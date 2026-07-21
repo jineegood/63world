@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>육삼빌딩의 세계 - 데모 v28</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Jua&family=Noto+Sans+KR:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <canvas id="splashCanvas" width="10" height="10" class="hidden" aria-hidden="true"></canvas>
+    <button id="settingsBtn" class="settings-floating">⚙ 환경설정</button>
+
+    <section id="landing" class="screen active">
+      <div class="login-stage">
+        <div class="login-title">
+          <div class="eyebrow">Classroom MMORPG Demo</div>
+          <h1>육삼빌딩의 세계</h1>
+          <p>문제를 풀어 성장하는 63마을 학급 RPG</p>
+        </div>
+
+        <div class="login-panel-grid single-login">
+          <div class="glass-panel auth-card student-card">
+            <div class="card-topline">학생 입장</div>
+            <h2>학생 로그인 / 생성</h2>
+            <label>캐릭터 이름</label>
+            <input id="loginName" maxlength="12" placeholder="예: 김용사" />
+            <label>비밀번호</label>
+            <input id="loginPassword" type="password" maxlength="20" placeholder="새 캐릭터면 이 비밀번호로 생성" />
+            <button id="studentLoginBtn" class="primary wide">게임 시작</button>
+            <small>기존 캐릭터는 이름과 비밀번호가 맞아야 입장합니다.</small>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="creator" class="screen">
+      <div class="creator-shell creator-shell-v6">
+        <div class="glass-panel creator-preview-box creator-preview-box-v6">
+          <div class="preview-header">
+            <div>
+              <div class="eyebrow">Character Preview</div>
+              <h2>캐릭터 생성</h2>
+            </div>
+            <button id="randomizeBtn" class="dice">🎲 랜덤 외형</button>
+          </div>
+          <canvas id="previewCanvas" width="640" height="720"></canvas>
+          <div id="appearanceSummary" class="hidden"></div>
+        </div>
+
+        <div class="glass-panel creator-form creator-form-v6">
+          <div class="card-topline">새 캐릭터</div>
+          <h2><span id="creatorNameLabel">새 학생</span>의 직업 선택</h2>
+          <p class="muted">직업을 고른 뒤 세계로 입장하세요. 전문화는 Lv.5 달성 후 선택합니다.</p>
+
+          <div class="class-list class-list-v6">
+            <button class="classBtn selected" data-class="warrior">
+              <span class="class-icon">⚔️</span>
+              <span><strong>전사</strong><em>대검 / 방어 · 무기</em></span>
+            </button>
+            <button class="classBtn" data-class="mage">
+              <span class="class-icon">🪄</span>
+              <span><strong>마법사</strong><em>지팡이 / 냉기 · 화염</em></span>
+            </button>
+            <button class="classBtn" data-class="priest">
+              <span class="class-icon">📖</span>
+              <span><strong>사제</strong><em>책 / 신성 · 암흑</em></span>
+            </button>
+          </div>
+
+          <div class="creator-actions">
+            <button id="createCharacterBtn" class="primary wide">세계로 입장</button>
+            <button id="backLandingBtn" class="ghost wide">뒤로</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="game" class="screen">
+      <header class="hud">
+        <div class="hud-bars hud-bars-main">
+          <div class="hud-stat hud-lv">LV <strong id="hudLevel">1</strong></div>
+          <div class="hud-meter-stack">
+            <div class="hud-meter hud-meter-hp">
+              <span class="hud-meter-fill" id="hudHpFill"></span>
+              <span class="hud-meter-label">HP <strong id="hudHp">1</strong>/<strong id="hudMaxHp">1</strong></span>
+            </div>
+            <div class="hud-meter hud-meter-exp">
+              <span class="hud-meter-fill" id="hudExpFill"></span>
+              <span class="hud-meter-label">EXP <strong id="hudExp">0</strong>/<strong id="hudNextExp">10</strong></span>
+            </div>
+          </div>
+          <div class="hud-stat hud-gold">🪙 Gold <strong id="hudGold">0</strong></div>
+          <div class="hud-stat building-currency hud-building">🏢 빌딩 <strong id="hudBuilding">0</strong></div>
+        </div>
+
+        <div class="hud-buttons">
+          <button id="chooseSpecBtn" class="small">전문화</button>
+          <button id="openCharacterPanelBtn" class="small">장비/스텟(C)</button>
+          <button id="openSkillTreeBtn" class="small">스킬(N)</button>
+          <button id="logoutBtn" class="small danger logout-danger">나가기</button>
+        </div>
+      </header>
+
+      <main class="game-shell">
+        <canvas id="gameCanvas" width="1280" height="720"></canvas>
+
+        <div class="game-overlay top-left">
+          <div id="zoneBadge" class="zone-badge">63마을</div>
+          <div id="interactionHint" class="interaction-hint">빛나는 입구로 다가가거나 NPC에게 가까이 가세요.</div>
+        </div>
+
+        <aside id="questTracker" class="quest-tracker hidden"></aside>
+
+        <div id="chatPanel" class="chat-panel">
+          <div id="chatMessages" class="chat-messages"></div>
+          <input id="chatInput" maxlength="80" placeholder="Enter 후 채팅 입력" />
+        </div>
+
+        <div class="game-overlay bottom-left control-help">
+          <span><b>WASD/방향키</b> 이동</span>
+          <span><b>E</b> 상호작용</span>
+          <span><b>C</b> 장비/스텟</span>
+          <span><b>N</b> 스킬</span>
+          <span><b>Z</b> 춤추기</span>
+        </div>
+
+        <button id="returnTownBtn" class="return-town hidden">마을로 돌아가기</button>
+      </main>
+    </section>
+
+    <div id="cheatCluster" class="cheat-cluster">
+      <button id="cheatToggleBtn" class="small test cheat-toggle">🧪 치트</button>
+      <div id="cheatPanel" class="cheat-panel hidden">
+        <div class="cheat-panel-title">🧪 치트 꾸러미</div>
+        <div class="cheat-panel-grid">
+          <button id="testExpBtn" class="small test">+20 EXP</button>
+          <button id="testExp100Btn" class="small test">+100 EXP</button>
+          <button id="testGoldBtn" class="small test">+3000 Gold</button>
+          <button id="testBuildingBtn" class="small test building-test">+200 빌딩</button>
+          <button id="testSpeedBtn" class="small test speed-test">이속 5배 OFF</button>
+          <button id="testHealBtn" class="small test heal-test">HP 100%</button>
+          <button id="testCooldownBtn" class="small test cooldown-test">쿨타임 회복</button>
+          <button id="cheatKillMonsterBtn" class="small test">⚔️ 몬스터 즉시 처치</button>
+          <button id="cheatCompleteQuestBtn" class="small test">📜 퀘스트 즉시 완료</button>
+          <button id="cheatUpgradeWeaponBtn" class="small test weapon-upgrade-test">✨ 무기 즉시 강화</button>
+          <button id="combatLogSpeedBtn" class="small test">⏩ 전투로그 2배속 OFF</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <div id="loadingOverlay" class="loading-overlay hidden">
+      <div class="loading-card">
+        <div class="loading-logo">이동 중</div>
+        <div id="loadingText" class="loading-text">육삼빌딩의 세계로 이동중입니다.</div>
+        <div class="loading-bar"><span></span></div>
+      </div>
+    </div>
+
+    <div id="cinematicOverlay" class="cinematic-overlay hidden">
+      <div>
+        <div id="cinematicTitle" class="cinematic-title"></div>
+        <div id="cinematicSub" class="cinematic-sub"></div>
+      </div>
+    </div>
+
+    <div id="modal" class="modal hidden">
+      <div class="modal-box">
+        <button id="modalClose" class="modal-close">×</button>
+        <div id="modalContent"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="src/core-utils.js"></script>
+  <script src="src/player-store.js"></script>
+  <script src="src/input-router.js"></script>
+  <script src="src/world-interaction-registry.js"></script>
+  <script src="src/world-navigation-registry.js"></script>
+  <script src="src/world-render-pipeline.js"></script>
+  <script src="src/hud-update-pipeline.js"></script>
+  <script src="src/total-stats-pipeline.js"></script>
+  <script src="src/combat-entry-pipeline.js"></script>
+  <script src="src/combat-frame-pipeline.js"></script>
+  <script src="src/audio-volume-pipeline.js"></script>
+  <script src="src/game-data.js"></script>
+  <script src="src/quest-data.js"></script>
+  <script src="src/patch-data.js"></script>
+  <script src="src/combat-rules.js"></script>
+  <script src="src/combat-sequence-controller.js"></script>
+  <script src="src/combat-fx.js"></script>
+  <script src="src/audio-manifest.js"></script>
+  <script src="src/audio-dispatcher.js"></script>
+  <script src="game.js"></script>
+  <script src="src/admin-dashboard.js"></script>
+  <script src="src/combat-keys.js"></script>
+  <script src="src/ui-tooltip.js"></script>
+  <script src="src/map-decor.js"></script>
+  <script src="src/ultimate-fx.js"></script>
+  <script src="src/sfx-map.js"></script>
+  <script src="src/skillpoint-hint.js"></script>
+  <script src="src/cheat-panel.js"></script>
+  <script src="src/hall-of-fame.js"></script>
+  <script src="src/cloud-config.js"></script>
+  <script src="src/cloud-sync.js"></script>
+</body>
+</html>
