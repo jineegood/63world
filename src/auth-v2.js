@@ -72,6 +72,11 @@
   function mapAuthError(error, fallbackCode = 'AUTH_FAILED') {
     const sourceCode = String(error?.code || '').toLowerCase();
     const sourceMessage = String(error?.message || '').toLowerCase();
+    if (sourceCode.includes('network')
+      || sourceMessage.includes('failed to fetch')
+      || sourceMessage.includes('network request')) {
+      return new AuthV2Error('OFFLINE', '인터넷 연결을 확인한 뒤 다시 시도해 주세요.');
+    }
     if (sourceCode.includes('already') || sourceMessage.includes('already registered')) {
       return new AuthV2Error('ACCOUNT_EXISTS', '이미 사용 중인 이름이에요. 다른 이름을 선택해 주세요.');
     }
@@ -94,7 +99,7 @@
       throw new TypeError('A Supabase client with auth methods is required.');
     }
 
-    async function signUpStudent(name, password) {
+    async function signUpStudentResult(name, password) {
       const displayName = normalizeDisplayName(name);
       const normalizedName = normalizeStudentName(displayName);
       validatePassword(password);
@@ -112,7 +117,11 @@
       if (error) throw mapAuthError(error, 'SIGNUP_FAILED');
       const safeUser = sanitizeUser(data?.user);
       if (!safeUser) throw new AuthV2Error('SIGNUP_FAILED', '계정을 만들지 못했어요. 잠시 후 다시 시도해 주세요.');
-      return safeUser;
+      return { identity:safeUser, hasSession:Boolean(data?.session) };
+    }
+
+    async function signUpStudent(name, password) {
+      return (await signUpStudentResult(name, password)).identity;
     }
 
     async function signInStudent(name, password) {
@@ -138,9 +147,35 @@
       if (error) throw mapAuthError(error, 'SIGNOUT_FAILED');
     }
 
+    async function enterStudent(name, password) {
+      try {
+        const identity = await signInStudent(name, password);
+        return Object.freeze({ identity, isNewAccount:false });
+      } catch (error) {
+        if (error?.code !== 'INVALID_CREDENTIALS') throw error;
+      }
+
+      try {
+        const signup = await signUpStudentResult(name, password);
+        if (!signup.hasSession) {
+          throw new AuthV2Error(
+            'AUTH_SETUP_REQUIRED',
+            'Supabase에서 이메일 확인을 꺼야 새 계정으로 바로 로그인할 수 있어요.',
+          );
+        }
+        return Object.freeze({ identity:signup.identity, isNewAccount:true });
+      } catch (error) {
+        if (error?.code === 'ACCOUNT_EXISTS') {
+          throw new AuthV2Error('INVALID_CREDENTIALS', '이름 또는 비밀번호가 맞지 않아요.');
+        }
+        throw error;
+      }
+    }
+
     return Object.freeze({
       signUpStudent,
       signInStudent,
+      enterStudent,
       restoreSession,
       signOut,
       getRole,

@@ -7,6 +7,10 @@ module.exports = async function run(root, actions, options = {}) {
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   const dom = new JSDOM(html, { url: 'http://localhost/', runScripts: 'outside-only', pretendToBeVisual: true });
   const { window } = dom;
+  const { webcrypto } = require('node:crypto');
+  const { TextEncoder } = require('node:util');
+  Object.defineProperty(window.crypto, 'subtle', { value:webcrypto.subtle, configurable:true });
+  window.TextEncoder = TextEncoder;
   const asyncErrors = [];
   window.addEventListener('error', (e) => asyncErrors.push(String(e.error && e.error.stack || e.message).split('\n')[0]));
   window.HTMLCanvasElement.prototype.getContext = function () {
@@ -44,9 +48,14 @@ module.exports = async function run(root, actions, options = {}) {
   // jsdom의 개별 window.eval은 스코프가 분리되어 파일 간 참조(예: admin-dashboard.js -> game.js의 const $)가 깨진다.
   // 따라서 모든 로컬 스크립트를 순서대로 이어붙여 한 번에 eval 해 브라우저 시맨틱을 재현한다.
   const combined = scriptSrcs.map((s) => {
-    let code = fs.readFileSync(fsPath(s), 'utf8');
-    if (s.replace(/\\/g, '/') === 'src/cloud-config.js') {
-      code = "window.YUKSAM_CLOUD = { url: '', anonKey: '' };";
+    const normalizedSrc = s.replace(/\\/g, '/');
+    let code = Object.prototype.hasOwnProperty.call(options.scriptOverrides || {}, normalizedSrc)
+      ? options.scriptOverrides[normalizedSrc]
+      : fs.readFileSync(fsPath(s), 'utf8');
+    if (normalizedSrc === 'src/cloud-config.js') {
+      code = typeof options.cloudConfigCode === 'string'
+        ? options.cloudConfigCode
+        : "window.YUKSAM_CLOUD = { securityV2Enabled: false, url: '', anonKey: '' };";
     }
     if (s === 'game.js') code += '\n;window.__G = game;';
     return code;

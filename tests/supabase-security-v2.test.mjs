@@ -185,6 +185,81 @@ test('missing session restores as null', async () => {
   assert.equal(await service.restoreSession(), null);
 });
 
+test('enterStudent signs in an existing account without attempting signup', async () => {
+  const api = loadAuthApi();
+  const fake = createFakeClient();
+  const service = api.createAuthService({ client:fake.client });
+  const result = await service.enterStudent('별빛', 'secret-123');
+  assert.equal(JSON.stringify(result), JSON.stringify({
+    identity:{ userId:'student-uuid', displayName:'별빛', role:'student' },
+    isNewAccount:false,
+  }));
+  assert.deepEqual(fake.calls.map(([name]) => name), ['signInWithPassword']);
+});
+
+test('enterStudent creates an account only after invalid login credentials', async () => {
+  const api = loadAuthApi();
+  const fake = createFakeClient({
+    async signInWithPassword(payload) {
+      fake.calls.push(['signInWithPassword', payload]);
+      return { data:{ user:null, session:null }, error:{ code:'invalid_credentials', message:'Invalid login credentials' } };
+    },
+  });
+  const service = api.createAuthService({ client:fake.client });
+  const result = await service.enterStudent('별빛', 'secret-123');
+  assert.equal(result.isNewAccount, true);
+  assert.deepEqual(fake.calls.map(([name]) => name), ['signInWithPassword', 'signUp']);
+});
+
+test('enterStudent treats an existing signup identity as a wrong password', async () => {
+  const api = loadAuthApi();
+  const fake = createFakeClient({
+    async signInWithPassword() {
+      return { data:{ user:null, session:null }, error:{ code:'invalid_credentials', message:'Invalid login credentials' } };
+    },
+    async signUp() {
+      return { data:{ user:null, session:null }, error:{ code:'user_already_exists', message:'User already registered' } };
+    },
+  });
+  const service = api.createAuthService({ client:fake.client });
+  await assert.rejects(
+    service.enterStudent('별빛', 'wrong-123'),
+    (error) => error.code === 'INVALID_CREDENTIALS' && /비밀번호/.test(error.message),
+  );
+});
+
+test('enterStudent rejects signup when email confirmation prevents an active session', async () => {
+  const api = loadAuthApi();
+  const fake = createFakeClient({
+    async signInWithPassword() {
+      return { data:{ user:null, session:null }, error:{ code:'invalid_credentials', message:'Invalid login credentials' } };
+    },
+    async signUp() {
+      return { data:{ user:fake.user, session:null }, error:null };
+    },
+  });
+  const service = api.createAuthService({ client:fake.client });
+  await assert.rejects(
+    service.enterStudent('별빛', 'secret-123'),
+    (error) => error.code === 'AUTH_SETUP_REQUIRED' && /이메일 확인/.test(error.message),
+  );
+});
+
+test('network failures map to an offline error without echoing credentials', async () => {
+  const api = loadAuthApi();
+  const password = 'network-secret-123';
+  const fake = createFakeClient({
+    async signInWithPassword() {
+      return { data:{ user:null, session:null }, error:{ message:`Failed to fetch ${password}` } };
+    },
+  });
+  const service = api.createAuthService({ client:fake.client });
+  await assert.rejects(
+    service.enterStudent('별빛', password),
+    (error) => error.code === 'OFFLINE' && /인터넷/.test(error.message) && !error.message.includes(password),
+  );
+});
+
 test('local Supabase bundle exposes one client factory without project secrets or CDN imports', () => {
   const bundle = readIfPresent(bundlePath);
   const cloudConfig = readIfPresent(path.join(root, 'src/cloud-config.js'));

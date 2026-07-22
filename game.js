@@ -3,6 +3,8 @@ const YuksamCore = window.YuksamCore;
 if (!YuksamCore) throw new Error('YuksamCore must be loaded before game.js');
 const YuksamPlayerStore = window.YuksamPlayerStore;
 if (!YuksamPlayerStore) throw new Error('YuksamPlayerStore must be loaded before game.js');
+const YuksamStudentAccessV2 = window.YuksamStudentAccessV2;
+if (!YuksamStudentAccessV2) throw new Error('YuksamStudentAccessV2 must be loaded before game.js');
 const YuksamInputRouter = window.YuksamInputRouter;
 if (!YuksamInputRouter) throw new Error('YuksamInputRouter must be loaded before game.js');
 const YuksamWorldInteractionRegistry = window.YuksamWorldInteractionRegistry;
@@ -80,6 +82,14 @@ const screens = {
   creator: $('creator'),
   game: $('game'),
 };
+
+const secureStudentAccess = YuksamStudentAccessV2.create({
+  config:window.YUKSAM_CLOUD || {},
+  clientFactory:window.YuksamSupabaseClient?.createClient,
+  authApi:window.YuksamAuthV2,
+  cloudApi:window.YuksamCloudSyncV2,
+  storage:localStorage,
+});
 
 const game = {
   canvas: $('gameCanvas'),
@@ -322,6 +332,10 @@ function getAllPlayers() {
 function savePlayer() {
   if (!game.player) return;
   game.player.updatedAt = Date.now();
+  if (secureStudentAccess.enabled) {
+    secureStudentAccess.savePlayer(game.player);
+    return;
+  }
   playerStore.write(game.player);
 }
 
@@ -349,7 +363,6 @@ function normalizePlayer(p) {
   });
   const normalized = {
     name: p.name || '이름없음',
-    password: String(p.password || '1234'),
     class: klass,
     baseStatsVersion: Number(p.baseStatsVersion) || 0,
     spec: p.spec === '분노' ? '무기' : (p.spec || null),
@@ -393,6 +406,7 @@ function normalizePlayer(p) {
       };
     })(),
   };
+  if (!secureStudentAccess.enabled) normalized.password = String(p.password || '1234');
   const classWeapon = defaultWeaponIdForClass(klass);
   if (!normalized.equipment.weapon) normalized.equipment.weapon = classWeapon;
   if (!normalized.inventory.includes(classWeapon)) normalized.inventory.unshift(classWeapon);
@@ -426,7 +440,7 @@ function createNewPlayer(name) {
   const defaultWeapon = defaultWeaponIdForClass(klass);
   return normalizePlayer({
     name,
-    password: game.currentPassword,
+    ...(secureStudentAccess.enabled ? {} : { password:game.currentPassword }),
     class: klass,
     baseStatsVersion: 2,
     spec: null,
@@ -3453,11 +3467,13 @@ function bindEvents() {
     drawPreview();
   });
   $('createCharacterBtn').addEventListener('click', () => {
-    const stored = readPlayerStorage(game.currentName);
-    if (stored.status === 'corrupt') {
-      game.player = null;
-      toast('저장 데이터가 손상되어 캐릭터를 만들 수 없습니다.');
-      return;
+    if (!secureStudentAccess.enabled) {
+      const stored = readPlayerStorage(game.currentName);
+      if (stored.status === 'corrupt') {
+        game.player = null;
+        toast('저장 데이터가 손상되어 캐릭터를 만들 수 없습니다.');
+        return;
+      }
     }
     game.player = createNewPlayer(game.currentName);
     savePlayer();
@@ -4347,19 +4363,42 @@ function handlePlayerDefeat() {
   }, 5000);
 }
 
-function handleStudentLogin() {
+async function handleStudentLogin() {
   const name = $('loginName').value.trim();
-  const password = $('loginPassword').value.trim();
+  const password = secureStudentAccess.enabled ? $('loginPassword').value : $('loginPassword').value.trim();
   if (!name) { toast('캐릭터 이름을 입력하세요.'); return; }
   if (!password) { toast('비밀번호를 입력하세요.'); return; }
   game.currentName = name;
-  game.currentPassword = password;
-  const existing = loadPlayer(name);
-  if (existing) {
-    if (existing.password !== password) { toast('비밀번호가 올바르지 않습니다.'); return; }
-    game.player = existing;
-    startGame(true, { loading: true });
-    return;
+  game.currentPassword = secureStudentAccess.enabled ? '' : password;
+  if (secureStudentAccess.enabled) {
+    const loginButton = $('studentLoginBtn');
+    const originalLabel = loginButton.textContent;
+    loginButton.disabled = true;
+    loginButton.textContent = '로그인 중...';
+    try {
+      const entered = await secureStudentAccess.enter(name, password);
+      game.currentName = entered.identity.displayName || name;
+      if (entered.kind === 'existing') {
+        game.player = normalizePlayer(entered.player);
+        startGame(true, { loading: true });
+        return;
+      }
+    } catch (error) {
+      game.player = null;
+      toast(error?.message || '로그인하지 못했습니다.');
+      return;
+    } finally {
+      loginButton.disabled = false;
+      loginButton.textContent = originalLabel;
+    }
+  } else {
+    const existing = loadPlayer(name);
+    if (existing) {
+      if (existing.password !== password) { toast('비밀번호가 올바르지 않습니다.'); return; }
+      game.player = existing;
+      startGame(true, { loading: true });
+      return;
+    }
   }
   game.selectedClass = 'warrior';
   game.currentAppearance = randomAppearance();
@@ -5514,8 +5553,13 @@ function updateQuestTracker() {
   const oldEnterBuildingShopInteriorV20 = enterBuildingShopInterior;
   enterBuildingShopInterior = function enterBuildingShopInteriorV20() { playSfx('door'); oldEnterBuildingShopInteriorV20(); };
   // 5) 캐릭터 신규 생성 시 검은 시네마틱 화면 후 생성창 표시
+  const secureHandleStudentLoginV2 = handleStudentLogin;
   handleStudentLogin = function handleStudentLoginV20() {
     if (typeof isServerOpen === 'function' && !isServerOpen()) { toast('지금은 서버가 닫혀 있어요. 선생님이 열어주면 접속할 수 있습니다!'); return; }
+    if (secureStudentAccess.enabled) {
+      resumeAudio();
+      return secureHandleStudentLoginV2();
+    }
     const name = $('loginName').value.trim();
     const password = $('loginPassword').value.trim();
     if (!name) { toast('캐릭터 이름을 입력하세요.'); return; }

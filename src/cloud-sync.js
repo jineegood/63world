@@ -7,6 +7,7 @@
   window.__CLOUD_SYNC_V53__ = true;
 
   const cfg = window.YUKSAM_CLOUD || {};
+  if (cfg.securityV2Enabled === true) return;
   const PLAYER_PREFIX = 'ysb_player_';
   const SHARED_KEYS = ['ysb_teacher_v1', 'ysb_workbooks_v3', 'ysb_questions_v2'];
   const META_KEY = 'ysb_cloud_meta_v1';

@@ -30,7 +30,7 @@
 - Produces: `createAuthService(...).enterStudent(name, password)` returning `{ identity, isNewAccount }`.
 - `identity` remains the existing sanitized `{ userId, displayName, role }` shape.
 
-- [ ] **Step 1: Write failing tests for login-first account entry**
+- [x] **Step 1: Write failing tests for login-first account entry**
 
 Add tests proving that `enterStudent`:
 
@@ -40,17 +40,17 @@ Add tests proving that `enterStudent`:
 - converts “signup says account already exists” into `INVALID_CREDENTIALS`, because it means the original password was wrong;
 - reports `OFFLINE` for fetch/network failures without echoing the supplied credential.
 
-- [ ] **Step 2: Run focused tests and verify the new tests fail**
+- [x] **Step 2: Run focused tests and verify the new tests fail**
 
 Run: `npm.cmd run test:supabase-security-v2`
 
 Expected: FAIL because `enterStudent` does not exist.
 
-- [ ] **Step 3: Implement the minimal combined flow**
+- [x] **Step 3: Implement the minimal combined flow**
 
 Reuse `signInStudent` and `signUpStudent`. Only attempt signup for `INVALID_CREDENTIALS`; never attempt it for offline, rate-limit, weak-password, or configuration errors. Require a session on successful signup so a mistakenly enabled email-confirmation setting cannot create an unusable character.
 
-- [ ] **Step 4: Run focused tests**
+- [x] **Step 4: Run focused tests**
 
 Run: `npm.cmd run test:supabase-security-v2`
 
@@ -75,11 +75,11 @@ Expected: all Auth foundation tests pass.
   - `clearCache(userId): void`
 - Cache keys use `ysb_player_v2_<userId>`, never a student name.
 
-- [ ] **Step 1: Write failing sanitizer and cache tests**
+- [x] **Step 1: Write failing sanitizer and cache tests**
 
 Cover nested sensitive-field removal, non-mutation of the input, circular/non-JSON value rejection, user-ID cache isolation, and synchronous safe cache writes from `queueSave`.
 
-- [ ] **Step 2: Write failing remote data tests**
+- [x] **Step 2: Write failing remote data tests**
 
 Use a small fake Supabase query builder to prove that:
 
@@ -89,7 +89,7 @@ Use a small fake Supabase query builder to prove that:
 - saves call `update({ data, updated_at }).eq('user_id', userId)` and never send identity fields or secrets;
 - a remote authorization/error response does not silently report success.
 
-- [ ] **Step 3: Register the focused test command and verify RED**
+- [x] **Step 3: Register the focused test command and verify RED**
 
 Add `test:cloud-sync-v2` and include it in `npm.cmd test`.
 
@@ -97,11 +97,11 @@ Run: `npm.cmd run test:cloud-sync-v2`
 
 Expected: FAIL because `src/cloud-sync-v2.js` does not exist.
 
-- [ ] **Step 4: Implement the minimal module**
+- [x] **Step 4: Implement the minimal module**
 
 Use a one-second trailing save queue with injected scheduling functions for deterministic tests. Cache first, then flush the most recent safe snapshot. Throw short Korean errors for authorization or server failures; use cached data only for genuine network failures.
 
-- [ ] **Step 5: Run focused tests**
+- [x] **Step 5: Run focused tests**
 
 Run: `npm.cmd run test:cloud-sync-v2`
 
@@ -127,25 +127,25 @@ Expected: all save/cache tests pass.
   - `signOut(): Promise<void>`
 - Supabase project URLs are normalized by removing a trailing `/rest/v1` before `createClient` is called.
 
-- [ ] **Step 1: Write failing feature-switch tests**
+- [x] **Step 1: Write failing feature-switch tests**
 
 Prove that a false/missing flag produces `enabled:false` and constructs no client, while an enabled flag with invalid URL/key produces `status:'misconfigured'` and a Korean configuration error.
 
-- [ ] **Step 2: Write failing entry and save tests**
+- [x] **Step 2: Write failing entry and save tests**
 
 Prove that an existing account loads its own profile, a new/empty profile returns the creator result, a same-user safe cache supports authenticated offline entry, `savePlayer` requires an identity, and signout flushes then clears the in-memory identity.
 
-- [ ] **Step 3: Register the focused command and verify RED**
+- [x] **Step 3: Register the focused command and verify RED**
 
 Run: `npm.cmd run test:student-access-v2`
 
 Expected: FAIL because the controller does not exist.
 
-- [ ] **Step 4: Implement the controller**
+- [x] **Step 4: Implement the controller**
 
 Construct exactly one Supabase client, Auth service, and cloud service when enabled. Keep credentials inside the Auth call only. Do not expose the raw client, session, internal email, or password from the returned controller.
 
-- [ ] **Step 5: Run focused tests**
+- [x] **Step 5: Run focused tests**
 
 Run: `npm.cmd run test:student-access-v2`
 
@@ -169,11 +169,11 @@ Expected: all controller tests pass.
 - `game.js` consumes only the public `YuksamStudentAccessV2` controller methods from Task 3.
 - Legacy `YuksamPlayerStore` remains the only path when `securityV2Enabled !== true`.
 
-- [ ] **Step 1: Write failing script-order and disabled-mode tests**
+- [x] **Step 1: Write failing script-order and disabled-mode tests**
 
 Assert that config, the local Supabase bundle, Auth, cloud sync v2, and student access v2 load before `game.js`; assert the flag remains false; assert legacy cloud sync exits immediately when the flag is true.
 
-- [ ] **Step 2: Write a failing secure browser flow**
+- [x] **Step 2: Write a failing secure browser flow**
 
 Extend the browser harness with an opt-in cloud-config override and fake Supabase client. Verify:
 
@@ -182,17 +182,17 @@ Extend the browser harness with an opt-in cloud-config override and fake Supabas
 - wrong password/offline errors keep the landing screen active with no legacy player record created;
 - the resulting `ysb_player_v2_<userId>` cache contains no password or token.
 
-- [ ] **Step 3: Run the new browser test and verify RED**
+- [x] **Step 3: Run the new browser test and verify RED**
 
 Run: `npm.cmd run test:secure-student-login-v2`
 
 Expected: FAIL because the game still uses plaintext local login.
 
-- [ ] **Step 4: Move configuration and v2 module scripts before game bootstrap**
+- [x] **Step 4: Move configuration and v2 module scripts before game bootstrap**
 
 Keep `securityV2Enabled: false`. Do not include the old cloud sync twice. Ensure browser tests still replace the real URL/key with isolated test values.
 
-- [ ] **Step 5: Add the game boundary calls**
+- [x] **Step 5: Add the game boundary calls**
 
 When secure mode is ready:
 
@@ -205,11 +205,11 @@ When secure mode is ready:
 
 When the flag is false, retain the existing synchronous behavior byte-for-byte where practical.
 
-- [ ] **Step 6: Disable v1 cloud access whenever v2 is enabled**
+- [x] **Step 6: Disable v1 cloud access whenever v2 is enabled**
 
 At the top of `src/cloud-sync.js`, return before any REST setup when `window.YUKSAM_CLOUD.securityV2Enabled === true`.
 
-- [ ] **Step 7: Run focused browser and safety tests**
+- [x] **Step 7: Run focused browser and safety tests**
 
 Run: `npm.cmd run test:secure-student-login-v2`
 
@@ -224,13 +224,13 @@ Expected: both commands exit 0.
 **Files:**
 - Modify: `docs/superpowers/plans/2026-07-23-secure-student-login-and-save-v2.md`
 
-- [ ] **Step 1: Rebuild the pinned client**
+- [x] **Step 1: Rebuild the pinned client**
 
 Run: `npm.cmd run build:supabase-client`
 
 Expected: `Built vendor\\supabase-client.bundle.js`.
 
-- [ ] **Step 2: Run all focused security tests**
+- [x] **Step 2: Run all focused security tests**
 
 Run: `npm.cmd run test:supabase-security-v2`
 
@@ -242,19 +242,19 @@ Run: `npm.cmd run test:secure-student-login-v2`
 
 Expected: every command exits 0 with no failed tests.
 
-- [ ] **Step 3: Run the complete project suite**
+- [x] **Step 3: Run the complete project suite**
 
 Run: `npm.cmd test`
 
 Expected: exit code 0.
 
-- [ ] **Step 4: Check repository and deployment boundaries**
+- [x] **Step 4: Check repository and deployment boundaries**
 
 Run: `git diff --check`, `git status --short`, and `git rev-list --left-right --count origin/main...HEAD`.
 
 Expected: only planned local files changed; the local branch remains ahead of `origin/main`; no push or deployment occurred.
 
-- [ ] **Step 5: Create a local commit only**
+- [x] **Step 5: Create a local commit only**
 
 Commit message: `feat: connect secure student login and saves`
 
