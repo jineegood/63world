@@ -141,8 +141,25 @@ function teacherSettingsHtml(){
       </div>
       <p class="muted">서버를 닫으면 학생들이 접속하거나 계속 플레이할 수 없습니다. 수업이 아닌 시간에 닫아 두세요.</p>
     </div>
+    <div class="panel-card" style="margin-top:12px">
+      <h3>🧪 치트(테스트) 도구</h3>
+      <div style="text-align:center;margin:10px 0">현재: ${window.__cheatEnabledV54 ? '<span class="good-text" style="font-weight:800">🟢 활성화됨</span>' : '<span class="muted" style="font-weight:800">⚪ 비활성</span>'}</div>
+      <div class="action-row">
+        <button class="primary" onclick="adminSetCheatEnabled(true)" ${window.__cheatEnabledV54 ? 'disabled' : ''}>치트 활성화</button>
+        <button class="ghost danger-text" onclick="adminSetCheatEnabled(false)" ${window.__cheatEnabledV54 ? '' : 'disabled'}>치트 비활성</button>
+      </div>
+      <p class="muted">활성화하면 화면 왼쪽에 치트 꾸러미(EXP·Gold·빌딩·즉시처치 등)가 나타납니다. 테스트·시연용이며, 수업 중에는 꺼 두세요.</p>
+    </div>
   </div>`;
 }
+
+window.adminSetCheatEnabled = function adminSetCheatEnabled(on){
+  window.__cheatEnabledV54 = !!on;
+  const cluster = document.getElementById('cheatCluster');
+  if (cluster) cluster.style.display = on ? 'flex' : 'none';
+  if (!on) { const panel = document.getElementById('cheatPanel'); if (panel) panel.classList.add('hidden'); }
+  if (typeof openAdminPanel === 'function') openAdminPanel('settings');
+};
 
 function buildAdminPanelHtml(tab){
   const tabs = [['students', '👨‍🎓 학생 현황'], ['workbooks', '📚 문제집 관리'], ['settings', '⚙️ 수업 설정']];
@@ -212,9 +229,21 @@ window.adminTeacherLogin = function adminTeacherLogin(){
   openAdminPanel('students');
 };
 
-function openAdminPanel(tab) {
+function openAdminPanel(tab, options) {
   if (!requireTeacherAuth()) return;
+  // [v58] 문제집 관리에서 토글·삭제 시 스크롤이 맨 위로 튀지 않도록 위치 보존
+  const keepScroll = options && options.keepScroll;
+  const box = document.querySelector('#modal .modal-box');
+  const prevTop = keepScroll && box ? box.scrollTop : null;
   openModal(buildAdminPanelHtml(tab), { type: 'admin', pause: false });
+  if (prevTop != null) {
+    const restore = () => {
+      const next = document.querySelector('#modal .modal-box');
+      if (next) next.scrollTop = prevTop;
+    };
+    restore();
+    requestAnimationFrame(restore);
+  }
 }
 
 window.addAdminQuestion = function addAdminQuestion() {
@@ -231,7 +260,7 @@ window.addAdminQuestion = function addAdminQuestion() {
   const choices = choiceRaw ? choiceRaw.split(',').map((v) => v.trim()).filter(Boolean).slice(0, 4) : null;
   wb.questions.push({ id: uid(), workbookId: wb.id, zone: wb.zone, q, answer, choices, source: '직접입력' });
   saveWorkbooks(workbooks);
-  openAdminPanel('workbooks');
+  openAdminPanel('workbooks', { keepScroll: true });
   toast('선택한 문제집에 문제가 추가되었습니다.');
 };
 
@@ -242,7 +271,7 @@ window.removeQuestionFromWorkbook = function removeQuestionFromWorkbook(workbook
   if (!wb) return;
   wb.questions = wb.questions.filter((q) => q.id !== questionId);
   saveWorkbooks(workbooks);
-  openAdminPanel('workbooks');
+  openAdminPanel('workbooks', { keepScroll: true });
   toast('문제를 삭제했습니다.');
 };
 
@@ -252,7 +281,7 @@ window.deleteWorkbook = function deleteWorkbook(workbookId) {
   if (!wb) return;
   if (!confirm(`${wb.name} 문제집을 삭제할까요?`)) return;
   saveWorkbooks(getWorkbooks().filter((book) => book.id !== workbookId));
-  openAdminPanel('workbooks');
+  openAdminPanel('workbooks', { keepScroll: true });
   toast('문제집을 삭제했습니다.');
 };
 
@@ -296,7 +325,7 @@ window.generateAiQuestionSet = function generateAiQuestionSet() {
     questions: questions.map((q) => ({ ...q, workbookId: id })),
   }));
   saveWorkbooks(workbooks);
-  openAdminPanel('workbooks');
+  openAdminPanel('workbooks', { keepScroll: true });
   toast(`AI 문제집 "${name}"을 추가했습니다.`);
 };
 
@@ -370,7 +399,7 @@ window.adminToggleWorkbook = function adminToggleWorkbook(workbookId){
   wb.enabled = wb.enabled === false ? true : false;
   saveWorkbooks(workbooks);
   toast(wb.enabled === false ? `『${wb.name}』 출제를 껐습니다.` : `『${wb.name}』 출제를 켰습니다!`);
-  openAdminPanel('workbooks');
+  openAdminPanel('workbooks', { keepScroll: true });
 };
 
 window.adminBulkImport = function adminBulkImport(){
@@ -393,7 +422,7 @@ window.adminBulkImport = function adminBulkImport(){
     added += 1;
   }
   saveWorkbooks(workbooks);
-  openAdminPanel('workbooks');
+  openAdminPanel('workbooks', { keepScroll: true });
   toast(`${added}개 문제를 추가했습니다.`);
 };
 

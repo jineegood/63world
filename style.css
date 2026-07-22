@@ -318,7 +318,8 @@ h1, h2, h3, .login-title h1, .zone-badge, .card-topline, .classBtn strong, .badg
     linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
   border: 1px solid rgba(255,255,255,.10);
 }
-.paperdoll-v7 #characterPanelCanvas {
+.paperdoll-v7 #characterPanelCanvas,
+.paperdoll-v7 #costumePanelCanvasV55 {
   width: 420px;
   height: 420px;
   align-self: center;
@@ -429,7 +430,8 @@ h1, h2, h3, .login-title h1, .zone-badge, .card-topline, .classBtn strong, .badg
   align-items: center;
   justify-content: center;
 }
-.paperdoll-v7 #characterPanelCanvas {
+.paperdoll-v7 #characterPanelCanvas,
+.paperdoll-v7 #costumePanelCanvasV55 {
   transform: translateX(18px);
 }
 .skill-tree-wrap.skill-tree-horizontal {
@@ -651,7 +653,8 @@ body.defeated #app { filter: grayscale(1) brightness(.62); transition: filter .3
 .hpfill { transition: width .78s cubic-bezier(.18,.78,.24,1); }
 
 /* v10 paperdoll centering */
-.paperdoll-v7 #characterPanelCanvas {
+.paperdoll-v7 #characterPanelCanvas,
+.paperdoll-v7 #costumePanelCanvasV55 {
   transform: none !important;
   position: absolute;
   left: 50%;
@@ -713,7 +716,8 @@ body.defeated #app { filter: grayscale(1) brightness(.62); transition: filter .3
 .settings-floating, .admin-floating { z-index: 80; }
 .admin-floating { top: 74px; }
 .building-test { background: linear-gradient(135deg, #a78bfa, #6d28d9) !important; }
-.paperdoll-v7 #characterPanelCanvas {
+.paperdoll-v7 #characterPanelCanvas,
+.paperdoll-v7 #costumePanelCanvasV55 {
   left: 50% !important;
   top: 44% !important;
   transform: translate(-50%, -50%) !important;
@@ -783,7 +787,8 @@ body.defeated #app { filter: grayscale(1) brightness(.62); transition: filter .3
   justify-content: flex-end;
   z-index: 24;
 }
-.paperdoll-v7 #characterPanelCanvas {
+.paperdoll-v7 #characterPanelCanvas,
+.paperdoll-v7 #costumePanelCanvasV55 {
   left: 50% !important;
   top: 39% !important;
   transform: translate(-50%, -50%) !important;
@@ -2463,10 +2468,62 @@ body.defeated #app { filter: grayscale(1) brightness(.62); transition: filter .3
   .character-window-v33 .character-right-v33 { min-width: 0; }
   .character-window-v33 .identity-strip-v33 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .character-window-v33 .paperdoll-v7 { min-height: 560px !important; overflow: hidden; }
-  .character-window-v33 .paperdoll-v7 #characterPanelCanvas { width: min(420px, 145%); height: auto; }
+  .character-window-v33 .paperdoll-v7 #characterPanelCanvas,
+.paperdoll-v7 #costumePanelCanvasV55 { width: min(420px, 145%); height: auto; }
   .character-window-v33 .paper-slot { width: min(112px, calc(50% - 16px)); }
   .character-window-v33 .slot-head-v7,
   .character-window-v33 .slot-armor-v7 { left: 8px !important; }
   .character-window-v33 .slot-weapon-v7,
   .character-window-v33 .slot-accessory-v7 { right: 8px !important; }
+}
+
+/* ── v53: HUD 스탯 칩 정렬·타이포 정리 ── */
+.hud-bars.hud-bars-main { align-items: center; }
+.hud-stat {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 16px !important;
+  font-family: 'Jua', 'Noto Sans KR', system-ui, sans-serif;
+  font-size: 14.5px;
+  line-height: 1;
+  letter-spacing: 0 !important;
+  white-space: nowrap;
+  text-align: center;
+}
+.hud-stat strong {
+  font-family: 'Jua', 'Noto Sans KR', system-ui, sans-serif;
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .02em;
+}
+.hud-lv { min-width: 78px; }
+.hud-gold { min-width: 116px; }
+.hud-building { min-width: 116px; }
+.hud-meter-label {
+  font-family: 'Jua', 'Noto Sans KR', system-ui, sans-serif;
+  letter-spacing: 0;
+}
+.hud-meter-label strong { font-variant-numeric: tabular-nums; }
+
+/* ── v54: HUD 그룹 배치 (LV/Gold/빌딩 왼쪽, HP/EXP 중앙) ── */
+.hud-stat-group { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.hud-bars.hud-bars-main .hud-meter-stack {
+  flex: 1 1 auto;
+  max-width: 440px;
+  margin: 0 auto;
+}
+.hud-bars.hud-bars-main { gap: 16px; }
+
+
+/* ── v58: 코스튬 미리보기 캔버스 — 그리드 전체 폭 차지 + 정중앙 배치 ── */
+.paperdoll-v7 #costumePanelCanvasV55 {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  justify-self: center;
+  align-self: center;
 }

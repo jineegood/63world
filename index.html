@@ -3,7 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>육삼빌딩의 세계 - 데모 v28</title>
+  <title>63월드</title>
+  <meta name="description" content="문제를 풀며 성장하는 교실용 RPG, 63월드" />
+  <meta property="og:title" content="63월드" />
+  <meta property="og:description" content="문제를 풀며 성장하는 교실용 RPG" />
+  <meta property="og:type" content="website" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Jua&family=Noto+Sans+KR:wght@400;500;700;800;900&display=swap" rel="stylesheet">
@@ -18,7 +22,7 @@
       <div class="login-stage">
         <div class="login-title">
           <div class="eyebrow">Classroom MMORPG Demo</div>
-          <h1>육삼빌딩의 세계</h1>
+          <h1>63월드</h1>
           <p>문제를 풀어 성장하는 63마을 학급 RPG</p>
         </div>
 
@@ -82,7 +86,11 @@
     <section id="game" class="screen">
       <header class="hud">
         <div class="hud-bars hud-bars-main">
-          <div class="hud-stat hud-lv">LV <strong id="hudLevel">1</strong></div>
+          <div class="hud-stat-group">
+            <div class="hud-stat hud-lv">LV <strong id="hudLevel">1</strong></div>
+            <div class="hud-stat hud-gold">🪙 Gold <strong id="hudGold">0</strong></div>
+            <div class="hud-stat building-currency hud-building">🏢 빌딩 <strong id="hudBuilding">0</strong></div>
+          </div>
           <div class="hud-meter-stack">
             <div class="hud-meter hud-meter-hp">
               <span class="hud-meter-fill" id="hudHpFill"></span>
@@ -93,8 +101,6 @@
               <span class="hud-meter-label">EXP <strong id="hudExp">0</strong>/<strong id="hudNextExp">10</strong></span>
             </div>
           </div>
-          <div class="hud-stat hud-gold">🪙 Gold <strong id="hudGold">0</strong></div>
-          <div class="hud-stat building-currency hud-building">🏢 빌딩 <strong id="hudBuilding">0</strong></div>
         </div>
 
         <div class="hud-buttons">
@@ -132,7 +138,7 @@
       </main>
     </section>
 
-    <div id="cheatCluster" class="cheat-cluster">
+    <div id="cheatCluster" class="cheat-cluster" style="display:none">
       <button id="cheatToggleBtn" class="small test cheat-toggle">🧪 치트</button>
       <div id="cheatPanel" class="cheat-panel hidden">
         <div class="cheat-panel-title">🧪 치트 꾸러미</div>
@@ -157,7 +163,7 @@
     <div id="loadingOverlay" class="loading-overlay hidden">
       <div class="loading-card">
         <div class="loading-logo">이동 중</div>
-        <div id="loadingText" class="loading-text">육삼빌딩의 세계로 이동중입니다.</div>
+        <div id="loadingText" class="loading-text">63월드로 이동중입니다.</div>
         <div class="loading-bar"><span></span></div>
       </div>
     </div>
@@ -191,6 +197,7 @@
   <script src="src/game-data.js"></script>
   <script src="src/quest-data.js"></script>
   <script src="src/patch-data.js"></script>
+  <script src="src/costume-data.js"></script>
   <script src="src/combat-rules.js"></script>
   <script src="src/combat-sequence-controller.js"></script>
   <script src="src/combat-fx.js"></script>
@@ -208,5 +215,8 @@
   <script src="src/hall-of-fame.js"></script>
   <script src="src/cloud-config.js"></script>
   <script src="src/cloud-sync.js"></script>
+  <script src="src/multiplayer.js"></script>
+  <script src="src/tutorial.js"></script>
+  <script src="src/costume-ui.js"></script>
 </body>
 </html>

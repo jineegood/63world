@@ -1,0 +1,10 @@
+.codex_work/
+.superpowers/
+backups/
+outputs/
+node_modules/
+.vercel/
+*.log
+.DS_Store
+Thumbs.db
+desktop.ini

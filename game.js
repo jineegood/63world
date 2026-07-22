@@ -136,7 +136,7 @@ function showLoadingTransition(message, callback) {
   const previousModalState = { ...game.modalState };
   game.transitionLock = Date.now() + 2600;
   game.modalState = { type: 'loading', pause: true };
-  if (text) text.textContent = message || '육삼빌딩의 세계로 이동중입니다.';
+  if (text) text.textContent = message || '63월드로 이동중입니다.';
   overlay.classList.remove('hidden', 'leaving');
   overlay.classList.add('visible');
   playSfx('transition');
@@ -192,6 +192,7 @@ function sendChatMessage() {
   input.value = '';
   appendChatMessage('user', game.player.name, text);
   game.speechBubble = { text, until: Date.now() + 4200 };
+  try { window.__mpBroadcastChatV53?.(text); } catch {} // [v53] 다른 학생에게 채팅 전달
 }
 
 function toast(msg, ms = 1800) {
@@ -370,6 +371,8 @@ function normalizePlayer(p) {
     y: Number(p.y) || worldDefs.town.playerSpawn.y,
     map: p.map || 'town',
     bossReturnMap: typeof p.bossReturnMap === 'string' ? p.bossReturnMap : null,
+    costume: (p.costume && typeof p.costume === 'object' && !Array.isArray(p.costume)) ? { ...p.costume } : {},
+    costumeInventory: Array.isArray(p.costumeInventory) ? [...p.costumeInventory] : [],
     inventory: Array.isArray(p.inventory) ? p.inventory : [],
     pets: Array.isArray(p.pets) ? p.pets : [],
     activePet: typeof p.activePet === 'string' ? p.activePet : null,
@@ -1099,6 +1102,7 @@ function drawBuildingShopInterior() {
   drawCrystalPedestalWorld(670, 330, '#c7a6ff');
   drawCrystalPedestalWorld(930, 330, '#93c5fd');
   drawNpcWorld(world.saenari.x, world.saenari.y, world.saenari.name, false, isNearPoint(world.saenari, 86), 'priest');
+  if (world.sangnam) drawNpcWorld(world.sangnam.x, world.sangnam.y, world.sangnam.name, false, isNearPoint(world.sangnam, 86), 'mage');
   drawExitMarker(world.exit.x, world.exit.y);
   drawTitleLabel(world.label);
 }
@@ -1772,8 +1776,35 @@ function drawPlayerSprite(ctx, x, y, appearance, klass, state, scale = 1, spec =
   // 플레이어 스프라이트 자체에 연결해 모든 경로(마을/필드/보스방)에서 표시
   try { if (typeof drawLevelUpAura === 'function') drawLevelUpAura(ctx, x, y); } catch (err) {}
   // [추가] 수호의 오라 악세서리: 캐릭터를 감싸는 은은한 원형 빛 (몸 뒤 레이어)
-  const auraItem = state?.equipment?.accessory ? getItemDefinition(state.equipment.accessory, klass) : null;
-  if (auraItem?.look?.type === 'aura') {
+  const visEqV55 = window.resolveVisualEquipmentV55 ? window.resolveVisualEquipmentV55(state) : (state?.equipment || {});
+  const auraItem = visEqV55.accessory ? getItemDefinition(visEqV55.accessory, klass) : null;
+  if (auraItem?.look?.type === 'rainbowAura') {
+    // [v56] 무지개 오라: 발밑에서 일곱 빛깔 고리가 회전
+    const tt = performance.now() / 900;
+    const pulse = 1 + Math.sin(performance.now() / 420) * 0.1;
+    const COLORS = ['#f87171','#fb923c','#fde047','#4ade80','#38bdf8','#818cf8','#c084fc'];
+    ctx.save();
+    ctx.lineWidth = 3 * scale;
+    for (let i = 0; i < COLORS.length; i++) {
+      const a0 = tt + (i / COLORS.length) * Math.PI * 2;
+      ctx.globalAlpha = 0.75;
+      ctx.strokeStyle = COLORS[i];
+      ctx.shadowColor = COLORS[i];
+      ctx.shadowBlur = 7 * scale;
+      ctx.beginPath();
+      ctx.ellipse(x, y + 28 * scale, 30 * scale * pulse, 9 * scale * pulse, 0, a0, a0 + Math.PI / 4.2);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 0.5;
+    for (let i = 0; i < 7; i++) {
+      const a = tt * 1.6 + (i / 7) * Math.PI * 2;
+      ctx.fillStyle = COLORS[i];
+      ctx.beginPath();
+      ctx.arc(x + Math.cos(a) * 30 * scale, y + 28 * scale + Math.sin(a) * 9 * scale, 2.2 * scale, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  } else if (auraItem?.look?.type === 'aura') {
     const pulse = 1 + Math.sin(performance.now() / 480) * 0.08;
     ctx.save();
     ctx.globalAlpha = 0.7;
@@ -1834,7 +1865,10 @@ function drawHumanoid(ctx, x, y, appearance, klass, state, scale = 1, isNpc = fa
   const legSwing = moving ? Math.sin(t * 10) * 4 * scale : (dancing ? Math.sin(t * 12) * 5 * scale : 0);
   const blink = (t % 4.7) < 0.11;
   const eyeShift = Math.sin(t * 1.6) * 0.9 * scale;
-  const equipment = state.equipment || {};
+  // [v55] 코스튬: 성능은 원래 장비 유지, 보이는 모습만 코스튬으로 교체
+  const equipment = (!isNpc && window.resolveVisualEquipmentV55)
+    ? window.resolveVisualEquipmentV55(state)
+    : (state.equipment || {});
   const headItem = equipment.head ? getItemDefinition(equipment.head, klass) : null;
   const armorItem = equipment.armor ? getItemDefinition(equipment.armor, klass) : null;
   const accessoryItem = equipment.accessory ? getItemDefinition(equipment.accessory, klass) : null;
@@ -1871,6 +1905,62 @@ function drawHumanoid(ctx, x, y, appearance, klass, state, scale = 1, isNpc = fa
   }
 
 
+  if (accessoryItem?.look?.type === 'ribbonStreamer') {
+    // [v58] 하얀 줄끈: 등 뒤에서 부드럽게 흘러내리는 리본 끈
+    const tt = performance.now() / 700;
+    ctx.save();
+    ctx.lineCap = 'round';
+    for (const dir of [-1, 1]) {
+      for (let k = 0; k < 2; k++) {
+        const phase = tt + dir * 0.6 + k * 0.9;
+        const baseX = dir * (5 + k * 3) * scale;
+        ctx.strokeStyle = k === 0 ? 'rgba(255,255,255,.95)' : 'rgba(226,232,240,.8)';
+        ctx.lineWidth = (2.6 - k * 0.7) * scale;
+        ctx.beginPath();
+        ctx.moveTo(baseX, -4 * scale);
+        ctx.bezierCurveTo(
+          baseX + dir * (9 + Math.sin(phase) * 3) * scale, 6 * scale,
+          baseX + dir * (3 + Math.sin(phase * 1.3) * 5) * scale, 16 * scale,
+          baseX + dir * (12 + Math.sin(phase * 0.8) * 4) * scale, 26 * scale,
+        );
+        ctx.stroke();
+      }
+    }
+    // 어깨 매듭
+    ctx.fillStyle = 'rgba(255,255,255,.97)';
+    ctx.beginPath(); ctx.ellipse(-5 * scale, -5 * scale, 2.6 * scale, 1.9 * scale, -0.4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(5 * scale, -5 * scale, 2.6 * scale, 1.9 * scale, 0.4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(241,245,249,.9)';
+    ctx.beginPath(); ctx.arc(0, -5 * scale, 1.7 * scale, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  if (accessoryItem?.look?.type === 'angelWing') {
+    // [v56] 천사 날개: 깃털이 층층이 겹친 진짜 날개 실루엣
+    const flap = Math.sin(performance.now() / 520) * 0.16;
+    for (const dir of [-1, 1]) {
+      ctx.save();
+      ctx.translate(dir * 13 * scale, 0);
+      ctx.rotate(dir * (0.28 + flap));
+      for (let layer = 0; layer < 3; layer++) {
+        const len = (32 - layer * 5) * scale;
+        const spread = (19 - layer * 3.2) * scale;
+        ctx.fillStyle = layer === 0 ? 'rgba(255,255,255,.97)' : (layer === 1 ? 'rgba(241,245,249,.93)' : 'rgba(219,234,254,.9)');
+        ctx.beginPath();
+        ctx.moveTo(0, 6 * scale - layer * 3 * scale);
+        for (let f = 0; f < 4; f++) {
+          const px = dir * (spread * (f + 1) / 4) * 1.7;
+          const py = 6 * scale - len * (f + 1) / 4;
+          ctx.quadraticCurveTo(px * 1.3, py + 5 * scale, px, py);
+        }
+        ctx.quadraticCurveTo(dir * spread * 0.8, 2 * scale, 0, 9 * scale - layer * 3 * scale);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = 'rgba(191,219,254,.55)'; ctx.lineWidth = 0.8 * scale; ctx.stroke();
+      }
+      ctx.restore();
+    }
+    ctx.save(); ctx.globalAlpha = .35; ctx.fillStyle = '#fef9c3';
+    ctx.beginPath(); ctx.ellipse(0, 0, 22 * scale, 20 * scale, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  }
   const wingLook = accessoryItem?.look?.type === 'wing' ? accessoryItem.look : null;
   if (appearance.accessory === 'wing' || wingLook || accessoryItem?.id === 'featherWing' || accessoryItem?.id === 'sixthWing') {
     ctx.fillStyle = wingLook?.color || (accessoryItem?.id === 'sixthWing' ? 'rgba(196,181,253,.94)' : 'rgba(255,255,255,.92)');
@@ -1923,7 +2013,84 @@ function drawHumanoid(ctx, x, y, appearance, klass, state, scale = 1, isNpc = fa
   }
 
   // [추가] 가슴 계열 착용 외형: 흉갑(갑옷) / 목걸이·배지(악세서리)
-  if (armorItem?.look?.type === 'robe') {
+  if (armorItem?.look?.type === 'sailorSuit') {
+    // [v56] 세일러 교복: 흰 상의 + 남색 카라 + 붉은 스카프 + 주름치마
+    ctx.fillStyle = '#f8fafc';
+    roundRect(ctx, -11 * scale, -8 * scale, 22 * scale, 20 * scale, 5 * scale); ctx.fill();
+    ctx.fillStyle = armorItem.look.color || '#1d4ed8';
+    ctx.beginPath();
+    ctx.moveTo(-11 * scale, -8 * scale); ctx.lineTo(11 * scale, -8 * scale);
+    ctx.lineTo(9 * scale, -1 * scale); ctx.lineTo(0, 4 * scale); ctx.lineTo(-9 * scale, -1 * scale);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#f8fafc';
+    roundRect(ctx, -10 * scale, -7 * scale, 20 * scale, 2 * scale, 1 * scale); ctx.fill();
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath(); ctx.moveTo(0, 1 * scale); ctx.lineTo(-3 * scale, 7 * scale); ctx.lineTo(3 * scale, 7 * scale); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = armorItem.look.color || '#1d4ed8';
+    const pleat = Math.sin(t * 3) * 1.2 * scale;
+    ctx.beginPath();
+    ctx.moveTo(-11 * scale, 11 * scale); ctx.lineTo(11 * scale, 11 * scale);
+    ctx.lineTo(14 * scale + pleat, 24 * scale); ctx.lineTo(-14 * scale + pleat, 24 * scale);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 0.9 * scale;
+    for (let i = -3; i <= 3; i++) { ctx.beginPath(); ctx.moveTo(i * 3.4 * scale, 11 * scale); ctx.lineTo(i * 4.4 * scale + pleat, 24 * scale); ctx.stroke(); }
+  } else if (armorItem?.look?.type === 'starryRobe') {
+    // [v56] 별무리 로브: 밤하늘 그라데이션 + 반짝이는 별 + 흐르는 은하수
+    const gradR = ctx.createLinearGradient(0, -10 * scale, 0, 26 * scale);
+    gradR.addColorStop(0, '#312e81'); gradR.addColorStop(.55, '#1e1b4b'); gradR.addColorStop(1, '#0b1027');
+    ctx.fillStyle = gradR;
+    ctx.beginPath();
+    ctx.moveTo(-11 * scale, -8 * scale);
+    ctx.quadraticCurveTo(-17 * scale, 10 * scale, -15 * scale, 26 * scale);
+    ctx.lineTo(15 * scale, 26 * scale);
+    ctx.quadraticCurveTo(17 * scale, 10 * scale, 11 * scale, -8 * scale);
+    ctx.closePath(); ctx.fill();
+    ctx.save(); ctx.clip();
+    ctx.globalAlpha = .34; ctx.fillStyle = '#a5b4fc';
+    ctx.beginPath();
+    ctx.ellipse(-2 * scale, 12 * scale, 15 * scale, 5 * scale, -0.5 + Math.sin(t) * 0.05, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    for (let i = 0; i < 9; i++) {
+      const sx = ((i * 37) % 26 - 13) * scale;
+      const sy = (-6 + ((i * 53) % 30)) * scale;
+      const tw = 0.45 + 0.55 * Math.abs(Math.sin(t * 1.6 + i));
+      ctx.globalAlpha = tw; ctx.fillStyle = i % 3 === 0 ? '#fde68a' : '#e0e7ff';
+      const r = (i % 3 === 0 ? 1.5 : 1) * scale;
+      ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.fill();
+      if (i % 4 === 0) { ctx.fillRect(sx - r * 2.4, sy - r * .28, r * 4.8, r * .56); ctx.fillRect(sx - r * .28, sy - r * 2.4, r * .56, r * 4.8); }
+    }
+    ctx.globalAlpha = 1; ctx.restore();
+    ctx.strokeStyle = 'rgba(196,181,253,.65)'; ctx.lineWidth = 1.1 * scale;
+    ctx.beginPath(); ctx.moveTo(-11 * scale, -8 * scale); ctx.lineTo(11 * scale, -8 * scale); ctx.stroke();
+  } else if (armorItem?.look?.type === 'peachDress') {
+    // [v56] 복숭아 드레스: 3단 프릴 + 허리 리본 + 어깨 퍼프
+    const sway = Math.sin(t * 2.6) * 1.6 * scale;
+    ctx.fillStyle = armorItem.look.color || '#fda4af';
+    roundRect(ctx, -10 * scale, -8 * scale, 20 * scale, 16 * scale, 6 * scale); ctx.fill();
+    ctx.fillStyle = '#fecdd3';
+    ctx.beginPath(); ctx.arc(-10 * scale, -4 * scale, 4.6 * scale, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(10 * scale, -4 * scale, 4.6 * scale, 0, Math.PI * 2); ctx.fill();
+    const tiers = [[8, 13, 16], [13, 19, 21], [19, 26, 25]];
+    tiers.forEach(([y0, y1, w], i) => {
+      ctx.fillStyle = i % 2 === 0 ? (armorItem.look.color || '#fda4af') : '#fecdd3';
+      ctx.beginPath();
+      ctx.moveTo(-(w - 4) * scale, y0 * scale);
+      ctx.lineTo((w - 4) * scale, y0 * scale);
+      ctx.quadraticCurveTo((w + 1) * scale + sway, (y0 + y1) / 2 * scale, w * scale + sway, y1 * scale);
+      for (let f = 3; f >= -3; f--) {
+        ctx.quadraticCurveTo(f * (w / 3.2) * scale + sway, (y1 + 2.2) * scale, (f - 0.5) * (w / 3.2) * scale + sway, y1 * scale);
+      }
+      ctx.quadraticCurveTo(-(w + 1) * scale + sway, (y0 + y1) / 2 * scale, -(w - 4) * scale, y0 * scale);
+      ctx.closePath(); ctx.fill();
+    });
+    ctx.fillStyle = '#fb7185';
+    roundRect(ctx, -10 * scale, 6 * scale, 20 * scale, 3.4 * scale, 1.6 * scale); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(0, 7.6 * scale); ctx.lineTo(-5 * scale, 4 * scale); ctx.lineTo(-5 * scale, 11 * scale); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(0, 7.6 * scale); ctx.lineTo(5 * scale, 4 * scale); ctx.lineTo(5 * scale, 11 * scale); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#fff1f2';
+    ctx.beginPath(); ctx.arc(0, 7.6 * scale, 2 * scale, 0, Math.PI * 2); ctx.fill();
+  } else if (armorItem?.look?.type === 'robe') {
     // [피드백] 사제 제의: 망토가 아니라 '입는 옷' — 몸통 덮개 + 아랫단 치마
     ctx.fillStyle = armorItem.look.color;
     roundRect(ctx, -12 * scale, -4 * scale, 24 * scale, 20 * scale, 7 * scale); ctx.fill();
@@ -1947,6 +2114,35 @@ function drawHumanoid(ctx, x, y, appearance, klass, state, scale = 1, isNpc = fa
     ctx.globalAlpha = 1;
     ctx.strokeStyle = 'rgba(0,0,0,.25)'; ctx.lineWidth = 1.5 * scale;
     ctx.beginPath(); ctx.moveTo(0, -3 * scale); ctx.lineTo(0, 11 * scale); ctx.stroke();
+  }
+  if (accessoryItem?.look?.type === 'butterflyRibbon') {
+    // [v56] 나비 리본: 목에 매는 큼직한 리본 (날개가 살짝 파닥임)
+    const wob = Math.sin(performance.now() / 420) * 0.1;
+    ctx.save();
+    ctx.translate(0, -3 * scale);
+    ctx.rotate(wob);
+    const col = accessoryItem.look.color || '#f9a8d4';
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.quadraticCurveTo(-9 * scale, -6 * scale, -8.5 * scale, 0.4 * scale);
+    ctx.quadraticCurveTo(-9 * scale, 6.4 * scale, 0, 1.2 * scale);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.quadraticCurveTo(9 * scale, -6 * scale, 8.5 * scale, 0.4 * scale);
+    ctx.quadraticCurveTo(9 * scale, 6.4 * scale, 0, 1.2 * scale);
+    ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = .45; ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(-5.4 * scale, 0.4 * scale, 2.4 * scale, 1.4 * scale, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(5.4 * scale, 0.4 * scale, 2.4 * scale, 1.4 * scale, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#fb7185';
+    ctx.beginPath(); ctx.ellipse(0, 0.5 * scale, 2.2 * scale, 2.8 * scale, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 1.5 * scale;
+    ctx.beginPath(); ctx.moveTo(-2 * scale, 2.6 * scale); ctx.quadraticCurveTo(-4 * scale, 7 * scale, -1.4 * scale, 9 * scale); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(2 * scale, 2.6 * scale); ctx.quadraticCurveTo(4 * scale, 7 * scale, 1.4 * scale, 9 * scale); ctx.stroke();
+    ctx.restore();
   }
   if (accessoryItem?.look?.type === 'necklace') {
     ctx.strokeStyle = 'rgba(226,232,240,.85)'; ctx.lineWidth = 1.6 * scale;
@@ -2036,7 +2232,86 @@ function drawHumanoid(ctx, x, y, appearance, klass, state, scale = 1, isNpc = fa
     ctx.stroke();
   }
 
-  if (headItem?.look?.type === 'nurseCap') {
+  if (headItem?.look?.type === 'bunnyEars') {
+    // [v56] 토끼 머리띠: 긴 귀 두 짝이 살랑이고 안쪽은 분홍
+    const wig = Math.sin(performance.now() / 560) * 0.13;
+    const band = headItem.look.color || '#fbcfe8';
+    for (const dir of [-1, 1]) {
+      ctx.save();
+      ctx.translate(dir * 6 * scale, -26 * scale);
+      ctx.rotate(dir * (0.2 + wig));
+      ctx.fillStyle = '#fdf2f8';
+      ctx.beginPath(); ctx.ellipse(0, -11 * scale, 4.2 * scale, 12 * scale, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = band;
+      ctx.beginPath(); ctx.ellipse(0, -11 * scale, 2.2 * scale, 8.6 * scale, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(148,163,184,.5)'; ctx.lineWidth = 0.8 * scale;
+      ctx.beginPath(); ctx.ellipse(0, -11 * scale, 4.2 * scale, 12 * scale, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
+    ctx.strokeStyle = band; ctx.lineWidth = 2.6 * scale;
+    ctx.beginPath(); ctx.arc(0, -22 * scale, 12.5 * scale, Math.PI * 1.12, Math.PI * -0.12); ctx.stroke();
+    ctx.fillStyle = '#fb7185';
+    ctx.beginPath(); ctx.arc(-9 * scale, -27 * scale, 2 * scale, 0, Math.PI * 2); ctx.fill();
+  } else if (headItem?.look?.type === 'flowerCrown') {
+    // [v56] 꽃 화관: 덩굴 위에 5송이 꽃 + 잎사귀
+    ctx.strokeStyle = '#4d7c0f'; ctx.lineWidth = 2.2 * scale;
+    ctx.beginPath(); ctx.arc(0, -22 * scale, 12.8 * scale, Math.PI * 1.08, Math.PI * -0.08); ctx.stroke();
+    const petalColors = ['#fda4af', '#fde68a', '#f9a8d4', '#a7f3d0', '#fdba74'];
+    for (let i = 0; i < 5; i++) {
+      const a = Math.PI * (1.06 + (i / 4) * 0.88);
+      const fx = Math.cos(a) * 12.8 * scale;
+      const fy = -22 * scale + Math.sin(a) * 12.8 * scale;
+      const sway = Math.sin(performance.now() / 700 + i) * 0.35 * scale;
+      ctx.save(); ctx.translate(fx, fy + sway);
+      ctx.fillStyle = '#65a30d';
+      ctx.beginPath(); ctx.ellipse(-3 * scale, 1.6 * scale, 2.4 * scale, 1.2 * scale, -0.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = petalColors[i];
+      for (let pIdx = 0; pIdx < 5; pIdx++) {
+        const pa = (pIdx / 5) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.ellipse(Math.cos(pa) * 2.3 * scale, Math.sin(pa) * 2.3 * scale, 1.9 * scale, 1.5 * scale, pa, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = '#fef3c7';
+      ctx.beginPath(); ctx.arc(0, 0, 1.3 * scale, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+  } else if (headItem?.look?.type === 'starCrown') {
+    // [v56] 별빛 왕관: 5갈래 왕관 + 큰 별 + 반짝임
+    const col = headItem.look.color || '#fde68a';
+    const glow = 0.55 + 0.45 * Math.abs(Math.sin(performance.now() / 620));
+    ctx.save();
+    ctx.shadowColor = col; ctx.shadowBlur = 9 * scale * glow;
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(-12 * scale, -24 * scale);
+    ctx.lineTo(-12 * scale, -30 * scale); ctx.lineTo(-7 * scale, -26.5 * scale);
+    ctx.lineTo(-3 * scale, -33 * scale); ctx.lineTo(0, -27 * scale);
+    ctx.lineTo(3 * scale, -33 * scale); ctx.lineTo(7 * scale, -26.5 * scale);
+    ctx.lineTo(12 * scale, -30 * scale); ctx.lineTo(12 * scale, -24 * scale);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#fffbeb';
+    roundRect(ctx, -12 * scale, -25.6 * scale, 24 * scale, 2.6 * scale, 1.2 * scale); ctx.fill();
+    // 중앙 큰 별
+    ctx.fillStyle = '#fff7ed';
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const rr = (i % 2 === 0 ? 4.4 : 1.9) * scale;
+      const aa = (i / 10) * Math.PI * 2 - Math.PI / 2;
+      ctx[i === 0 ? 'moveTo' : 'lineTo'](Math.cos(aa) * rr, -34 * scale + Math.sin(aa) * rr);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+    for (let i = 0; i < 3; i++) {
+      const tt = performance.now() / 800 + i * 2.1;
+      const sx = Math.cos(tt) * 15 * scale;
+      const sy = -30 * scale + Math.sin(tt * 1.4) * 5 * scale;
+      ctx.globalAlpha = 0.35 + 0.4 * Math.abs(Math.sin(tt * 2));
+      ctx.fillStyle = '#fef9c3';
+      ctx.beginPath(); ctx.arc(sx, sy, 1.3 * scale, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  } else if (headItem?.look?.type === 'nurseCap') {
     // [피드백] 사제 모자: 네모난 높은 관 + 십자 마크
     ctx.fillStyle = headItem.look.color;
     roundRect(ctx, -10 * scale, -40 * scale, 20 * scale, 15 * scale, 2.5 * scale); ctx.fill();
@@ -2122,6 +2397,8 @@ function drawHumanoid(ctx, x, y, appearance, klass, state, scale = 1, isNpc = fa
   }
 
   // [피드백] 강화 등급 잔상: 고급=초록, 희귀=파랑, 에픽=보라, 전설=금색 글로우
+
+  // 무기 레이어: 캐릭터·장비·코스튬 위에 표시 (원래 순서)
   const weaponTierPlayer = !isNpc && game.player?.equipment?.weapon === state.equipment?.weapon
     ? game.player
     : { equipment:state.equipment, weaponUpgrades:state.weaponUpgrades || {} };
@@ -2251,6 +2528,7 @@ function dispatchBaseWorldInteraction(nearest) {
   if (nearest.type === 'weaponShop') { openShopModal('weapon'); return true; }
   if (nearest.type === 'armorShop') { openShopModal('armor'); return true; }
   if (nearest.type === 'buildingShopNpc') { openBuildingShopModal(); return true; }
+  if (nearest.type === 'costumeShopNpc') { window.openCostumeShopV55?.(); return true; }
   if (nearest.type === 'hall') { openHallOfFame(); return true; }
   return false;
 }
@@ -2759,6 +3037,7 @@ function getBaseMapColliders() {
     const s = worldDefs.buildingShopInterior;
     return [
       { type: 'circle', x: s.saenari.x, y: s.saenari.y, r: 46 },
+      ...(s.sangnam ? [{ type: 'circle', x: s.sangnam.x, y: s.sangnam.y, r: 46 }] : []),
       { type: 'rect', x: 520, y: 560, w: 120, h: 180 },
       { type: 'rect', x: 1080, y: 560, w: 120, h: 180 },
       { type: 'circle', x: 670, y: 330, r: 60 },
@@ -2819,7 +3098,7 @@ function gameLoop(ts) {
 function startGame(existing = false, options = {}) {
   if (!game.player) return;
   if (options.loading && !options.skipLoading) {
-    showLoadingTransition('육삼빌딩의 세계로 이동중입니다.', () => startGame(existing, { skipLoading: true }));
+    showLoadingTransition('63월드로 이동중입니다.', () => startGame(existing, { skipLoading: true }));
     return;
   }
   if (!existing) {
@@ -2958,6 +3237,7 @@ function openShopModal(kind = 'all') {
   const kindLabel = kind === 'weapon' ? '무기 상인 의석' : (kind === 'armor' ? '방어구 상인 상미' : '장비상점');
   const items = Object.values(ITEM_DEFS)
     .filter((item) => typeof item.price === 'number')
+    .filter((item) => !item.costume) // [v55] 코스튬은 옷 상인 상남 전용
     .filter((item) => kind === 'all' || (kind === 'weapon' ? item.slot === 'weapon' : ['armor', 'head'].includes(item.slot)))
     .filter((item) => !item.classOnly || item.classOnly === game.player.class)
     .map((item) => `
@@ -3182,6 +3462,8 @@ function bindEvents() {
     game.player = createNewPlayer(game.currentName);
     savePlayer();
     startGame(false, { loading: true });
+    // [v53] 신규 캐릭터 첫 진입 시 튜토리얼
+    setTimeout(() => { try { window.startTutorialV53?.(); } catch {} }, 2200);
   });
   $('backLandingBtn').addEventListener('click', () => showScreen('landing'));
   document.querySelectorAll('.classBtn').forEach((btn) => {
@@ -3281,13 +3563,13 @@ function drawWeapon(ctx, klass, scale, swing, isNpc, itemId = null, spec = null)
   const item = itemId ? getItemDefinition(itemId, klass) : null;
   const variant = item?.id || '';
   if (klass === 'warrior') {
-    ctx.translate(18 * scale + swing * 8 * scale, 7 * scale - swing * 4 * scale);
-    ctx.rotate(.58 + swing * .75);
+    ctx.translate(18 * scale + swing * 8 * scale, 11 * scale - swing * 4 * scale);
+    ctx.rotate(.40 + swing * .75);
     const wood = variant === 'training_greatsword' || variant === 'bronzeGreatsword';
     if (wood) {
       const strong = variant === 'bronzeGreatsword';
       ctx.fillStyle = strong ? '#9a6a34' : '#b9874a';
-      roundRect(ctx, -2.6 * scale, -1 * scale, 5.2 * scale, 18 * scale, 2.5 * scale); ctx.fill();
+      roundRect(ctx, -2.6 * scale, -6 * scale, 5.2 * scale, 23 * scale, 2.5 * scale); ctx.fill();
       ctx.fillStyle = strong ? '#6b3f1d' : '#8a5a2b';
       roundRect(ctx, -11 * scale, -7 * scale, 22 * scale, 5 * scale, 3 * scale); ctx.fill();
       ctx.fillStyle = strong ? '#c29152' : '#d6a665';
@@ -3307,7 +3589,7 @@ function drawWeapon(ctx, klass, scale, swing, isNpc, itemId = null, spec = null)
       const edge = '#ffffff';
       const guard = '#526071';
       ctx.fillStyle = '#8b4513';
-      roundRect(ctx, -3.3 * scale, -1 * scale, 6.6 * scale, 18 * scale, 3 * scale); ctx.fill();
+      roundRect(ctx, -3.3 * scale, -6 * scale, 6.6 * scale, 23 * scale, 3 * scale); ctx.fill();
       ctx.fillStyle = guard;
       roundRect(ctx, -13 * scale, -7 * scale, 26 * scale, 6 * scale, 3 * scale); ctx.fill();
       ctx.fillStyle = blade;
@@ -3344,8 +3626,6 @@ function drawWeapon(ctx, klass, scale, swing, isNpc, itemId = null, spec = null)
       ctx.stroke();
       ctx.restore();
     }
-    ctx.fillStyle = '#f1d2b6';
-    ctx.beginPath(); ctx.arc(0, 4 * scale, 4 * scale, 0, Math.PI * 2); ctx.fill();
   } else if (klass === 'mage') {
     ctx.translate(14 * scale + swing * 6 * scale, 7 * scale);
     ctx.rotate(.15 + swing * .3);
@@ -3366,8 +3646,6 @@ function drawWeapon(ctx, klass, scale, swing, isNpc, itemId = null, spec = null)
     ctx.lineWidth = 1.5 * scale;
     ctx.strokeRect(-4 * scale, -9 * scale, 12 * scale, 14 * scale);
     ctx.beginPath(); ctx.moveTo(2 * scale, -9 * scale); ctx.lineTo(2 * scale, 5 * scale); ctx.stroke();
-    ctx.fillStyle = '#f1d2b6';
-    ctx.beginPath(); ctx.arc(-7 * scale, 0, 3.4 * scale, 0, Math.PI * 2); ctx.fill();
   }
   ctx.restore();
 }
@@ -3387,8 +3665,8 @@ function drawWeaponTierOutline(ctx, klass, scale, swing, itemId, tierStyle) {
   const variant = item?.id || '';
 
   if (klass === 'warrior') {
-    ctx.translate(18 * scale + swing * 8 * scale, 7 * scale - swing * 4 * scale);
-    ctx.rotate(.58 + swing * .75);
+    ctx.translate(18 * scale + swing * 8 * scale, 11 * scale - swing * 4 * scale);
+    ctx.rotate(.40 + swing * .75);
     const wood = variant === 'training_greatsword' || variant === 'bronzeGreatsword';
     ctx.beginPath();
     if (wood) {
@@ -3628,6 +3906,7 @@ function findBaseWorldInteractable() {
   if (game.currentMap === 'buildingShopInterior') {
     const shop = worldDefs.buildingShopInterior;
     if (distance(p, shop.saenari) < 90) return { type: 'buildingShopNpc', label: 'E: 특별 상인 새나리와 대화' };
+    if (shop.sangnam && distance(p, shop.sangnam) < 90) return { type: 'costumeShopNpc', label: 'E: 옷 상인 상남과 대화' };
   }
   if (game.currentMap === 'bossRoom') {
     const room = worldDefs.bossRoom;
@@ -3943,6 +4222,7 @@ function drawNpcIdleBubble(ctx, x, y, name, scale = 1) {
     '무기 상인 의석': ['좋은 무기는 바른 자세에서 시작되지.', '손에 맞는 무기를 골라봐.'],
     '방어구 상인 상미': ['방어구는 생존의 기본이야.', '망토는 뒤에서 자연스럽게 흘러야 예쁘지.'],
     '특별 상인 새나리': ['빌딩은 특별한 보상 화폐야.', '빛나는 아이템을 구경해봐!'],
+      '옷 상인 상남': ['멋과 귀여움은 능력치보다 중요하지!', '코스튬은 성능은 그대로, 모습만 바꿔줘.'],
   };
   const arr = lines[name] || ['어서 와!'];
   game.npcBubbleState = game.npcBubbleState || {};
@@ -4365,7 +4645,7 @@ function updateQuestTracker() {
       name: '문제집3 - 으스스한 늪지 기본 문제 세트',
       zone: 'spooky_swamp',
       subject: '복습',
-      prompt: '늪지 기본 데모 문제',
+      prompt: '늪지 기본 문제',
       createdAt: Date.now(),
       questions: [
         { id: uid(), workbookId: id, zone: 'spooky_swamp', q: '15 × 4 = ?', choices: ['50','55','60','65'], answer: '60', source: '기본' },
@@ -5741,8 +6021,6 @@ function updateQuestTracker() {
     ctx.lineWidth = 1.8 * scale;
     ctx.strokeRect(-4 * scale, -9 * scale, 12 * scale, 14 * scale);
     ctx.beginPath(); ctx.moveTo(2 * scale, -9 * scale); ctx.lineTo(2 * scale, 5 * scale); ctx.stroke();
-    ctx.fillStyle = '#f1d2b6';
-    ctx.beginPath(); ctx.arc(-7 * scale, 0, 3.4 * scale, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   };
 
@@ -8624,7 +8902,7 @@ function updateQuestTracker() {
   if (window.__YUKSAM_V28_PATCH__) return;
   window.__YUKSAM_V28_PATCH__ = true;
 
-  try { document.title = '육삼빌딩의 세계 - 데모 v28'; } catch {}
+  try { document.title = '63월드'; } catch {}
 
   const TIER_INFO_V28 = window.TIER_INFO_V27 || [
     { name:'일반', cls:'tier-0', color:'#cbd5e1', chance:null },
@@ -8813,7 +9091,7 @@ function updateQuestTracker() {
   if (window.__YUKSAM_V29_PATCH__) return;
   window.__YUKSAM_V29_PATCH__ = true;
 
-  try { document.title = '육삼빌딩의 세계 - 데모 v29'; } catch {}
+  try { document.title = '63월드'; } catch {}
 
   // 이름/위치 정리
   if (worldDefs?.town?.upgradeShop) worldDefs.town.upgradeShop.name = '대장간';
@@ -9110,7 +9388,7 @@ function updateQuestTracker() {
   if (window.__YUKSAM_V30_PATCH__) return;
   window.__YUKSAM_V30_PATCH__ = true;
 
-  try { document.title = '육삼빌딩의 세계 - 데모 v30'; } catch {}
+  try { document.title = '63월드'; } catch {}
 
   // 내부 공간을 방어구/특별 상점처럼 작은 고정 룸 느낌으로 통일해서 출구 위치가 화면에서 흔들리지 않도록 한다.
   worldDefs.petShopInterior = WORLD_PATCHES_V30.petShopInterior;
@@ -9413,7 +9691,7 @@ function updateQuestTracker() {
   if (window.__YUKSAM_V31_PATCH__) return;
   window.__YUKSAM_V31_PATCH__ = true;
 
-  try { document.title = '육삼빌딩의 세계 - 데모 v31'; } catch {}
+  try { document.title = '63월드'; } catch {}
 
   // 1) 캐릭터/장비가 보이는 paperdoll 영역은 v26 느낌으로 복구하고,
   //    위 상태 정보/아래 동행 펫/스탯 영역은 유지한다.
@@ -9876,7 +10154,7 @@ function updateQuestTracker() {
   if (window.__YUKSAM_V32_PATCH__) return;
   window.__YUKSAM_V32_PATCH__ = true;
 
-  try { document.title = '육삼빌딩의 세계 - 데모 v32'; } catch {}
+  try { document.title = '63월드'; } catch {}
 
   // 신규 강화 진행음 교체 후, 대장간/펫상점에서도 마을 BGM이 계속 흐르도록 보정한다.
   const oldGetDesiredAudioFileV32 = getDesiredAudioFile;
@@ -10034,12 +10312,29 @@ function updateQuestTracker() {
       '무기 상인 의석': ['좋은 무기는 바른 자세에서 시작되지.', '손에 맞는 무기를 골라봐.'],
       '방어구 상인 상미': ['방어구는 생존의 기본이야.', '망토는 뒤로 자연스럽게 흐르는 게 예쁘지.'],
       '특별 상인 새나리': ['빌딩은 특별한 보상 화폐야.', '빛나는 아이템을 구경해봐!'],
+      '옷 상인 상남': ['멋과 귀여움은 능력치보다 중요하지!', '코스튬은 성능은 그대로, 모습만 바꿔줘.'],
       '대장장이 진명': ['무기를 벼려 더 강해져 보게.', '등급이 오르면 빛이 달라진다네.', '강화에는 3빌딩이 필요하네.'],
       '펫 수정구': ['반짝이는 친구를 만나볼래?', '귀여운 펫들이 기다리고 있어!', '10빌딩으로 새로운 동행을 소환해봐!'],
     };
     const arr = lines[name] || ['어서 와!'];
     const cycle = 12000;
-    const now = Date.now();
+    // [v60] 같은 방의 NPC들이 동시에 말하지 않도록 이름 기반 고정 오프셋을 준다
+    const OFFSETS = {
+      '명진쌤': 0,
+      '무기 상인 의석': 0,
+      '방어구 상인 상미': 6000,
+      '특별 상인 새나리': 0,
+      '옷 상인 상남': 6000,
+      '대장장이 진명': 0,
+      '펫 수정구': 6000,
+    };
+    let offset = OFFSETS[name];
+    if (offset == null) { // 미등록 NPC는 이름 해시로 분산
+      let h = 0;
+      for (let i = 0; i < name.length; i += 1) h = (h * 31 + name.charCodeAt(i)) % cycle;
+      offset = h;
+    }
+    const now = Date.now() + offset;
     const phase = now % cycle;
     if (phase > 5000) return;
     const idx = Math.floor(now / cycle) % arr.length;
@@ -10227,7 +10522,7 @@ function updateQuestTracker() {
   if (window.__YUKSAM_V33_PATCH__) return;
   window.__YUKSAM_V33_PATCH__ = true;
 
-  try { document.title = '육삼빌딩의 세계 - 데모 v33'; } catch {}
+  try { document.title = '63월드'; } catch {}
 
   // 펫 상점 마을 위치를 개울/연못과 겹치지 않는 상단 잔디 구역으로 이동
   if (worldDefs?.town?.petShop) {
@@ -10817,7 +11112,7 @@ function updateQuestTracker() {
   if (window.__YUKSAM_V34_PATCH__) return;
   window.__YUKSAM_V34_PATCH__ = true;
 
-  try { document.title = '육삼빌딩의 세계 - 데모 v34'; } catch {}
+  try { document.title = '63월드'; } catch {}
 
   // 펫상점/대장간 위치와 최종보스방을 안정적으로 고정
   if (worldDefs?.town?.petShop) {
@@ -11374,7 +11669,7 @@ function updateQuestTracker() {
   if (window.__YUKSAM_V35_PATCH__) return;
   window.__YUKSAM_V35_PATCH__ = true;
 
-  try { document.title = '육삼빌딩의 세계 - 데모 v35'; } catch {}
+  try { document.title = '63월드'; } catch {}
 
   // 1) 마을 펫 상점 위치 재배치 (남서쪽 끝과 중심 포탈의 중간 지점 느낌)
   if (worldDefs?.town?.petShop) {
