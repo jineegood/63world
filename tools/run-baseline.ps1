@@ -1,5 +1,5 @@
 param(
-  [ValidateSet('all', 'check', 'baseline', 'core-utils', 'player-store', 'input-router', 'world-interaction-registry', 'world-navigation-registry', 'world-render-pipeline', 'hud-update-pipeline', 'total-stats-pipeline', 'combat-entry-pipeline', 'combat-frame-pipeline', 'audio-volume-pipeline', 'combat-rules', 'combat-sequence-controller', 'combat-flow', 'combat-fx', 'sfx-map', 'audio-manifest', 'audio-dispatcher', 'weapon-tier', 'game-data', 'quest-data', 'patch-data', 'refactor-health', 'current-data', 'safety-net', 'extract-data', 'build-workbook')]
+  [ValidateSet('all', 'check', 'baseline', 'core-utils', 'player-store', 'input-router', 'world-interaction-registry', 'world-navigation-registry', 'world-render-pipeline', 'hud-update-pipeline', 'total-stats-pipeline', 'combat-entry-pipeline', 'combat-frame-pipeline', 'audio-volume-pipeline', 'combat-rules', 'combat-sequence-controller', 'combat-flow', 'combat-fx', 'sfx-map', 'audio-manifest', 'audio-dispatcher', 'weapon-tier', 'game-data', 'quest-data', 'patch-data', 'supabase-security-v2', 'refactor-health', 'current-data', 'safety-net', 'extract-data', 'build-workbook')]
   [string]$Mode = 'all'
 )
 
@@ -194,6 +194,10 @@ if ($Mode -eq 'all' -or $Mode -eq 'quest-data') {
 
 if ($Mode -eq 'all' -or $Mode -eq 'patch-data') {
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', 'tests/patch-data.test.mjs')
+}
+
+if ($Mode -eq 'all' -or $Mode -eq 'supabase-security-v2') {
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', 'tests/supabase-security-v2.test.mjs')
 }
 
 if ($Mode -eq 'all' -or $Mode -eq 'refactor-health') {

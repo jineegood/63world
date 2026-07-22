@@ -5,6 +5,7 @@
   "scripts": {
     "extract:data": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 extract-data",
     "build:workbook": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 build-workbook",
+    "build:supabase-client": "node tools/build-supabase-client.mjs",
     "check:syntax": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 check",
     "test:core-utils": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 core-utils",
     "test:player-store": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 player-store",
@@ -28,10 +29,17 @@
     "test:game-data": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 game-data",
     "test:quest-data": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 quest-data",
     "test:patch-data": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 patch-data",
+    "test:supabase-security-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 supabase-security-v2",
     "test:baseline": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 baseline",
     "test:refactor-health": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 refactor-health",
     "test:current-data": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 current-data",
     "test:safety-net": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 safety-net",
     "test": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 all"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.110.8"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.1"
   }
 }
