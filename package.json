@@ -28,6 +28,7 @@
     "test:weapon-tier": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 weapon-tier",
     "test:game-data": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 game-data",
     "test:quest-data": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 quest-data",
+    "test:quest-text": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 quest-text",
     "test:patch-data": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 patch-data",
     "test:supabase-security-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 supabase-security-v2",
     "test:cloud-sync-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 cloud-sync-v2",

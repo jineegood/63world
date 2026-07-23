@@ -39,6 +39,8 @@ const YuksamQuestData = window.YuksamQuestData;
 if (!YuksamQuestData) throw new Error('YuksamQuestData must be loaded before game.js');
 const QUEST_DEFS = YuksamQuestData.QUEST_DEFS;
 const QUEST_ORDER = YuksamQuestData.QUEST_ORDER;
+const YuksamQuestText = window.YuksamQuestText;
+if (!YuksamQuestText) throw new Error('YuksamQuestText must be loaded before game.js');
 const YuksamPatchData = window.YuksamPatchData;
 if (!YuksamPatchData) throw new Error('YuksamPatchData must be loaded before game.js');
 const PET_DEFS_V27 = YuksamPatchData.PET_DEFS_V27;
@@ -5896,7 +5898,7 @@ function updateQuestTracker() {
       options.push({ label: '대화 종료', action: 'closeModal()' });
     }
     game.dialogue.selected = Math.min(selected, Math.max(0, options.length - 1));
-    openModal(`<div class="dialogue-box"><div class="dialogue-speaker"><h2>명진쌤 ${marker ? `<span class="badge quest-marker-badge">${marker}</span>` : ''}</h2><div class="badge">클릭 또는 E키로 진행</div></div><div class="dialogue-text">${escapeHtml(text)}</div><div class="dialogue-options">${options.map((opt,i)=>`<button class="${i===game.dialogue.selected?'selected':''}" onclick="${opt.action}">${escapeHtml(opt.label)}</button>`).join('')}</div></div>`, { type:'dialogue', pause:true });
+    openModal(`<div class="dialogue-box"><div class="dialogue-speaker"><h2>명진쌤 ${marker ? `<span class="badge quest-marker-badge">${marker}</span>` : ''}</h2><div class="badge">클릭 또는 E키로 진행</div></div><div class="dialogue-text">${YuksamQuestText.emphasize(text)}</div><div class="dialogue-options">${options.map((opt,i)=>`<button class="${i===game.dialogue.selected?'selected':''}" onclick="${opt.action}">${YuksamQuestText.emphasize(opt.label)}</button>`).join('')}</div></div>`, { type:'dialogue', pause:true });
   }
   window.startQuestStory = function startQuestStoryV21() { game.dialogue = { page: 0, selected: 0, mode: 'quest' }; renderNpcDialogueV21(); };
   window.nextDialoguePage = function nextDialoguePageV21() { const id = getCurrentQuestIdForNpcV21(); const def = QUEST_DEFS[id]; game.dialogue.page = Math.min((def?.pages?.length || 1) - 1, (game.dialogue.page || 0) + 1); renderNpcDialogueV21(); };
@@ -5947,7 +5949,7 @@ function updateQuestTracker() {
     const q = getQuestState(activeId); const def = QUEST_DEFS[activeId];
     const pct = Math.min(100, Math.round(((q.progress || 0) / (q.target || def.target)) * 100));
     tracker.classList.remove('hidden');
-    tracker.innerHTML = `<h3>${escapeHtml(def.title)}</h3><p>${escapeHtml(def.desc)}</p><p><b>진행도:</b> ${q.progress || 0}/${def.target} ${q.status === 'ready' ? '· 보고 가능' : ''}</p><div class="quest-progress-bar"><div class="quest-progress-fill" style="width:${pct}%"></div></div>`;
+    tracker.innerHTML = `<h3>${YuksamQuestText.emphasize(def.title)}</h3><p>${YuksamQuestText.emphasize(def.desc)}</p><p><b>진행도:</b> ${q.progress || 0}/${def.target} ${q.status === 'ready' ? '· 보고 가능' : ''}</p><div class="quest-progress-bar"><div class="quest-progress-fill" style="width:${pct}%"></div></div>`;
   };
   window.incrementQuestProgressByMonster = function incrementQuestProgressByMonsterV21(monster) {
     if (!monster || !game.player?.quests) return;

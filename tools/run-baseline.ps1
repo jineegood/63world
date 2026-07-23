@@ -1,5 +1,5 @@
 param(
-  [ValidateSet('all', 'check', 'baseline', 'core-utils', 'player-store', 'input-router', 'world-interaction-registry', 'world-navigation-registry', 'world-render-pipeline', 'hud-update-pipeline', 'total-stats-pipeline', 'combat-entry-pipeline', 'combat-frame-pipeline', 'audio-volume-pipeline', 'combat-rules', 'combat-sequence-controller', 'combat-flow', 'combat-fx', 'sfx-map', 'audio-manifest', 'audio-dispatcher', 'weapon-tier', 'game-data', 'quest-data', 'patch-data', 'gameplay-polish-v2', 'early-game-polish-v2', 'wrong-answer-polish-v2', 'world-healing-polish-v2', 'reward-presentation-v2', 'tutorial-quests-polish-v2', 'multiplayer', 'supabase-security-v2', 'cloud-sync-v2', 'student-access-v2', 'secure-student-login-v2', 'secure-shared-student-v2', 'admin-auth-v2', 'teacher-reset-function', 'secure-teacher-auth-v2', 'secure-shared-teacher-v2', 'admin-data-v2', 'student-reward-grants-v2', 'teacher-delete-function', 'secure-cloud-student-admin-v2', 'shared-state-policy-v2', 'shared-state-v2', 'refactor-health', 'current-data', 'safety-net', 'extract-data', 'build-workbook')]
+  [ValidateSet('all', 'check', 'baseline', 'core-utils', 'player-store', 'input-router', 'world-interaction-registry', 'world-navigation-registry', 'world-render-pipeline', 'hud-update-pipeline', 'total-stats-pipeline', 'combat-entry-pipeline', 'combat-frame-pipeline', 'audio-volume-pipeline', 'combat-rules', 'combat-sequence-controller', 'combat-flow', 'combat-fx', 'sfx-map', 'audio-manifest', 'audio-dispatcher', 'weapon-tier', 'game-data', 'quest-data', 'quest-text', 'patch-data', 'gameplay-polish-v2', 'early-game-polish-v2', 'wrong-answer-polish-v2', 'world-healing-polish-v2', 'reward-presentation-v2', 'tutorial-quests-polish-v2', 'multiplayer', 'supabase-security-v2', 'cloud-sync-v2', 'student-access-v2', 'secure-student-login-v2', 'secure-shared-student-v2', 'admin-auth-v2', 'teacher-reset-function', 'secure-teacher-auth-v2', 'secure-shared-teacher-v2', 'admin-data-v2', 'student-reward-grants-v2', 'teacher-delete-function', 'secure-cloud-student-admin-v2', 'shared-state-policy-v2', 'shared-state-v2', 'refactor-health', 'current-data', 'safety-net', 'extract-data', 'build-workbook')]
   [string]$Mode = 'all'
 )
 
@@ -74,6 +74,7 @@ if ($Mode -eq 'all' -or $Mode -eq 'check') {
   if (Test-Path -LiteralPath 'src/quest-data.js') {
     Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/quest-data.js')
   }
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/quest-text.js')
   if (Test-Path -LiteralPath 'src/patch-data.js') {
     Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/patch-data.js')
   }
@@ -201,6 +202,10 @@ if ($Mode -eq 'all' -or $Mode -eq 'game-data') {
 
 if ($Mode -eq 'all' -or $Mode -eq 'quest-data') {
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', 'tests/quest-data.test.mjs')
+}
+
+if ($Mode -eq 'all' -or $Mode -eq 'quest-text') {
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', 'tests/quest-text.test.mjs')
 }
 
 if ($Mode -eq 'all' -or $Mode -eq 'patch-data') {

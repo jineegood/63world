@@ -136,6 +136,8 @@ strong { font-weight: 900; }
 .quest-tracker p { margin: 6px 0; color: #dbeafe; font-size: 13px; line-height: 1.45; }
 .quest-progress-bar { height: 9px; background: rgba(255,255,255,.09); border-radius: 999px; overflow: hidden; margin-top: 10px; }
 .quest-progress-fill { height: 100%; background: linear-gradient(90deg, #ffd76a, #22c55e); }
+.quest-keyword-yellow { color:#fde047; font-weight:900; text-shadow:0 1px 5px rgba(113,63,18,.72); }
+.quest-keyword-green { color:#4ade80; font-weight:900; text-shadow:0 1px 5px rgba(20,83,45,.72); }
 
 .toast { position: fixed; top: 92px; left: 50%; transform: translateX(-50%); z-index: 60; background: rgba(6,12,22,.95); border: 1px solid rgba(255,255,255,.11); border-radius: 999px; padding: 12px 18px; box-shadow: var(--shadow); }
 .modal { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(3,8,16,.74); padding: 24px; z-index: 100; }
