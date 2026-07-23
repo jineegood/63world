@@ -52,6 +52,27 @@ test('Shield Charge caps shield-derived base damage and applies critical damage 
   assert.deepEqual({ ...rules.shieldChargeDamage(500, true) }, { baseDamage:100, damage:150 });
 });
 
+test('shielded damage reports shield and HP loss separately', () => {
+  assert.deepEqual({ ...rules.resolveShieldedDamage(12, 20) }, {
+    shieldDamage:12,
+    hpDamage:0,
+    remainingShield:8,
+    fullyBlocked:true,
+  });
+  assert.deepEqual({ ...rules.resolveShieldedDamage(20, 7) }, {
+    shieldDamage:7,
+    hpDamage:13,
+    remainingShield:0,
+    fullyBlocked:false,
+  });
+  assert.deepEqual({ ...rules.resolveShieldedDamage(5, 0) }, {
+    shieldDamage:0,
+    hpDamage:5,
+    remainingShield:0,
+    fullyBlocked:false,
+  });
+});
+
 test('enhancement succeeds only when the random roll is below the displayed chance', () => {
   for (const chance of [0.8, 0.6, 0.4, 0.2]) {
     assert.equal(rules.rollEnhancement(chance, chance - Number.EPSILON), true);

@@ -65,6 +65,19 @@
     return { baseDamage, damage:critical ? Math.ceil(baseDamage * 1.5) : baseDamage };
   }
 
+  function resolveShieldedDamage(damage, shield) {
+    const safeDamage = Math.max(0, Math.floor(Number(damage) || 0));
+    const safeShield = Math.max(0, Math.floor(Number(shield) || 0));
+    const shieldDamage = Math.min(safeDamage, safeShield);
+    const hpDamage = Math.max(0, safeDamage - shieldDamage);
+    return {
+      shieldDamage,
+      hpDamage,
+      remainingShield:Math.max(0, safeShield - shieldDamage),
+      fullyBlocked:safeDamage > 0 && hpDamage === 0,
+    };
+  }
+
   function rollEnhancement(chance, roll) {
     return Number(roll) < Number(chance);
   }
@@ -297,6 +310,7 @@
     executeHpThreshold,
     mageBasicCriticalDamage,
     shieldChargeDamage,
+    resolveShieldedDamage,
     rollEnhancement,
     rollHostileHit,
     combinedMonsterMissChance,
