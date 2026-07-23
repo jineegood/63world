@@ -3,15 +3,15 @@
 
   const WELLS = Object.freeze({
     forest:Object.freeze([
-      Object.freeze({ id:'forest-entrance', x:560, y:1780 }),
+      Object.freeze({ id:'forest-entrance', x:560, y:1580 }),
       Object.freeze({ id:'forest-advanced', x:2100, y:1120 }),
     ]),
     desert:Object.freeze([
-      Object.freeze({ id:'desert-entrance', x:620, y:1840 }),
+      Object.freeze({ id:'desert-entrance', x:620, y:1640 }),
       Object.freeze({ id:'desert-advanced', x:2140, y:1180 }),
     ]),
     swamp:Object.freeze([
-      Object.freeze({ id:'swamp-entrance', x:680, y:1940 }),
+      Object.freeze({ id:'swamp-entrance', x:680, y:1760 }),
       Object.freeze({ id:'swamp-advanced', x:2400, y:1220 }),
     ]),
   });

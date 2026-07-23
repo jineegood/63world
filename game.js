@@ -12398,6 +12398,17 @@ window.cheatUpgradeEquippedWeapon = function cheatUpgradeEquippedWeapon() {
     },
   });
 
+  worldNavigationRegistry.registerCollider({
+    id:'hunting-healing-well-colliders-v2',
+    priority:900,
+    resolve:() => {
+      if (!['forest', 'desert', 'swamp'].includes(game.currentMap)) return null;
+      const wells = YuksamGameplayPolishV2.getHealingWells(game.currentMap)
+        .map((well) => ({ type:'circle', x:well.x, y:well.y, r:38 }));
+      return [...getBaseMapColliders(), ...wells];
+    },
+  });
+
   worldInteractionRegistry.registerCandidate({
     id:'hunting-healing-wells-v2',
     priority:900,

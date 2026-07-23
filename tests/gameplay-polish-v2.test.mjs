@@ -65,9 +65,9 @@ test('reward steps use fixed dramatic timing and omit empty optional rewards', (
 test('each hunting map has two frozen healing wells at approved coordinates', () => {
   const api = loadApi();
   const expected = {
-    forest:[{ id:'forest-entrance', x:560, y:1780 }, { id:'forest-advanced', x:2100, y:1120 }],
-    desert:[{ id:'desert-entrance', x:620, y:1840 }, { id:'desert-advanced', x:2140, y:1180 }],
-    swamp:[{ id:'swamp-entrance', x:680, y:1940 }, { id:'swamp-advanced', x:2400, y:1220 }],
+    forest:[{ id:'forest-entrance', x:560, y:1580 }, { id:'forest-advanced', x:2100, y:1120 }],
+    desert:[{ id:'desert-entrance', x:620, y:1640 }, { id:'desert-advanced', x:2140, y:1180 }],
+    swamp:[{ id:'swamp-entrance', x:680, y:1760 }, { id:'swamp-advanced', x:2400, y:1220 }],
   };
   for (const [mapKey, wells] of Object.entries(expected)) {
     const actual = api.getHealingWells(mapKey);
@@ -76,4 +76,12 @@ test('each hunting map has two frozen healing wells at approved coordinates', ()
     assert.equal(actual.every(Object.isFrozen), true);
   }
   assert.deepEqual(Array.from(api.getHealingWells('town')), []);
+});
+
+test('hunting wells add solid circle colliders without replacing map obstacles', () => {
+  const game = fs.readFileSync(path.join(root, 'game.js'), 'utf8');
+  const patch = game.slice(game.indexOf('(function yuksamHealingWellsV2()'));
+  assert.match(patch, /worldNavigationRegistry\.registerCollider/);
+  assert.match(patch, /\.\.\.getBaseMapColliders\(\)/);
+  assert.match(patch, /type:'circle'[\s\S]*r:38/);
 });
