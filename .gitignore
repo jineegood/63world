@@ -2,6 +2,7 @@
 .superpowers/
 backups/
 outputs/
+작업자료/
 node_modules/
 .vercel/
 *.log
