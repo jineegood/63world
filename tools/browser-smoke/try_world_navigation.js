@@ -56,9 +56,9 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   check('town includes healing well collider', townUnique.includes(signature({ type:'circle', x:worlds.town.healingWell.x, y:worlds.town.healingWell.y, r:44 })));
   check('town includes final pet building collider', townUnique.includes(signature({ type:'rect', x:worlds.town.petShop.x, y:worlds.town.petShop.y + 18, w:worlds.town.petShop.w * .9, h:worlds.town.petShop.h * .82 })));
   check('town includes final upgrade building collider', townUnique.includes(signature({ type:'rect', x:worlds.town.upgradeShop.x, y:worlds.town.upgradeShop.y + 18, w:worlds.town.upgradeShop.w * .9, h:worlds.town.upgradeShop.h * .82 })));
-  check('forest keeps twenty-six colliders', colliders('forest').length === 26);
-  check('desert keeps twenty colliders', colliders('desert').length === 20);
-  check('swamp keeps twenty-eight colliders', colliders('swamp').length === 28);
+  check('forest keeps twenty-eight colliders including two healing wells', colliders('forest').length === 28);
+  check('desert keeps twenty-two colliders including two healing wells', colliders('desert').length === 22);
+  check('swamp keeps thirty colliders including two healing wells', colliders('swamp').length === 30);
   check('pet interior keeps final five colliders', colliders('petShopInterior').length === 5);
   check('upgrade interior keeps final four colliders', colliders('upgradeShopInterior').length === 4);
   check('boss room keeps an empty collider list', colliders('bossRoom').length === 0);

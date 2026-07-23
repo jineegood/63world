@@ -378,12 +378,12 @@ test('browser queue consumes player effects at impact with a safe fallback', () 
   assert.equal(pkg.scripts['test:combat-fx'], 'powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 combat-fx');
 });
 
-test('combat floating numbers provide damage, healing, and shield variants with the original lifetime', () => {
+test('combat floating numbers provide damage, healing, shield gain, and shield loss variants', () => {
   const game = read('game.js');
   const style = read('style.css');
 
   assert.match(game, /function showCombatFloatingNumberV49\(target, amount, kind, critical = false\)/);
-  assert.match(game, /kind === 'damage' \? `-\$\{value\}` : `\+\$\{value\}`/);
+  assert.match(game, /kind === 'damage' \|\| kind === 'shield-damage' \? `-\$\{value\}` : `\+\$\{value\}`/);
   assert.match(game, /showCombatFloatingNumberV49\('player', actualHeal, 'heal'\)/);
   assert.match(game, /showCombatFloatingNumberV49\('player', actualShield, 'shield'\)/);
   assert.match(game, /showCombatFloatingNumberV49\('monster', actualHeal, 'heal'\)/);
@@ -391,6 +391,7 @@ test('combat floating numbers provide damage, healing, and shield variants with 
   assert.match(game, /\}, 1200\)/);
   assert.match(style, /\.combat-floating-damage\.heal\s*\{[^}]*color:\s*#(?:86efac|22c55e)/);
   assert.match(style, /\.combat-floating-damage\.shield\s*\{[^}]*color:\s*#(?:d1d5db|9ca3af)/);
+  assert.match(style, /\.combat-floating-damage\.shield-damage\s*\{/);
 });
 
 test('combat fx module contains no gameplay damage or health mutation', () => {
