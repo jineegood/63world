@@ -2208,6 +2208,7 @@ body.defeated #app { filter: grayscale(1) brightness(.62); transition: filter .3
 .combat-floating-damage.monster { --float-x: 58px; color: #fca5a5; }
 .combat-floating-damage.heal { color: #86efac; -webkit-text-stroke-color: rgba(5, 55, 18, .92); text-shadow: 0 2px 3px rgba(0, 0, 0, .95), 0 0 8px rgba(20, 83, 45, .85); }
 .combat-floating-damage.shield { color: #d1d5db; -webkit-text-stroke-color: rgba(31, 41, 55, .92); text-shadow: 0 2px 3px rgba(0, 0, 0, .95), 0 0 8px rgba(75, 85, 99, .85); }
+.combat-floating-damage.shield-damage { color: #cbd5e1; -webkit-text-stroke-color: rgba(15, 23, 42, .96); text-shadow: 0 2px 3px rgba(0, 0, 0, .95), 0 0 10px rgba(96, 165, 250, .88); }
 .combat-floating-damage.critical { font-size: 32px; color: #f87171; }
 @keyframes combatFloatingDamage {
   from { opacity: 1; transform: translate(-50%, -50%) scale(.86); }

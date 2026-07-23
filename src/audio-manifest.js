@@ -18,6 +18,7 @@
     miss: { src:'assets/3. 빗나감 소리.mp3', volume:1, channel:'sfx' },
     enemyAttack: { src:'assets/3. 적 공격 소리.mp3', volume:1, channel:'sfx' },
     critical: { src:'assets/3. 치명타 소리.mp3', volume:1, channel:'sfx' },
+    shieldBlock: { src:'assets/3. 보호막으로만 다 데미지 막혔을때 소리.mp3', volume:1, channel:'sfx' },
     stunned: { src:'assets/3. 기절 소리.mp3', volume:1, channel:'sfx' },
     warriorBasic: { src:'assets/4. 전사 기본공격.mp3', volume:1, channel:'sfx' },
     warriorBasicStrike: { src:'assets/4. 전사의일격 소리.mp3', volume:1, channel:'sfx' },
@@ -51,7 +52,7 @@
   });
 
   const eventSounds = Object.freeze({
-    door:'door', questComplete:'questComplete', petDraw:'petDraw', miss:'miss', enemyAttack:'enemyAttack', critical:'critical', execution:'execution',
+    door:'door', questComplete:'questComplete', petDraw:'petDraw', miss:'miss', enemyAttack:'enemyAttack', critical:'critical', shieldBlock:'shieldBlock', execution:'execution',
     upgradeCharge:'upgradeCharge', upgradeSuccess:'upgradeSuccess', upgradeFail:'upgradeFail',
   });
   const classBasicSounds = Object.freeze({ warrior:'warriorBasic', mage:'mageBasic', priest:'priestBasic' });

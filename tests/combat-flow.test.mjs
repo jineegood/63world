@@ -14,6 +14,7 @@ const styleSource = readFileSync(join(root, 'style.css'), 'utf8');
 const skillHintSource = readFileSync(join(root, 'src', 'skillpoint-hint.js'), 'utf8');
 const cheatPanelSource = readFileSync(join(root, 'src', 'cheat-panel.js'), 'utf8');
 const patchDataSource = readFileSync(join(root, 'src', 'patch-data.js'), 'utf8');
+const audioManifestSource = readFileSync(join(root, 'src', 'audio-manifest.js'), 'utf8');
 const combatRulesSource = readFileSync(join(root, 'src', 'combat-rules.js'), 'utf8');
 const combatRulesContext = createContext({ window: {} });
 new Script(combatRulesSource, { filename: 'src/combat-rules.js' }).runInContext(combatRulesContext);
@@ -345,6 +346,25 @@ test('critical feedback is emitted even when a monster shield absorbs all HP dam
   assert.match(monsterDamage, /if \(effect\.critical\) playSfx\('critical'\)/);
   assert.doesNotMatch(monsterDamage, /effect\.critical && actualDamage > 0/);
   assert.match(monsterDamage, /if \(actualDamage > 0\) showCombatFloatingNumberV49\('monster', actualDamage, 'damage', effect\.critical\)/);
+});
+
+test('shield loss has its own negative number and full absorption sound', () => {
+  const monsterDamage = gameSource.match(/'monster-damage': \(effect\) => \{[\s\S]*?\n    },\n    'monster-status'/)?.[0] || '';
+  const playerDamage = gameSource.match(/'player-damage': \(effect\) => \{[\s\S]*?\n    },\n    'retaliation'/)?.[0] || '';
+  assert.match(gameSource, /\['damage', 'heal', 'shield', 'shield-damage'\]/);
+  assert.match(gameSource, /kind === 'damage' \|\| kind === 'shield-damage'/);
+  assert.match(monsterDamage, /showCombatFloatingNumberV49\('monster', shieldDamage, 'shield-damage'\)/);
+  assert.match(playerDamage, /showCombatFloatingNumberV49\('player', shieldDamage, 'shield-damage'\)/);
+  assert.match(monsterDamage, /if \(fullyBlocked\) playSfx\('shieldBlock'\)/);
+  assert.match(playerDamage, /if \(fullyBlocked\) playSfx\('shieldBlock'\)/);
+  assert.match(audioManifestSource, /shieldBlock:\s*\{\s*src:'assets\/3\. 보호막으로만 다 데미지 막혔을때 소리\.mp3'/);
+});
+
+test('every damaging combat effect shakes the struck actor only', () => {
+  const handlers = gameSource.match(/const combatEffectHandlerV42 = YuksamCombatRules\.createCombatEffectHandler\(\{[\s\S]*?\n  }\);/)?.[0] || '';
+  const retaliation = handlers.match(/'retaliation': \(effect\) => \{[\s\S]*?\n    },/)?.[0] || '';
+  assert.match(retaliation, /setCombatImpactV44\('monster'/);
+  assert.doesNotMatch(retaliation, /querySelectorAll\('\.combat-sprite/);
 });
 
 test('active skill sound and ultimate visuals are queued with the skill notice', () => {

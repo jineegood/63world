@@ -6855,12 +6855,12 @@ function updateQuestTracker() {
     const value = Math.max(0, Math.floor(Number(amount) || 0));
     const stage = $('modalContent')?.querySelector('.combat-stage');
     const actor = stage?.querySelector(target === 'player' ? '.combat-player' : '.combat-monster');
-    if (!value || !actor || !['damage', 'heal', 'shield'].includes(kind)) return;
+    if (!value || !actor || !['damage', 'heal', 'shield', 'shield-damage'].includes(kind)) return;
     const stageRect = stage.getBoundingClientRect();
     const rect = actor.getBoundingClientRect();
     const number = document.createElement('div');
     number.className = `combat-floating-damage ${target} ${kind}${critical ? ' critical' : ''}`;
-    number.textContent = kind === 'damage' ? `-${value}` : `+${value}`;
+    number.textContent = kind === 'damage' || kind === 'shield-damage' ? `-${value}` : `+${value}`;
     number.style.left = `${rect.left - stageRect.left + rect.width * .5}px`;
     number.style.top = `${rect.top - stageRect.top + rect.height * .5}px`;
     stage.appendChild(number);
@@ -6893,13 +6893,21 @@ function updateQuestTracker() {
     'monster-damage': (effect) => {
       const monster = currentEffectMonsterV43(effect);
       if (!monster) return;
+      const shieldBefore = Math.max(0, Number(monster.shield) || 0);
+      const shieldResult = YuksamCombatRules.resolveShieldedDamage(
+        effect.amount,
+        effect.ignoreShield === true ? 0 : shieldBefore,
+      );
       const hpBefore = monster.hp;
       applyDamageToMonsterV40(monster, effect.amount, { ignoreShield:effect.ignoreShield === true });
       if (effect.consumeCharge) game.chargeActive = false;
       const actualDamage = Math.max(0, hpBefore - monster.hp);
+      const { shieldDamage, fullyBlocked } = shieldResult;
       queueCombatEffectFeedbackV46(effect.id, () => {
         setCombatImpactV44('monster', effect.critical ? 1150 : 900);
+        if (shieldDamage > 0) showCombatFloatingNumberV49('monster', shieldDamage, 'shield-damage');
         if (actualDamage > 0) showCombatFloatingNumberV49('monster', actualDamage, 'damage', effect.critical);
+        if (fullyBlocked) playSfx('shieldBlock');
         if (effect.critical) playSfx('critical');
       });
       if (effect.finalHit && monster.hp > 0) {
@@ -7018,21 +7026,23 @@ function updateQuestTracker() {
     'player-damage': (effect) => {
       const monster = currentEffectMonsterV43(effect);
       if (!monster || game.player.hp <= 0) return;
-      let damage = effect.amount;
-      if (!effect.pierceDefense && game.combatShield > 0) {
-        const blocked = Math.min(game.combatShield, damage);
-        game.combatShield -= blocked;
-        damage -= blocked;
-      }
+      const shieldResult = YuksamCombatRules.resolveShieldedDamage(
+        effect.amount,
+        effect.pierceDefense ? 0 : game.combatShield,
+      );
+      const { shieldDamage, hpDamage, remainingShield, fullyBlocked } = shieldResult;
+      if (!effect.pierceDefense) game.combatShield = remainingShield;
       const hpBefore = game.player.hp;
-      game.player.hp = Math.max(0, game.player.hp - damage);
+      game.player.hp = Math.max(0, game.player.hp - hpDamage);
       const actualDamage = Math.max(0, hpBefore - game.player.hp);
       const monsterHpBefore = monster.hp;
       if (effect.monsterHeal > 0) monster.hp = Math.min(monster.maxHp || monster.hp, monster.hp + effect.monsterHeal);
       const actualMonsterHeal = Math.max(0, monster.hp - monsterHpBefore);
       queueCombatEffectFeedbackV46(effect.id, () => {
         setCombatImpactV44('player', effect.hitIndex > 0 ? 420 : 960);
+        if (shieldDamage > 0) showCombatFloatingNumberV49('player', shieldDamage, 'shield-damage');
         showCombatFloatingNumberV49('player', actualDamage, 'damage', effect.critical);
+        if (fullyBlocked) playSfx('shieldBlock');
         if (actualMonsterHeal > 0) showCombatFloatingNumberV49('monster', actualMonsterHeal, 'heal');
         if (effect.critical) playSfx('critical'); // [v50] 일반 명중음은 notice의 enemyAttack으로 대체
       });
@@ -7050,6 +7060,7 @@ function updateQuestTracker() {
       game.player.hp = Math.min(game.player.maxHp, game.player.hp + heal);
       const actualHeal = Math.max(0, game.player.hp - playerHpBefore);
       queueCombatEffectFeedbackV46(effect.id, () => {
+        setCombatImpactV44('monster', 700);
         if (actualDamage > 0) showCombatFloatingNumberV49('monster', actualDamage, 'damage');
         if (actualHeal > 0) showCombatFloatingNumberV49('player', actualHeal, 'heal');
       });
