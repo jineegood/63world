@@ -3928,7 +3928,7 @@ function findBaseWorldInteractable() {
   if (game.currentMap === 'town') {
     const town = worldDefs.town;
     if (distance(p, town.portal) < town.portal.r + 48) return { type: 'portal', label: 'E: 포탈 - 사냥터 선택' };
-    if (distance(p, town.npc) < 72) return { type: 'npc', label: 'E: 퀘스트 받기' };
+    if (distance(p, town.npc) < 110) return { type: 'npc', label: 'E: 퀘스트 받기' };
     if (distance(p, { x: town.shop.doorX, y: town.shop.doorY }) < 100) return { type: 'shopDoor', label: '빛나는 입구에 접근하면 장비상점으로 이동' };
     if (distance(p, { x: town.buildingShop.doorX, y: town.buildingShop.doorY }) < 100) return { type: 'buildingShopDoor', label: '빛나는 입구에 접근하면 빌딩 화폐 상점으로 이동' };
     if (Math.abs(p.x - town.hall.x) < 200 && Math.abs(p.y - town.hall.y) < 140) return { type: 'hall', label: 'E: 명예의 전당 보기' };
@@ -12253,3 +12253,64 @@ window.cheatUpgradeEquippedWeapon = function cheatUpgradeEquippedWeapon() {
   toast(`${item.name}: ${nextStyle.name} 등급으로 즉시 강화했습니다.`);
   return true;
 };
+
+/* Early-game polish v2: hunting-map healing wells */
+(function yuksamHealingWellsV2() {
+  if (window.__YUKSAM_HEALING_WELLS_V2__) return;
+  window.__YUKSAM_HEALING_WELLS_V2__ = true;
+
+  function drawHuntingHealingWellV2(well) {
+    const ctx = game.ctx;
+    const p = worldToScreen(well.x, well.y);
+    const pulse = Math.sin(performance.now() / 420) * 2;
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.fillStyle = 'rgba(0,0,0,.24)';
+    ctx.beginPath(); ctx.ellipse(0, 29, 40, 11, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#64748b';
+    roundRect(ctx, -34, -6, 68, 35, 11); ctx.fill();
+    ctx.fillStyle = '#94a3b8';
+    roundRect(ctx, -30, -15, 60, 17, 9); ctx.fill();
+    ctx.fillStyle = '#38bdf8';
+    ctx.beginPath(); ctx.ellipse(0, -7, 25 + pulse, 8, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(186,230,253,.85)';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(0, -7, 31 + pulse, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = 'rgba(7,16,27,.76)';
+    roundRect(ctx, -47, 36, 94, 22, 999); ctx.fill();
+    ctx.fillStyle = '#dff8ff';
+    ctx.textAlign = 'center';
+    ctx.font = '800 13px Jua, Noto Sans KR, sans-serif';
+    ctx.fillText('치유의 우물', 0, 51);
+    ctx.restore();
+  }
+
+  worldRenderPipeline.registerLayer({
+    id:'hunting-healing-wells-v2',
+    priority:360,
+    when:({ map }) => ['forest', 'desert', 'swamp'].includes(map),
+    render:() => {
+      YuksamGameplayPolishV2.getHealingWells(game.currentMap).forEach(drawHuntingHealingWellV2);
+    },
+  });
+
+  worldInteractionRegistry.registerCandidate({
+    id:'hunting-healing-wells-v2',
+    priority:900,
+    find:() => {
+      if (!game.player || !['forest', 'desert', 'swamp'].includes(game.currentMap)) return null;
+      const well = YuksamGameplayPolishV2.getHealingWells(game.currentMap)
+        .find((entry) => distance(game.player, entry) < 92);
+      return well ? { type:'huntingHealingWellV2', label:'E: 치유의 우물 - 문제를 풀고 회복', well } : null;
+    },
+  });
+  worldInteractionRegistry.registerAction({
+    id:'hunting-healing-well-actions-v2',
+    priority:900,
+    types:['huntingHealingWellV2'],
+    handle:() => {
+      window.openHealingWellModal();
+      return true;
+    },
+  });
+})();
