@@ -8120,6 +8120,47 @@ function updateQuestTracker() {
       }
     });
   };
+  function resolveWrongAnswerV2(monster) {
+    const correctAnswer = game.currentQuestion?.answer ?? '';
+    const result = calculateActionDamageV25();
+    const sourceHits = Array.isArray(result.hitInfo) && result.hitInfo.length
+      ? result.hitInfo
+      : result.damage > 0 ? [{ dmg:result.damage, missed:false, label:'' }] : [];
+    const wrongHits = sourceHits.map((hit) => ({
+      ...hit,
+      dmg:hit.missed ? 0 : YuksamGameplayPolishV2.wrongHitDamage(hit.dmg),
+    }));
+    const effectBatchId = `${monster.id}:wrong:${game.combatEffectSerial = (Number(game.combatEffectSerial) || 0) + 1}`;
+    const firstDamageIndex = wrongHits.findIndex((hit) => hit.dmg > 0);
+    const events = [
+      { type:'answer-wrong', text:'오답입니다!', tone:'enemy-action', duration:700 },
+      { type:'answer-wrong', text:`정답은 ${correctAnswer}`, tone:'correct-answer', duration:2200 },
+    ];
+    wrongHits.forEach((hit, index) => {
+      events.push({
+        type:index === 0 ? 'player-hit' : 'player-extra-hit',
+        text:hit.missed
+          ? `${hit.label || '공격'}이 빗나갔습니다.`
+          : `오답 공격으로 ${hit.dmg}의 피해를 주었습니다.`,
+        duration:PLAYER_ATTACK_NOTICE_DELAY_V46,
+        ...(!hit.missed && hit.dmg > 0 ? { effect:{
+          id:`${effectBatchId}:${index}`,
+          type:'monster-damage',
+          combatId:monster.id,
+          amount:hit.dmg,
+          ...(result.ignoreShield === true ? { ignoreShield:true } : {}),
+          ...(result.chargeRelease && index === firstDamageIndex ? { consumeCharge:true } : {}),
+        } } : {}),
+      });
+    });
+    queueCombatSequence(events, () => {
+      const fresh = currentCombatMonster();
+      if (!fresh || !fresh.alive || fresh.dying) return;
+      if (fresh.hp <= 0) startMonsterDefeatSequenceV25(fresh, '');
+      else monsterCounterAttack('');
+    });
+  }
+
   window.submitCombatAnswer = function submitCombatAnswerV25() {
     const monster = currentCombatMonster();
     if (!monster || !game.currentQuestion || monster.dying) return;
@@ -8136,9 +8177,7 @@ function updateQuestTracker() {
         savePlayer();
       }
       if ($('combatAnswer')) $('combatAnswer').value = '';
-      queueCombatSequence([
-        { type:'answer-wrong', text:'오답입니다! 다시 생각해 보자!' },
-      ], () => monsterCounterAttack(''));
+      resolveWrongAnswerV2(monster);
       return;
     }
     if (game.player) {
