@@ -238,7 +238,13 @@ input[type="range"] { margin: 0; }
 .reward-sequence-v2 strong,.reward-sequence-v2 span { display:block; }
 .reward-sequence-v2 strong { color:#fde68a; font-size:18px; }
 .reward-sequence-v2 span { margin-top:5px; color:#fff; font-size:22px; font-weight:900; }
-.reward-sequence-v2.reward-pop-v2 { animation:rewardPopV2 .9s ease both; }
+.reward-sequence-v2.reward-tone-exp { border-color:rgba(192,132,252,.72); box-shadow:0 18px 55px rgba(0,0,0,.45),0 0 30px rgba(192,132,252,.28); }
+.reward-sequence-v2.reward-tone-exp span { color:#c084fc; }
+.reward-sequence-v2.reward-tone-gold { border-color:rgba(250,204,21,.72); box-shadow:0 18px 55px rgba(0,0,0,.45),0 0 30px rgba(250,204,21,.25); }
+.reward-sequence-v2.reward-tone-gold span { color:#facc15; }
+.reward-sequence-v2.reward-tone-building { border-color:rgba(244,114,182,.72); box-shadow:0 18px 55px rgba(0,0,0,.45),0 0 30px rgba(244,114,182,.26); }
+.reward-sequence-v2.reward-tone-building span { color:#f472b6; }
+.reward-sequence-v2.reward-pop-v2 { animation:rewardPopV2 1s ease both; }
 @keyframes rewardPopV2 {
   0% { opacity:0; transform:translateX(-50%) scale(.82); }
   18%,75% { opacity:1; transform:translateX(-50%) scale(1); }

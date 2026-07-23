@@ -220,15 +220,19 @@ function showRewardSequenceV2(title, prefix, reward = {}) {
       if (token !== rewardSequenceTokenV2) return;
       overlay.innerHTML = `<strong>${escapeHtml(title)}</strong><span>${escapeHtml(prefix)} · ${escapeHtml(labels[step.kind](step.amount))}</span>`;
       overlay.classList.remove('hidden');
+      overlay.classList.remove('reward-tone-exp', 'reward-tone-gold', 'reward-tone-building');
+      overlay.classList.add(`reward-tone-${step.tone}`);
       overlay.classList.remove('reward-pop-v2');
       void overlay.offsetWidth;
       overlay.classList.add('reward-pop-v2');
+      playSfx(step.sfx);
     }, step.delayMs);
   });
   const lastDelay = steps.at(-1)?.delayMs || 0;
+  const lastDuration = steps.at(-1)?.durationMs || 1000;
   setTimeout(() => {
     if (token === rewardSequenceTokenV2) overlay.classList.add('hidden');
-  }, lastDelay + 950);
+  }, lastDelay + lastDuration);
 }
 
 function appendChatMessage(type, sender, message) {
@@ -7762,7 +7766,7 @@ function updateQuestTracker() {
     game.currentCombatAction = null;
     game.combatHpDisplay = null;
     closeModal();
-    game.modalState = { type:'cinematic', pause:true };
+    game.transitionLock = 0;
     if (expGain > 0) addExp(expGain);
     addGold(defeatedMonster.gold || 0);
     if (typeof incrementQuestProgressByMonster === 'function') incrementQuestProgressByMonster(defeatedMonster);

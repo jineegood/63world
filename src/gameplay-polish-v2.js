@@ -50,9 +50,18 @@
   }
 
   function rewardSteps(reward = {}) {
-    const steps = [{ kind:'exp', amount:Math.max(0, number(reward.exp)), delayMs:0 }];
-    if (number(reward.gold) > 0) steps.push({ kind:'gold', amount:number(reward.gold), delayMs:1000 });
-    if (number(reward.building) > 0) steps.push({ kind:'building', amount:number(reward.building), delayMs:2000 });
+    const steps = [];
+    const add = (kind, amount, tone, sfx) => steps.push({
+      kind,
+      amount,
+      delayMs:steps.length * 1000,
+      durationMs:1000,
+      tone,
+      sfx,
+    });
+    add('exp', Math.max(0, number(reward.exp)), 'exp', 'quest');
+    if (number(reward.gold) > 0) add('gold', number(reward.gold), 'gold', 'coin');
+    if (number(reward.building) > 0) add('building', number(reward.building), 'building', 'open');
     return Object.freeze(steps.map(Object.freeze));
   }
 

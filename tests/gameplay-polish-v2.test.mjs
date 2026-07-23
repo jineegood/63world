@@ -48,15 +48,17 @@ test('costume tutorial compatibility requires every shop costume, not merely one
 
 test('reward steps use fixed dramatic timing and omit empty optional rewards', () => {
   const api = loadApi();
-  const simplify = (steps) => Array.from(steps, ({ kind, amount, delayMs }) => ({ kind, amount, delayMs }));
+  const simplify = (steps) => Array.from(steps, ({ kind, amount, delayMs, durationMs, tone, sfx }) => ({
+    kind, amount, delayMs, durationMs, tone, sfx,
+  }));
   assert.deepEqual(simplify(api.rewardSteps({ exp:5, gold:4, building:1 })), [
-    { kind:'exp', amount:5, delayMs:0 },
-    { kind:'gold', amount:4, delayMs:1000 },
-    { kind:'building', amount:1, delayMs:2000 },
+    { kind:'exp', amount:5, delayMs:0, durationMs:1000, tone:'exp', sfx:'quest' },
+    { kind:'gold', amount:4, delayMs:1000, durationMs:1000, tone:'gold', sfx:'coin' },
+    { kind:'building', amount:1, delayMs:2000, durationMs:1000, tone:'building', sfx:'open' },
   ]);
   assert.deepEqual(simplify(api.rewardSteps({ exp:0, gold:4, building:0 })), [
-    { kind:'exp', amount:0, delayMs:0 },
-    { kind:'gold', amount:4, delayMs:1000 },
+    { kind:'exp', amount:0, delayMs:0, durationMs:1000, tone:'exp', sfx:'quest' },
+    { kind:'gold', amount:4, delayMs:1000, durationMs:1000, tone:'gold', sfx:'coin' },
   ]);
 });
 
