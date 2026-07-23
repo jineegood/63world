@@ -2821,6 +2821,7 @@ function enterBaseCombat(monster) {
   monster.shield = 0; // [패턴] 전투 시작 시 상태 초기화
   monster.chasing = true;
   game.currentCombatMonsterId = monster.id;
+  syncAudioFileBgm();
   game.currentQuestion = null;
   game.currentCombatAction = null;
   game.combatShield = 0;
@@ -5760,19 +5761,26 @@ function updateQuestTracker() {
       game.audio.bossFile.preload = 'auto';
       game.audio.bossFile.volume = game.settings.bgmEnabled ? Math.min(1, Math.max(0, game.settings.bgmVolume)) : 0;
     }
+    if (!game.audio.battleFile) {
+      game.audio.battleFile = new Audio(window.getAudioAsset?.('battleBgm')?.src || '');
+      game.audio.battleFile.loop = true;
+      game.audio.battleFile.preload = 'auto';
+      game.audio.battleFile.volume = game.settings.bgmEnabled ? Math.min(1, Math.max(0, game.settings.bgmVolume)) : 0;
+    }
   }
   const oldGetDesiredAudioFileV21 = getDesiredAudioFile;
   getDesiredAudioFile = function getDesiredAudioFileV21() {
     ensureBossAudioV21();
     if (!game.settings.bgmEnabled) return null;
     if (screens.game.classList.contains('active') && (game.currentMap === 'bossRoom' || game.currentMap === 'finalBossRoom')) return game.audio.bossFile || null;
+    if (screens.game.classList.contains('active') && game.currentCombatMonsterId) return game.audio.battleFile || null;
     return oldGetDesiredAudioFileV21();
   };
   const oldSyncAudioFileBgmV21 = syncAudioFileBgm;
   syncAudioFileBgm = function syncAudioFileBgmV21() {
     initAudio();
     ensureBossAudioV21();
-    const files = [game.audio.file, game.audio.forestFile, game.audio.desertFile, game.audio.swampFile, game.audio.bossFile].filter(Boolean);
+    const files = [game.audio.file, game.audio.forestFile, game.audio.desertFile, game.audio.swampFile, game.audio.bossFile, game.audio.battleFile].filter(Boolean);
     const desired = getDesiredAudioFile();
     files.forEach((file) => {
       file.volume = game.settings.bgmEnabled ? Math.min(1, Math.max(0, game.settings.bgmVolume)) : 0;
@@ -5786,6 +5794,7 @@ function updateQuestTracker() {
     after:() => {
       ensureBossAudioV21();
       if (game.audio.bossFile) game.audio.bossFile.volume = game.settings.bgmEnabled ? Math.min(1, Math.max(0, game.settings.bgmVolume)) : 0;
+      if (game.audio.battleFile) game.audio.battleFile.volume = game.settings.bgmEnabled ? Math.min(1, Math.max(0, game.settings.bgmVolume)) : 0;
     },
   });
 
@@ -7748,6 +7757,7 @@ function updateQuestTracker() {
   }
   function finishMonsterDefeatV25(defeatedMonster, expGain) {
     game.currentCombatMonsterId = null;
+    syncAudioFileBgm();
     game.currentQuestion = null;
     game.currentCombatAction = null;
     game.combatHpDisplay = null;

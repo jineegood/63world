@@ -323,6 +323,19 @@ test('BGM synchronization selects and starts the desired file only once', () => 
   assert.equal((syncV21.match(/file\.play\(\)/g) || []).length, 1);
 });
 
+test('normal combat uses battle BGM while boss rooms keep boss BGM', () => {
+  const desiredV21 = gameSource.match(/getDesiredAudioFile = function getDesiredAudioFileV21\(\) \{[\s\S]*?\n  };/)?.[0] || '';
+  const syncV21 = gameSource.match(/syncAudioFileBgm = function syncAudioFileBgmV21\(\) \{[\s\S]*?\n  };/)?.[0] || '';
+  const enterCombat = gameSource.match(/function enterBaseCombat\(monster\) \{[\s\S]*?\n}/)?.[0] || '';
+  const finishDefeat = gameSource.match(/function finishMonsterDefeatV25\([\s\S]*?\n  }/)?.[0] || '';
+  assert.match(audioManifestSource, /battleBgm:\s*\{\s*src:'assets\/1\. 전투씬 음악\.wav'/);
+  assert.ok(desiredV21.indexOf("game.currentMap === 'bossRoom'") < desiredV21.indexOf('game.currentCombatMonsterId'));
+  assert.match(desiredV21, /game\.currentCombatMonsterId[\s\S]*?game\.audio\.battleFile/);
+  assert.match(syncV21, /game\.audio\.battleFile/);
+  assert.match(enterCombat, /game\.currentCombatMonsterId = monster\.id;[\s\S]*?syncAudioFileBgm\(\)/);
+  assert.match(finishDefeat, /game\.currentCombatMonsterId = null;[\s\S]*?syncAudioFileBgm\(\)/);
+});
+
 test('Offensive Armor sound is queued once with its extra-hit impact, not its calculation', () => {
   const submitAnswer = gameSource.match(/window\.submitCombatAnswer = function submitCombatAnswer[\s\S]*?\n  };/)?.[0] || '';
   const armorEffect = submitAnswer.match(/effect:\{[\s\S]*?\n          },\n          fx:\{/)?.[0] || '';
