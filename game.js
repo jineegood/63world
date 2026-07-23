@@ -4737,23 +4737,31 @@ function updateQuestTracker() {
     Object.defineProperty(monster, '__zoneScale', { value: zone, enumerable: false, configurable: true });
     return monster;
   }
+  function polishNormalMonsterV2(monster) {
+    if (!monster || monster.elite) return monster;
+    Object.assign(monster, YuksamGameplayPolishV2.tuneNormalMonster(monster));
+    Object.defineProperty(monster, '__gameplayPolishV2', {
+      value:true, enumerable:false, configurable:true,
+    });
+    return monster;
+  }
   createForestMonsters = function createForestMonstersV17() {
     const mushrooms = [
       { x: 760, y: 1600 }, { x: 1040, y: 1380 }, { x: 1320, y: 1660 },
       { x: 1560, y: 1260 }, { x: 1780, y: 1580 }, { x: 1980, y: 1360 },
-    ].map((p, i) => monsterBase({
+    ].map((p, i) => polishNormalMonsterV2(monsterBase({
       id: 'mushroom_' + i, type: 'mushroom', name: '버섯돌이', level: 1,
       x: p.x, y: p.y, r: 20, hp: randomInt(9, 11), exp: 1, gold: 2,
       attack: randomInt(3, 5), speed: 0.92, aggro: 220, // [피드백] 공격 +2
-    }));
+    })));
     const slimes = [
       { x: 2280, y: 520 }, { x: 2520, y: 860 }, { x: 2700, y: 1230 },
       { x: 2860, y: 1580 }, { x: 3020, y: 760 }, { x: 3060, y: 1900 },
-    ].map((p, i) => monsterBase({
+    ].map((p, i) => polishNormalMonsterV2(monsterBase({
       id: 'slime_' + i, type: 'slime', name: '슬라임', level: 3,
       x: p.x, y: p.y, r: 24, hp: randomInt(18, 21), exp: 3, gold: 4,
       attack: randomInt(3, 5), speed: 0.78, aggro: 250,
-    }));
+    })));
     return [...mushrooms, ...slimes];
   };
 
@@ -4813,11 +4821,12 @@ function updateQuestTracker() {
       const d = 130 + Math.random() * 110;
       const x = clamp(p.x + Math.cos(a) * d, 90, worldDefs[mapKey].width - 90);
       const y = clamp(p.y + Math.sin(a) * d, 90, worldDefs[mapKey].height - 90);
-      game.forestMonsters.push(applyZoneScaleV42(monsterBase({
+      const guard = applyZoneScaleV42(monsterBase({
         id: `boss_guard_${mapKey}_${i}_${uid()}`,
         type: def.type, name: def.name, level: def.level, x, y, r: def.r,
         hp: def.hp(), exp: def.exp, gold: def.gold, attack: def.attack(), speed: def.speed, aggro: def.aggro,
-      }), mapKey));
+      }), mapKey);
+      game.forestMonsters.push(mapKey === 'forest' ? polishNormalMonsterV2(guard) : guard);
     }
   }
 
@@ -6590,14 +6599,19 @@ function updateQuestTracker() {
     const lostGold = Math.floor(oldGold / 2);
     game.player.gold = oldGold - lostGold;
     const deathMinExpV50 = minExpForLevel(game.player.level);
-    const deathProgressV50 = Math.max(0, Number(game.player.exp || 0) - deathMinExpV50);
-    game.player.exp = deathMinExpV50 + Math.floor(deathProgressV50 / 2 + 0.5); // 진행분의 절반(반올림) 손실
+    const expProtectedV2 = !game.player.spec;
+    game.player.exp = YuksamGameplayPolishV2.deathExperience({
+      currentExp:game.player.exp,
+      levelStartExp:deathMinExpV50,
+      hasSpecialization:Boolean(game.player.spec),
+    });
     game.player.level = computeLevelFromExp(game.player.exp);
     ensurePlayerHp();
 
     const overlay = document.createElement('div');
     overlay.className = 'death-overlay';
-    overlay.innerHTML = `<div class="death-message">으윽.. 쓰러졌다..!</div><div class="death-sub">Gold -${lostGold} · 현재 레벨의 시작 경험치로 돌아갑니다.</div>`;
+    const expMessageV2 = expProtectedV2 ? '전문화 전 EXP 보호' : '현재 레벨 EXP 진행도 절반 보호';
+    overlay.innerHTML = `<div class="death-message">으윽.. 쓰러졌다..!</div><div class="death-sub">Gold -${lostGold} · ${expMessageV2}</div>`;
     document.body.classList.add('defeated');
     document.body.appendChild(overlay);
 

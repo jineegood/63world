@@ -101,7 +101,7 @@
             <h3>코스튬 보관함</h3>
             <div class="bag-grid">${bag}</div>
           </div>
-          <button class="wide" onclick="openCharacterPanel()" style="margin-top:10px;width:100%;background:linear-gradient(180deg,#ef4444,#b91c1c);border-color:rgba(248,113,113,.55);color:#fff;font-weight:800">← 상태창으로 돌아가기</button>
+          <button class="primary wide" onclick="openCharacterPanel()" style="margin-top:10px">← 상태창으로 돌아가기</button>
         </div>
       </div>
     </div>`, { type: 'costume', pause: true });
