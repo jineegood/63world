@@ -53,10 +53,12 @@ test('quest data module exposes mutable quest definitions', () => {
     'swamp_spider_hunt',
     'swamp_zombie_hunt',
     'tut_accessory', // [피드백] 악세서리 구매 튜토리얼
+    'tut_costume',
     'tut_enhance',
     'tut_equip',
     'tut_pet',
     'tut_shop',
+    'tut_skill',
   ]);
   assert.equal(data.QUEST_DEFS.elite_slime_hunt.eliteOnly, true);
   assert.equal(data.QUEST_DEFS.elite_snake_hunt.reward.building, 15); // [피드백] 빌딩 보상 3배
@@ -74,7 +76,9 @@ test('quest data module exposes mutable quest definitions', () => {
     'tut_equip',
     'mushroom_hunt',
     'tut_shop',
+    'tut_skill',
     'slime_hunt',
+    'tut_costume',
     'tut_accessory',
     'elite_slime_hunt',
     'tut_enhance',
@@ -108,9 +112,9 @@ test('quest data matches the July 12 edited quest workbook', () => {
   runBrowserModule('src/quest-data.js', context);
   const { QUEST_DEFS: quests, QUEST_ORDER: order } = context.window.YuksamQuestData;
 
-  assert.equal(order.length, 14);
+  assert.equal(order.length, 16);
   assert.deepEqual(Array.from(order), [
-    'tut_equip','mushroom_hunt','tut_shop','slime_hunt','tut_accessory','elite_slime_hunt','tut_enhance',
+    'tut_equip','mushroom_hunt','tut_shop','tut_skill','slime_hunt','tut_costume','tut_accessory','elite_slime_hunt','tut_enhance',
     'stomp_hunt','snake_hunt','tut_pet','elite_snake_hunt','swamp_spider_hunt','swamp_zombie_hunt','swamp_king_hunt',
   ]);
   assert.equal(quests.mushroom_hunt.target, 4);

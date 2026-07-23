@@ -5882,6 +5882,14 @@ function updateQuestTracker() {
       if (grant.building) { addBuilding(grant.building); toast(`🏢 빌딩 화폐 ${grant.building}개를 받았습니다!`); }
       if (grant.gold) { addGold(grant.gold); toast(`💰 ${grant.gold}골드를 받았습니다!`); }
     }
+    if (id === 'tut_skill' && Object.values(game.player.skills || {}).some((rank) => Number(rank) > 0)) {
+      game.player.quests[id].progress = def.target;
+      game.player.quests[id].status = 'ready';
+    }
+    if (id === 'tut_costume' && Array.isArray(game.player.costumeInventory) && game.player.costumeInventory.length > 0) {
+      game.player.quests[id].progress = def.target;
+      game.player.quests[id].status = 'ready';
+    }
     savePlayer(); updateQuestTracker();
   };
   window.acceptCurrentQuest = function acceptCurrentQuestV21(id) { if (getQuestState(id)) { toast('이미 받은 퀘스트입니다.'); return; } acceptQuest(id); playSfx('quest'); closeModal(); showCinematicMessage('퀘스트 수락!', `${QUEST_DEFS[id].title} 퀘스트를 시작합니다.`, 1600); appendChatMessage('system', '퀘스트', `${QUEST_DEFS[id].title} 수락`); };
@@ -6734,6 +6742,7 @@ function updateQuestTracker() {
     ensurePlayerHp();
     savePlayer();
     updateHud();
+    window.recordQuestActionV38?.('learnSkill');
     playSfx('quest');
     openSkillTreeModal();
     const rankNow = getSkillRank(skillId), maxP = skill.maxPoints || 1;

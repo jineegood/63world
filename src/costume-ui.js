@@ -59,6 +59,7 @@
     p.gold -= item.price;
     p.costumeInventory.push(id);
     call('savePlayer')?.(); call('updateHud')?.(); call('playSfx')?.('coin');
+    window.recordQuestActionV38?.('buyCostume');
     call('toast')?.(`${item.name}을(를) 구매했습니다!`);
     window.openCostumeShopV55();
   };
