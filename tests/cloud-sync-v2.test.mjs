@@ -23,11 +23,17 @@ function loadApi() {
   return window.YuksamCloudSyncV2;
 }
 
-function fakeClient({ loadData = null, loadError = null, updateError = null, throwOnLoad = null } = {}) {
+function fakeClient({ loadData = null, loadError = null, updateError = null, throwOnLoad = null,
+  claimData = null, claimError = null, throwOnClaim = null } = {}) {
   const calls = [];
   return {
     calls,
     client:{
+      async rpc(name) {
+        calls.push(['rpc', name]);
+        if (throwOnClaim) throw throwOnClaim;
+        return { data:claimData, error:claimError };
+      },
       from(table) {
         calls.push(['from', table]);
         return {
@@ -112,7 +118,8 @@ test('loadPlayer reads only the authenticated profile data and refreshes that ca
   assert.equal(JSON.stringify(result), JSON.stringify({
     player:{ name:'별빛', level:4 }, source:'remote', offline:false,
   }));
-  assert.deepEqual(remote.calls.slice(0, 4), [
+  assert.deepEqual(remote.calls.slice(0, 5), [
+    ['rpc', 'claim_student_rewards_v2'],
     ['from', 'player_profiles_v2'],
     ['select', 'data,updated_at'],
     ['loadEq', 'user_id', 'user-a'],
@@ -120,6 +127,27 @@ test('loadPlayer reads only the authenticated profile data and refreshes that ca
   ]);
   assert.equal(storage.getItem('ysb_player_v2_user-a'), JSON.stringify({ name:'별빛', level:4 }));
   assert.equal(storage.getItem('ysb_player_v2_user-b'), '{"name":"other"}');
+});
+
+test('loadPlayer uses the atomic claimed profile without a second profile read', async () => {
+  const api = loadApi();
+  const remote = fakeClient({ claimData:{ name:'별빛', level:5, gold:99 } });
+  const service = api.create({ client:remote.client, storage:memoryStorage() });
+  const result = await service.loadPlayer('user-a');
+  assert.equal(JSON.stringify(result), JSON.stringify({
+    player:{ name:'별빛', level:5, gold:99 }, source:'remote', offline:false,
+  }));
+  assert.deepEqual(remote.calls, [['rpc', 'claim_student_rewards_v2']]);
+});
+
+test('reward claim database and authorization failures do not use stale cache', async () => {
+  const api = loadApi();
+  const storage = memoryStorage({ 'ysb_player_v2_user-a':'{"name":"cached"}' });
+  const remote = fakeClient({ claimError:{ code:'42501', message:'permission denied' } });
+  await assert.rejects(
+    api.create({ client:remote.client, storage }).loadPlayer('user-a'),
+    (error) => error.code === 'LOAD_FAILED',
+  );
 });
 
 test('loadPlayer uses only the same user cache for a genuine network failure', async () => {

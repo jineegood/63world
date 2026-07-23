@@ -68,7 +68,9 @@
   }
 
   function create({ client, storage, schedule, cancelSchedule } = {}) {
-    if (!client || typeof client.from !== 'function') throw new TypeError('cloud sync v2 requires a Supabase client');
+    if (!client || typeof client.from !== 'function' || typeof client.rpc !== 'function') {
+      throw new TypeError('cloud sync v2 requires a Supabase client');
+    }
     if (!storage || typeof storage.getItem !== 'function'
       || typeof storage.setItem !== 'function'
       || typeof storage.removeItem !== 'function') {
@@ -108,6 +110,17 @@
     async function loadPlayer(userId) {
       const safeUserId = assertUserId(userId);
       try {
+        const { data:claimedData, error:claimError } = await client.rpc('claim_student_rewards_v2');
+        if (claimError) {
+          if (isNetworkFailure(claimError)) throw new TypeError('Failed to fetch');
+          throw new CloudSyncV2Error('LOAD_FAILED', '보상과 캐릭터 정보를 확인할 권한이 없거나 서버에 문제가 있어요.');
+        }
+        if (claimedData && typeof claimedData === 'object' && !Array.isArray(claimedData)) {
+          if (Object.keys(claimedData).length === 0) return null;
+          const claimedPlayer = sanitizePlayerData(claimedData);
+          writeCache(safeUserId, claimedPlayer);
+          return { player:claimedPlayer, source:'remote', offline:false };
+        }
         const { data, error } = await client
           .from('player_profiles_v2')
           .select('data,updated_at')

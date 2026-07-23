@@ -12,6 +12,7 @@ window.YuksamSupabaseClient = {
       user_metadata:{ display_name:'별빛', normalized_name:'별빛' }
     };
     return {
+      async rpc() { return { data:null, error:null }; },
       auth:{
         async signInWithPassword() {
           if (window.__secureLoginMode === 'existing') return { data:{ user, session:{ user } }, error:null };

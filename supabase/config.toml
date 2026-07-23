@@ -1,2 +1,5 @@
 [functions.teacher-reset-password]
 verify_jwt = true
+
+[functions.teacher-delete-student]
+verify_jwt = true

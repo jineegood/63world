@@ -43,9 +43,20 @@ window.YuksamSupabaseClient = {
             return { data:{ ok:true, displayName:'별빛' }, error:null };
           },
         },
+        from(table) {
+          if (table !== 'player_profiles_v2') throw new Error('unexpected table ' + table);
+          return { select() { return {
+            async order() { return { data:[{
+              user_id:'22222222-2222-4222-8222-222222222222', display_name:'별빛',
+              updated_at:'2026-07-23T00:00:00.000Z', data:{ class:'mage', level:3, records:{} },
+            }], error:null }; },
+            eq() { return { async maybeSingle() { return { data:{ display_name:'별빛' }, error:null }; } }; },
+          }; } };
+        },
       };
     }
     return {
+      async rpc() { return { data:null, error:null }; },
       auth:{
         async signInWithPassword() { return { data:null, error:{ code:'invalid_credentials' } }; },
         async signUp() { return { data:null, error:{ code:'user_already_exists' } }; },
@@ -76,12 +87,13 @@ run(root, async ({ window, $, sleep, asyncErrors }) => {
     check('student role remains outside dashboard', Boolean($('teacherEmail')) && !$('secureAdminStudentName'));
     check('rejected account is signed out', window.__teacherSignedIn === false);
   } else {
-    check('teacher sees student reset controls', Boolean($('secureAdminStudentName')) && Boolean($('secureAdminStudentPw')));
+    check('teacher sees cloud student controls', Boolean($('secureAdminStudentRows')));
     const dashboardText = window.document.querySelector('#modal').textContent;
     check('secure dashboard contains no legacy password hint', !dashboardText.includes('6363'));
-    check('secure dashboard contains no student password table', !window.document.querySelector('.teacher-table'));
+    check('secure dashboard contains no password column', !/비밀번호\s*최근/.test(dashboardText));
 
-    $('secureAdminStudentName').value = '  별빛  ';
+    window.adminOpenResetPasswordV2('22222222-2222-4222-8222-222222222222');
+    check('teacher can open student reset controls', Boolean($('secureAdminStudentName')) && Boolean($('secureAdminStudentPw')));
     $('secureAdminStudentPw').value = 'new-student-password';
     await window.adminResetStudentPassword();
     check('reset uses the named server function', window.__studentReset?.name === 'teacher-reset-password');

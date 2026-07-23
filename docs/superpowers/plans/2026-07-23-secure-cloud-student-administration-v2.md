@@ -225,3 +225,10 @@ Do not push.
 ## Completion Boundary
 
 This phase ends with local, disabled cloud student administration code. Shared workbooks, server-open state, live teacher provisioning, SQL execution, Edge Function deployment, security-switch activation, GitHub push, and Vercel deployment remain later explicit phases.
+
+## Execution Record (2026-07-23)
+
+- Built the sanitized cloud student list, queued reward, atomic claim, wrong-log, password-reset, and complete account-deletion paths test-first.
+- All focused v2 security, teacher, student, and browser regression commands passed.
+- Full `npm.cmd test` passed locally with exit code 0.
+- `securityV2Enabled` remains false. No SQL, Edge Function deployment, GitHub push, Vercel deployment, teacher provisioning, or live configuration change was performed.

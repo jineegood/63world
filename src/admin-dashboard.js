@@ -7,6 +7,11 @@
 
 const SECURE_ADMIN_MODE_V2 = window.YUKSAM_CLOUD?.securityV2Enabled === true;
 let secureAdminAuthV2 = null;
+let secureAdminDataV2 = null;
+let secureAdminStudentsV2 = [];
+let secureAdminStudentsStatusV2 = 'idle';
+let secureAdminStudentsErrorV2 = '';
+let secureAdminMutationV2 = false;
 
 if (SECURE_ADMIN_MODE_V2) {
   const secureAdminUrlV2 = String(window.YUKSAM_CLOUD?.url || '')
@@ -34,6 +39,9 @@ if (SECURE_ADMIN_MODE_V2) {
       client:secureAdminClientV2,
       normalizeStudentName:window.YuksamAuthV2.normalizeStudentName,
     });
+    if (window.YuksamAdminDataV2?.create && typeof secureAdminClientV2.from === 'function') {
+      secureAdminDataV2 = window.YuksamAdminDataV2.create({ client:secureAdminClientV2 });
+    }
   }
 }
 
@@ -56,18 +64,46 @@ function teacherZoneOptions(selected){
 
 function teacherStudentsHtml(){
   if (SECURE_ADMIN_MODE_V2) {
+    let studentContent = '';
+    if (!secureAdminDataV2) {
+      studentContent = '<div class="empty-state danger-text">클라우드 학생 관리 설정을 확인해 주세요.</div>';
+    } else if (secureAdminStudentsStatusV2 === 'loading' || secureAdminStudentsStatusV2 === 'idle') {
+      studentContent = '<div class="empty-state" id="secureAdminLoading">학생 목록을 불러오는 중...</div>';
+    } else if (secureAdminStudentsStatusV2 === 'error') {
+      studentContent = `<div class="empty-state danger-text">${escapeHtml(secureAdminStudentsErrorV2 || '학생 목록을 불러오지 못했어요.')}
+        <button class="ghost" onclick="adminRetryStudentListV2()">다시 시도</button></div>`;
+    } else if (!secureAdminStudentsV2.length) {
+      studentContent = '<div class="empty-state">등록된 학생 계정이 없습니다.</div>';
+    } else {
+      const rows = secureAdminStudentsV2.map((student) => {
+        const classMeta = CLASS_META[student.className] || { name:student.className || '미정' };
+        const spec = student.spec ? ` <small class="muted">${escapeHtml(student.spec)}</small>` : '';
+        return `<tr data-user-id="${escapeHtml(student.userId)}">
+          <td><b>${escapeHtml(student.displayName)}</b></td>
+          <td>${escapeHtml(classMeta.name || '')}${spec}</td>
+          <td>Lv.${student.level}</td>
+          <td>${fmtAcc(student.records)}</td>
+          <td>${student.gold}</td>
+          <td>${student.building}</td>
+          <td class="muted">${fmtDate(student.updatedAt)}</td>
+          <td class="t-actions">
+            <button class="primary tiny" onclick="adminOpenGrantModalV2('${student.userId}')">보상</button>
+            <button class="ghost tiny" onclick="adminOpenWrongLogV2('${student.userId}')">오답</button>
+            <button class="ghost tiny" onclick="adminOpenResetPasswordV2('${student.userId}')">비밀번호 재설정</button>
+            <button class="ghost tiny danger-text" onclick="adminConfirmDeleteStudentV2('${student.userId}')">계정 삭제</button>
+          </td>
+        </tr>`;
+      }).join('');
+      studentContent = `<div class="teacher-body">
+        <table class="teacher-table"><thead><tr><th>이름</th><th>직업</th><th>레벨</th><th>정답률</th><th>골드</th><th>빌딩</th><th>최근 저장</th><th>관리</th></tr></thead>
+        <tbody id="secureAdminStudentRows">${rows}</tbody></table>
+      </div>`;
+    }
     return `<div class="teacher-body">
-      <div class="panel-card">
-        <h3>학생 비밀번호 재설정</h3>
-        <label>학생 이름</label>
-        <input id="secureAdminStudentName" autocomplete="off" placeholder="학생 캐릭터 이름" />
-        <label>새 비밀번호</label>
-        <input type="password" id="secureAdminStudentPw" autocomplete="new-password" placeholder="6자 이상" />
-        <button class="primary wide" onclick="adminResetStudentPassword()">비밀번호 바꾸기</button>
-        <p class="muted">학생에게 새 비밀번호를 직접 알려 주세요. 기존 비밀번호는 누구도 확인할 수 없습니다.</p>
-      </div>
+      <p class="muted">보상은 안전하게 보관되며 학생의 다음 로그인 또는 새로고침 때 적용됩니다.</p>
+      ${studentContent}
       <div class="panel-card" style="margin-top:12px">
-        <p class="muted">클라우드 학생 목록·보상·문제집·수업 설정 관리는 다음 단계에서 연결됩니다.</p>
+        <p class="muted">클라우드 문제집·수업 설정 관리는 다음 단계에서 연결됩니다.</p>
       </div>
     </div>`;
   }
@@ -355,6 +391,136 @@ window.adminResetStudentPassword = async function adminResetStudentPassword(){
   }
 };
 
+function secureAdminStudentByIdV2(userId){
+  return secureAdminStudentsV2.find((student) => student.userId === userId) || null;
+}
+
+async function loadSecureAdminStudentsV2(){
+  if (!SECURE_ADMIN_MODE_V2 || !secureAdminDataV2 || secureAdminStudentsStatusV2 === 'loading') return;
+  secureAdminStudentsStatusV2 = 'loading';
+  secureAdminStudentsErrorV2 = '';
+  try {
+    secureAdminStudentsV2 = await secureAdminDataV2.listStudents();
+    secureAdminStudentsStatusV2 = 'ready';
+  } catch (error) {
+    secureAdminStudentsV2 = [];
+    secureAdminStudentsStatusV2 = 'error';
+    secureAdminStudentsErrorV2 = error?.message || '학생 목록을 불러오지 못했어요.';
+  }
+  if (__teacherAuthed) openAdminPanel('students', { skipSecureLoad:true });
+}
+
+window.adminRetryStudentListV2 = function adminRetryStudentListV2(){
+  if (!SECURE_ADMIN_MODE_V2 || !requireTeacherAuth()) return;
+  secureAdminStudentsStatusV2 = 'idle';
+  openAdminPanel('students');
+};
+
+window.adminOpenWrongLogV2 = function adminOpenWrongLogV2(userId){
+  if (!SECURE_ADMIN_MODE_V2 || !requireTeacherAuth()) return;
+  const student = secureAdminStudentByIdV2(userId);
+  if (!student) { toast('학생 계정을 찾지 못했어요.'); return; }
+  const log = student.records.wrongLog.slice().reverse();
+  openModal(`
+    <h2>📝 오답 기록 · ${escapeHtml(student.displayName)}</h2>
+    <div class="teacher-body">
+      ${log.length ? `<table class="teacher-table"><tr><th>문제</th><th>정답</th><th>학생 답</th></tr>
+        ${log.map((entry) => `<tr><td>${escapeHtml(entry.q)}</td><td class="good-text">${escapeHtml(entry.a)}</td><td class="danger-text">${escapeHtml(entry.mine)}</td></tr>`).join('')}
+      </table>` : '<div class="empty-state">오답 기록이 없습니다.</div>'}
+    </div>
+    <button class="ghost wide" onclick="openAdminPanel('students')">돌아가기</button>
+  `, { type:'admin', pause:false });
+};
+
+window.adminOpenGrantModalV2 = function adminOpenGrantModalV2(userId){
+  if (!SECURE_ADMIN_MODE_V2 || !requireTeacherAuth()) return;
+  const student = secureAdminStudentByIdV2(userId);
+  if (!student) { toast('학생 계정을 찾지 못했어요.'); return; }
+  openModal(`
+    <h2>🎁 보상 지급 · ${escapeHtml(student.displayName)}</h2>
+    <div class="panel-card">
+      <label>골드</label><input type="number" id="grantGoldV2" value="0" min="0" max="1000000" />
+      <label>빌딩 재료</label><input type="number" id="grantBuildingV2" value="0" min="0" max="1000000" />
+      <label>경험치 (EXP)</label><input type="number" id="grantExpV2" value="0" min="0" max="1000000" />
+      <p class="muted">보상은 학생의 다음 로그인 또는 새로고침 때 안전하게 적용됩니다.</p>
+    </div>
+    <div class="action-row">
+      <button class="primary" id="grantRewardV2Btn" onclick="adminGrantRewardV2('${userId}')">지급하기</button>
+      <button class="ghost" onclick="openAdminPanel('students')">취소</button>
+    </div>
+  `, { type:'admin', pause:false });
+};
+
+window.adminGrantRewardV2 = async function adminGrantRewardV2(userId){
+  if (!SECURE_ADMIN_MODE_V2 || !requireTeacherAuth() || !secureAdminDataV2 || secureAdminMutationV2) return;
+  const reward = {
+    gold:Number($('grantGoldV2')?.value || 0),
+    building:Number($('grantBuildingV2')?.value || 0),
+    exp:Number($('grantExpV2')?.value || 0),
+  };
+  const button = $('grantRewardV2Btn');
+  secureAdminMutationV2 = true;
+  if (button) { button.disabled = true; button.textContent = '저장 중...'; }
+  try {
+    const result = await secureAdminDataV2.grantReward(userId, reward);
+    openAdminPanel('students');
+    toast(`${result.displayName} 학생의 보상을 보관했어요. 다음 로그인 때 적용됩니다.`);
+  } catch (error) {
+    toast(error?.message || '학생 보상을 저장하지 못했어요.');
+    if (button) { button.disabled = false; button.textContent = '지급하기'; }
+  } finally {
+    secureAdminMutationV2 = false;
+  }
+};
+
+window.adminOpenResetPasswordV2 = function adminOpenResetPasswordV2(userId){
+  if (!SECURE_ADMIN_MODE_V2 || !requireTeacherAuth()) return;
+  const student = secureAdminStudentByIdV2(userId);
+  if (!student) { toast('학생 계정을 찾지 못했어요.'); return; }
+  openModal(`
+    <h2>🔑 비밀번호 재설정 · ${escapeHtml(student.displayName)}</h2>
+    <input type="hidden" id="secureAdminStudentName" value="${escapeHtml(student.displayName)}" />
+    <label>새 비밀번호</label>
+    <input type="password" id="secureAdminStudentPw" autocomplete="new-password" placeholder="6자 이상" />
+    <div class="action-row">
+      <button class="primary" onclick="adminResetStudentPassword()">비밀번호 바꾸기</button>
+      <button class="ghost" onclick="openAdminPanel('students')">취소</button>
+    </div>
+  `, { type:'admin', pause:false });
+};
+
+window.adminConfirmDeleteStudentV2 = function adminConfirmDeleteStudentV2(userId){
+  if (!SECURE_ADMIN_MODE_V2 || !requireTeacherAuth()) return;
+  const student = secureAdminStudentByIdV2(userId);
+  if (!student) { toast('학생 계정을 찾지 못했어요.'); return; }
+  openModal(`
+    <h2>⚠️ 학생 계정 완전 삭제</h2>
+    <div class="panel-card"><p><b>${escapeHtml(student.displayName)}</b> 학생의 로그인 계정과 게임 데이터를 모두 삭제합니다. 되돌릴 수 없습니다.</p></div>
+    <div class="action-row">
+      <button class="ghost danger-text" id="confirmDeleteStudentV2Btn" onclick="adminDeleteStudentV2('${userId}')">완전히 삭제</button>
+      <button class="ghost" onclick="openAdminPanel('students')">취소</button>
+    </div>
+  `, { type:'admin', pause:false });
+};
+
+window.adminDeleteStudentV2 = async function adminDeleteStudentV2(userId){
+  if (!SECURE_ADMIN_MODE_V2 || !requireTeacherAuth() || !secureAdminDataV2 || secureAdminMutationV2) return;
+  const button = $('confirmDeleteStudentV2Btn');
+  secureAdminMutationV2 = true;
+  if (button) { button.disabled = true; button.textContent = '삭제 중...'; }
+  try {
+    const result = await secureAdminDataV2.deleteStudent(userId);
+    secureAdminStudentsStatusV2 = 'idle';
+    await loadSecureAdminStudentsV2();
+    toast(`${result.displayName} 학생 계정을 삭제했어요.`);
+  } catch (error) {
+    toast(error?.message || '학생 계정을 삭제하지 못했어요.');
+    if (button) { button.disabled = false; button.textContent = '완전히 삭제'; }
+  } finally {
+    secureAdminMutationV2 = false;
+  }
+};
+
 function openAdminPanel(tab, options) {
   if (!requireTeacherAuth()) return;
   // [v58] 문제집 관리에서 토글·삭제 시 스크롤이 맨 위로 튀지 않도록 위치 보존
@@ -362,6 +528,11 @@ function openAdminPanel(tab, options) {
   const box = document.querySelector('#modal .modal-box');
   const prevTop = keepScroll && box ? box.scrollTop : null;
   openModal(buildAdminPanelHtml(tab), { type: 'admin', pause: false });
+  if (SECURE_ADMIN_MODE_V2 && (tab || 'students') === 'students'
+    && !(options && options.skipSecureLoad)
+    && secureAdminStudentsStatusV2 !== 'loading') {
+    loadSecureAdminStudentsV2();
+  }
   if (prevTop != null) {
     const restore = () => {
       const next = document.querySelector('#modal .modal-box');
