@@ -22,7 +22,12 @@ window.YuksamSupabaseClient = {
           return { data:{ user:null, session:null }, error:{ code:'user_already_exists', message:'User already registered' } };
         },
         async getSession() { return { data:{ session:null }, error:null }; },
+        async getUser() { return { data:{ user:null }, error:{ code:'session_not_found', message:'Auth session missing' } }; },
+        async updateUser() { return { data:null, error:null }; },
         async signOut() { return { error:null }; }
+      },
+      functions:{
+        async invoke() { return { data:null, error:{ status:403, message:'Forbidden' } }; }
       },
       from(table) {
         if (table !== 'player_profiles_v2') throw new Error('unexpected table ' + table);

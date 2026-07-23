@@ -5,6 +5,38 @@
  * 공용 유틸(escapeHtml, escapeJs, fmtDate 등)과 game 객체는 game.js에 남아 있으며 호출 시점에 늦은 바인딩으로 참조한다.
  */
 
+const SECURE_ADMIN_MODE_V2 = window.YUKSAM_CLOUD?.securityV2Enabled === true;
+let secureAdminAuthV2 = null;
+
+if (SECURE_ADMIN_MODE_V2) {
+  const secureAdminUrlV2 = String(window.YUKSAM_CLOUD?.url || '')
+    .trim()
+    .replace(/\/rest\/v1\/?$/i, '')
+    .replace(/\/+$/, '');
+  const secureAdminAnonKeyV2 = String(window.YUKSAM_CLOUD?.anonKey || '').trim();
+  if (secureAdminUrlV2 && secureAdminAnonKeyV2
+    && window.YuksamSupabaseClient?.createClient
+    && window.YuksamAdminAuthV2?.create
+    && window.YuksamAuthV2?.normalizeStudentName) {
+    const secureAdminClientV2 = window.YuksamSupabaseClient.createClient(
+      secureAdminUrlV2,
+      secureAdminAnonKeyV2,
+      {
+        auth:{
+          storageKey:'ysb_teacher_auth_v2',
+          persistSession:true,
+          autoRefreshToken:true,
+          detectSessionInUrl:false,
+        },
+      },
+    );
+    secureAdminAuthV2 = window.YuksamAdminAuthV2.create({
+      client:secureAdminClientV2,
+      normalizeStudentName:window.YuksamAuthV2.normalizeStudentName,
+    });
+  }
+}
+
 function fmtAcc(rec){
   const answered = rec && rec.answered ? rec.answered : 0;
   const correct = rec && rec.correct ? rec.correct : 0;
@@ -23,6 +55,22 @@ function teacherZoneOptions(selected){
 }
 
 function teacherStudentsHtml(){
+  if (SECURE_ADMIN_MODE_V2) {
+    return `<div class="teacher-body">
+      <div class="panel-card">
+        <h3>학생 비밀번호 재설정</h3>
+        <label>학생 이름</label>
+        <input id="secureAdminStudentName" autocomplete="off" placeholder="학생 캐릭터 이름" />
+        <label>새 비밀번호</label>
+        <input type="password" id="secureAdminStudentPw" autocomplete="new-password" placeholder="6자 이상" />
+        <button class="primary wide" onclick="adminResetStudentPassword()">비밀번호 바꾸기</button>
+        <p class="muted">학생에게 새 비밀번호를 직접 알려 주세요. 기존 비밀번호는 누구도 확인할 수 없습니다.</p>
+      </div>
+      <div class="panel-card" style="margin-top:12px">
+        <p class="muted">클라우드 학생 목록·보상·문제집·수업 설정 관리는 다음 단계에서 연결됩니다.</p>
+      </div>
+    </div>`;
+  }
   const players = getAllPlayers();
   if (!players.length) return '<div class="empty-state">저장된 학생 데이터가 없습니다.</div>';
   const rows = players.map((p) => {
@@ -119,6 +167,17 @@ function teacherWorkbooksHtml(){
 }
 
 function teacherSettingsHtml(){
+  if (SECURE_ADMIN_MODE_V2) {
+    return `<div class="teacher-body">
+      <div class="panel-card">
+        <h3>관리자 비밀번호 변경</h3>
+        <input type="password" id="teacherNewPw" autocomplete="new-password" placeholder="새 비밀번호 (6자 이상)" />
+        <button class="primary wide" onclick="adminSaveTeacherSettings()">내 비밀번호 바꾸기</button>
+      </div>
+      <button class="ghost wide" onclick="adminTeacherLogout()" style="margin-top:12px">관리자 로그아웃</button>
+      <p class="muted" style="margin-top:12px">클라우드 수업 설정 기능은 다음 단계에서 연결됩니다.</p>
+    </div>`;
+  }
   const open = isServerOpen();
   const stateHtml = open
     ? '<span class="good-text" style="font-size:1.5em;font-weight:800">🟢 열림</span>'
@@ -162,7 +221,9 @@ window.adminSetCheatEnabled = function adminSetCheatEnabled(on){
 };
 
 function buildAdminPanelHtml(tab){
-  const tabs = [['students', '👨‍🎓 학생 현황'], ['workbooks', '📚 문제집 관리'], ['settings', '⚙️ 수업 설정']];
+  const tabs = SECURE_ADMIN_MODE_V2
+    ? [['students', '🔑 학생 비밀번호'], ['settings', '⚙️ 내 계정']]
+    : [['students', '👨‍🎓 학생 현황'], ['workbooks', '📚 문제집 관리'], ['settings', '⚙️ 수업 설정']];
   const active = tabs.some(([k]) => k === tab) ? tab : 'students';
   let body = '';
   if (active === 'students') body = teacherStudentsHtml();
@@ -178,6 +239,12 @@ function buildAdminPanelHtml(tab){
 
 const TEACHER_STORE_KEY = 'ysb_teacher_v1';
 let __teacherAuthed = false;
+
+if (SECURE_ADMIN_MODE_V2 && secureAdminAuthV2) {
+  secureAdminAuthV2.restore()
+    .then((identity) => { __teacherAuthed = Boolean(identity); })
+    .catch(() => { __teacherAuthed = false; });
+}
 
 function teacherStore(){
   try {
@@ -201,6 +268,25 @@ function saveTeacherStore(store){
 }
 
 function openTeacherLogin(){
+  if (SECURE_ADMIN_MODE_V2) {
+    const unavailable = !secureAdminAuthV2;
+    openModal(`
+      <h2>🧑‍🏫 관리자 로그인</h2>
+      <div class="panel-card">
+        <label>관리자 이메일</label>
+        <input type="email" id="teacherEmail" autocomplete="username" placeholder="관리자 이메일" ${unavailable ? 'disabled' : ''} />
+        <label>관리자 비밀번호</label>
+        <input type="password" id="teacherPw" autocomplete="current-password" placeholder="관리자 비밀번호" onkeydown="if(event.key==='Enter')adminTeacherLogin()" ${unavailable ? 'disabled' : ''} />
+        ${unavailable ? '<p class="danger-text">보안 관리자 연결 설정을 확인해 주세요.</p>' : ''}
+      </div>
+      <div class="action-row">
+        <button class="primary" id="teacherLoginBtn" onclick="adminTeacherLogin()" ${unavailable ? 'disabled' : ''}>로그인</button>
+        <button class="ghost" onclick="closeModal()">취소</button>
+      </div>
+    `, { type:'admin', pause:false });
+    setTimeout(() => $('teacherEmail')?.focus(), 50);
+    return;
+  }
   openModal(`
     <h2>🧑‍🏫 교사 모드</h2>
     <div class="panel-card">
@@ -221,12 +307,52 @@ function requireTeacherAuth(){
   return false;
 }
 
-window.adminTeacherLogin = function adminTeacherLogin(){
+window.adminTeacherLogin = async function adminTeacherLogin(){
+  if (SECURE_ADMIN_MODE_V2) {
+    if (!secureAdminAuthV2) { toast('관리자 연결 설정을 확인해 주세요.'); return; }
+    const email = $('teacherEmail')?.value || '';
+    const pw = $('teacherPw')?.value || '';
+    const button = $('teacherLoginBtn');
+    if (button) { button.disabled = true; button.textContent = '확인 중...'; }
+    try {
+      await secureAdminAuthV2.signIn(email, pw);
+      __teacherAuthed = true;
+      openAdminPanel('students');
+    } catch (error) {
+      __teacherAuthed = false;
+      toast(error?.message || '관리자 로그인을 확인하지 못했어요.');
+      if (button) { button.disabled = false; button.textContent = '로그인'; }
+    }
+    return;
+  }
   const pw = $('teacherPw')?.value || '';
   const store = teacherStore();
   if (pw !== store.pw) { toast('비밀번호가 틀렸습니다.'); return; }
   __teacherAuthed = true;
   openAdminPanel('students');
+};
+
+window.adminTeacherLogout = async function adminTeacherLogout(){
+  if (SECURE_ADMIN_MODE_V2 && secureAdminAuthV2) {
+    try { await secureAdminAuthV2.signOut(); }
+    catch (error) { toast(error?.message || '로그아웃하지 못했어요.'); return; }
+  }
+  __teacherAuthed = false;
+  openTeacherLogin();
+};
+
+window.adminResetStudentPassword = async function adminResetStudentPassword(){
+  if (!SECURE_ADMIN_MODE_V2 || !requireTeacherAuth() || !secureAdminAuthV2) return;
+  const studentName = $('secureAdminStudentName')?.value || '';
+  const newPassword = $('secureAdminStudentPw')?.value || '';
+  try {
+    const result = await secureAdminAuthV2.resetStudentPassword(studentName, newPassword);
+    const passwordInput = $('secureAdminStudentPw');
+    if (passwordInput) passwordInput.value = '';
+    toast(`${result.displayName} 학생의 비밀번호를 바꿨어요.`);
+  } catch (error) {
+    toast(error?.message || '학생 비밀번호를 바꾸지 못했어요.');
+  }
 };
 
 function openAdminPanel(tab, options) {
@@ -426,10 +552,20 @@ window.adminBulkImport = function adminBulkImport(){
   toast(`${added}개 문제를 추가했습니다.`);
 };
 
-window.adminSaveTeacherSettings = function adminSaveTeacherSettings(){
+window.adminSaveTeacherSettings = async function adminSaveTeacherSettings(){
   if (!requireTeacherAuth()) return;
   const newPw = ($('teacherNewPw')?.value || '').trim();
   if (!newPw) { toast('새 비밀번호를 입력하세요.'); return; }
+  if (SECURE_ADMIN_MODE_V2) {
+    try {
+      await secureAdminAuthV2.changeOwnPassword(newPw);
+      openAdminPanel('settings');
+      toast('관리자 비밀번호를 바꿨어요.');
+    } catch (error) {
+      toast(error?.message || '관리자 비밀번호를 바꾸지 못했어요.');
+    }
+    return;
+  }
   const store = teacherStore();
   store.pw = newPw;
   saveTeacherStore(store);

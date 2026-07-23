@@ -1,0 +1,2 @@
+[functions.teacher-reset-password]
+verify_jwt = true

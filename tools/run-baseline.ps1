@@ -1,5 +1,5 @@
 param(
-  [ValidateSet('all', 'check', 'baseline', 'core-utils', 'player-store', 'input-router', 'world-interaction-registry', 'world-navigation-registry', 'world-render-pipeline', 'hud-update-pipeline', 'total-stats-pipeline', 'combat-entry-pipeline', 'combat-frame-pipeline', 'audio-volume-pipeline', 'combat-rules', 'combat-sequence-controller', 'combat-flow', 'combat-fx', 'sfx-map', 'audio-manifest', 'audio-dispatcher', 'weapon-tier', 'game-data', 'quest-data', 'patch-data', 'supabase-security-v2', 'cloud-sync-v2', 'student-access-v2', 'secure-student-login-v2', 'refactor-health', 'current-data', 'safety-net', 'extract-data', 'build-workbook')]
+  [ValidateSet('all', 'check', 'baseline', 'core-utils', 'player-store', 'input-router', 'world-interaction-registry', 'world-navigation-registry', 'world-render-pipeline', 'hud-update-pipeline', 'total-stats-pipeline', 'combat-entry-pipeline', 'combat-frame-pipeline', 'audio-volume-pipeline', 'combat-rules', 'combat-sequence-controller', 'combat-flow', 'combat-fx', 'sfx-map', 'audio-manifest', 'audio-dispatcher', 'weapon-tier', 'game-data', 'quest-data', 'patch-data', 'supabase-security-v2', 'cloud-sync-v2', 'student-access-v2', 'secure-student-login-v2', 'admin-auth-v2', 'teacher-reset-function', 'secure-teacher-auth-v2', 'refactor-health', 'current-data', 'safety-net', 'extract-data', 'build-workbook')]
   [string]$Mode = 'all'
 )
 
@@ -102,6 +102,7 @@ if ($Mode -eq 'all' -or $Mode -eq 'check') {
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/auth-v2.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/cloud-sync-v2.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/student-access-v2.js')
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/admin-auth-v2.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/multiplayer.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/tutorial.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/costume-data.js')
@@ -214,6 +215,18 @@ if ($Mode -eq 'all' -or $Mode -eq 'student-access-v2') {
 
 if ($Mode -eq 'all' -or $Mode -eq 'secure-student-login-v2') {
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', 'tests/secure-student-login-v2.test.mjs')
+}
+
+if ($Mode -eq 'all' -or $Mode -eq 'admin-auth-v2') {
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', 'tests/admin-auth-v2.test.mjs')
+}
+
+if ($Mode -eq 'all' -or $Mode -eq 'teacher-reset-function') {
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', 'tests/teacher-reset-function.test.mjs')
+}
+
+if ($Mode -eq 'all' -or $Mode -eq 'secure-teacher-auth-v2') {
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', 'tests/secure-teacher-auth-v2.test.mjs')
 }
 
 if ($Mode -eq 'all' -or $Mode -eq 'refactor-health') {
