@@ -48,6 +48,7 @@
     "test:world-healing-polish-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 world-healing-polish-v2",
     "test:reward-presentation-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 reward-presentation-v2",
     "test:tutorial-quests-polish-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 tutorial-quests-polish-v2",
+    "test:multiplayer": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 multiplayer",
     "test:secure-shared-student-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 secure-shared-student-v2",
     "test:secure-shared-teacher-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 secure-shared-teacher-v2",
     "test:baseline": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 baseline",
