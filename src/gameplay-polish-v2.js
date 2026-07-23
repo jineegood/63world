@@ -43,6 +43,12 @@
     return original > 0 ? Math.max(1, Math.floor(original * 0.5)) : 0;
   }
 
+  function ownsAllCostumes(ownedIds = [], availableIds = []) {
+    const owned = new Set(Array.isArray(ownedIds) ? ownedIds : []);
+    return Array.isArray(availableIds) && availableIds.length > 0
+      && availableIds.every((id) => owned.has(id));
+  }
+
   function rewardSteps(reward = {}) {
     const steps = [{ kind:'exp', amount:Math.max(0, number(reward.exp)), delayMs:0 }];
     if (number(reward.gold) > 0) steps.push({ kind:'gold', amount:number(reward.gold), delayMs:1000 });
@@ -58,6 +64,7 @@
     deathExperience,
     tuneNormalMonster,
     wrongHitDamage,
+    ownsAllCostumes,
     rewardSteps,
     getHealingWells,
   });

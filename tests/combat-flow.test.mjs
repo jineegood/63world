@@ -63,10 +63,10 @@ test('combat events follow the canonical turn order and omit missing stages', ()
 test('combat events preserve optional fx metadata for later animation tasks', () => {
   const fx = { motion:'slash', impact:'light', tier:2 };
   const [event] = combatRules.buildCombatSequence([
-    { type:'player-hit', text:'12 피해', tone:'player-action', duration:2100, fx },
+    { type:'player-hit', text:'12 피해', tone:'player-action', duration:2100, fx, preserveDuration:true },
   ]);
   assert.deepEqual({ ...event, fx:{ ...event.fx } }, {
-    type:'player-hit', text:'12 피해', tone:'player-action', duration:2100, fx,
+    type:'player-hit', text:'12 피해', tone:'player-action', duration:2100, fx, preserveDuration:true,
   });
 });
 
@@ -392,7 +392,7 @@ test('only the synthesized player-hit path doubles the original hit gain and cla
 });
 
 test('quest completion uses its manifest sound while quest acceptance keeps the synthesized cue', () => {
-  const reward = gameSource.match(/window\.claimQuestReward = function claimQuestRewardV21\(id\) \{[^\n]*/)?.[0] || '';
+  const reward = gameSource.match(/window\.claimQuestReward = function claimQuestRewardV21\(id\) \{[\s\S]*?\n  };/)?.[0] || '';
   const accept = gameSource.match(/window\.acceptCurrentQuest = function acceptCurrentQuestV21\(id\) \{[^\n]*/)?.[0] || '';
   assert.match(reward, /playQuestCompletionSoundV42/);
   assert.match(reward, /playSfx\('quest'\)/);
@@ -403,10 +403,12 @@ test('quest completion uses its manifest sound while quest acceptance keeps the 
 test('legacy direct counterattacks use the doubled player-hit sound after wrong answers and player stuns', () => {
   const legacyCounter = gameSource.match(/function monsterCounterAttack\(messagePrefix = ''\) \{[\s\S]*?\n}\n\nfunction openCharacterPanel/)?.[0] || '';
   const submitAnswer = gameSource.match(/window\.submitCombatAnswer = function submitCombatAnswer[\s\S]*?\n  };/)?.[0] || '';
+  const wrongAnswer = gameSource.match(/function resolveWrongAnswerV2[\s\S]*?\n  }/)?.[0] || '';
   const v25Counter = gameSource.match(/monsterCounterAttack = function monsterCounterAttackV25[\s\S]*?\n  };\n  window\.submitCombatAnswer/)?.[0] || '';
   assert.match(legacyCounter, /playPlayerHitSfx\(\)/);
   assert.doesNotMatch(legacyCounter, /playSfx\('hit'\)/);
-  assert.match(submitAnswer, /type:'answer-wrong'[\s\S]*?monsterCounterAttack\(''\)/);
+  assert.match(submitAnswer, /resolveWrongAnswerV2\(monster\)/);
+  assert.match(wrongAnswer, /type:'answer-wrong'[\s\S]*?monsterCounterAttack\(''\)/);
   assert.match(v25Counter, /playerAilments\?\.stunTurns > 0[\s\S]*?monsterCounterAttack\(''\)/);
 });
 

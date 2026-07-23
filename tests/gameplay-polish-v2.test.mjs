@@ -39,6 +39,13 @@ test('wrong answer damage is half with a minimum of one', () => {
   assert.equal(api.wrongHitDamage(0), 0);
 });
 
+test('costume tutorial compatibility requires every shop costume, not merely one', () => {
+  const api = loadApi();
+  assert.equal(api.ownsAllCostumes(['hat'], ['hat', 'cape']), false);
+  assert.equal(api.ownsAllCostumes(['hat', 'cape'], ['hat', 'cape']), true);
+  assert.equal(api.ownsAllCostumes([], []), false);
+});
+
 test('reward steps use fixed dramatic timing and omit empty optional rewards', () => {
   const api = loadApi();
   const simplify = (steps) => Array.from(steps, ({ kind, amount, delayMs }) => ({ kind, amount, delayMs }));

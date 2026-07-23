@@ -30,5 +30,5 @@ test('successful learning and costume buying report tutorial progress', () => {
   assert.match(game, /recordQuestActionV38\?\.\('learnSkill'\)/);
   assert.match(costume, /recordQuestActionV38\?\.\('buyCostume'\)/);
   assert.match(game, /tut_skill[\s\S]*Object\.values\(game\.player\.skills/);
-  assert.match(game, /tut_costume[\s\S]*costumeInventory/);
+  assert.match(game, /tut_costume[\s\S]*ownsAllCostumes/);
 });

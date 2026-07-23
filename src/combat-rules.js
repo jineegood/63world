@@ -280,6 +280,7 @@
         if (event.audioId) normalized.audioId = String(event.audioId);
         if (event.fallbackSfx) normalized.fallbackSfx = String(event.fallbackSfx);
         if (event.ultimateId) normalized.ultimateId = String(event.ultimateId);
+        if (event.preserveDuration === true) normalized.preserveDuration = true;
         const effect = normalizeCombatEffect(event.effect);
         if (effect) normalized.effect = effect;
         return { event:normalized, index };

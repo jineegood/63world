@@ -199,17 +199,36 @@ function showCinematicMessage(title, sub = '', ms = 1200) {
   }, ms);
 }
 
+let rewardSequenceTokenV2 = 0;
 function showRewardSequenceV2(title, prefix, reward = {}) {
+  const token = ++rewardSequenceTokenV2;
   const labels = {
     exp:(amount) => amount > 0 ? `EXP +${amount}` : 'EXP 없음',
     gold:(amount) => `Gold +${amount}`,
     building:(amount) => `빌딩 +${amount}`,
   };
-  YuksamGameplayPolishV2.rewardSteps(reward).forEach((step) => {
+  let overlay = $('rewardSequenceV2');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'rewardSequenceV2';
+    overlay.className = 'reward-sequence-v2 hidden';
+    document.body.appendChild(overlay);
+  }
+  const steps = YuksamGameplayPolishV2.rewardSteps(reward);
+  steps.forEach((step) => {
     setTimeout(() => {
-      showCinematicMessage(title, `${prefix} · ${labels[step.kind](step.amount)}`, 900);
+      if (token !== rewardSequenceTokenV2) return;
+      overlay.innerHTML = `<strong>${escapeHtml(title)}</strong><span>${escapeHtml(prefix)} · ${escapeHtml(labels[step.kind](step.amount))}</span>`;
+      overlay.classList.remove('hidden');
+      overlay.classList.remove('reward-pop-v2');
+      void overlay.offsetWidth;
+      overlay.classList.add('reward-pop-v2');
     }, step.delayMs);
   });
+  const lastDelay = steps.at(-1)?.delayMs || 0;
+  setTimeout(() => {
+    if (token === rewardSequenceTokenV2) overlay.classList.add('hidden');
+  }, lastDelay + 950);
 }
 
 function appendChatMessage(type, sender, message) {
@@ -5886,7 +5905,9 @@ function updateQuestTracker() {
       game.player.quests[id].progress = def.target;
       game.player.quests[id].status = 'ready';
     }
-    if (id === 'tut_costume' && Array.isArray(game.player.costumeInventory) && game.player.costumeInventory.length > 0) {
+    const costumeIdsV2 = Object.keys(window.COSTUME_DEFS_V55 || {});
+    if (id === 'tut_costume'
+      && YuksamGameplayPolishV2.ownsAllCostumes(game.player.costumeInventory, costumeIdsV2)) {
       game.player.quests[id].progress = def.target;
       game.player.quests[id].status = 'ready';
     }
@@ -7153,7 +7174,7 @@ function updateQuestTracker() {
         if (!combatSequenceControllerV47.isCurrent(sequenceToken)) return;
         let duration = notice.duration == null ? COMBAT_NOTICE_DELAY_V25 : Math.max(0, Number(notice.duration) || 0);
         if (notice.type === 'monster-action') duration = Math.round(duration * 0.6); // [v51] 적 행동 로그 40% 단축
-        if (window.__combatLogFastV50) duration = Math.ceil(duration / 2); // [v50] 치트: 전투 로그 2배속
+        if (window.__combatLogFastV50 && !notice.preserveDuration) duration = Math.ceil(duration / 2); // 정답 표시는 2초 이상 유지
         if (duration === 0) showNext();
         else combatSequenceControllerV47.schedule(sequenceToken, showNext, duration);
       };
@@ -7729,7 +7750,6 @@ function updateQuestTracker() {
     if (Math.random() < 0.10) {
       buildingGain = 1;
       addBuilding(1);
-      appendChatMessage?.('system', '행운', '🏢 빌딩 화폐 1개를 주웠습니다!');
     }
     const expText = expGain > 0 ? `EXP +${expGain}` : '레벨 차이로 EXP 없음';
     showRewardSequenceV2('몬스터를 처치했습니다!', defeatedMonster.name, {
@@ -7737,7 +7757,8 @@ function updateQuestTracker() {
       gold:defeatedMonster.gold || 0,
       building:buildingGain,
     });
-    appendChatMessage?.('system', '전투', `${defeatedMonster.name} 처치! ${expText}, Gold +${defeatedMonster.gold || 0}`);
+    const buildingText = buildingGain > 0 ? `, 빌딩 +${buildingGain}` : '';
+    appendChatMessage?.('system', '전투', `${defeatedMonster.name} 처치! ${expText}, Gold +${defeatedMonster.gold || 0}${buildingText}`);
     savePlayer?.();
   }
   function startMonsterDefeatSequenceV25(monster, actionMsg = '') {
@@ -8156,47 +8177,6 @@ function updateQuestTracker() {
       }
     });
   };
-  function resolveWrongAnswerV2(monster) {
-    const correctAnswer = game.currentQuestion?.answer ?? '';
-    const result = calculateActionDamageV25();
-    const sourceHits = Array.isArray(result.hitInfo) && result.hitInfo.length
-      ? result.hitInfo
-      : result.damage > 0 ? [{ dmg:result.damage, missed:false, label:'' }] : [];
-    const wrongHits = sourceHits.map((hit) => ({
-      ...hit,
-      dmg:hit.missed ? 0 : YuksamGameplayPolishV2.wrongHitDamage(hit.dmg),
-    }));
-    const effectBatchId = `${monster.id}:wrong:${game.combatEffectSerial = (Number(game.combatEffectSerial) || 0) + 1}`;
-    const firstDamageIndex = wrongHits.findIndex((hit) => hit.dmg > 0);
-    const events = [
-      { type:'answer-wrong', text:'오답입니다!', tone:'enemy-action', duration:700 },
-      { type:'answer-wrong', text:`정답은 ${correctAnswer}`, tone:'correct-answer', duration:2200 },
-    ];
-    wrongHits.forEach((hit, index) => {
-      events.push({
-        type:index === 0 ? 'player-hit' : 'player-extra-hit',
-        text:hit.missed
-          ? `${hit.label || '공격'}이 빗나갔습니다.`
-          : `오답 공격으로 ${hit.dmg}의 피해를 주었습니다.`,
-        duration:PLAYER_ATTACK_NOTICE_DELAY_V46,
-        ...(!hit.missed && hit.dmg > 0 ? { effect:{
-          id:`${effectBatchId}:${index}`,
-          type:'monster-damage',
-          combatId:monster.id,
-          amount:hit.dmg,
-          ...(result.ignoreShield === true ? { ignoreShield:true } : {}),
-          ...(result.chargeRelease && index === firstDamageIndex ? { consumeCharge:true } : {}),
-        } } : {}),
-      });
-    });
-    queueCombatSequence(events, () => {
-      const fresh = currentCombatMonster();
-      if (!fresh || !fresh.alive || fresh.dying) return;
-      if (fresh.hp <= 0) startMonsterDefeatSequenceV25(fresh, '');
-      else monsterCounterAttack('');
-    });
-  }
-
   window.submitCombatAnswer = function submitCombatAnswerV25() {
     const monster = currentCombatMonster();
     if (!monster || !game.currentQuestion || monster.dying) return;
@@ -8328,6 +8308,69 @@ function updateQuestTracker() {
     }
     finishPlayerActionV39(monster, result, activeSkill, act, skill, actionMsg, playerEvents, effectBatchId);
   };
+
+  function calculateWrongActionDamageV2() {
+    const skillId = String(game.currentCombatAction || '').startsWith('active:')
+      ? String(game.currentCombatAction).slice(7)
+      : null;
+    const skill = skillId ? SKILL_DEFS[skillId] : null;
+    const active = skill?.active || null;
+    const damagingSkill = active && ['damage', 'damageHeal', 'shadowDot'].includes(active.type);
+    const rawHits = [];
+    if (skillId && !damagingSkill) return { hitInfo:[], ignoreShield:false };
+    if (damagingSkill && Number(active.multiplier) === 0 && !(Number(active.hits) > 1)) {
+      return { hitInfo:[], ignoreShield:active.ignoreShield === true };
+    }
+    if (damagingSkill) {
+      const count = Math.max(1, Number(active.hits) || 1);
+      const multiplier = count > 1 ? Number(active.hitMult) || 1 : Number(active.multiplier) || 1;
+      for (let i = 0; i < count; i += 1) rawHits.push(getPlayerAttackPower() * multiplier);
+      setSkillCooldown(skillId, active.cooldown || 3);
+    } else {
+      rawHits.push(getPlayerAttackPower());
+    }
+    const specMult = specDamageMultV25();
+    return {
+      hitInfo:rawHits.map((raw) => ({
+        dmg:YuksamGameplayPolishV2.wrongHitDamage(Math.max(1, Math.ceil(raw * specMult))),
+        crit:false,
+        missed:false,
+        label:active?.name || '',
+      })),
+      ignoreShield:active?.ignoreShield === true,
+    };
+  }
+
+  function resolveWrongAnswerV2(monster) {
+    const correctAnswer = game.currentQuestion?.answer ?? '';
+    const result = calculateWrongActionDamageV2();
+    const wrongHits = result.hitInfo;
+    const effectBatchId = `${monster.id}:wrong:${game.combatEffectSerial = (Number(game.combatEffectSerial) || 0) + 1}`;
+    const events = [
+      { type:'answer-wrong', text:'오답입니다!', tone:'enemy-action', duration:700 },
+      { type:'answer-wrong', text:`정답은 ${correctAnswer}`, tone:'correct-answer', duration:2200, preserveDuration:true },
+    ];
+    wrongHits.forEach((hit, index) => {
+      events.push({
+        type:index === 0 ? 'player-hit' : 'player-extra-hit',
+        text:`오답 공격으로 ${hit.dmg}의 피해를 주었습니다.`,
+        duration:PLAYER_ATTACK_NOTICE_DELAY_V46,
+        effect:{
+          id:`${effectBatchId}:${index}`,
+          type:'monster-damage',
+          combatId:monster.id,
+          amount:hit.dmg,
+          ...(result.ignoreShield === true ? { ignoreShield:true } : {}),
+        },
+      });
+    });
+    queueCombatSequence(events, () => {
+      const fresh = currentCombatMonster();
+      if (!fresh || !fresh.alive || fresh.dying) return;
+      if (fresh.hp <= 0) startMonsterDefeatSequenceV25(fresh, '');
+      else monsterCounterAttack('');
+    });
+  }
 
   // [연출 리팩터] 플레이어 행동 후처리: 부가효과 → 처치 판정 → 반격 예약
   // (단일 타격/다단히트 순차 연출이 공유)
