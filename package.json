@@ -42,6 +42,7 @@
     "test:secure-cloud-student-admin-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 secure-cloud-student-admin-v2",
     "test:shared-state-policy-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 shared-state-policy-v2",
     "test:shared-state-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 shared-state-v2",
+    "test:gameplay-polish-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 gameplay-polish-v2",
     "test:secure-shared-student-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 secure-shared-student-v2",
     "test:secure-shared-teacher-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 secure-shared-teacher-v2",
     "test:baseline": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 baseline",

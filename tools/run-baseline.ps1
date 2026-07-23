@@ -1,5 +1,5 @@
 param(
-  [ValidateSet('all', 'check', 'baseline', 'core-utils', 'player-store', 'input-router', 'world-interaction-registry', 'world-navigation-registry', 'world-render-pipeline', 'hud-update-pipeline', 'total-stats-pipeline', 'combat-entry-pipeline', 'combat-frame-pipeline', 'audio-volume-pipeline', 'combat-rules', 'combat-sequence-controller', 'combat-flow', 'combat-fx', 'sfx-map', 'audio-manifest', 'audio-dispatcher', 'weapon-tier', 'game-data', 'quest-data', 'patch-data', 'supabase-security-v2', 'cloud-sync-v2', 'student-access-v2', 'secure-student-login-v2', 'secure-shared-student-v2', 'admin-auth-v2', 'teacher-reset-function', 'secure-teacher-auth-v2', 'secure-shared-teacher-v2', 'admin-data-v2', 'student-reward-grants-v2', 'teacher-delete-function', 'secure-cloud-student-admin-v2', 'shared-state-policy-v2', 'shared-state-v2', 'refactor-health', 'current-data', 'safety-net', 'extract-data', 'build-workbook')]
+  [ValidateSet('all', 'check', 'baseline', 'core-utils', 'player-store', 'input-router', 'world-interaction-registry', 'world-navigation-registry', 'world-render-pipeline', 'hud-update-pipeline', 'total-stats-pipeline', 'combat-entry-pipeline', 'combat-frame-pipeline', 'audio-volume-pipeline', 'combat-rules', 'combat-sequence-controller', 'combat-flow', 'combat-fx', 'sfx-map', 'audio-manifest', 'audio-dispatcher', 'weapon-tier', 'game-data', 'quest-data', 'patch-data', 'gameplay-polish-v2', 'supabase-security-v2', 'cloud-sync-v2', 'student-access-v2', 'secure-student-login-v2', 'secure-shared-student-v2', 'admin-auth-v2', 'teacher-reset-function', 'secure-teacher-auth-v2', 'secure-shared-teacher-v2', 'admin-data-v2', 'student-reward-grants-v2', 'teacher-delete-function', 'secure-cloud-student-admin-v2', 'shared-state-policy-v2', 'shared-state-v2', 'refactor-health', 'current-data', 'safety-net', 'extract-data', 'build-workbook')]
   [string]$Mode = 'all'
 )
 
@@ -76,6 +76,9 @@ if ($Mode -eq 'all' -or $Mode -eq 'check') {
   }
   if (Test-Path -LiteralPath 'src/patch-data.js') {
     Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/patch-data.js')
+  }
+  if (Test-Path -LiteralPath 'src/gameplay-polish-v2.js') {
+    Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/gameplay-polish-v2.js')
   }
   if (Test-Path -LiteralPath 'src/combat-rules.js') {
     Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/combat-rules.js')
@@ -201,6 +204,10 @@ if ($Mode -eq 'all' -or $Mode -eq 'quest-data') {
 
 if ($Mode -eq 'all' -or $Mode -eq 'patch-data') {
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', 'tests/patch-data.test.mjs')
+}
+
+if ($Mode -eq 'all' -or $Mode -eq 'gameplay-polish-v2') {
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', 'tests/gameplay-polish-v2.test.mjs')
 }
 
 if ($Mode -eq 'all' -or $Mode -eq 'supabase-security-v2') {
