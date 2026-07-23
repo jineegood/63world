@@ -88,7 +88,9 @@ const secureStudentAccess = YuksamStudentAccessV2.create({
   clientFactory:window.YuksamSupabaseClient?.createClient,
   authApi:window.YuksamAuthV2,
   cloudApi:window.YuksamCloudSyncV2,
+  sharedApi:window.YuksamSharedStateV2,
   storage:localStorage,
+  defaultWorkbooks,
 });
 
 const game = {
@@ -131,6 +133,23 @@ const game = {
   transitionLock: 0,
 };
 window.getYuksamAudioSettings = () => game.settings;
+
+if (secureStudentAccess.enabled) {
+  window.addEventListener('load', () => {
+    secureStudentAccess.refreshClassroomSettings().catch(() => {});
+    secureStudentAccess.startSharedPolling({
+      onClassroomChange(open) {
+        if (open || !game.player) return;
+        try { savePlayer(); } catch (_) {}
+        secureStudentAccess.signOut().catch(() => {});
+        game.player = null;
+        game.currentMap = 'town';
+        showScreen('landing');
+        toast('선생님이 서버를 닫았어요. 다음 수업 시간에 다시 만나요!');
+      },
+    });
+  });
+}
 
 function showScreen(name) {
   Object.values(screens).forEach((s) => s.classList.remove('active'));
@@ -283,6 +302,9 @@ function readWorkbookStorage() {
 }
 
 function getWorkbooks() {
+  if (secureStudentAccess.enabled) {
+    return JSON.parse(JSON.stringify(secureStudentAccess.getWorkbooks()));
+  }
   const stored = readWorkbookStorage();
   if (stored.status === 'valid') return stored.workbooks;
   if (stored.status === 'corrupt') return defaultWorkbooks.map(normalizeWorkbook);
@@ -312,6 +334,10 @@ function getWorkbooks() {
 }
 
 function saveWorkbooks(workbooks) {
+  if (secureStudentAccess.enabled) {
+    secureStudentAccess.setLocalWorkbooks(workbooks.map(normalizeWorkbook));
+    return;
+  }
   localStorage.setItem(STORAGE.workbooks, JSON.stringify(workbooks.map(normalizeWorkbook)));
 }
 

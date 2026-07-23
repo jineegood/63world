@@ -31,6 +31,11 @@ window.YuksamSupabaseClient = {
         async invoke() { return { data:null, error:{ status:403, message:'Forbidden' } }; }
       },
       from(table) {
+        if (table === 'shared_state_v2') {
+          return { select() { return { eq(column, key) { return { async maybeSingle() {
+            return { data:key === 'classroom_settings' ? { data:{ version:1, serverOpen:true } } : null, error:null };
+          } }; } }; } };
+        }
         if (table !== 'player_profiles_v2') throw new Error('unexpected table ' + table);
         return {
           select() {

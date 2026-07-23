@@ -8,6 +8,7 @@
 const SECURE_ADMIN_MODE_V2 = window.YUKSAM_CLOUD?.securityV2Enabled === true;
 let secureAdminAuthV2 = null;
 let secureAdminDataV2 = null;
+let secureAdminSharedV2 = null;
 let secureAdminStudentsV2 = [];
 let secureAdminStudentsStatusV2 = 'idle';
 let secureAdminStudentsErrorV2 = '';
@@ -41,6 +42,13 @@ if (SECURE_ADMIN_MODE_V2) {
     });
     if (window.YuksamAdminDataV2?.create && typeof secureAdminClientV2.from === 'function') {
       secureAdminDataV2 = window.YuksamAdminDataV2.create({ client:secureAdminClientV2 });
+    }
+    if (window.YuksamSharedStateV2?.create && typeof secureAdminClientV2.from === 'function') {
+      secureAdminSharedV2 = window.YuksamSharedStateV2.create({
+        client:secureAdminClientV2,
+        storage:localStorage,
+        defaultWorkbooks,
+      });
     }
   }
 }
@@ -102,9 +110,6 @@ function teacherStudentsHtml(){
     return `<div class="teacher-body">
       <p class="muted">보상은 안전하게 보관되며 학생의 다음 로그인 또는 새로고침 때 적용됩니다.</p>
       ${studentContent}
-      <div class="panel-card" style="margin-top:12px">
-        <p class="muted">클라우드 문제집·수업 설정 관리는 다음 단계에서 연결됩니다.</p>
-      </div>
     </div>`;
   }
   const players = getAllPlayers();
@@ -137,7 +142,9 @@ function teacherStudentsHtml(){
 }
 
 function teacherWorkbooksHtml(){
-  const workbooks = getWorkbooks();
+  const workbooks = SECURE_ADMIN_MODE_V2 && secureAdminSharedV2
+    ? secureAdminSharedV2.getWorkbooks()
+    : getWorkbooks();
   const workbookOptions = workbooks.map((wb) => `<option value="${wb.id}">${escapeHtml(wb.name)} (${wb.questions.length}문제)</option>`).join('');
   const cards = workbooks.length ? workbooks.map((wb, i) => `
     <div class="workbook-card${wb.enabled === false ? ' wb-disabled' : ''}">
@@ -204,14 +211,23 @@ function teacherWorkbooksHtml(){
 
 function teacherSettingsHtml(){
   if (SECURE_ADMIN_MODE_V2) {
+    const open = secureAdminSharedV2 ? secureAdminSharedV2.getServerOpen() : true;
     return `<div class="teacher-body">
       <div class="panel-card">
         <h3>관리자 비밀번호 변경</h3>
         <input type="password" id="teacherNewPw" autocomplete="new-password" placeholder="새 비밀번호 (6자 이상)" />
         <button class="primary wide" onclick="adminSaveTeacherSettings()">내 비밀번호 바꾸기</button>
       </div>
+      <div class="panel-card" style="margin-top:12px">
+        <h3>수업 서버 상태</h3>
+        <p style="text-align:center;font-weight:800">${open ? '🟢 열림' : '🔴 닫힘'}</p>
+        <div class="action-row">
+          <button class="primary" onclick="adminSetServerOpen(true)" ${open ? 'disabled' : ''}>서버 열기</button>
+          <button class="ghost danger-text" onclick="adminSetServerOpen(false)" ${open ? '' : 'disabled'}>서버 닫기</button>
+        </div>
+        <p class="muted">변경 내용은 학생 화면에 약 15초 안에 반영됩니다.</p>
+      </div>
       <button class="ghost wide" onclick="adminTeacherLogout()" style="margin-top:12px">관리자 로그아웃</button>
-      <p class="muted" style="margin-top:12px">클라우드 수업 설정 기능은 다음 단계에서 연결됩니다.</p>
     </div>`;
   }
   const open = isServerOpen();
@@ -258,7 +274,7 @@ window.adminSetCheatEnabled = function adminSetCheatEnabled(on){
 
 function buildAdminPanelHtml(tab){
   const tabs = SECURE_ADMIN_MODE_V2
-    ? [['students', '🔑 학생 비밀번호'], ['settings', '⚙️ 내 계정']]
+    ? [['students', '👨‍🎓 학생 관리'], ['workbooks', '📚 문제집 관리'], ['settings', '⚙️ 수업 설정']]
     : [['students', '👨‍🎓 학생 현황'], ['workbooks', '📚 문제집 관리'], ['settings', '⚙️ 수업 설정']];
   const active = tabs.some(([k]) => k === tab) ? tab : 'students';
   let body = '';
@@ -352,6 +368,12 @@ window.adminTeacherLogin = async function adminTeacherLogin(){
     if (button) { button.disabled = true; button.textContent = '확인 중...'; }
     try {
       await secureAdminAuthV2.signIn(email, pw);
+      if (secureAdminSharedV2) {
+        await Promise.all([
+          secureAdminSharedV2.refreshClassroomSettings(),
+          secureAdminSharedV2.refreshWorkbooks(),
+        ]);
+      }
       __teacherAuthed = true;
       openAdminPanel('students');
     } catch (error) {
@@ -543,41 +565,70 @@ function openAdminPanel(tab, options) {
   }
 }
 
-window.addAdminQuestion = function addAdminQuestion() {
+function getAdminWorkbooksV2(){
+  return SECURE_ADMIN_MODE_V2 && secureAdminSharedV2
+    ? secureAdminSharedV2.getWorkbooks()
+    : getWorkbooks();
+}
+
+async function saveAdminWorkbooksV2(workbooks){
+  try {
+    if (SECURE_ADMIN_MODE_V2) {
+      if (!secureAdminSharedV2) throw new Error('클라우드 문제집 설정을 확인해 주세요.');
+      await secureAdminSharedV2.saveWorkbooks(workbooks);
+      return true;
+    }
+    saveWorkbooks(workbooks);
+    return true;
+  } catch (error) {
+    toast(error?.message || '문제집을 저장하지 못했어요.');
+    return false;
+  }
+}
+
+function hasAdminQuestionDuplicate(workbook, question, answer){
+  const key = (value) => String(value || '').normalize('NFKC').trim().toLocaleLowerCase('ko');
+  const questionKey = key(question);
+  const answerKey = key(answer);
+  return workbook.questions.some((item) => key(item.q) === questionKey && key(item.answer) === answerKey);
+}
+
+window.addAdminQuestion = async function addAdminQuestion() {
   if (!requireTeacherAuth()) return;
   const workbookId = $('adminWorkbook')?.value;
   const q = $('adminQuestion').value.trim();
   const answer = $('adminAnswer').value.trim();
   if (!workbookId) { toast('먼저 문제집을 생성하세요.'); return; }
   if (!q || !answer) { toast('문제와 정답을 모두 입력하세요.'); return; }
-  const workbooks = getWorkbooks();
+  const workbooks = getAdminWorkbooksV2().map((book) => ({ ...book, questions:[...book.questions] }));
   const wb = workbooks.find((book) => book.id === workbookId);
   if (!wb) { toast('문제집을 찾을 수 없습니다.'); return; }
+  if (hasAdminQuestionDuplicate(wb, q, answer)) { toast('같은 문제와 정답이 이미 있어요.'); return; }
   const choiceRaw = $('adminChoices')?.value.trim() || '';
   const choices = choiceRaw ? choiceRaw.split(',').map((v) => v.trim()).filter(Boolean).slice(0, 4) : null;
   wb.questions.push({ id: uid(), workbookId: wb.id, zone: wb.zone, q, answer, choices, source: '직접입력' });
-  saveWorkbooks(workbooks);
+  if (!(await saveAdminWorkbooksV2(workbooks))) return;
   openAdminPanel('workbooks', { keepScroll: true });
   toast('선택한 문제집에 문제가 추가되었습니다.');
 };
 
-window.removeQuestionFromWorkbook = function removeQuestionFromWorkbook(workbookId, questionId) {
+window.removeQuestionFromWorkbook = async function removeQuestionFromWorkbook(workbookId, questionId) {
   if (!requireTeacherAuth()) return;
-  const workbooks = getWorkbooks();
+  const workbooks = getAdminWorkbooksV2().map((book) => ({ ...book, questions:[...book.questions] }));
   const wb = workbooks.find((book) => book.id === workbookId);
   if (!wb) return;
   wb.questions = wb.questions.filter((q) => q.id !== questionId);
-  saveWorkbooks(workbooks);
+  if (!(await saveAdminWorkbooksV2(workbooks))) return;
   openAdminPanel('workbooks', { keepScroll: true });
   toast('문제를 삭제했습니다.');
 };
 
-window.deleteWorkbook = function deleteWorkbook(workbookId) {
+window.deleteWorkbook = async function deleteWorkbook(workbookId) {
   if (!requireTeacherAuth()) return;
-  const wb = getWorkbookById(workbookId);
+  const wb = getAdminWorkbooksV2().find((book) => book.id === workbookId);
   if (!wb) return;
   if (!confirm(`${wb.name} 문제집을 삭제할까요?`)) return;
-  saveWorkbooks(getWorkbooks().filter((book) => book.id !== workbookId));
+  if (!(await saveAdminWorkbooksV2(getAdminWorkbooksV2().filter((book) => book.id !== workbookId)))) return;
   openAdminPanel('workbooks', { keepScroll: true });
   toast('문제집을 삭제했습니다.');
 };
@@ -603,12 +654,12 @@ window.grantBuildingToStudent = function grantBuildingToStudent(name) {
   toast(`${name}에게 빌딩 ${amount}개를 지급했습니다.`);
 };
 
-window.generateAiQuestionSet = function generateAiQuestionSet() {
+window.generateAiQuestionSet = async function generateAiQuestionSet() {
   if (!requireTeacherAuth()) return;
   const prompt = $('aiPrompt').value.trim();
   if (!prompt) { toast('AI 요청 문장을 입력하세요.'); return; }
   const questions = generateAiQuestions(prompt, 'silent_forest');
-  const workbooks = getWorkbooks();
+  const workbooks = getAdminWorkbooksV2().map((book) => ({ ...book, questions:[...book.questions] }));
   const index = workbooks.length + 1;
   const name = $('aiWorkbookName').value.trim() || `문제집${index} - ${inferSubject(prompt)} ${questions.length}문제 세트`;
   const id = 'wb_' + uid();
@@ -621,7 +672,7 @@ window.generateAiQuestionSet = function generateAiQuestionSet() {
     createdAt: Date.now(),
     questions: questions.map((q) => ({ ...q, workbookId: id })),
   }));
-  saveWorkbooks(workbooks);
+  if (!(await saveAdminWorkbooksV2(workbooks))) return;
   openAdminPanel('workbooks', { keepScroll: true });
   toast(`AI 문제집 "${name}"을 추가했습니다.`);
 };
@@ -688,24 +739,24 @@ window.adminConfirmDeleteStudent = function adminConfirmDeleteStudent(name){
   `, { type: 'admin', pause: false });
 };
 
-window.adminToggleWorkbook = function adminToggleWorkbook(workbookId){
+window.adminToggleWorkbook = async function adminToggleWorkbook(workbookId){
   if (!requireTeacherAuth()) return;
-  const workbooks = getWorkbooks();
+  const workbooks = getAdminWorkbooksV2().map((book) => ({ ...book, questions:[...book.questions] }));
   const wb = workbooks.find((w) => w.id === workbookId);
   if (!wb) return;
   wb.enabled = wb.enabled === false ? true : false;
-  saveWorkbooks(workbooks);
+  if (!(await saveAdminWorkbooksV2(workbooks))) return;
   toast(wb.enabled === false ? `『${wb.name}』 출제를 껐습니다.` : `『${wb.name}』 출제를 켰습니다!`);
   openAdminPanel('workbooks', { keepScroll: true });
 };
 
-window.adminBulkImport = function adminBulkImport(){
+window.adminBulkImport = async function adminBulkImport(){
   if (!requireTeacherAuth()) return;
   const workbookId = $('adminWorkbook')?.value;
   if (!workbookId) { toast('먼저 문제집을 선택하세요.'); return; }
   const raw = ($('adminBulk')?.value || '').trim();
   if (!raw) { toast('등록할 문제를 입력하세요.'); return; }
-  const workbooks = getWorkbooks();
+  const workbooks = getAdminWorkbooksV2().map((book) => ({ ...book, questions:[...book.questions] }));
   const wb = workbooks.find((book) => book.id === workbookId);
   if (!wb) { toast('문제집을 찾을 수 없습니다.'); return; }
   let added = 0;
@@ -715,10 +766,11 @@ window.adminBulkImport = function adminBulkImport(){
     const q = line.slice(0, idx).trim();
     const answer = line.slice(idx + 1).trim();
     if (!q || !answer) continue;
+    if (hasAdminQuestionDuplicate(wb, q, answer)) continue;
     wb.questions.push({ id: uid(), workbookId: wb.id, zone: wb.zone, q, answer, choices: null, source: '일괄등록' });
     added += 1;
   }
-  saveWorkbooks(workbooks);
+  if (!(await saveAdminWorkbooksV2(workbooks))) return;
   openAdminPanel('workbooks', { keepScroll: true });
   toast(`${added}개 문제를 추가했습니다.`);
 };
@@ -746,13 +798,27 @@ window.adminSaveTeacherSettings = async function adminSaveTeacherSettings(){
 
 // ── 서버 오픈/닫기 상태 ─────────────────────────────────────────
 function isServerOpen(){
+  if (SECURE_ADMIN_MODE_V2 && typeof secureStudentAccess?.isServerOpen === 'function') {
+    return secureStudentAccess.isServerOpen();
+  }
   // 기존 저장데이터에 serverOpen 필드가 없으면 열림(true)으로 간주
   const store = teacherStore();
   return store.serverOpen !== false;
 }
 
-window.adminSetServerOpen = function adminSetServerOpen(open){
+window.adminSetServerOpen = async function adminSetServerOpen(open){
   if (!requireTeacherAuth()) return;
+  if (SECURE_ADMIN_MODE_V2) {
+    if (!secureAdminSharedV2) { toast('클라우드 수업 설정을 확인해 주세요.'); return; }
+    try {
+      await secureAdminSharedV2.setServerOpen(Boolean(open));
+      openAdminPanel('settings');
+      toast(open ? '🟢 서버를 열었어요.' : '🔴 서버를 닫았어요.');
+    } catch (error) {
+      toast(error?.message || '서버 상태를 저장하지 못했어요.');
+    }
+    return;
+  }
   const store = teacherStore();
   store.serverOpen = !!open;
   saveTeacherStore(store);

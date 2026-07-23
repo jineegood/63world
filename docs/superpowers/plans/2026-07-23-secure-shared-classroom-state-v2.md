@@ -125,3 +125,13 @@
 ## Completion Boundary
 
 This phase ends with local, disabled shared workbook and classroom-setting code. Realtime multiplayer/chat, leaderboard completion, live SQL execution, teacher provisioning, Edge Function deployment, security-switch activation, GitHub push, and Vercel deployment remain later explicit phases.
+
+## Execution Record — 2026-07-23
+
+- Added row-specific anonymous/authenticated read policies for the two fixed shared-state rows.
+- Added the validated shared-state module, isolated v2 caches, and one 15-second poller.
+- Connected closed-classroom checks, cloud workbooks, later-close save/signout, and safe local bootstrap preparation.
+- Connected the separate teacher client to workbook and classroom-setting management.
+- Added duplicate-question blocking and safe workbook-save error handling.
+- Verified with `npm.cmd test` (exit code 0). The production security switch remains `false`.
+- Kept all work local: no SQL execution, GitHub push, Vercel deployment, or live service change.

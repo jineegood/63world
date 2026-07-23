@@ -28,10 +28,16 @@
       savePlayer:rejectSync,
       flush:reject,
       signOut:reject,
+      refreshClassroomSettings:reject,
+      isServerOpen:() => true,
+      getWorkbooks:() => Object.freeze([]),
+      setLocalWorkbooks:rejectSync,
+      startSharedPolling() {},
+      stopSharedPolling() {},
     });
   }
 
-  function create({ config, clientFactory, authApi, cloudApi, storage } = {}) {
+  function create({ config, clientFactory, authApi, cloudApi, sharedApi, storage, defaultWorkbooks } = {}) {
     if (config?.securityV2Enabled !== true) {
       return closedController('off', new StudentAccessV2Error('DISABLED', '새 보안 로그인이 아직 켜지지 않았어요.'));
     }
@@ -41,7 +47,8 @@
     if (!/^https:\/\/[^/]+$/i.test(projectUrl) || anonKey.length < 20
       || typeof clientFactory !== 'function'
       || typeof authApi?.createAuthService !== 'function'
-      || typeof cloudApi?.create !== 'function') {
+      || typeof cloudApi?.create !== 'function'
+      || typeof sharedApi?.create !== 'function') {
       return closedController(
         'misconfigured',
         new StudentAccessV2Error('CONFIG', '새 보안 로그인 설정을 확인해 주세요.'),
@@ -51,6 +58,7 @@
     const client = clientFactory(projectUrl, anonKey);
     const auth = authApi.createAuthService({ client });
     const cloud = cloudApi.create({ client, storage });
+    const shared = sharedApi.create({ client, storage, defaultWorkbooks });
     let currentIdentity = null;
 
     const normalizeName = typeof authApi.normalizeStudentName === 'function'
@@ -58,6 +66,10 @@
       : simpleNormalizeName;
 
     async function enter(name, password) {
+      const classroom = await shared.refreshClassroomSettings();
+      if (!classroom.serverOpen) {
+        throw new StudentAccessV2Error('SERVER_CLOSED', '지금은 서버가 닫혀 있어요. 선생님이 열어주면 접속할 수 있어요.');
+      }
       let entered;
       try {
         entered = await auth.enterStudent(name, password);
@@ -69,6 +81,12 @@
       }
 
       currentIdentity = entered.identity;
+      try {
+        await shared.refreshWorkbooks();
+      } catch (error) {
+        currentIdentity = null;
+        throw error;
+      }
       if (entered.isNewAccount) {
         return Object.freeze({ kind:'new', identity:currentIdentity });
       }
@@ -113,6 +131,12 @@
       savePlayer,
       flush,
       signOut,
+      refreshClassroomSettings:shared.refreshClassroomSettings,
+      isServerOpen:shared.getServerOpen,
+      getWorkbooks:shared.getWorkbooks,
+      setLocalWorkbooks:shared.setLocalWorkbooks,
+      startSharedPolling:shared.startPolling,
+      stopSharedPolling:shared.stopPolling,
     });
   }
 

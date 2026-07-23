@@ -1,5 +1,5 @@
 param(
-  [ValidateSet('all', 'check', 'baseline', 'core-utils', 'player-store', 'input-router', 'world-interaction-registry', 'world-navigation-registry', 'world-render-pipeline', 'hud-update-pipeline', 'total-stats-pipeline', 'combat-entry-pipeline', 'combat-frame-pipeline', 'audio-volume-pipeline', 'combat-rules', 'combat-sequence-controller', 'combat-flow', 'combat-fx', 'sfx-map', 'audio-manifest', 'audio-dispatcher', 'weapon-tier', 'game-data', 'quest-data', 'patch-data', 'supabase-security-v2', 'cloud-sync-v2', 'student-access-v2', 'secure-student-login-v2', 'admin-auth-v2', 'teacher-reset-function', 'secure-teacher-auth-v2', 'admin-data-v2', 'student-reward-grants-v2', 'teacher-delete-function', 'secure-cloud-student-admin-v2', 'refactor-health', 'current-data', 'safety-net', 'extract-data', 'build-workbook')]
+  [ValidateSet('all', 'check', 'baseline', 'core-utils', 'player-store', 'input-router', 'world-interaction-registry', 'world-navigation-registry', 'world-render-pipeline', 'hud-update-pipeline', 'total-stats-pipeline', 'combat-entry-pipeline', 'combat-frame-pipeline', 'audio-volume-pipeline', 'combat-rules', 'combat-sequence-controller', 'combat-flow', 'combat-fx', 'sfx-map', 'audio-manifest', 'audio-dispatcher', 'weapon-tier', 'game-data', 'quest-data', 'patch-data', 'supabase-security-v2', 'cloud-sync-v2', 'student-access-v2', 'secure-student-login-v2', 'secure-shared-student-v2', 'admin-auth-v2', 'teacher-reset-function', 'secure-teacher-auth-v2', 'secure-shared-teacher-v2', 'admin-data-v2', 'student-reward-grants-v2', 'teacher-delete-function', 'secure-cloud-student-admin-v2', 'shared-state-policy-v2', 'shared-state-v2', 'refactor-health', 'current-data', 'safety-net', 'extract-data', 'build-workbook')]
   [string]$Mode = 'all'
 )
 
@@ -104,6 +104,7 @@ if ($Mode -eq 'all' -or $Mode -eq 'check') {
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/student-access-v2.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/admin-auth-v2.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/admin-data-v2.js')
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/shared-state-v2.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/multiplayer.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/tutorial.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/costume-data.js')
@@ -217,6 +218,9 @@ if ($Mode -eq 'all' -or $Mode -eq 'student-access-v2') {
 if ($Mode -eq 'all' -or $Mode -eq 'secure-student-login-v2') {
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', 'tests/secure-student-login-v2.test.mjs')
 }
+if ($Mode -eq 'all' -or $Mode -eq 'secure-shared-student-v2') {
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', 'tests/secure-shared-student-v2.test.mjs')
+}
 
 if ($Mode -eq 'all' -or $Mode -eq 'admin-auth-v2') {
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', 'tests/admin-auth-v2.test.mjs')
@@ -228,6 +232,9 @@ if ($Mode -eq 'all' -or $Mode -eq 'teacher-reset-function') {
 
 if ($Mode -eq 'all' -or $Mode -eq 'secure-teacher-auth-v2') {
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', 'tests/secure-teacher-auth-v2.test.mjs')
+}
+if ($Mode -eq 'all' -or $Mode -eq 'secure-shared-teacher-v2') {
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', 'tests/secure-shared-teacher-v2.test.mjs')
 }
 
 if ($Mode -eq 'all' -or $Mode -eq 'admin-data-v2') {
@@ -244,6 +251,14 @@ if ($Mode -eq 'all' -or $Mode -eq 'teacher-delete-function') {
 
 if ($Mode -eq 'all' -or $Mode -eq 'secure-cloud-student-admin-v2') {
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', 'tests/secure-cloud-student-admin-v2.test.mjs')
+}
+
+if ($Mode -eq 'all' -or $Mode -eq 'shared-state-policy-v2') {
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', 'tests/shared-state-policy-v2.test.mjs')
+}
+
+if ($Mode -eq 'all' -or $Mode -eq 'shared-state-v2') {
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', 'tests/shared-state-v2.test.mjs')
 }
 
 if ($Mode -eq 'all' -or $Mode -eq 'refactor-health') {

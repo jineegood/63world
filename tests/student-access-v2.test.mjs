@@ -29,12 +29,23 @@ function dependencies(overrides = {}) {
     async flush() { calls.push(['flush']); },
     ...overrides.cloudService,
   };
+  const sharedService = {
+    async refreshClassroomSettings() { calls.push(['refreshClassroomSettings']); return { serverOpen:true, source:'remote' }; },
+    async refreshWorkbooks() { calls.push(['refreshWorkbooks']); return { workbooks:[], source:'remote' }; },
+    getServerOpen() { return true; },
+    getWorkbooks() { return []; },
+    startPolling(options) { calls.push(['startPolling', options]); },
+    stopPolling() { calls.push(['stopPolling']); },
+    ...overrides.sharedService,
+  };
   return {
     calls,
     identity,
     clientFactory(url, key) { calls.push(['createClient', url, key]); return { auth:{} }; },
     authApi:{ createAuthService({ client }) { calls.push(['createAuthService', client]); return authService; } },
     cloudApi:{ create({ client, storage }) { calls.push(['createCloudService', client, storage]); return cloudService; } },
+    sharedApi:{ create({ client, storage }) { calls.push(['createSharedService', client, storage]); return sharedService; } },
+    defaultWorkbooks:[],
     storage:{ getItem() { return null; }, setItem() {}, removeItem() {} },
   };
 }
@@ -76,6 +87,28 @@ test('ready controller normalizes the project URL and constructs one dependency 
   assert.equal(deps.calls[0][0], 'createClient');
   assert.equal(deps.calls[0][1], 'https://project.supabase.co');
   assert.equal(deps.calls.filter(([name]) => name === 'createClient').length, 1);
+});
+
+test('closed classroom rejects before any Auth login or signup attempt', async () => {
+  const api = loadApi();
+  const deps = dependencies({ sharedService:{
+    async refreshClassroomSettings() { deps.calls.push(['refreshClassroomSettings']); return { serverOpen:false, source:'remote' }; },
+  } });
+  const service = api.create({ config:validConfig(), ...deps });
+  await assert.rejects(service.enter('별빛', 'secret-123'), (error) => error.code === 'SERVER_CLOSED');
+  assert.equal(deps.calls.some(([name]) => name === 'enterStudent'), false);
+});
+
+test('open classroom refreshes authenticated workbooks before loading a profile', async () => {
+  const api = loadApi();
+  const deps = dependencies();
+  const service = api.create({ config:validConfig(), ...deps });
+  await service.enter('별빛', 'secret-123');
+  const names = deps.calls.map(([name]) => name);
+  assert.equal(names.includes('refreshClassroomSettings'), true);
+  assert.equal(names.includes('refreshWorkbooks'), true);
+  assert.ok(names.indexOf('refreshClassroomSettings') < names.indexOf('enterStudent'));
+  assert.ok(names.indexOf('refreshWorkbooks') < names.indexOf('loadPlayer'));
 });
 
 test('existing account returns only its authenticated profile', async () => {

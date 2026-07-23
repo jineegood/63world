@@ -35,6 +35,12 @@ window.YuksamSupabaseClient = {
         async updateUser() { return { data:{ user:teacher }, error:null }; },
       },
       from(table) {
+        if (table === 'shared_state_v2') return {
+          select() { return { eq(column, key) { return { async maybeSingle() {
+            return { data:{ data:key === 'classroom_settings' ? { version:1, serverOpen:true } : { version:1, items:[] } }, error:null };
+          } }; } }; },
+          async upsert() { return { error:null }; },
+        };
         if (table === 'player_profiles_v2') return {
           select(columns) { return {
             async order() { window.__adminCalls.push(['list']); return { data:window.__profileRows, error:null }; },
