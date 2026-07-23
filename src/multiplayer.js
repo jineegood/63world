@@ -6,8 +6,10 @@
   window.__MULTIPLAYER_V53__ = true;
 
   const cfg = window.YUKSAM_CLOUD || {};
+  const multiplayerCore = window.YuksamMultiplayerCore;
   const enabled = typeof cfg.url === 'string' && cfg.url.startsWith('http')
-    && typeof cfg.anonKey === 'string' && cfg.anonKey.length > 20;
+    && typeof cfg.anonKey === 'string' && cfg.anonKey.length > 20
+    && typeof multiplayerCore?.realtimeWebSocketUrl === 'function';
   const SEND_MS = 220;       // 내 위치 전송 주기
   const STALE_MS = 6000;     // 이 시간 동안 소식 없으면 화면에서 제거
   const remotes = new Map(); // name -> { x, y, map, class, spec, level, equipment, appearance, moving, bubble, at }
@@ -21,7 +23,8 @@
   const TOPIC = 'realtime:yuksam-world';
 
   function connect() {
-    const wsUrl = cfg.url.replace(/^http/, 'ws') + '/realtime/v1/websocket?apikey=' + encodeURIComponent(cfg.anonKey) + '&vsn=1.0.0';
+    const wsUrl = multiplayerCore.realtimeWebSocketUrl(cfg.url, cfg.anonKey);
+    if (!wsUrl) { window.__multiplayerStatusV53 = 'offline'; return; }
     try { socket = new WebSocket(wsUrl); } catch { window.__multiplayerStatusV53 = 'offline'; return; }
     socket.onopen = () => {
       send({ topic: TOPIC, event: 'phx_join', payload: { config: { broadcast: { self: false } } } });
