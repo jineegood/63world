@@ -1,5 +1,5 @@
 param(
-  [ValidateSet('all', 'check', 'baseline', 'core-utils', 'player-store', 'input-router', 'world-interaction-registry', 'world-navigation-registry', 'world-render-pipeline', 'hud-update-pipeline', 'total-stats-pipeline', 'combat-entry-pipeline', 'combat-frame-pipeline', 'audio-volume-pipeline', 'combat-rules', 'combat-sequence-controller', 'combat-flow', 'combat-fx', 'sfx-map', 'audio-manifest', 'audio-dispatcher', 'weapon-tier', 'game-data', 'quest-data', 'patch-data', 'gameplay-polish-v2', 'early-game-polish-v2', 'wrong-answer-polish-v2', 'world-healing-polish-v2', 'supabase-security-v2', 'cloud-sync-v2', 'student-access-v2', 'secure-student-login-v2', 'secure-shared-student-v2', 'admin-auth-v2', 'teacher-reset-function', 'secure-teacher-auth-v2', 'secure-shared-teacher-v2', 'admin-data-v2', 'student-reward-grants-v2', 'teacher-delete-function', 'secure-cloud-student-admin-v2', 'shared-state-policy-v2', 'shared-state-v2', 'refactor-health', 'current-data', 'safety-net', 'extract-data', 'build-workbook')]
+  [ValidateSet('all', 'check', 'baseline', 'core-utils', 'player-store', 'input-router', 'world-interaction-registry', 'world-navigation-registry', 'world-render-pipeline', 'hud-update-pipeline', 'total-stats-pipeline', 'combat-entry-pipeline', 'combat-frame-pipeline', 'audio-volume-pipeline', 'combat-rules', 'combat-sequence-controller', 'combat-flow', 'combat-fx', 'sfx-map', 'audio-manifest', 'audio-dispatcher', 'weapon-tier', 'game-data', 'quest-data', 'patch-data', 'gameplay-polish-v2', 'early-game-polish-v2', 'wrong-answer-polish-v2', 'world-healing-polish-v2', 'reward-presentation-v2', 'supabase-security-v2', 'cloud-sync-v2', 'student-access-v2', 'secure-student-login-v2', 'secure-shared-student-v2', 'admin-auth-v2', 'teacher-reset-function', 'secure-teacher-auth-v2', 'secure-shared-teacher-v2', 'admin-data-v2', 'student-reward-grants-v2', 'teacher-delete-function', 'secure-cloud-student-admin-v2', 'shared-state-policy-v2', 'shared-state-v2', 'refactor-health', 'current-data', 'safety-net', 'extract-data', 'build-workbook')]
   [string]$Mode = 'all'
 )
 
@@ -220,6 +220,10 @@ if ($Mode -eq 'all' -or $Mode -eq 'wrong-answer-polish-v2') {
 
 if ($Mode -eq 'all' -or $Mode -eq 'world-healing-polish-v2') {
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', 'tests/world-healing-polish-v2.test.mjs')
+}
+
+if ($Mode -eq 'all' -or $Mode -eq 'reward-presentation-v2') {
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', 'tests/reward-presentation-v2.test.mjs')
 }
 
 if ($Mode -eq 'all' -or $Mode -eq 'supabase-security-v2') {

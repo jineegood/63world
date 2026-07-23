@@ -199,6 +199,19 @@ function showCinematicMessage(title, sub = '', ms = 1200) {
   }, ms);
 }
 
+function showRewardSequenceV2(title, prefix, reward = {}) {
+  const labels = {
+    exp:(amount) => amount > 0 ? `EXP +${amount}` : 'EXP 없음',
+    gold:(amount) => `Gold +${amount}`,
+    building:(amount) => `빌딩 +${amount}`,
+  };
+  YuksamGameplayPolishV2.rewardSteps(reward).forEach((step) => {
+    setTimeout(() => {
+      showCinematicMessage(title, `${prefix} · ${labels[step.kind](step.amount)}`, 900);
+    }, step.delayMs);
+  });
+}
+
 function appendChatMessage(type, sender, message) {
   const msg = { type, sender, message, at: Date.now() };
   game.chatMessages.push(msg);
@@ -5873,7 +5886,16 @@ function updateQuestTracker() {
   };
   window.acceptCurrentQuest = function acceptCurrentQuestV21(id) { if (getQuestState(id)) { toast('이미 받은 퀘스트입니다.'); return; } acceptQuest(id); playSfx('quest'); closeModal(); showCinematicMessage('퀘스트 수락!', `${QUEST_DEFS[id].title} 퀘스트를 시작합니다.`, 1600); appendChatMessage('system', '퀘스트', `${QUEST_DEFS[id].title} 수락`); };
   function applyQuestRewardV21(id) { const q = getQuestState(id); const def = QUEST_DEFS[id]; if (!q || q.status !== 'ready' || !def) return null; q.status = 'completed'; q.completedAt = Date.now(); const r = def.reward || {}; if (r.exp) addExp(r.exp); if (r.gold) addGold(r.gold); if (r.building) addBuilding(r.building); if (r.item && window.grantQuestRewardItemV38) window.grantQuestRewardItemV38(r.item); savePlayer(); updateHud(); updateQuestTracker(); return r; }
-  window.claimQuestReward = function claimQuestRewardV21(id) { const def = QUEST_DEFS[id]; const reward = applyQuestRewardV21(id); if (!reward) { toast('받을 수 있는 보상이 없습니다.'); return; } closeModal(); if (!window.playQuestCompletionSoundV42?.()) playSfx('quest'); const rewardText = `EXP +${reward.exp || 0} · Gold +${reward.gold || 0} · 빌딩 +${reward.building || 0}`; showCinematicMessage('퀘스트 보상 획득!', `${def.title} 완료 보상: ${rewardText}`, 2400); appendChatMessage('system', '퀘스트 보상', `${def.title}: ${rewardText}`); };
+  window.claimQuestReward = function claimQuestRewardV21(id) {
+    const def = QUEST_DEFS[id];
+    const reward = applyQuestRewardV21(id);
+    if (!reward) { toast('받을 수 있는 보상이 없습니다.'); return; }
+    closeModal();
+    if (!window.playQuestCompletionSoundV42?.()) playSfx('quest');
+    const rewardText = `EXP +${reward.exp || 0} · Gold +${reward.gold || 0} · 빌딩 +${reward.building || 0}`;
+    showRewardSequenceV2('퀘스트 보상 획득!', `${def.title} 완료`, reward);
+    appendChatMessage('system', '퀘스트 보상', `${def.title}: ${rewardText}`);
+  };
   window.completeCurrentQuest = function completeCurrentQuestV21(id) { game.dialogue = { page:0, selected:0, mode:'base' }; renderNpcDialogueV21(); };
   updateQuestTracker = function updateQuestTrackerV21() {
     const tracker = $('questTracker');
@@ -7694,13 +7716,18 @@ function updateQuestTracker() {
     addGold(defeatedMonster.gold || 0);
     if (typeof incrementQuestProgressByMonster === 'function') incrementQuestProgressByMonster(defeatedMonster);
     // [피드백] 전투 승리 시 10% 확률로 빌딩 화폐 1개 드랍
+    let buildingGain = 0;
     if (Math.random() < 0.10) {
+      buildingGain = 1;
       addBuilding(1);
       appendChatMessage?.('system', '행운', '🏢 빌딩 화폐 1개를 주웠습니다!');
-      toast('🏢 빌딩 화폐 1개 획득!');
     }
     const expText = expGain > 0 ? `EXP +${expGain}` : '레벨 차이로 EXP 없음';
-    showCinematicMessage('몬스터를 처치했습니다!', `${defeatedMonster.name} · ${expText} · Gold +${defeatedMonster.gold || 0}`, 2240);
+    showRewardSequenceV2('몬스터를 처치했습니다!', defeatedMonster.name, {
+      exp:expGain,
+      gold:defeatedMonster.gold || 0,
+      building:buildingGain,
+    });
     appendChatMessage?.('system', '전투', `${defeatedMonster.name} 처치! ${expText}, Gold +${defeatedMonster.gold || 0}`);
     savePlayer?.();
   }
