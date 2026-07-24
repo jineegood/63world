@@ -2603,10 +2603,22 @@ function dispatchBaseWorldInteraction(nearest) {
   if (nearest.type === 'stageReturnPortal') { confirmStageReturn(); return true; }
   if (nearest.type === 'bossPortal') { confirmBossPortal(game.currentMap); return true; }
   if (nearest.type === 'bossRoomExit') { returnToStageFromBossRoom(); return true; }
-  if (nearest.type === 'weaponShop') { openShopModal('weapon'); return true; }
-  if (nearest.type === 'armorShop') { openShopModal('armor'); return true; }
-  if (nearest.type === 'buildingShopNpc') { openBuildingShopModal(); return true; }
-  if (nearest.type === 'costumeShopNpc') { window.openCostumeShopV55?.(); return true; }
+  if (nearest.type === 'weaponShop') {
+    if (!window.openQuestNpcIntroV3?.('weapon', () => openShopModal('weapon'))) openShopModal('weapon');
+    return true;
+  }
+  if (nearest.type === 'armorShop') {
+    if (!window.openQuestNpcIntroV3?.('armor', () => openShopModal('armor'))) openShopModal('armor');
+    return true;
+  }
+  if (nearest.type === 'buildingShopNpc') {
+    if (!window.openQuestNpcIntroV3?.('accessory', () => openBuildingShopModal())) openBuildingShopModal();
+    return true;
+  }
+  if (nearest.type === 'costumeShopNpc') {
+    if (!window.openQuestNpcIntroV3?.('costume', () => window.openCostumeShopV55?.())) window.openCostumeShopV55?.();
+    return true;
+  }
   if (nearest.type === 'hall') { openHallOfFame(); return true; }
   return false;
 }
@@ -5461,6 +5473,7 @@ function updateQuestTracker() {
     if (!q) return closeModal();
     if (normalize(given) === normalize(q.answer)) {
       game.player.hp = game.player.maxHp;
+      window.recordHealingQuestSuccessV3?.();
       savePlayer(); updateHud(); closeModal();
       playSfx('quest');
       showCinematicMessage('회복 완료!', '치유의 우물빛이 몸을 감싸며 HP가 모두 회복되었습니다.', 1500);
@@ -5820,8 +5833,96 @@ function updateQuestTracker() {
   };
 
   const QUEST_ORDER_V21 = QUEST_ORDER;
+  const QUEST_NPC_IDS_V3 = Object.freeze({
+    weapon:'tut_shop',
+    armor:'tut_shop',
+    accessory:'tut_accessory',
+    costume:'tut_costume',
+    enhance:'tut_enhance',
+  });
+  let questNpcContinuationV3 = null;
+
+  function migrateTutorialQuestsV3() {
+    const changed = window.YuksamQuestTutorialPolishV3?.migrateHealingQuest(game.player?.quests);
+    if (changed) savePlayer();
+    return !!changed;
+  }
+
+  window.openQuestNpcIntroV3 = function openQuestNpcIntroV3(kind, continuation) {
+    const questId = QUEST_NPC_IDS_V3[kind];
+    const state = questId ? getQuestState(questId) : null;
+    const intro = window.YuksamQuestTutorialPolishV3?.getNpcIntro(kind, state);
+    if (!intro) return false;
+    questNpcContinuationV3 = typeof continuation === 'function' ? continuation : null;
+    const action = intro.gift ? 'receiveQuestCostumeV3()' : `continueQuestNpcIntroV3('${kind}')`;
+    const label = intro.gift ? '선물 받기' : '알겠어요!';
+    openModal(`
+      <div class="dialogue-box">
+        <div class="dialogue-speaker"><h2>${kind === 'costume' ? '옷 상인 상남' : kind === 'accessory' ? '특별 상인 새나리' : kind === 'enhance' ? '대장장이 진명' : kind === 'armor' ? '방어구 상인 상미' : '무기 상인 의석'}</h2></div>
+        <div class="dialogue-text">${YuksamQuestText.emphasize(intro.text)}</div>
+        <div class="dialogue-options"><button class="selected" onclick="${action}">${label}</button></div>
+      </div>
+    `, { type:'dialogue', pause:true });
+    return true;
+  };
+
+  window.continueQuestNpcIntroV3 = function continueQuestNpcIntroV3(kind) {
+    const questId = QUEST_NPC_IDS_V3[kind];
+    window.YuksamQuestTutorialPolishV3?.markNpcIntroSeen(getQuestState(questId));
+    savePlayer();
+    closeModal();
+    const continuation = questNpcContinuationV3;
+    questNpcContinuationV3 = null;
+    continuation?.();
+  };
+
+  window.receiveQuestCostumeV3 = function receiveQuestCostumeV3() {
+    const result = window.YuksamQuestTutorialPolishV3?.grantQuestCostume({
+      player:game.player,
+      questState:getQuestState('tut_costume'),
+      itemId:'cs_questSproutRibbon',
+    });
+    savePlayer();
+    updateHud();
+    updateQuestTracker();
+    closeModal();
+    if (result?.granted) {
+      playSfx('quest');
+      showCinematicMessage('새싹 리본 획득!', '상남에게 특별한 퀘스트 코스튬을 선물받았습니다.', 2200);
+      appendChatMessage('system', '코스튬 선물', '새싹 리본을 받았습니다.');
+    } else {
+      toast('이미 새싹 리본을 가지고 있습니다.');
+    }
+    questNpcContinuationV3 = null;
+  };
+
+  window.recordHealingQuestSuccessV3 = function recordHealingQuestSuccessV3() {
+    const changed = window.YuksamQuestTutorialPolishV3?.recordHealingSuccess(getQuestState('tut_healing_well'));
+    if (changed) {
+      savePlayer();
+      updateQuestTracker();
+    }
+    return !!changed;
+  };
+
+  function applyHealingTrainingAcceptV3(id) {
+    const result = window.YuksamQuestTutorialPolishV3?.applyTrainingAccept({
+      questId:id,
+      player:game.player,
+      questState:getQuestState(id),
+    });
+    if (!result?.applied) return false;
+    playSfx('enemyAttack');
+    try { triggerScreenShakeV19(); } catch { triggerScreenShake?.(); }
+    savePlayer();
+    updateHud();
+    showCinematicMessage('회복 훈련!', '명진쌤의 안전한 훈련 공격! HP가 1이 되었어요. 치유의 우물에서 문제를 풀어 회복해 보세요.', 2600);
+    appendChatMessage('system', '회복 훈련', '명진쌤의 훈련 공격으로 HP가 1이 되었습니다.');
+    return true;
+  }
 
   function getCurrentQuestIdForNpcV21() {
+    migrateTutorialQuestsV3();
     for (let i = 0; i < QUEST_ORDER_V21.length; i += 1) {
       const id = QUEST_ORDER_V21[i];
       const state = getQuestState(id);
@@ -5920,15 +6021,16 @@ function updateQuestTracker() {
       game.player.quests[id].progress = def.target;
       game.player.quests[id].status = 'ready';
     }
-    const costumeIdsV2 = Object.keys(window.COSTUME_DEFS_V55 || {});
-    if (id === 'tut_costume'
-      && YuksamGameplayPolishV2.ownsAllCostumes(game.player.costumeInventory, costumeIdsV2)) {
-      game.player.quests[id].progress = def.target;
-      game.player.quests[id].status = 'ready';
-    }
     savePlayer(); updateQuestTracker();
   };
-  window.acceptCurrentQuest = function acceptCurrentQuestV21(id) { if (getQuestState(id)) { toast('이미 받은 퀘스트입니다.'); return; } acceptQuest(id); playSfx('quest'); closeModal(); showCinematicMessage('퀘스트 수락!', `${QUEST_DEFS[id].title} 퀘스트를 시작합니다.`, 1600); appendChatMessage('system', '퀘스트', `${QUEST_DEFS[id].title} 수락`); };
+  window.acceptCurrentQuest = function acceptCurrentQuestV21(id) { if (getQuestState(id)) { toast('이미 받은 퀘스트입니다.'); return; } if (id !== 'tut_healing_well') playSfx('quest');
+    acceptQuest(id);
+    closeModal();
+    if (!applyHealingTrainingAcceptV3(id)) {
+      showCinematicMessage('퀘스트 수락!', `${QUEST_DEFS[id].title} 퀘스트를 시작합니다.`, 1600);
+    }
+    appendChatMessage('system', '퀘스트', `${QUEST_DEFS[id].title} 수락`);
+  };
   function applyQuestRewardV21(id) { const q = getQuestState(id); const def = QUEST_DEFS[id]; if (!q || q.status !== 'ready' || !def) return null; q.status = 'completed'; q.completedAt = Date.now(); const r = def.reward || {}; if (r.exp) addExp(r.exp); if (r.gold) addGold(r.gold); if (r.building) addBuilding(r.building); if (r.item && window.grantQuestRewardItemV38) window.grantQuestRewardItemV38(r.item); savePlayer(); updateHud(); updateQuestTracker(); return r; }
   window.claimQuestReward = function claimQuestRewardV21(id) {
     const def = QUEST_DEFS[id];
@@ -12282,7 +12384,9 @@ function updateQuestTracker() {
     handle:(nearest) => {
       if (nearest.type === 'healingWell') window.openHealingWellModal();
       else if (nearest.type === 'petOrbNpc') window.openPetShopModalV34();
-      else if (nearest.type === 'upgradeNpc') window.openUpgradeShopModalV33();
+      else if (nearest.type === 'upgradeNpc') {
+        if (!window.openQuestNpcIntroV3?.('enhance', () => window.openUpgradeShopModalV33())) window.openUpgradeShopModalV33();
+      }
       else if (nearest.type === 'finalBossPortal') window.confirmFinalBossPortalV21?.();
       else if (nearest.type === 'finalBossExitV35') exitFinalBossRoomV35();
       else if (nearest.type === 'finalTeacherNpcV35') openFinalTeacherDialogueV35();

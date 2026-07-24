@@ -91,3 +91,16 @@ test('the quest costume is granted once and readies the quest', () => {
   assert.equal(api.grantQuestCostume({ player, questState:quest, itemId:'cs_questSproutRibbon' }).granted, false);
   assert.deepEqual(player.costumeInventory, ['cs_questSproutRibbon']);
 });
+
+test('the quest-only costume is hidden from the paid shop and game hooks tutorial interactions', () => {
+  const costumeData = fs.readFileSync(path.join(root, 'src/costume-data.js'), 'utf8');
+  const costumeUi = fs.readFileSync(path.join(root, 'src/costume-ui.js'), 'utf8');
+  const game = fs.readFileSync(path.join(root, 'game.js'), 'utf8');
+  assert.match(costumeData, /cs_questSproutRibbon[\s\S]*questOnly:\s*true/);
+  assert.match(costumeUi, /Object\.values\(defs\(\)\)\.filter\(\(item\)\s*=>\s*!item\.questOnly\)/);
+  assert.match(game, /applyTrainingAccept/);
+  assert.match(game, /recordHealingSuccess/);
+  assert.match(game, /grantQuestCostume/);
+  assert.match(game, /openQuestNpcIntroV3/);
+  assert.doesNotMatch(game, /ownsAllCostumes\(game\.player\.costumeInventory/);
+});

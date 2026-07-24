@@ -328,7 +328,7 @@ test('normal combat uses battle BGM while boss rooms keep boss BGM', () => {
   const syncV21 = gameSource.match(/syncAudioFileBgm = function syncAudioFileBgmV21\(\) \{[\s\S]*?\n  };/)?.[0] || '';
   const enterCombat = gameSource.match(/function enterBaseCombat\(monster\) \{[\s\S]*?\n}/)?.[0] || '';
   const finishDefeat = gameSource.match(/function finishMonsterDefeatV25\([\s\S]*?\n  }/)?.[0] || '';
-  assert.match(audioManifestSource, /battleBgm:\s*\{\s*src:'assets\/1\. 전투씬 음악\.wav'/);
+  assert.match(audioManifestSource, /battleBgm:\s*\{\s*src:'assets\/1\. 전투씬 음악\.mp3'/);
   assert.ok(desiredV21.indexOf("game.currentMap === 'bossRoom'") < desiredV21.indexOf('game.currentCombatMonsterId'));
   assert.match(desiredV21, /game\.currentCombatMonsterId[\s\S]*?game\.audio\.battleFile/);
   assert.match(syncV21, /game\.audio\.battleFile/);

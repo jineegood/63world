@@ -4,6 +4,12 @@
   window.__COSTUME_DATA_V55__ = true;
 
   const COSTUME_DEFS = {
+    cs_questSproutRibbon: {
+      id: 'cs_questSproutRibbon', name: '새싹 리본', slot: 'accessory', classOnly: null,
+      price: 0, costume: true, questOnly: true,
+      desc: '명진쌤의 부탁을 받은 상남이 처음 모험을 축하하며 선물한 초록 리본.',
+      look: { type: 'butterflyRibbon', color: '#4ade80' },
+    },
     /* ── 머리 3종 ── */
     cs_bunnyBand: {
       id: 'cs_bunnyBand', name: '토끼 머리띠', slot: 'head', classOnly: null, price: 120, costume: true,

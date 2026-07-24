@@ -20,14 +20,14 @@
     return ({
       cs_bunnyBand: '🐰', cs_flowerCrown: '🌸', cs_starCrown: '👑',
       cs_sailorCape: '🎀', cs_starryRobe: '🌌', cs_peachDress: '👗',
-      cs_ribbon: '🎗️', cs_angelWing: '🎐', cs_strangeWing: '🪽', cs_rainbowAura: '🌈',
+      cs_ribbon: '🎗️', cs_questSproutRibbon: '🌱', cs_angelWing: '🎐', cs_strangeWing: '🪽', cs_rainbowAura: '🌈',
     })[item.id] || '✨';
   }
 
   /* ── 상점 ── */
   window.openCostumeShopV55 = function openCostumeShopV55() {
     const p = ensureFields(); if (!p) return;
-    const cards = Object.values(defs()).map((item) => {
+    const cards = Object.values(defs()).filter((item) => !item.questOnly).map((item) => {
       const owned = p.costumeInventory.includes(item.id);
       const afford = (p.gold || 0) >= item.price;
       return `<div class="panel-card" style="display:flex;gap:12px;align-items:center;padding:12px">

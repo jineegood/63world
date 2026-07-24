@@ -135,3 +135,14 @@ test('quest data matches the current approved progression', () => {
   assert.equal(quests.tut_costume.actionType, 'receiveCostume');
   assert.equal(quests.tut_costume.grantOnAccept, undefined);
 });
+
+test('ordinary hunt completions do not falsely claim that a boss was defeated', () => {
+  const context = createContext({ window:{} });
+  context.globalThis = context.window;
+  runBrowserModule('src/quest-data.js', context);
+  const quests = context.window.YuksamQuestData.QUEST_DEFS;
+  for (const quest of Object.values(quests)) {
+    if (!quest.targetTypes || quest.eliteOnly) continue;
+    assert.doesNotMatch(quest.done || '', /보스.*(잡|처치|쓰러)/, quest.id);
+  }
+});
