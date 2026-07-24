@@ -46,19 +46,24 @@ test('costume tutorial compatibility requires every shop costume, not merely one
   assert.equal(api.ownsAllCostumes([], []), false);
 });
 
-test('reward steps use fixed dramatic timing and omit empty optional rewards', () => {
+test('reward steps show each reward for 1.5 seconds and random monster building for 2 seconds', () => {
   const api = loadApi();
   const simplify = (steps) => Array.from(steps, ({ kind, amount, delayMs, durationMs, tone, sfx }) => ({
     kind, amount, delayMs, durationMs, tone, sfx,
   }));
   assert.deepEqual(simplify(api.rewardSteps({ exp:5, gold:4, building:1 })), [
-    { kind:'exp', amount:5, delayMs:0, durationMs:1000, tone:'exp', sfx:'quest' },
-    { kind:'gold', amount:4, delayMs:1000, durationMs:1000, tone:'gold', sfx:'coin' },
-    { kind:'building', amount:1, delayMs:2000, durationMs:1000, tone:'building', sfx:'open' },
+    { kind:'exp', amount:5, delayMs:0, durationMs:1500, tone:'exp', sfx:'quest' },
+    { kind:'gold', amount:4, delayMs:1500, durationMs:1500, tone:'gold', sfx:'coin' },
+    { kind:'building', amount:1, delayMs:3000, durationMs:1500, tone:'building', sfx:'open' },
+  ]);
+  assert.deepEqual(simplify(api.rewardSteps({ exp:5, gold:4, building:1 }, { monsterRandomBuilding:true })), [
+    { kind:'exp', amount:5, delayMs:0, durationMs:1500, tone:'exp', sfx:'quest' },
+    { kind:'gold', amount:4, delayMs:1500, durationMs:1500, tone:'gold', sfx:'coin' },
+    { kind:'building', amount:1, delayMs:3000, durationMs:2000, tone:'building', sfx:'open' },
   ]);
   assert.deepEqual(simplify(api.rewardSteps({ exp:0, gold:4, building:0 })), [
-    { kind:'exp', amount:0, delayMs:0, durationMs:1000, tone:'exp', sfx:'quest' },
-    { kind:'gold', amount:4, delayMs:1000, durationMs:1000, tone:'gold', sfx:'coin' },
+    { kind:'exp', amount:0, delayMs:0, durationMs:1500, tone:'exp', sfx:'quest' },
+    { kind:'gold', amount:4, delayMs:1500, durationMs:1500, tone:'gold', sfx:'coin' },
   ]);
 });
 

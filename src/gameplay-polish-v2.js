@@ -49,19 +49,25 @@
       && availableIds.every((id) => owned.has(id));
   }
 
-  function rewardSteps(reward = {}) {
+  function rewardSteps(reward = {}, options = {}) {
     const steps = [];
-    const add = (kind, amount, tone, sfx) => steps.push({
-      kind,
-      amount,
-      delayMs:steps.length * 1000,
-      durationMs:1000,
-      tone,
-      sfx,
-    });
+    let nextDelayMs = 0;
+    const add = (kind, amount, tone, sfx, durationMs = 1500) => {
+      steps.push({
+        kind,
+        amount,
+        delayMs:nextDelayMs,
+        durationMs,
+        tone,
+        sfx,
+      });
+      nextDelayMs += durationMs;
+    };
     add('exp', Math.max(0, number(reward.exp)), 'exp', 'quest');
     if (number(reward.gold) > 0) add('gold', number(reward.gold), 'gold', 'coin');
-    if (number(reward.building) > 0) add('building', number(reward.building), 'building', 'open');
+    if (number(reward.building) > 0) {
+      add('building', number(reward.building), 'building', 'open', options.monsterRandomBuilding ? 2000 : 1500);
+    }
     return Object.freeze(steps.map(Object.freeze));
   }
 

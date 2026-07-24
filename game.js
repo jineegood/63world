@@ -202,7 +202,7 @@ function showCinematicMessage(title, sub = '', ms = 1200) {
 }
 
 let rewardSequenceTokenV2 = 0;
-function showRewardSequenceV2(title, prefix, reward = {}) {
+function showRewardSequenceV2(title, prefix, reward = {}, options = {}) {
   const token = ++rewardSequenceTokenV2;
   const labels = {
     exp:(amount) => amount > 0 ? `EXP +${amount}` : 'EXP 없음',
@@ -216,7 +216,7 @@ function showRewardSequenceV2(title, prefix, reward = {}) {
     overlay.className = 'reward-sequence-v2 hidden';
     document.body.appendChild(overlay);
   }
-  const steps = YuksamGameplayPolishV2.rewardSteps(reward);
+  const steps = YuksamGameplayPolishV2.rewardSteps(reward, options);
   steps.forEach((step) => {
     setTimeout(() => {
       if (token !== rewardSequenceTokenV2) return;
@@ -7783,7 +7783,7 @@ function updateQuestTracker() {
       exp:expGain,
       gold:defeatedMonster.gold || 0,
       building:buildingGain,
-    });
+    }, { monsterRandomBuilding:buildingGain > 0 });
     const buildingText = buildingGain > 0 ? `, 빌딩 +${buildingGain}` : '';
     appendChatMessage?.('system', '전투', `${defeatedMonster.name} 처치! ${expText}, Gold +${defeatedMonster.gold || 0}${buildingText}`);
     savePlayer?.();

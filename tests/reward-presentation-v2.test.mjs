@@ -5,7 +5,7 @@ import test from 'node:test';
 
 const root = path.resolve(import.meta.dirname, '..');
 
-test('monster and quest rewards use the shared one-second presentation sequence', () => {
+test('monster and quest rewards use the shared extended presentation sequence', () => {
   const game = fs.readFileSync(path.join(root, 'game.js'), 'utf8');
   const helperStart = game.indexOf('function showRewardSequenceV2');
   const helper = game.slice(helperStart, game.indexOf('function appendChatMessage', helperStart));
@@ -19,6 +19,7 @@ test('monster and quest rewards use the shared one-second presentation sequence'
   assert.match(helper, /playSfx\(step\.sfx\)/);
   assert.doesNotMatch(helper, /showCinematicMessage/);
   assert.match(monster, /showRewardSequenceV2/);
+  assert.match(monster, /monsterRandomBuilding:buildingGain > 0/);
   assert.match(monster, /game\.transitionLock = 0/);
   assert.doesNotMatch(monster, /game\.modalState = \{ type:'cinematic', pause:true \}/);
   assert.match(game, /claimQuestRewardV21[\s\S]*showRewardSequenceV2/);
