@@ -75,6 +75,7 @@ if ($Mode -eq 'all' -or $Mode -eq 'check') {
     Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/quest-data.js')
   }
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/quest-text.js')
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/quest-tutorial-polish-v3.js')
   if (Test-Path -LiteralPath 'src/patch-data.js') {
     Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/patch-data.js')
   }

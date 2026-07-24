@@ -142,6 +142,10 @@ test('ordinary hunt completions do not falsely claim that a boss was defeated', 
   runBrowserModule('src/quest-data.js', context);
   const quests = context.window.YuksamQuestData.QUEST_DEFS;
   for (const quest of Object.values(quests)) {
+    assert.equal(Number.isInteger(quest.target) && quest.target > 0, true, `${quest.id}: target`);
+    assert.equal(Array.isArray(quest.pages) && quest.pages.every((page) => String(page).trim()), true, `${quest.id}: pages`);
+    assert.equal(Boolean(String(quest.done || '').trim()), true, `${quest.id}: done`);
+    if (quest.eliteOnly) assert.equal(quest.target, 1, `${quest.id}: elite target`);
     if (!quest.targetTypes || quest.eliteOnly) continue;
     assert.doesNotMatch(quest.done || '', /보스.*(잡|처치|쓰러)/, quest.id);
   }
