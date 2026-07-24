@@ -15,10 +15,11 @@
     ...greenTerms.map((term) => [term, 'green']),
   ]);
   const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const pattern = new RegExp(
+  const termPattern = new RegExp(
     Array.from(tones.keys()).sort((a, b) => b.length - a.length).map(escapeRegExp).join('|'),
     'g',
   );
+  const quantityPattern = /\d+(?:마리|회|개|골드|빌딩|층|레벨)/g;
 
   function escapeHtml(value) {
     return String(value ?? '')
@@ -31,13 +32,22 @@
 
   function emphasize(value) {
     const text = String(value ?? '');
+    const tokens = [];
+    for (const match of text.matchAll(termPattern)) {
+      tokens.push({ start:match.index, end:match.index + match[0].length, text:match[0], tone:tones.get(match[0]) });
+    }
+    for (const match of text.matchAll(quantityPattern)) {
+      tokens.push({ start:match.index, end:match.index + match[0].length, text:match[0], tone:'green' });
+    }
+    tokens.sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
+
     let cursor = 0;
     let html = '';
-    text.replace(pattern, (match, offset) => {
-      html += escapeHtml(text.slice(cursor, offset));
-      html += `<strong class="quest-keyword-${tones.get(match)}">${escapeHtml(match)}</strong>`;
-      cursor = offset + match.length;
-      return match;
+    tokens.forEach((token) => {
+      if (token.start < cursor) return;
+      html += escapeHtml(text.slice(cursor, token.start));
+      html += `<strong class="quest-keyword-${token.tone}">${escapeHtml(token.text)}</strong>`;
+      cursor = token.end;
     });
     return html + escapeHtml(text.slice(cursor));
   }

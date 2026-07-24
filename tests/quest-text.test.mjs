@@ -23,6 +23,15 @@ test('quest emphasis safely escapes text before adding approved highlights', () 
   assert.match(html, /<strong class="quest-keyword-green">처치<\/strong>/);
 });
 
+test('quest quantities are highlighted once as complete green phrases', () => {
+  const html = loadApi().emphasize('버섯돌이 4마리, 아이템 1회, 150골드, 빌딩 화폐 5개');
+  assert.match(html, /<strong class="quest-keyword-green">4마리<\/strong>/);
+  assert.match(html, /<strong class="quest-keyword-green">1회<\/strong>/);
+  assert.match(html, /<strong class="quest-keyword-green">150골드<\/strong>/);
+  assert.match(html, /<strong class="quest-keyword-green">5개<\/strong>/);
+  assert.doesNotMatch(html, /<strong[^>]*><strong/);
+});
+
 test('quest dialogue and tracker use emphasis without changing chat rendering', () => {
   const game = fs.readFileSync(path.join(root, 'game.js'), 'utf8');
   const dialogue = game.match(/function renderNpcDialogueV21\(\) \{[\s\S]*?\n  }/)?.[0] || '';

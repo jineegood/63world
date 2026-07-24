@@ -56,6 +56,7 @@ test('quest data module exposes mutable quest definitions', () => {
     'tut_costume',
     'tut_enhance',
     'tut_equip',
+    'tut_healing_well',
     'tut_pet',
     'tut_shop',
     'tut_skill',
@@ -74,6 +75,7 @@ test('quest data module exposes mutable quest definitions', () => {
   // [v38 갱신] 튜토리얼이 처치형 사이에 끼어든 새 진행 순서.
   assert.deepEqual(Array.from(data.QUEST_ORDER), [
     'tut_equip',
+    'tut_healing_well',
     'mushroom_hunt',
     'tut_shop',
     'tut_skill',
@@ -106,19 +108,19 @@ test('game.js consumes split quest data instead of defining it locally', () => {
   assert.doesNotMatch(js, /Object\.assign\(QUEST_DEFS,/);
 });
 
-test('quest data matches the July 12 edited quest workbook', () => {
+test('quest data matches the current approved progression', () => {
   const context = createContext({ window:{} });
   context.globalThis = context.window;
   runBrowserModule('src/quest-data.js', context);
   const { QUEST_DEFS: quests, QUEST_ORDER: order } = context.window.YuksamQuestData;
 
-  assert.equal(order.length, 16);
+  assert.equal(order.length, 17);
   assert.deepEqual(Array.from(order), [
-    'tut_equip','mushroom_hunt','tut_shop','tut_skill','slime_hunt','tut_costume','tut_accessory','elite_slime_hunt','tut_enhance',
+    'tut_equip','tut_healing_well','mushroom_hunt','tut_shop','tut_skill','slime_hunt','tut_costume','tut_accessory','elite_slime_hunt','tut_enhance',
     'stomp_hunt','snake_hunt','tut_pet','elite_snake_hunt','swamp_spider_hunt','swamp_zombie_hunt','swamp_king_hunt',
   ]);
   assert.equal(quests.mushroom_hunt.target, 4);
-  assert.equal(quests.slime_hunt.target, 4);
+  assert.equal(quests.slime_hunt.target, 3);
   assert.equal(quests.stomp_hunt.target, 4);
   assert.equal(quests.snake_hunt.target, 4);
   assert.equal(quests.swamp_spider_hunt.target, 4);
@@ -128,5 +130,8 @@ test('quest data matches the July 12 edited quest workbook', () => {
   assert.equal(quests.elite_snake_hunt.reward.item, 'starCape');
   assert.equal(quests.tut_accessory.grantOnAccept.building, 5);
   assert.match(quests.tut_accessory.pages[1], /새나리 쌤/);
-  assert.match(quests.swamp_king_hunt.done, /명진쌤 보스/);
+  assert.doesNotMatch(quests.slime_hunt.done, /보스/);
+  assert.doesNotMatch(quests.swamp_king_hunt.done, /명진쌤 보스|졌다고/);
+  assert.equal(quests.tut_costume.actionType, 'receiveCostume');
+  assert.equal(quests.tut_costume.grantOnAccept, undefined);
 });
