@@ -5,6 +5,8 @@ const YuksamPlayerStore = window.YuksamPlayerStore;
 if (!YuksamPlayerStore) throw new Error('YuksamPlayerStore must be loaded before game.js');
 const YuksamStudentAccessV2 = window.YuksamStudentAccessV2;
 if (!YuksamStudentAccessV2) throw new Error('YuksamStudentAccessV2 must be loaded before game.js');
+const YuksamPvpClient = window.YuksamPvpClient;
+if (!YuksamPvpClient) throw new Error('YuksamPvpClient must be loaded before game.js');
 const YuksamInputRouter = window.YuksamInputRouter;
 if (!YuksamInputRouter) throw new Error('YuksamInputRouter must be loaded before game.js');
 const YuksamWorldInteractionRegistry = window.YuksamWorldInteractionRegistry;
@@ -96,6 +98,24 @@ const secureStudentAccess = YuksamStudentAccessV2.create({
   storage:localStorage,
   defaultWorkbooks,
 });
+let pvpClientV1 = null;
+window.getPvpIdentityV1 = () => secureStudentAccess.getIdentity();
+window.getPvpClientV1 = () => {
+  const client = secureStudentAccess.getClient();
+  const identity = secureStudentAccess.getIdentity();
+  if (!client || !identity) return null;
+  if (!pvpClientV1) {
+    pvpClientV1 = YuksamPvpClient.create({
+      client,
+      getIdentity:() => secureStudentAccess.getIdentity(),
+    });
+  }
+  return pvpClientV1;
+};
+function closePvpClientV1() {
+  pvpClientV1?.close();
+  pvpClientV1 = null;
+}
 
 const game = {
   canvas: $('gameCanvas'),
@@ -146,6 +166,7 @@ if (secureStudentAccess.enabled) {
       onClassroomChange(open) {
         if (open || !game.player) return;
         try { savePlayer(); } catch (_) {}
+        closePvpClientV1();
         secureStudentAccess.signOut().catch(() => {});
         game.player = null;
         game.currentMap = 'town';
@@ -3621,6 +3642,8 @@ function bindEvents() {
   $('logoutBtn').addEventListener('click', () => {
     window.cancelClickMovementV1({ clearArrivalLock:true });
     savePlayer();
+    closePvpClientV1();
+    secureStudentAccess.signOut().catch(() => {});
     game.player = null;
     game.currentMap = 'town';
     showScreen('landing');

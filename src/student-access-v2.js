@@ -34,6 +34,8 @@
       setLocalWorkbooks:rejectSync,
       startSharedPolling() {},
       stopSharedPolling() {},
+      getIdentity:() => null,
+      getClient:() => null,
     });
   }
 
@@ -137,6 +139,12 @@
       setLocalWorkbooks:shared.setLocalWorkbooks,
       startSharedPolling:shared.startPolling,
       stopSharedPolling:shared.stopPolling,
+      getIdentity:() => currentIdentity ? Object.freeze({
+        userId:currentIdentity.userId,
+        displayName:currentIdentity.displayName,
+        role:currentIdentity.role,
+      }) : null,
+      getClient:() => currentIdentity ? client : null,
     });
   }
 

@@ -180,3 +180,27 @@ test('save requires an authenticated identity and signout flushes before Auth lo
   assert.equal(important[0][1], 'user-a');
   assert.throws(() => service.savePlayer({ name:'별빛' }), /로그인/);
 });
+
+test('authenticated PvP boundary exposes only a frozen identity copy and the existing client', async () => {
+  const api = loadApi();
+  const deps = dependencies();
+  const service = api.create({ config:validConfig(), ...deps });
+  assert.equal(service.getIdentity(), null);
+  assert.equal(service.getClient(), null);
+  await service.enter('별빛', 'secret-123');
+  const first = service.getIdentity();
+  assert.equal(Object.isFrozen(first), true);
+  assert.equal(JSON.stringify(first), JSON.stringify(deps.identity));
+  assert.notEqual(first, deps.identity);
+  assert.equal(service.getClient()?.auth != null, true);
+  await service.signOut();
+  assert.equal(service.getIdentity(), null);
+  assert.equal(service.getClient(), null);
+});
+
+test('closed controller exposes no authenticated PvP boundary', () => {
+  const api = loadApi();
+  const service = api.create({ config:{ securityV2Enabled:false } });
+  assert.equal(service.getIdentity(), null);
+  assert.equal(service.getClient(), null);
+});
