@@ -266,5 +266,146 @@
     });
   }
 
-  global.YuksamClickMovement = Object.freeze({ planPath, advance, isWalkable });
+  function createController(options = {}) {
+    const canvas = options.canvas;
+    const now = typeof options.now === 'function' ? options.now : Date.now;
+    const radius = finitePositive(options.radius, DEFAULT_RADIUS);
+    const cellSize = finitePositive(options.cellSize, 32);
+    let state = null;
+    let bound = false;
+
+    function cancel() {
+      state = null;
+    }
+
+    function getState() {
+      if (!state) return null;
+      return Object.freeze({
+        map:state.map,
+        path:Object.freeze(state.path.map((point) => Object.freeze({ ...point }))),
+        target:Object.freeze({ ...state.target }),
+        markerUntil:state.markerUntil,
+        moving:state.path.length > 0,
+      });
+    }
+
+    function pointerdown(event) {
+      if (
+        event?.button !== 0
+        || options.isActive?.() !== true
+        || options.isPaused?.() === true
+        || options.isInCombat?.() === true
+      ) return;
+      const player = options.getPlayer?.();
+      const world = options.getWorld?.();
+      const camera = options.getCamera?.() || { x:0, y:0 };
+      const map = options.getMap?.();
+      const rect = canvas?.getBoundingClientRect?.();
+      if (!player || !world || !rect?.width || !rect?.height || !map) return;
+      const scaleX = finitePositive(canvas.width / rect.width, 1);
+      const scaleY = finitePositive(canvas.height / rect.height, 1);
+      const target = {
+        x:(Number(event.clientX) - rect.left) * scaleX + Number(camera.x || 0),
+        y:(Number(event.clientY) - rect.top) * scaleY + Number(camera.y || 0),
+      };
+      const path = planPath({
+        start:{ x:player.x, y:player.y },
+        target,
+        bounds:{ width:world.width, height:world.height },
+        colliders:options.getColliders?.() || [],
+        radius,
+        cellSize,
+      });
+      state = path.length ? {
+        map,
+        path:[...path],
+        target:{ ...path.at(-1) },
+        markerUntil:now() + 850,
+      } : null;
+      options.onStateChange?.(getState());
+    }
+
+    function bind() {
+      if (bound || typeof canvas?.addEventListener !== 'function') return;
+      bound = true;
+      canvas.addEventListener('pointerdown', pointerdown);
+    }
+
+    function unbind() {
+      if (!bound) return;
+      bound = false;
+      canvas.removeEventListener?.('pointerdown', pointerdown);
+      cancel();
+    }
+
+    function update({ dt = 16.67, keyboardMoving = false, speedMultiplier = 1 } = {}) {
+      const player = options.getPlayer?.();
+      if (
+        !state || !player
+        || options.isActive?.() !== true
+        || options.isPaused?.() === true
+        || options.isInCombat?.() === true
+        || state.map !== options.getMap?.()
+      ) {
+        if (state) cancel();
+        return Object.freeze({ moved:false, moving:false });
+      }
+      if (keyboardMoving) {
+        cancel();
+        return Object.freeze({ moved:false, moving:false, cancelledByKeyboard:true });
+      }
+      if (!state.path.length) {
+        if (state.markerUntil <= now()) cancel();
+        return Object.freeze({ moved:false, moving:false });
+      }
+
+      const speed = 3.2
+        * finitePositive(speedMultiplier, 1)
+        * Math.min(Math.max(0, Number(dt) || 0) / 16.67, 2);
+      const result = advance({
+        position:{ x:player.x, y:player.y },
+        path:state.path,
+        speed,
+      });
+      const previous = { x:player.x, y:player.y };
+      let nextX = result.position.x;
+      let nextY = result.position.y;
+      if (options.canMoveTo?.(nextX, player.y) === false) nextX = player.x;
+      if (options.canMoveTo?.(nextX, nextY) === false) nextY = player.y;
+      if (nextX === player.x && nextY === player.y) {
+        cancel();
+        return Object.freeze({ moved:false, moving:false, blocked:true });
+      }
+      player.x = nextX;
+      player.y = nextY;
+      state.path = [...result.path];
+      const moved = player.x !== previous.x || player.y !== previous.y;
+      if (moved) options.savePosition?.();
+      options.onDirection?.(result.direction, state.path.length > 0);
+      options.onStateChange?.(getState());
+      return Object.freeze({ moved, moving:state.path.length > 0, direction:result.direction });
+    }
+
+    function drawMarker(context, worldToScreen) {
+      if (!state || state.markerUntil <= now() || typeof worldToScreen !== 'function') return false;
+      const marker = worldToScreen(state.target.x, state.target.y);
+      context.save();
+      context.strokeStyle = 'rgba(96,165,250,.95)';
+      context.lineWidth = 4;
+      context.beginPath();
+      context.arc(marker.x, marker.y, 13, 0, Math.PI * 2);
+      context.stroke();
+      context.restore();
+      return true;
+    }
+
+    return Object.freeze({ bind, unbind, cancel, getState, update, drawMarker });
+  }
+
+  global.YuksamClickMovement = Object.freeze({
+    planPath,
+    advance,
+    isWalkable,
+    createController,
+  });
 })(window);

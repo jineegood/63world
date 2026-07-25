@@ -13,6 +13,7 @@
     "test:world-interaction-registry": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 world-interaction-registry",
     "test:world-navigation-registry": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 world-navigation-registry",
     "test:click-movement": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 click-movement",
+    "test:click-movement-integration": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 click-movement-integration",
     "test:world-render-pipeline": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 world-render-pipeline",
     "test:hud-update-pipeline": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 hud-update-pipeline",
     "test:total-stats-pipeline": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 total-stats-pipeline",

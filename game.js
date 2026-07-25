@@ -11,6 +11,8 @@ const YuksamWorldInteractionRegistry = window.YuksamWorldInteractionRegistry;
 if (!YuksamWorldInteractionRegistry) throw new Error('YuksamWorldInteractionRegistry must be loaded before game.js');
 const YuksamWorldNavigationRegistry = window.YuksamWorldNavigationRegistry;
 if (!YuksamWorldNavigationRegistry) throw new Error('YuksamWorldNavigationRegistry must be loaded before game.js');
+const YuksamClickMovement = window.YuksamClickMovement;
+if (!YuksamClickMovement) throw new Error('YuksamClickMovement must be loaded before game.js');
 const { uid, randomFrom, randomInt, clamp, distance, normalize, escapeHtml, fmtDate } = YuksamCore;
 const YuksamData = window.YuksamData;
 if (!YuksamData) throw new Error('YuksamData must be loaded before game.js');
@@ -133,6 +135,7 @@ const game = {
   chatMessages: [],
   combatStatuses: {},
   transitionLock: 0,
+  clickMovement: null,
 };
 window.getYuksamAudioSettings = () => game.settings;
 
@@ -154,6 +157,7 @@ if (secureStudentAccess.enabled) {
 }
 
 function showScreen(name) {
+  if (name !== 'game') window.cancelClickMovementV1?.({ clearArrivalLock:true });
   Object.values(screens).forEach((s) => s.classList.remove('active'));
   screens[name].classList.add('active');
   const settingsBtn = $('settingsBtn');
@@ -271,6 +275,7 @@ function toast(msg, ms = 1800) {
 }
 
 function openModal(html, options = {}) {
+  window.cancelClickMovementV1?.();
   $('modalContent').innerHTML = html;
   $('modal').classList.remove('hidden');
   game.modalState = { type: options.type || null, pause: !!options.pause };
@@ -2866,6 +2871,7 @@ const combatEntryPipeline = YuksamCombatEntryPipeline.create({
 });
 
 function openCombat(monster) {
+  window.cancelClickMovementV1?.();
   return combatEntryPipeline.open({ monster });
 }
 
@@ -3172,6 +3178,36 @@ function savePlayerPositionThrottled() {
   game.player.map = game.currentMap;
   savePlayer();
 }
+
+let clickMovementArrivalLockV1 = null;
+const clickMovementControllerV1 = YuksamClickMovement.createController({
+  canvas:game.canvas,
+  isActive:() => !!game.player && screens.game.classList.contains('active'),
+  isPaused,
+  isInCombat:() => !!game.currentCombatMonsterId || game.modalState?.type === 'combat',
+  getMap:() => game.currentMap,
+  getPlayer:() => game.player,
+  getCamera:() => game.camera,
+  getWorld:() => worldDefs[game.currentMap],
+  getColliders:getCurrentMapColliders,
+  canMoveTo:canPlayerMoveTo,
+  savePosition:savePlayerPositionThrottled,
+  onDirection:(direction, moving) => {
+    if (direction.x || direction.y) game.lastMove = direction;
+    game.isMoving = moving;
+  },
+  onStateChange:(state) => {
+    game.clickMovement = state;
+    if (state) clickMovementArrivalLockV1 = state.map;
+  },
+  radius:30,
+  cellSize:32,
+});
+window.cancelClickMovementV1 = function cancelClickMovementV1(options = {}) {
+  clickMovementControllerV1.cancel();
+  game.clickMovement = null;
+  if (options.clearArrivalLock) clickMovementArrivalLockV1 = null;
+};
 
 function gameLoop(ts) {
   const dt = ts - game.lastTick;
@@ -3533,6 +3569,7 @@ function getSkillTotal(ids) {
 
 
 function bindEvents() {
+  clickMovementControllerV1.bind();
   $('studentLoginBtn').addEventListener('click', () => { resumeAudio(); handleStudentLogin(); });
   if ($('settingsBtn')) $('settingsBtn').addEventListener('click', () => { resumeAudio(); openSettingsModal(); });
   if ($('adminEntryBtn')) $('adminEntryBtn').addEventListener('click', () => { resumeAudio(); openAdminPanel(); });
@@ -3582,6 +3619,7 @@ function bindEvents() {
   if ($('chatInput')) $('chatInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); sendChatMessage(); } });
 
   $('logoutBtn').addEventListener('click', () => {
+    window.cancelClickMovementV1({ clearArrivalLock:true });
     savePlayer();
     game.player = null;
     game.currentMap = 'town';
@@ -3915,6 +3953,11 @@ function renderBaseWorld() {
 }
 
 const worldRenderPipeline = YuksamWorldRenderPipeline.create({ fallback:() => renderBaseWorld() });
+worldRenderPipeline.registerLayer({
+  id:'click-move-target-v1',
+  priority:1000,
+  render:() => clickMovementControllerV1.drawMarker(game.ctx, worldToScreen),
+});
 function drawWorld() { return worldRenderPipeline.render({ map:game.currentMap }); }
 
 function drawBossRoom() {
@@ -5148,7 +5191,15 @@ function updateQuestTracker() {
       const speed = 3.2 * (game.adminSpeedBoost ? 5 : 1) * Math.min(dt / 16.67, 2);
       let dx = 0, dy = 0;
       if (game.keys.w) dy -= speed; if (game.keys.s) dy += speed; if (game.keys.a) dx -= speed; if (game.keys.d) dx += speed;
-      game.isMoving = !!(dx || dy);
+      const keyboardMoving = !!(dx || dy);
+      if (keyboardMoving) clickMovementArrivalLockV1 = null;
+      const clickMovementResultV1 = clickMovementControllerV1.update({
+        dt,
+        keyboardMoving,
+        speedMultiplier:game.adminSpeedBoost ? 5 : 1,
+      });
+      game.clickMovement = clickMovementControllerV1.getState();
+      game.isMoving = keyboardMoving || clickMovementResultV1.moving || clickMovementResultV1.moved;
       if (dx || dy) {
         game.lastMove = { x: dx || game.lastMove.x, y: dy || game.lastMove.y };
         const world = worldDefs[game.currentMap];
@@ -5157,7 +5208,7 @@ function updateQuestTracker() {
         if (canPlayerMoveTo(game.player.x, ny)) game.player.y = ny;
         savePlayerPositionThrottled();
       }
-      checkAutoTransitions();
+      if (clickMovementArrivalLockV1 !== game.currentMap) checkAutoTransitions();
       if (['forest','desert','swamp','bossRoom'].includes(game.currentMap)) { updateForestMonsters(dt); updateStagePortalInteractions(); }
       if (game.attackTimer > 0) game.attackTimer = Math.max(0, game.attackTimer - dt);
       if (game.danceTimer > 0) game.danceTimer = Math.max(0, game.danceTimer - dt);
