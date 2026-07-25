@@ -3,3 +3,6 @@ verify_jwt = true
 
 [functions.teacher-delete-student]
 verify_jwt = true
+
+[functions.pvp-match-v1]
+verify_jwt = true
