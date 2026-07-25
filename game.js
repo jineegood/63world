@@ -113,6 +113,7 @@ window.getPvpClientV1 = () => {
   return pvpClientV1;
 };
 function closePvpClientV1() {
+  window.stopPvpUiV1?.();
   pvpClientV1?.close();
   pvpClientV1 = null;
 }
@@ -661,6 +662,55 @@ function maxHpForPlayer(p = game.player) {
   const stamina = equipmentStats.체력 || base.체력 || 6;
   return 8 + stamina * 3 + (p.level || 1) * 2; // [v50] 체력 스탯 1당 HP 3 (전사 안정성 너프)
 }
+
+window.getLocalPvpProfileV1 = function getLocalPvpProfileV1() {
+  const identity = secureStudentAccess.getIdentity();
+  const player = game.player;
+  if (!identity || !player) return null;
+  const stats = computeTotalStats();
+  const attackStat = player.class === 'mage' ? stats.지능 : player.class === 'priest' ? stats.정신 : stats.힘;
+  return {
+    userId:identity.userId,
+    name:player.name,
+    level:Number(player.level) || 1,
+    className:player.class,
+    spec:player.spec || '',
+    appearance:{ ...(player.appearance || {}) },
+    equipment:{ ...(player.equipment || {}) },
+    costume:{ ...(player.costume || {}) },
+    skills:{ ...(player.skills || {}) },
+    maxHp:maxHpForPlayer(player),
+    hp:maxHpForPlayer(player),
+    shield:0,
+    attack:Math.max(1, Math.round((Number(attackStat) || 1) / 2)),
+    defense:Math.max(0, Math.round(Number(stats.방어) || 0)),
+    map:game.currentMap,
+    busy:game.currentMap !== 'town' || !!game.modalState?.pause || !!game.currentCombatMonsterId || !!window.getActivePvpMatchV1?.(),
+  };
+};
+
+window.renderPlayerPortraitForPvpV1 = function renderPlayerPortraitForPvpV1(canvas, profile) {
+  const ctx = canvas?.getContext?.('2d');
+  if (!ctx || !profile) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(canvas.width / 2, canvas.height / 2, Math.min(canvas.width, canvas.height) / 2 - 4, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.fillStyle = '#dbeafe';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  drawPlayerSprite(
+    ctx,
+    canvas.width / 2,
+    canvas.height + 48,
+    profile.appearance || {},
+    profile.className || 'warrior',
+    { attack:0, moving:false, equipment:profile.equipment || {}, costume:profile.costume || {} },
+    3.25,
+    profile.spec || null,
+  );
+  ctx.restore();
+};
 
 function ensurePlayerHp() {
   if (!game.player) return;
@@ -3269,6 +3319,7 @@ function startGame(existing = false, options = {}) {
   closeModal();
   updateHud();
   showScreen('game');
+  window.startPvpUiV1?.();
   playSfx('world');
   savePlayer();
   toast(existing ? '기존 캐릭터로 접속했습니다.' : '63마을에 도착했습니다!');

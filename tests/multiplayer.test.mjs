@@ -56,16 +56,31 @@ test('two mocked browser sessions exchange positions and chat', async () => {
   function createSession(name, x) {
     const intervals = [];
     const chats = [];
+    const canvasListeners = new Map();
+    const layers = [];
     const window = {
       YUKSAM_CLOUD:{ url:'https://example.supabase.co/rest/v1/', anonKey:'x'.repeat(30) },
       addEventListener() {},
       appendChatMessage:(type, sender, message) => chats.push({ type, sender, message }),
+      getPvpIdentityV1:() => ({ userId:`id-${name}`, displayName:name, role:'student' }),
+      openRemoteProfileV1:(userId) => chats.push({ type:'profile', userId }),
     };
     const game = {
-      player:{ name, x, y:200, level:1, class:'warrior', equipment:{}, appearance:{} },
+      player:{ name, x, y:200, level:1, class:'warrior', equipment:{}, appearance:{}, costume:{ hat:'blue-cap' } },
       currentMap:'town',
       isMoving:false,
-      ctx:{},
+      currentCombatMonsterId:null,
+      modalState:{ pause:false },
+      canvas:{
+        addEventListener:(type, fn) => canvasListeners.set(type, fn),
+        getBoundingClientRect:() => ({ left:0, top:0, width:800, height:450 }),
+        width:800, height:450,
+      },
+      width:800, height:450,
+      ctx:{
+        save() {}, restore() {}, measureText:() => ({ width:50 }),
+        beginPath() {}, roundRect() {}, fill() {}, fillText() {},
+      },
     };
     const context = {
       window,
@@ -80,11 +95,14 @@ test('two mocked browser sessions exchange positions and chat', async () => {
       clearInterval() {},
       setTimeout:() => 1,
       clearTimeout() {},
-      worldRenderPipeline:{ registerLayer() {} },
+      worldRenderPipeline:{ registerLayer(layer) { layers.push(layer); } },
+      drawPlayerSprite() {},
+      worldToScreen:(px, py) => ({ x:px, y:py }),
+      PLAYER_WORLD_SCALE:1.26,
     };
     vm.runInNewContext(coreSource(), context);
     vm.runInNewContext(multiplayerSource(), context);
-    return { window, game, intervals, chats };
+    return { window, game, intervals, chats, canvasListeners, layers };
   }
 
   const first = createSession('첫째', 100);
@@ -99,8 +117,18 @@ test('two mocked browser sessions exchange positions and chat', async () => {
   await Promise.resolve();
   assert.equal(first.window.__remotePlayersV53.get('둘째').x, 300);
   assert.equal(second.window.__remotePlayersV53.get('첫째').x, 100);
+  assert.equal(first.window.__remotePlayersV53.get('둘째').userId, 'id-둘째');
+  assert.equal(first.window.__remotePlayersV53.get('둘째').costume.hat, 'blue-cap');
+  assert.equal(first.window.__remotePlayersV53.get('둘째').pvpAvailable, true);
 
   first.window.__mpBroadcastChatV53('안녕!');
   await Promise.resolve();
   assert.deepEqual(second.chats.at(-1), { type:'user', sender:'첫째', message:'안녕!' });
+
+  first.layers[0].render();
+  const contextmenu = first.canvasListeners.get('contextmenu');
+  let prevented = false;
+  contextmenu({ clientX:300, clientY:200, preventDefault:() => { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.deepEqual(first.chats.at(-1), { type:'profile', userId:'id-둘째' });
 });

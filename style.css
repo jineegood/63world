@@ -139,6 +139,14 @@ strong { font-weight: 900; }
 .quest-keyword-yellow { color:#fde047; font-weight:900; text-shadow:0 1px 5px rgba(113,63,18,.72); }
 .quest-keyword-green { color:#4ade80; font-weight:900; text-shadow:0 1px 5px rgba(20,83,45,.72); }
 
+.pvp-profile-v1{display:grid;grid-template-columns:190px 1fr;gap:18px;align-items:center}
+.pvp-profile-v1 canvas{width:180px;height:180px;border-radius:50%;border:4px solid #60a5fa;background:#dbeafe;box-shadow:0 10px 30px rgba(37,99,235,.28)}
+.pvp-profile-info-v1 h2{margin:0 0 6px}
+.pvp-record-v1{display:flex;gap:10px;margin:14px 0;font-size:1.15rem}
+.pvp-record-v1 strong{color:#4ade80}.pvp-record-v1 span{color:#fca5a5}
+.pvp-invite-v1{text-align:center}.pvp-invite-v1 .action-row{justify-content:center;margin-top:18px}
+@media(max-width:620px){.pvp-profile-v1{grid-template-columns:1fr;text-align:center}.pvp-profile-v1 canvas{margin:auto}}
+
 .toast { position: fixed; top: 92px; left: 50%; transform: translateX(-50%); z-index: 60; background: rgba(6,12,22,.95); border: 1px solid rgba(255,255,255,.11); border-radius: 999px; padding: 12px 18px; box-shadow: var(--shadow); }
 .modal { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(3,8,16,.74); padding: 24px; z-index: 100; }
 .modal-box { width: min(1080px, 100%); max-height: 88vh; overflow: auto; border-radius: 30px; background: linear-gradient(180deg, rgba(15,26,46,.98), rgba(7,14,26,.98)); border: 1px solid var(--line-strong); box-shadow: var(--shadow); padding: 24px; position: relative; }

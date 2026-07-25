@@ -13,6 +13,7 @@
   const SEND_MS = 220;       // 내 위치 전송 주기
   const STALE_MS = 6000;     // 이 시간 동안 소식 없으면 화면에서 제거
   const remotes = new Map(); // name -> { x, y, map, class, spec, level, equipment, appearance, moving, bubble, at }
+  let remoteBounds = [];
 
   window.__remotePlayersV53 = remotes;
   window.__multiplayerStatusV53 = enabled ? 'connecting' : 'off';
@@ -76,11 +77,14 @@
       lastSent = now;
       broadcast({
         type: 'pos',
+        userId:window.getPvpIdentityV1?.()?.userId || null,
         name: G.player.name,
         map: G.currentMap,
         x: Math.round(G.player.x), y: Math.round(G.player.y),
         level: G.player.level, class: G.player.class, spec: G.player.spec || null,
         equipment: G.player.equipment || {}, appearance: G.player.appearance || {},
+        costume: G.player.costume || {},
+        pvpAvailable:G.currentMap === 'town' && !G.modalState?.pause && !G.currentCombatMonsterId,
         moving: !!G.isMoving,
       });
     }
@@ -100,6 +104,7 @@
     const toScreen = (typeof worldToScreen === 'function') ? worldToScreen : null;
     if (!draw || !toScreen) return;
     const ctx = G.ctx;
+    remoteBounds = [];
     remotes.forEach((p) => {
       if (!p || p.map !== G.currentMap || typeof p.x !== 'number') return;
       const s = toScreen(p.x, p.y);
@@ -108,10 +113,21 @@
       ctx.globalAlpha = 0.96;
       try {
         draw(ctx, s.x, s.y, p.appearance || {}, p.class || 'warrior',
-          { attack: 0, moving: !!p.moving, dance: 0, equipment: p.equipment || {} },
+          { attack: 0, moving: !!p.moving, dance: 0, equipment: p.equipment || {}, costume:p.costume || {} },
           (typeof PLAYER_WORLD_SCALE !== 'undefined' ? PLAYER_WORLD_SCALE : 1.26), p.spec || null);
       } catch {}
       ctx.restore();
+      if (p.userId) {
+        remoteBounds.push({
+          userId:String(p.userId),
+          left:s.x - 46,
+          right:s.x + 46,
+          top:s.y - 90,
+          bottom:s.y + 24,
+          centerX:s.x,
+          centerY:s.y - 30,
+        });
+      }
       // 이름표
       ctx.save();
       ctx.font = '700 12px "Noto Sans KR", sans-serif';
@@ -134,6 +150,20 @@
       ctx.restore();
     });
   }
+
+  g()?.canvas?.addEventListener?.('contextmenu', (event) => {
+    const G = g();
+    const rect = G?.canvas?.getBoundingClientRect?.();
+    if (!rect?.width || !rect?.height) return;
+    const x = (event.clientX - rect.left) * (G.canvas.width / rect.width);
+    const y = (event.clientY - rect.top) * (G.canvas.height / rect.height);
+    const target = remoteBounds
+      .filter((bounds) => x >= bounds.left && x <= bounds.right && y >= bounds.top && y <= bounds.bottom)
+      .sort((a, b) => Math.hypot(x - a.centerX, y - a.centerY) - Math.hypot(x - b.centerX, y - b.centerY))[0];
+    if (!target) return;
+    event.preventDefault();
+    window.openRemoteProfileV1?.(target.userId);
+  });
 
   function attachLayer() {
     if (typeof worldRenderPipeline !== 'undefined' && worldRenderPipeline?.registerLayer) {
