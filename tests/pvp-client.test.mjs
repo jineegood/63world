@@ -69,9 +69,8 @@ test('match subscription emits each event sequence once and cleans up its channe
 test('incoming invitation subscription listens only for the signed-in target', () => {
   const { api, channels } = harness();
   const unsubscribe = api.onInvite(() => {});
-  const filter = channels[0].handlers[0].filter;
-  assert.equal(filter.table, 'pvp_invites_v1');
-  assert.equal(filter.filter, 'target_id=eq.student-a');
+  const filters = channels[0].handlers.map((entry) => entry.filter.filter);
+  assert.deepEqual(filters, ['target_id=eq.student-a', 'challenger_id=eq.student-a']);
   unsubscribe();
 });
 

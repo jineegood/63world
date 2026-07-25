@@ -7,6 +7,8 @@
     BUSY:'상대 학생은 지금 다른 활동 중이에요.',
     NO_QUESTIONS:'선생님이 활성화한 문제가 없어 대전을 시작할 수 없어요.',
     MATCH_CLOSED:'이미 끝난 대전이에요.',
+    RECONNECTING:'상대 학생의 재접속을 기다리는 중이에요.',
+    PROFILE_MISSING:'저장된 캐릭터 정보를 확인한 뒤 다시 시도해 주세요.',
     UNAUTHENTICATED:'다시 로그인한 뒤 이용해 주세요.',
   });
 
@@ -79,6 +81,10 @@
         .on('postgres_changes', {
           event:'*', schema:'public', table:'pvp_invites_v1',
           filter:`target_id=eq.${me.userId}`,
+        }, (payload) => listener(payload?.new || payload?.old))
+        .on('postgres_changes', {
+          event:'*', schema:'public', table:'pvp_invites_v1',
+          filter:`challenger_id=eq.${me.userId}`,
         }, (payload) => listener(payload?.new || payload?.old))
         .subscribe();
       channels.add(channel);

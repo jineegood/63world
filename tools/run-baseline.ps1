@@ -1,5 +1,5 @@
 param(
-  [ValidateSet('all', 'check', 'baseline', 'core-utils', 'player-store', 'input-router', 'world-interaction-registry', 'world-navigation-registry', 'click-movement', 'click-movement-integration', 'world-render-pipeline', 'hud-update-pipeline', 'total-stats-pipeline', 'combat-entry-pipeline', 'combat-frame-pipeline', 'audio-volume-pipeline', 'combat-rules', 'combat-sequence-controller', 'combat-flow', 'combat-fx', 'sfx-map', 'audio-manifest', 'audio-dispatcher', 'weapon-tier', 'game-data', 'quest-data', 'quest-text', 'patch-data', 'gameplay-polish-v2', 'early-game-polish-v2', 'wrong-answer-polish-v2', 'world-healing-polish-v2', 'reward-presentation-v2', 'tutorial-quests-polish-v2', 'tutorial-highlight-v1', 'multiplayer', 'pvp-rules', 'pvp-policy-v1', 'pvp-function-v1', 'pvp-client', 'supabase-security-v2', 'cloud-sync-v2', 'student-access-v2', 'secure-student-login-v2', 'secure-shared-student-v2', 'admin-auth-v2', 'teacher-reset-function', 'secure-teacher-auth-v2', 'secure-shared-teacher-v2', 'admin-data-v2', 'student-reward-grants-v2', 'teacher-delete-function', 'secure-cloud-student-admin-v2', 'shared-state-policy-v2', 'shared-state-v2', 'refactor-health', 'current-data', 'safety-net', 'extract-data', 'build-workbook')]
+  [ValidateSet('all', 'check', 'baseline', 'core-utils', 'player-store', 'input-router', 'world-interaction-registry', 'world-navigation-registry', 'click-movement', 'click-movement-integration', 'world-render-pipeline', 'hud-update-pipeline', 'total-stats-pipeline', 'combat-entry-pipeline', 'combat-frame-pipeline', 'audio-volume-pipeline', 'combat-rules', 'combat-sequence-controller', 'combat-flow', 'combat-fx', 'sfx-map', 'audio-manifest', 'audio-dispatcher', 'weapon-tier', 'game-data', 'quest-data', 'quest-text', 'patch-data', 'gameplay-polish-v2', 'early-game-polish-v2', 'wrong-answer-polish-v2', 'world-healing-polish-v2', 'reward-presentation-v2', 'tutorial-quests-polish-v2', 'tutorial-highlight-v1', 'multiplayer', 'pvp-rules', 'pvp-policy-v1', 'pvp-function-v1', 'pvp-client', 'pvp-profile-ui', 'pvp-battle-ui', 'pvp-reconnect-v1', 'supabase-security-v2', 'cloud-sync-v2', 'student-access-v2', 'secure-student-login-v2', 'secure-shared-student-v2', 'admin-auth-v2', 'teacher-reset-function', 'secure-teacher-auth-v2', 'secure-shared-teacher-v2', 'admin-data-v2', 'student-reward-grants-v2', 'teacher-delete-function', 'secure-cloud-student-admin-v2', 'shared-state-policy-v2', 'shared-state-v2', 'refactor-health', 'current-data', 'safety-net', 'extract-data', 'build-workbook')]
   [string]$Mode = 'all'
 )
 
@@ -109,6 +109,8 @@ if ($Mode -eq 'all' -or $Mode -eq 'check') {
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/cloud-sync-v2.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/student-access-v2.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/pvp-client.js')
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/pvp-ui.js')
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/pvp-battle.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/admin-auth-v2.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/admin-data-v2.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/shared-state-v2.js')
@@ -269,6 +271,18 @@ if ($Mode -eq 'all' -or $Mode -eq 'pvp-function-v1') {
 
 if ($Mode -eq 'all' -or $Mode -eq 'pvp-client') {
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', 'tests/pvp-client.test.mjs')
+}
+
+if ($Mode -eq 'all' -or $Mode -eq 'pvp-profile-ui') {
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', 'tests/pvp-profile-ui.test.mjs')
+}
+
+if ($Mode -eq 'all' -or $Mode -eq 'pvp-battle-ui') {
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', 'tests/pvp-battle-ui.test.mjs')
+}
+
+if ($Mode -eq 'all' -or $Mode -eq 'pvp-reconnect-v1') {
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', 'tests/pvp-reconnect-v1.test.mjs')
 }
 
 if ($Mode -eq 'all' -or $Mode -eq 'supabase-security-v2') {

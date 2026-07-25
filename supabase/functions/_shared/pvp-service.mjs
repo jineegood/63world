@@ -16,6 +16,29 @@ function participant(match, userId) {
   return match?.playerAId === userId || match?.playerBId === userId;
 }
 
+function publicMatch(match) {
+  if (!match) return null;
+  const { answerKey:privateAnswerKey, ...safe } = match;
+  void privateAnswerKey;
+  return safe;
+}
+
+function publicProfile(profile = {}) {
+  return {
+    name:String(profile.name || '학생').slice(0, 24),
+    level:Number(profile.level) || 1,
+    className:profile.className || 'warrior',
+    spec:profile.spec || '',
+    appearance:profile.appearance || {},
+    equipment:profile.equipment || {},
+    costume:profile.costume || {},
+    skills:profile.skills || {},
+    maxHp:Number(profile.maxHp) || 100,
+    attack:Number(profile.attack) || 1,
+    defense:Number(profile.defense) || 0,
+  };
+}
+
 export function createPvpService({ store, now = Date.now, randomInt }) {
   if (!store || typeof randomInt !== 'function') throw new Error('PvP service dependencies are required');
 
@@ -43,6 +66,7 @@ export function createPvpService({ store, now = Date.now, randomInt }) {
     const match = await store.getMatchForUpdate(body.matchId);
     if (!participant(match, userId)) fail('NOT_PARTICIPANT');
     if (match.finishedAt || match.phase === 'finished' || match.phase === 'cancelled') fail('MATCH_CLOSED');
+    if (match.phase === 'reconnect') fail('RECONNECTING');
     if (Number(body.round) !== Number(match.round)) fail('ROUND_CHANGED');
     await store.insertRoundInputOnce({
       matchId:match.id,
@@ -79,7 +103,13 @@ export function createPvpService({ store, now = Date.now, randomInt }) {
       },
       randomInt,
     });
-    await store.appendEvents(match.id, match.round, resolution.events);
+    const publicEvents = [{
+      id:`${match.id}:${match.round}:dice`,
+      kind:'dice',
+      rolls:resolution.initiative.rolls,
+      first:resolution.initiative.first,
+    }, ...resolution.events];
+    await store.appendEvents(match.id, match.round, publicEvents);
     if (resolution.winner) {
       const winnerId = resolution.winner === 'a' ? match.playerAId : match.playerBId;
       const loserId = resolution.winner === 'a' ? match.playerBId : match.playerAId;
@@ -100,7 +130,7 @@ export function createPvpService({ store, now = Date.now, randomInt }) {
       answerKey:question.answer,
       deadline:now() + 20000,
     });
-    return { resolved:true, events:resolution.events };
+    return { resolved:true, events:publicEvents };
   }
 
   async function surrender(userId, body) {
@@ -117,12 +147,18 @@ export function createPvpService({ store, now = Date.now, randomInt }) {
     if (!userId) fail('UNAUTHENTICATED');
     switch (body.op) {
       case 'presence':
-        return store.upsertPresence(userId, {
-          map:String(body.map || ''),
-          busy:body.busy === true,
-          publicProfile:body.publicProfile || {},
+      {
+        const authoritative = await store.getAuthoritativeProfile(userId);
+        if (!authoritative) fail('PROFILE_MISSING');
+        const activeMatch = await store.findActiveMatchForUser(userId);
+        const presence = await store.upsertPresence(userId, {
+          map:String(authoritative.map || ''),
+          busy:authoritative.map !== 'town' || !!activeMatch,
+          publicProfile:publicProfile(authoritative),
           lastSeenAt:now(),
         });
+        return { ...(presence || { ok:true }), activeMatch:publicMatch(activeMatch) };
+      }
       case 'profile':
         return store.getPublicProfile(body.userId);
       case 'invite':
@@ -138,10 +174,26 @@ export function createPvpService({ store, now = Date.now, randomInt }) {
       case 'sync': {
         const match = await store.getMatchForUser(body.matchId, userId);
         if (!match) fail('NOT_PARTICIPANT');
-        return match;
+        return publicMatch(match);
       }
       case 'heartbeat':
-        return store.heartbeat(userId, body.matchId, now());
+      {
+        const heartbeat = await store.heartbeat(userId, body.matchId, now());
+        if (!body.matchId) return heartbeat;
+        const match = await store.getMatchForUpdate(body.matchId);
+        if (participant(match, userId)
+          && ['question', 'waiting'].includes(match.phase)
+          && now() >= Number(match.deadline || 0)) {
+          return submit(userId, {
+            matchId:match.id,
+            round:match.round,
+            actionId:'basic',
+            answer:'',
+            requestId:`timeout-${match.id}-${match.round}-${userId}`,
+          });
+        }
+        return heartbeat;
+      }
       case 'surrender':
         return surrender(userId, body);
       case 'cleanup':

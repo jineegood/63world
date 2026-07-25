@@ -90,3 +90,141 @@ test('surrender finalizes one opponent win without client record values', async 
   assert.equal(result.finished, true);
   assert.deepEqual(calls, [['m1', 'b', 'a', 'surrender']]);
 });
+
+test('resolved simultaneous submissions publish dice before ordered combat effects', async () => {
+  const { createPvpService } = await import(serviceUrl.href);
+  const appended = [];
+  const inputs = [{ userId:'a', actionId:'basic', answer:'5' }];
+  const match = {
+    id:'m1', playerAId:'a', playerBId:'b', round:1, phase:'waiting',
+    deadline:21000, answerKey:'5',
+    playerAState:{ userId:'a', name:'A', level:1, className:'warrior', maxHp:100, hp:100, attack:20, defense:0, skills:{}, cooldowns:{}, statuses:{} },
+    playerBState:{ userId:'b', name:'B', level:1, className:'warrior', maxHp:100, hp:100, attack:20, defense:0, skills:{}, cooldowns:{}, statuses:{} },
+  };
+  const rolls = [7, 21];
+  const service = createPvpService({
+    now:() => 6000,
+    randomInt:(minimum) => rolls.shift() ?? minimum,
+    store:{
+      getMatchForUpdate:async () => match,
+      insertRoundInputOnce:async (input) => { inputs.push(input); },
+      listRoundInputs:async () => inputs,
+      appendEvents:async (_id, _round, events) => appended.push(...events),
+      readEnabledWorkbooks:async () => [{ enabled:true, questions:[{ id:'q2', prompt:'3+3', answer:'6' }] }],
+      updateMatch:async () => {},
+    },
+  });
+  await service.handle('b', { op:'submit', matchId:'m1', round:1, actionId:'basic', answer:'5', requestId:'b1' });
+  assert.equal(appended[0].kind, 'dice');
+  assert.deepEqual(appended[0].rolls, [{ a:7, b:21 }]);
+  assert.equal(appended[1].kind, 'damage');
+  assert.equal(appended[1].source, 'b');
+});
+
+test('heartbeat resolves an expired unanswered round so neither player can stall forever', async () => {
+  const { createPvpService } = await import(serviceUrl.href);
+  const calls = [];
+  const match = {
+    id:'m1', playerAId:'a', playerBId:'b', round:1, phase:'question',
+    deadline:5000, answerKey:'5',
+    playerAState:{ userId:'a', name:'A', level:1, className:'warrior', maxHp:100, hp:100, attack:20, defense:0, skills:{}, cooldowns:{}, statuses:{} },
+    playerBState:{ userId:'b', name:'B', level:1, className:'warrior', maxHp:100, hp:100, attack:20, defense:0, skills:{}, cooldowns:{}, statuses:{} },
+  };
+  const inputs = [];
+  const service = createPvpService({
+    now:() => 6000,
+    randomInt:(minimum) => minimum,
+    store:{
+      heartbeat:async () => { calls.push('heartbeat'); return { ok:true }; },
+      getMatchForUpdate:async () => match,
+      insertRoundInputOnce:async (input) => { inputs.push(input); },
+      listRoundInputs:async () => inputs,
+      appendEvents:async () => { calls.push('events'); },
+      readEnabledWorkbooks:async () => [{ enabled:true, questions:[{ id:'q2', prompt:'3+3', answer:'6' }] }],
+      updateMatch:async () => { calls.push('next'); },
+    },
+  });
+
+  await service.handle('a', { op:'heartbeat', matchId:'m1' });
+  assert.deepEqual(calls, ['heartbeat', 'events', 'next']);
+  assert.equal(inputs[0].requestId, 'timeout-m1-1-a');
+});
+
+test('answers cannot be submitted while a disconnected opponent is in the reconnect grace period', async () => {
+  const { createPvpService } = await import(serviceUrl.href);
+  const service = createPvpService({
+    now:() => 6000,
+    randomInt:(minimum) => minimum,
+    store:{
+      getMatchForUpdate:async () => ({
+        id:'m1', playerAId:'a', playerBId:'b', round:1, phase:'reconnect',
+        deadline:5000,
+      }),
+    },
+  });
+  await assert.rejects(
+    service.handle('a', { op:'submit', matchId:'m1', round:1, answer:'5' }),
+    (error) => error.code === 'RECONNECTING',
+  );
+});
+
+test('presence returns the caller active match so a refreshed browser can restore it', async () => {
+  const { createPvpService } = await import(serviceUrl.href);
+  const activeMatch = { id:'m1', playerAId:'a', playerBId:'b', phase:'reconnect' };
+  const service = createPvpService({
+    now:() => 6000,
+    randomInt:(minimum) => minimum,
+    store:{
+      upsertPresence:async () => ({ ok:true }),
+      findActiveMatchForUser:async (userId) => userId === 'a' ? activeMatch : null,
+      getAuthoritativeProfile:async () => ({ name:'A', map:'town' }),
+    },
+  });
+  assert.deepEqual(
+    await service.handle('a', { op:'presence', map:'town', busy:true, publicProfile:{} }),
+    { ok:true, activeMatch },
+  );
+});
+
+test('presence ignores caller profile and map claims in favor of the saved server profile', async () => {
+  const { createPvpService } = await import(serviceUrl.href);
+  let saved = null;
+  const service = createPvpService({
+    now:() => 6000,
+    randomInt:(minimum) => minimum,
+    store:{
+      getAuthoritativeProfile:async () => ({
+        name:'서버학생', map:'forest', level:4, className:'mage', attack:20,
+      }),
+      findActiveMatchForUser:async () => null,
+      upsertPresence:async (_id, value) => { saved = value; return { ok:true }; },
+    },
+  });
+  await service.handle('a', {
+    op:'presence',
+    map:'town',
+    busy:false,
+    publicProfile:{ name:'조작', attack:999999 },
+  });
+  assert.equal(saved.map, 'forest');
+  assert.equal(saved.busy, true);
+  assert.equal(saved.publicProfile.name, '서버학생');
+  assert.equal(saved.publicProfile.attack, 20);
+});
+
+test('sync never returns the private answer key to a participant', async () => {
+  const { createPvpService } = await import(serviceUrl.href);
+  const service = createPvpService({
+    now:() => 6000,
+    randomInt:(minimum) => minimum,
+    store:{
+      getMatchForUser:async () => ({
+        id:'m1', playerAId:'a', playerBId:'b', phase:'question',
+        answerKey:'절대 노출 금지', question:{ prompt:'문제' },
+      }),
+    },
+  });
+  const result = await service.handle('a', { op:'sync', matchId:'m1' });
+  assert.equal(Object.hasOwn(result, 'answerKey'), false);
+  assert.equal(result.question.prompt, '문제');
+});

@@ -18,7 +18,11 @@
     return value;
   }
 
-  async function openRemoteProfileV1(userId) {
+  async function openRemoteProfileV1(userId, skipTutorial = false) {
+    if (!skipTutorial && global.shouldShowPvpTutorialV1?.() && global.startPvpTutorialV1) {
+      global.startPvpTutorialV1(() => openRemoteProfileV1(userId, true));
+      return;
+    }
     try {
       const profile = await client().profile(userId);
       if (!profile) throw new Error('상대 학생의 정보를 불러오지 못했어요.');
@@ -85,17 +89,44 @@
     `, { type:'pvpInvite', pause:true });
   }
 
+  async function handleInvite(pvp, invite) {
+    const me = global.getPvpIdentityV1?.();
+    const matchId = invite?.match_id || invite?.matchId;
+    if (invite?.status === 'accepted' && matchId
+      && (invite.challenger_id === me?.userId || invite.target_id === me?.userId)) {
+      try {
+        const match = await pvp.sync(matchId);
+        if (match) global.enterPvpMatchV1?.(match);
+      } catch (error) {
+        global.toast?.(error?.message || '대전 화면을 열지 못했어요.');
+      }
+      return;
+    }
+    if (invite?.status !== 'pending' || invite.target_id !== me?.userId) return;
+    try {
+      const challenger = await pvp.profile(invite.challenger_id);
+      showInvite({ ...invite, challenger_name:challenger?.name || '다른 학생' });
+    } catch {
+      showInvite(invite);
+    }
+  }
+
   function startPvpUiV1() {
     if (stopInvites) return;
     let pvp;
     try { pvp = client(); } catch { return; }
-    stopInvites = pvp.onInvite(showInvite);
+    stopInvites = pvp.onInvite((invite) => { handleInvite(pvp, invite); });
     const sendPresence = () => {
       const profile = global.getLocalPvpProfileV1?.();
       if (!profile) return;
-      pvp.presence(profile.map, profile.busy, profile).catch(() => {});
+      pvp.presence(profile.map, profile.busy, profile).then((result) => {
+        const match = result?.activeMatch;
+        const active = global.getActivePvpMatchV1?.();
+        if (match?.id && active?.matchId !== match.id) global.enterPvpMatchV1?.(match);
+      }).catch(() => {});
     };
     sendPresence();
+    pvp.cleanup?.().catch?.(() => {});
     presenceTimer = setInterval(sendPresence, 5000);
   }
 

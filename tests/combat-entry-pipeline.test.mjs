@@ -81,7 +81,10 @@ test('real browser preserves valid, paused, and invalid combat entry behavior', 
 test('production uses one combat-entry boundary without versioned wrappers', () => {
   assert.match(indexSource, /src\/combat-entry-pipeline\.js[\s\S]*game\.js/);
   assert.equal((gameSource.match(/YuksamCombatEntryPipeline\.create\(/g) || []).length, 1);
-  assert.match(gameSource, /function openCombat\(monster\) \{\s*return combatEntryPipeline\.open\(/);
+  assert.match(
+    gameSource,
+    /function openCombat\(monster\) \{\s*window\.cancelClickMovementV1\?\.\(\);\s*return combatEntryPipeline\.open\(/,
+  );
   assert.doesNotMatch(gameSource, /openCombat\s*=\s*function\s+openCombatV\d+/);
   assert.doesNotMatch(gameSource, /oldOpenCombatV\d+/);
   for (const id of ['combat-entry-v22', 'combat-entry-v24', 'combat-entry-v25']) {

@@ -6,6 +6,9 @@ function rowMatch(row) {
     playerBState:row.player_b_state, question:row.question_public,
     deadline:row.question_deadline ? new Date(row.question_deadline).getTime() : 0,
     reconnectDeadline:row.reconnect_deadline ? new Date(row.reconnect_deadline).getTime() : 0,
+    disconnectedUserId:row.disconnected_user_id || null,
+    resumePhase:row.resume_phase || null,
+    pausedQuestionMs:Number(row.paused_question_ms) || 0,
     finishedAt:row.finished_at, winnerId:row.winner_id, loserId:row.loser_id,
   };
 }
@@ -15,14 +18,135 @@ function check(result) {
   return result.data;
 }
 
+const DISCONNECT_DETECT_MS = 10000;
+const RECONNECT_GRACE_MS = 30000;
+
+export function decideDisconnectV1(match, lastSeen, now) {
+  if (!match || match.finishedAt || ['finished', 'cancelled'].includes(match.phase)) return null;
+  const staleA = now - Number(lastSeen?.a || 0) > DISCONNECT_DETECT_MS;
+  const staleB = now - Number(lastSeen?.b || 0) > DISCONNECT_DETECT_MS;
+
+  if (match.phase !== 'reconnect') {
+    if (!staleA && !staleB) return null;
+    return {
+      type:'reconnect',
+      disconnectedUserId:staleA !== staleB ? (staleA ? match.playerAId : match.playerBId) : null,
+      reconnectDeadline:now + RECONNECT_GRACE_MS,
+      resumePhase:match.phase,
+      pausedQuestionMs:Math.max(0, Number(match.deadline || 0) - now),
+    };
+  }
+
+  if (!staleA && !staleB) {
+    const phase = match.resumePhase || 'question';
+    return {
+      type:'resume',
+      phase,
+      deadline:phase === 'question' || phase === 'waiting'
+        ? now + Math.max(1000, Number(match.pausedQuestionMs) || 20000)
+        : Number(match.deadline) || now,
+    };
+  }
+  if (now < Number(match.reconnectDeadline || 0)) return null;
+  if (staleA && staleB) return { type:'cancel', reason:'both_disconnected' };
+  return staleA
+    ? { type:'finish', winnerId:match.playerBId, loserId:match.playerAId, reason:'disconnect' }
+    : { type:'finish', winnerId:match.playerAId, loserId:match.playerBId, reason:'disconnect' };
+}
+
 export function createSupabasePvpStore(client) {
+  async function getAuthoritativeProfile(id) {
+    const row = check(await client.from('player_profiles_v2')
+      .select('display_name,data').eq('user_id', id).maybeSingle());
+    if (!row) return null;
+    const data = row.data && typeof row.data === 'object' ? row.data : {};
+    const className = ['warrior', 'mage', 'priest'].includes(data.class) ? data.class : 'warrior';
+    const balance = {
+      warrior:{ maxHp:120, attack:18, defense:5 },
+      mage:{ maxHp:95, attack:24, defense:2 },
+      priest:{ maxHp:105, attack:20, defense:3 },
+    }[className];
+    return {
+      name:String(data.name || row.display_name || '학생').slice(0, 24),
+      level:Math.max(1, Math.min(100, Math.trunc(Number(data.level) || 1))),
+      className,
+      spec:String(data.spec || ''),
+      appearance:data.appearance || {},
+      equipment:data.equipment || {},
+      costume:data.costume || {},
+      skills:data.skills || {},
+      map:String(data.map || 'town'),
+      ...balance,
+    };
+  }
   async function getMatch(id) {
     const row = check(await client.from('pvp_matches_v1').select('*').eq('id', id).maybeSingle());
     if (!row) return null;
     const secret = check(await client.from('pvp_match_secrets_v1').select('answer_key').eq('match_id', id).maybeSingle());
     return { ...rowMatch(row), answerKey:secret?.answer_key };
   }
+  async function setPlayersAvailable(match) {
+    if (!match) return;
+    check(await client.from('pvp_presence_v1').update({ busy:false })
+      .in('user_id', [match.playerAId, match.playerBId]));
+  }
+  async function cancelMatch(id, reason) {
+    const match = await getMatch(id);
+    check(await client.from('pvp_matches_v1').update({
+      phase:'cancelled',
+      finish_reason:reason,
+      finished_at:new Date().toISOString(),
+      updated_at:new Date().toISOString(),
+    }).eq('id', id).is('finished_at', null));
+    await setPlayersAvailable(match);
+    return true;
+  }
+  async function reconcileMatch(id, now) {
+    const match = await getMatch(id);
+    if (!match || match.finishedAt || ['finished', 'cancelled'].includes(match.phase)) return { ok:true };
+    const rows = check(await client.from('pvp_presence_v1').select('user_id,last_seen_at')
+      .in('user_id', [match.playerAId, match.playerBId])) || [];
+    const seen = new Map(rows.map((row) => [row.user_id, new Date(row.last_seen_at).getTime()]));
+    const decision = decideDisconnectV1(match, {
+      a:seen.get(match.playerAId) || 0,
+      b:seen.get(match.playerBId) || 0,
+    }, now);
+    if (!decision) return { ok:true };
+
+    if (decision.type === 'reconnect') {
+      check(await client.from('pvp_matches_v1').update({
+        phase:'reconnect',
+        disconnected_user_id:decision.disconnectedUserId,
+        reconnect_deadline:new Date(decision.reconnectDeadline).toISOString(),
+        resume_phase:decision.resumePhase,
+        paused_question_ms:decision.pausedQuestionMs,
+        updated_at:new Date(now).toISOString(),
+      }).eq('id', id).is('finished_at', null));
+    } else if (decision.type === 'resume') {
+      check(await client.from('pvp_matches_v1').update({
+        phase:decision.phase,
+        question_deadline:new Date(decision.deadline).toISOString(),
+        disconnected_user_id:null,
+        reconnect_deadline:null,
+        resume_phase:null,
+        paused_question_ms:null,
+        updated_at:new Date(now).toISOString(),
+      }).eq('id', id).is('finished_at', null));
+    } else if (decision.type === 'finish') {
+      await check(await client.rpc('finish_pvp_match_v1', {
+        _match_id:id,
+        _winner_id:decision.winnerId,
+        _loser_id:decision.loserId,
+        _reason:decision.reason,
+      }));
+      await setPlayersAvailable(match);
+    } else if (decision.type === 'cancel') {
+      await cancelMatch(id, decision.reason);
+    }
+    return { ok:true, decision:decision.type };
+  }
   return {
+    getAuthoritativeProfile,
     async getPresence(id) {
       const row = check(await client.from('pvp_presence_v1').select('*').eq('user_id', id).maybeSingle());
       return row && { userId:row.user_id, map:row.map, busy:row.busy, publicProfile:row.public_profile, lastSeenAt:new Date(row.last_seen_at).getTime() };
@@ -91,18 +215,24 @@ export function createSupabasePvpStore(client) {
       return row?.data?.items || [];
     },
     async finishMatchOnce(id, winner, loser, reason) {
-      return check(await client.rpc('finish_pvp_match_v1', { _match_id:id, _winner_id:winner, _loser_id:loser, _reason:reason }));
+      const match = await getMatch(id);
+      const finished = check(await client.rpc('finish_pvp_match_v1', { _match_id:id, _winner_id:winner, _loser_id:loser, _reason:reason }));
+      if (finished) await setPlayersAvailable(match);
+      return finished;
     },
-    async cancelMatch(id, reason) {
-      check(await client.from('pvp_matches_v1').update({ phase:'cancelled', finish_reason:reason, finished_at:new Date().toISOString() }).eq('id', id).is('finished_at', null));
-      return true;
-    },
-    async heartbeat(userId) {
-      check(await client.from('pvp_presence_v1').update({ last_seen_at:new Date().toISOString() }).eq('user_id', userId));
-      return { ok:true };
+    cancelMatch,
+    async heartbeat(userId, matchId, now) {
+      check(await client.from('pvp_presence_v1').update({ last_seen_at:new Date(now).toISOString() }).eq('user_id', userId));
+      if (!matchId) return { ok:true };
+      const match = await getMatch(matchId);
+      if (!match || (match.playerAId !== userId && match.playerBId !== userId)) return { ok:true };
+      return reconcileMatch(matchId, now);
     },
     async cleanupStale(now) {
       check(await client.from('pvp_invites_v1').update({ status:'expired' }).eq('status', 'pending').lt('expires_at', new Date(now).toISOString()));
+      const matches = check(await client.from('pvp_matches_v1').select('id')
+        .is('finished_at', null).neq('phase', 'cancelled')) || [];
+      for (const match of matches) await reconcileMatch(match.id, now);
       return { ok:true };
     },
     async respondToInvite(userId, body, now, randomInt, helpers) {
@@ -115,9 +245,13 @@ export function createSupabasePvpStore(client) {
       }
       const presenceRows = check(await client.from('pvp_presence_v1').select('*').in('user_id', [invite.challenger_id, invite.target_id]));
       if (presenceRows.length !== 2 || presenceRows.some((row) => row.map !== 'town' || row.busy)) throw Object.assign(new Error(), { code:'TOWN_ONLY' });
-      const profiles = new Map(presenceRows.map((row) => [row.user_id, row.public_profile || {}]));
-      const a = helpers.normalizeSnapshot({ ...profiles.get(invite.challenger_id), userId:invite.challenger_id });
-      const b = helpers.normalizeSnapshot({ ...profiles.get(invite.target_id), userId:invite.target_id });
+      const [aProfile, bProfile] = await Promise.all([
+        getAuthoritativeProfile(invite.challenger_id),
+        getAuthoritativeProfile(invite.target_id),
+      ]);
+      if (!aProfile || !bProfile) throw Object.assign(new Error(), { code:'PROFILE_MISSING' });
+      const a = helpers.normalizeSnapshot({ ...aProfile, userId:invite.challenger_id });
+      const b = helpers.normalizeSnapshot({ ...bProfile, userId:invite.target_id });
       a.hp = a.maxHp; a.shield = 0; b.hp = b.maxHp; b.shield = 0;
       const workbookRow = check(await client.from('shared_state_v2').select('data').eq('key', 'workbooks').maybeSingle());
       const question = helpers.selectQuestion(workbookRow?.data?.items || [], randomInt);
@@ -128,7 +262,7 @@ export function createSupabasePvpStore(client) {
         question_deadline:new Date(now + 20000).toISOString(),
       }).select('*').single());
       check(await client.from('pvp_match_secrets_v1').insert({ match_id:match.id, answer_key:question.answer }));
-      check(await client.from('pvp_invites_v1').update({ status:'accepted', responded_at:new Date(now).toISOString() }).eq('id', invite.id));
+      check(await client.from('pvp_invites_v1').update({ status:'accepted', match_id:match.id, responded_at:new Date(now).toISOString() }).eq('id', invite.id));
       check(await client.from('pvp_presence_v1').update({ busy:true }).in('user_id', [invite.challenger_id, invite.target_id]));
       return { accepted:true, match:rowMatch(match) };
     },

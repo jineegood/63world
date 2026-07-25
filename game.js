@@ -159,6 +159,12 @@ const game = {
   clickMovement: null,
 };
 window.getYuksamAudioSettings = () => game.settings;
+window.shouldShowPvpTutorialV1 = () => !!game.player && !game.player.pvpTutorialSeen;
+window.markPvpTutorialSeenV1 = () => {
+  if (!game.player || game.player.pvpTutorialSeen) return;
+  game.player.pvpTutorialSeen = true;
+  savePlayer();
+};
 
 if (secureStudentAccess.enabled) {
   window.addEventListener('load', () => {
@@ -3678,6 +3684,8 @@ function bindEvents() {
 
   $('modalClose').addEventListener('click', () => {
     if (game.modalState.type === 'combat') window.escapeCombat();
+    else if (game.modalState.type === 'pvpBattle') window.surrenderPvpV1?.();
+    else if (game.modalState.type === 'pvpSurrender') window.restorePvpMatchV1?.();
     else closeModal();
   });
   $('chooseSpecBtn').addEventListener('click', () => openSpecModal());

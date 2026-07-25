@@ -10,9 +10,11 @@ const gameSource = fs.readFileSync(path.join(root, 'game.js'), 'utf8');
 const htmlSource = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 
 function loadUi(overrides = {}) {
+  const { pvpClientOverrides = {}, ...windowOverrides } = overrides;
   const opened = [];
   const calls = [];
   const elements = new Map();
+  let inviteListener = null;
   const document = {
     getElementById:(id) => elements.get(id) || null,
   };
@@ -27,14 +29,25 @@ function loadUi(overrides = {}) {
       },
       async invite(userId) { calls.push(['invite', userId]); return { ok:true }; },
       async respond(inviteId, accept) { calls.push(['respond', inviteId, accept]); return { accepted:accept }; },
+      async presence() { return { ok:true }; },
+      async sync(matchId) { calls.push(['sync', matchId]); return { id:matchId }; },
+      onInvite(listener) { inviteListener = listener; return () => {}; },
+      ...pvpClientOverrides,
     }),
+    getPvpIdentityV1:() => ({ userId:'student-a', displayName:'별빛', role:'student' }),
+    getLocalPvpProfileV1:() => ({ map:'town', busy:false }),
+    enterPvpMatchV1:(match) => calls.push(['enterMatch', match.id]),
     openModal:(html, options) => { opened.push({ html, options }); },
     renderPlayerPortraitForPvpV1:(canvas, profile) => calls.push(['portrait', canvas, profile]),
     toast:(message) => calls.push(['toast', message]),
-    ...overrides,
+    ...windowOverrides,
   };
-  vm.runInNewContext(fs.readFileSync(sourcePath, 'utf8'), { window, document, setTimeout, clearTimeout });
-  return { window, opened, calls, elements };
+  vm.runInNewContext(fs.readFileSync(sourcePath, 'utf8'), {
+    window, document, setTimeout, clearTimeout,
+    setInterval:() => 1,
+    clearInterval() {},
+  });
+  return { window, opened, calls, elements, emitInvite:(invite) => inviteListener?.(invite) };
 }
 
 test('right-click profile shows safe public details and renders equipped face portrait', async () => {
@@ -69,4 +82,32 @@ test('game supplies the real equipped portrait and starts presence after enterin
   assert.match(gameSource, /window\.getLocalPvpProfileV1\s*=/);
   assert.match(gameSource, /window\.startPvpUiV1\?\.\(\)/);
   assert.ok(htmlSource.indexOf('src/pvp-ui.js') < htmlSource.indexOf('src/multiplayer.js'));
+  assert.match(gameSource, /modalState\.type === 'pvpBattle'[\s\S]{0,100}surrenderPvpV1/);
+  assert.match(gameSource, /modalState\.type === 'pvpSurrender'[\s\S]{0,100}restorePvpMatchV1/);
+});
+
+test('challenger enters the match when the opponent accepts the invitation', async () => {
+  const ui = loadUi();
+  ui.window.startPvpUiV1();
+  ui.emitInvite({ id:'invite-1', status:'accepted', challenger_id:'student-a', match_id:'match-1' });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(ui.calls.filter(([type]) => ['sync', 'enterMatch'].includes(type)), [
+    ['sync', 'match-1'],
+    ['enterMatch', 'match-1'],
+  ]);
+  ui.window.stopPvpUiV1();
+});
+
+test('entering the world after refresh restores the active server match', async () => {
+  const ui = loadUi({
+    pvpClientOverrides:{
+      async presence() { return { ok:true, activeMatch:{ id:'match-restored' } }; },
+    },
+  });
+  ui.window.startPvpUiV1();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(
+    ui.calls.filter(([type]) => type === 'enterMatch'),
+    [['enterMatch', 'match-restored']],
+  );
 });

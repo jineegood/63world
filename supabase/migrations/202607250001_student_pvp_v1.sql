@@ -25,6 +25,7 @@ create table if not exists public.pvp_invites_v1 (
   created_at timestamptz not null default now(),
   expires_at timestamptz not null default (now() + interval '20 seconds'),
   responded_at timestamptz,
+  match_id uuid,
   check (challenger_id <> target_id),
   check (expires_at > created_at and expires_at <= created_at + interval '20 seconds'),
   unique (challenger_id, request_id)
@@ -44,6 +45,8 @@ create table if not exists public.pvp_matches_v1 (
   question_deadline timestamptz,
   reconnect_deadline timestamptz,
   disconnected_user_id uuid references auth.users(id) on delete set null,
+  resume_phase text check (resume_phase in ('question', 'waiting', 'dice', 'effects')),
+  paused_question_ms integer check (paused_question_ms is null or paused_question_ms >= 0),
   winner_id uuid references auth.users(id) on delete set null,
   loser_id uuid references auth.users(id) on delete set null,
   finish_reason text,
@@ -193,6 +196,10 @@ begin
   on conflict (user_id) do update
     set losses = public.pvp_records_v1.losses + 1,
         updated_at = now();
+
+  update public.pvp_presence_v1
+     set busy = false
+   where user_id in (_winner_id, _loser_id);
 
   return true;
 end;

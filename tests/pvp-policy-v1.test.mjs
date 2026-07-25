@@ -5,6 +5,7 @@ import test from 'node:test';
 
 const root = path.resolve(import.meta.dirname, '..');
 const migrationPath = path.join(root, 'supabase/migrations/202607250001_student_pvp_v1.sql');
+const hardeningPath = path.join(root, 'supabase/migrations/202607260001_pvp_runtime_hardening_v1.sql');
 
 test('PvP storage forces RLS and keeps authoritative tables client read-only', () => {
   const sql = fs.readFileSync(migrationPath, 'utf8');
@@ -43,4 +44,14 @@ test('match finishing is service-only, locked, and records one terminal result',
   assert.match(sql, /on conflict\s*\(\s*user_id\s*\)\s*do update/i);
   assert.match(sql, /revoke all on function public\.finish_pvp_match_v1[\s\S]*from public/i);
   assert.match(sql, /grant execute on function public\.finish_pvp_match_v1[\s\S]*to service_role/i);
+});
+
+test('an additive migration upgrades existing PvP databases and enables realtime tables', () => {
+  const sql = fs.readFileSync(hardeningPath, 'utf8');
+  assert.match(sql, /alter table public\.pvp_invites_v1[\s\S]*add column if not exists match_id/i);
+  assert.match(sql, /alter table public\.pvp_matches_v1[\s\S]*add column if not exists resume_phase/i);
+  assert.match(sql, /alter table public\.pvp_matches_v1[\s\S]*add column if not exists paused_question_ms/i);
+  for (const table of ['pvp_invites_v1', 'pvp_matches_v1', 'pvp_match_events_v1']) {
+    assert.match(sql, new RegExp(`alter publication supabase_realtime add table public\\.${table}`, 'i'));
+  }
 });

@@ -69,4 +69,50 @@
     } catch {}
   };
   window.startTutorialV53 = function () { render(0); };
+
+  const PVP_STEPS = [
+    {
+      title: '⚔️ 학생 대전 시작하기',
+      body: `<p>마을에서 다른 학생 캐릭터를 ${tutorialGreenV1('오른쪽 클릭')}하면 얼굴과 승패 기록을 볼 수 있어요.</p>
+        <p>프로필의 ${tutorialGreenV1('대전 신청')} 버튼을 누르면 친선 대전을 요청합니다.</p>`,
+    },
+    {
+      title: '✏️ 같은 문제를 함께 풀어요',
+      body: `<p>두 학생에게 같은 문제가 나오고, 제한 시간은 ${tutorialGreenV1('20초')}예요.</p>
+        <p>먼저 제출해도 상대가 다 풀 때까지 기다린 뒤 함께 결과를 확인합니다.</p>`,
+    },
+    {
+      title: '🎲 매 라운드 공격 순서',
+      body: `<p>매 라운드 두 학생이 ${tutorialGreenV1('30면체 주사위')}를 굴려 높은 숫자가 먼저 공격해요.</p>
+        <p>그만하고 싶을 때는 ${tutorialGreenV1('항복')}을 누를 수 있고, 게임 아이템이나 체력은 잃지 않아요.</p>`,
+    },
+  ];
+  let pvpTutorialDone = null;
+
+  function renderPvpTutorial(idx) {
+    const step = PVP_STEPS[idx];
+    if (!step || typeof window.openModal !== 'function') return;
+    const isLast = idx === PVP_STEPS.length - 1;
+    window.openModal(`
+      <h2>${step.title}</h2>
+      <div class="panel-card" style="line-height:1.7">${step.body}</div>
+      <div class="action-row" style="justify-content:flex-end;margin-top:12px">
+        ${idx > 0 ? `<button class="ghost" onclick="__pvpTutorialStepV1(${idx - 1})">이전</button>` : ''}
+        <button class="primary" onclick="${isLast ? '__pvpTutorialDoneV1()' : `__pvpTutorialStepV1(${idx + 1})`}">${isLast ? '확인' : '다음'}</button>
+      </div>
+    `, { type:'pvpTutorial', pause:true });
+  }
+
+  window.__pvpTutorialStepV1 = renderPvpTutorial;
+  window.__pvpTutorialDoneV1 = async function () {
+    window.markPvpTutorialSeenV1?.();
+    window.closeModal?.();
+    const done = pvpTutorialDone;
+    pvpTutorialDone = null;
+    await done?.();
+  };
+  window.startPvpTutorialV1 = function (done) {
+    pvpTutorialDone = typeof done === 'function' ? done : null;
+    renderPvpTutorial(0);
+  };
 })();
