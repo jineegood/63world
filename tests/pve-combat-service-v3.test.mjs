@@ -73,6 +73,7 @@ test('start ignores forged browser stats and builds the encounter from server ro
   assert.equal(result.ok, true);
   assert.deepEqual(calls[0], ['readCombatant', 'user-a']);
   assert.equal(calls[1][1].userId, 'user-a');
+  assert.equal(calls[1][1].expectedPlayerRevision, 4);
   assert.equal(calls[1][1].state.monsterHp, 9);
   assert.equal(Object.hasOwn(calls[1][1], 'playerAttack'), false);
   assert.equal(Object.hasOwn(calls[1][1], 'rewards'), false);

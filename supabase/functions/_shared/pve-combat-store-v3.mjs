@@ -23,10 +23,11 @@ export function createSupabasePveCombatStore(client) {
         p_user_id:userId,
       }));
     },
-    async start({ userId, monsterKey, state, requestId }) {
+    async start({ userId, monsterKey, expectedPlayerRevision, state, requestId }) {
       return resultData(await client.rpc('private_start_student_combat_v3', {
         p_user_id:userId,
         p_monster_key:monsterKey,
+        p_expected_player_revision:expectedPlayerRevision,
         p_state:state,
         p_request_id:requestId,
       }));

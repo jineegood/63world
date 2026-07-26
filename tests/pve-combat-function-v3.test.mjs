@@ -73,3 +73,27 @@ test('store turns private application rejections into stable service errors', as
     (error) => error.code === 'REQUEST_ID_REUSED',
   );
 });
+
+test('combat start binds the projected player revision inside the locked transaction', async () => {
+  const calls = [];
+  const store = createSupabasePveCombatStore({
+    rpc:async (name, payload) => {
+      calls.push([name, payload]);
+      return { data:{ ok:true } };
+    },
+  });
+  await store.start({
+    userId:'user-a',
+    monsterKey:'forest_mushroom',
+    expectedPlayerRevision:7,
+    state:{ playerHp:22, playerMaxHp:22 },
+    requestId:'33333333-3333-4333-8333-333333333333',
+  });
+  assert.deepEqual(calls[0], ['private_start_student_combat_v3', {
+    p_user_id:'user-a',
+    p_monster_key:'forest_mushroom',
+    p_expected_player_revision:7,
+    p_state:{ playerHp:22, playerMaxHp:22 },
+    p_request_id:'33333333-3333-4333-8333-333333333333',
+  }]);
+});

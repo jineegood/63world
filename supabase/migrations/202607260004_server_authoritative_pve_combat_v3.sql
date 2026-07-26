@@ -310,6 +310,7 @@ $$;
 create or replace function public.private_start_student_combat_v3(
   p_user_id uuid,
   p_monster_key text,
+  p_expected_player_revision bigint,
   p_state jsonb,
   p_request_id text
 )
@@ -322,6 +323,7 @@ declare
   v_request_id uuid;
   v_receipt record;
   v_core public.player_core_v3%rowtype;
+  v_session public.player_combat_sessions_v3%rowtype;
   v_monster public.game_monster_catalog_v3%rowtype;
   v_existing jsonb;
   v_question jsonb;
@@ -365,24 +367,8 @@ begin
   if not found then
     raise exception using errcode = 'P0001', message = 'PLAYER_NOT_FOUND';
   end if;
-
-  if exists (
-    select 1 from public.player_combat_sessions_v3 as s
-    where s.user_id = p_user_id and s.expires_at <= now()
-  ) then
-    delete from public.player_combat_sessions_v3 where user_id = p_user_id;
-  end if;
-  v_existing := public.private_build_safe_combat_session_v3(p_user_id);
-  if v_existing is not null then
-    v_response := jsonb_build_object(
-      'ok', true,
-      'resumed', true,
-      'session', v_existing,
-      'player', public.private_build_student_snapshot_v3(p_user_id)
-    );
-    insert into public.game_action_receipts_v3(user_id, request_id, action_name, response_json)
-    values (p_user_id, v_request_id, 'private_start_student_combat_v3', v_response);
-    return v_response;
+  if v_core.revision <> p_expected_player_revision then
+    raise exception using errcode = 'P0001', message = 'PLAYER_REVISION_CONFLICT';
   end if;
 
   select m.* into v_monster
@@ -393,6 +379,36 @@ begin
   end if;
   if v_core.current_map <> v_monster.map_name then
     raise exception using errcode = 'P0001', message = 'MONSTER_MAP_MISMATCH';
+  end if;
+
+  select s.* into v_session
+  from public.player_combat_sessions_v3 as s
+  where s.user_id = p_user_id and s.status = 'active'
+  for update;
+  if found and v_session.expires_at <= now() then
+    update public.player_core_v3
+    set current_hp = least(current_hp, v_session.player_hp),
+        revision = revision + 1,
+        updated_at = now()
+    where user_id = p_user_id
+    returning * into v_core;
+    delete from public.player_combat_sessions_v3 where user_id = p_user_id;
+    v_session.user_id := null;
+  end if;
+  if v_session.user_id is not null then
+    if v_session.monster_key <> p_monster_key then
+      raise exception using errcode = 'P0001', message = 'COMBAT_ALREADY_ACTIVE';
+    end if;
+    v_existing := public.private_build_safe_combat_session_v3(p_user_id);
+    v_response := jsonb_build_object(
+      'ok', true,
+      'resumed', true,
+      'session', v_existing,
+      'player', public.private_build_student_snapshot_v3(p_user_id)
+    );
+    insert into public.game_action_receipts_v3(user_id, request_id, action_name, response_json)
+    values (p_user_id, v_request_id, 'private_start_student_combat_v3', v_response);
+    return v_response;
   end if;
 
   begin
@@ -763,6 +779,7 @@ declare
   v_request_id uuid;
   v_receipt record;
   v_session public.player_combat_sessions_v3%rowtype;
+  v_core public.player_core_v3%rowtype;
   v_response jsonb;
 begin
   perform public.private_require_service_role_v3();
@@ -791,11 +808,24 @@ begin
   if v_session.session_revision <> p_expected_session_revision then
     raise exception using errcode = 'P0001', message = 'SESSION_REVISION_CONFLICT';
   end if;
+  select c.* into v_core
+  from public.player_core_v3 as c
+  where c.user_id = p_user_id
+  for update;
+  if v_core.revision <> v_session.player_revision then
+    raise exception using errcode = 'P0001', message = 'PLAYER_REVISION_CONFLICT';
+  end if;
+  update public.player_core_v3
+  set current_hp = least(current_hp, v_session.player_hp),
+      revision = revision + 1,
+      updated_at = now()
+  where user_id = p_user_id;
   delete from public.player_combat_sessions_v3 where user_id = p_user_id;
   v_response := jsonb_build_object(
     'ok', true,
     'outcome', 'surrender',
-    'rewards', jsonb_build_object('exp', 0, 'gold', 0, 'building', 0)
+    'rewards', jsonb_build_object('exp', 0, 'gold', 0, 'building', 0),
+    'player', public.private_build_student_snapshot_v3(p_user_id)
   );
   insert into public.game_action_receipts_v3(user_id, request_id, action_name, response_json)
   values (p_user_id, v_request_id, 'private_surrender_student_combat_v3', v_response);
@@ -812,21 +842,41 @@ security definer
 set search_path = ''
 as $$
 declare
-  v_session jsonb;
+  v_session public.player_combat_sessions_v3%rowtype;
+  v_core public.player_core_v3%rowtype;
+  v_safe_session jsonb;
 begin
   perform public.private_require_service_role_v3();
   if p_user_id is null then
     raise exception using errcode = '22023', message = 'INVALID_REQUEST';
   end if;
-  if exists (
-    select 1 from public.player_combat_sessions_v3 as s
-    where s.user_id = p_user_id and s.expires_at <= now()
-  ) then
+  select s.* into v_session
+  from public.player_combat_sessions_v3 as s
+  where s.user_id = p_user_id and s.status = 'active' and s.expires_at <= now()
+  for update;
+  if found then
+    select c.* into v_core
+    from public.player_core_v3 as c
+    where c.user_id = p_user_id
+    for update;
+    if v_core.revision <> v_session.player_revision then
+      raise exception using errcode = 'P0001', message = 'PLAYER_REVISION_CONFLICT';
+    end if;
+    update public.player_core_v3
+    set current_hp = least(current_hp, v_session.player_hp),
+        revision = revision + 1,
+        updated_at = now()
+    where user_id = p_user_id;
     delete from public.player_combat_sessions_v3 where user_id = p_user_id;
-    return jsonb_build_object('ok', true, 'session', null, 'expired', true);
+    return jsonb_build_object(
+      'ok', true,
+      'session', null,
+      'expired', true,
+      'player', public.private_build_student_snapshot_v3(p_user_id)
+    );
   end if;
-  v_session := public.private_build_safe_combat_session_v3(p_user_id);
-  return jsonb_build_object('ok', true, 'session', v_session, 'expired', false);
+  v_safe_session := public.private_build_safe_combat_session_v3(p_user_id);
+  return jsonb_build_object('ok', true, 'session', v_safe_session, 'expired', false);
 end;
 $$;
 
@@ -838,7 +888,7 @@ revoke all on function public.private_read_combatant_v3(uuid)
   from public, anon, authenticated;
 revoke all on function public.private_pick_combat_question_v3(text)
   from public, anon, authenticated;
-revoke all on function public.private_start_student_combat_v3(uuid, text, jsonb, text)
+revoke all on function public.private_start_student_combat_v3(uuid, text, bigint, jsonb, text)
   from public, anon, authenticated;
 revoke all on function public.private_prepare_student_combat_turn_v3(uuid, uuid, bigint, text)
   from public, anon, authenticated;
@@ -849,7 +899,7 @@ revoke all on function public.private_surrender_student_combat_v3(uuid, bigint, 
 revoke all on function public.private_resume_student_combat_v3(uuid)
   from public, anon, authenticated;
 
-grant execute on function public.private_start_student_combat_v3(uuid, text, jsonb, text)
+grant execute on function public.private_start_student_combat_v3(uuid, text, bigint, jsonb, text)
   to service_role;
 grant execute on function public.private_read_combatant_v3(uuid)
   to service_role;

@@ -701,6 +701,17 @@ async function requestServerMapTransitionV3(targetMap) {
 }
 window.requestServerMapTransitionV3 = requestServerMapTransitionV3;
 
+async function confirmServerMapTransitionV3(targetMap) {
+  if (!secureStudentAccess.authorityV3Enabled) return true;
+  try {
+    await requestServerMapTransitionV3(targetMap);
+    return true;
+  } catch (error) {
+    toast(error?.message || '이동 정보를 서버에 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+    return false;
+  }
+}
+
 function computeLevelFromExp(exp) {
   const value = Number(exp) || 0;
   let level = 1;
@@ -2878,7 +2889,8 @@ function enterBuildingShopInterior() {
 
 window.enterForest = function enterForest() {
   closeModal();
-  showLoadingTransition('고요한 숲으로 이동중입니다.', () => {
+  showLoadingTransition('고요한 숲으로 이동중입니다.', async () => {
+    if (!await confirmServerMapTransitionV3('forest')) return;
     game.currentMap = 'forest';
     game.player.map = 'forest';
     const portals = ensureStagePortals('forest');
@@ -2893,7 +2905,8 @@ window.enterForest = function enterForest() {
   });
 };
 
-function returnTown() {
+async function returnTown() {
+  if (!await confirmServerMapTransitionV3('town')) return;
   closeModal();
   game.currentMap = 'town';
   game.player.map = 'town';
@@ -5381,7 +5394,8 @@ function updateQuestTracker() {
   window.enterDesert = function enterDesertV17() {
     if ((game.player?.level || 1) < 4) return showLevelGateMessage('황량한 사막', 4);
     closeModal();
-    showLoadingTransition('황량한 사막으로 이동중입니다.', () => {
+    showLoadingTransition('황량한 사막으로 이동중입니다.', async () => {
+      if (!await confirmServerMapTransitionV3('desert')) return;
       game.currentMap = 'desert'; game.player.map = 'desert';
       const portals = ensureStagePortals('desert');
       game.player.x = portals.returnPortal.x + 180; game.player.y = portals.returnPortal.y + 20; game.lastMove = { x: 1, y: 0 };
@@ -5391,7 +5405,8 @@ function updateQuestTracker() {
   window.enterSwamp = function enterSwamp() {
     if ((game.player?.level || 1) < 7) return showLevelGateMessage('으스스한 늪지', 7);
     closeModal(); ensureSwampWorkbook();
-    showLoadingTransition('으스스한 늪지로 이동중입니다.', () => {
+    showLoadingTransition('으스스한 늪지로 이동중입니다.', async () => {
+      if (!await confirmServerMapTransitionV3('swamp')) return;
       game.currentMap = 'swamp'; game.player.map = 'swamp';
       const portals = ensureStagePortals('swamp');
       game.player.x = portals.returnPortal.x + 185; game.player.y = portals.returnPortal.y + 20; game.lastMove = { x: 1, y: 0 };
@@ -13425,7 +13440,8 @@ function wireAuthoritativePveCombatV3() {
     if (busy) return;
     busy = true;
     try {
-      await getClient().surrender(session.sessionRevision);
+      const response = await getClient().surrender(session.sessionRevision);
+      applyServerPlayer(response);
       const monster = activeMonster;
       resetLocalCombat();
       if (monster) monster.ignorePlayerUntil = Date.now() + 1800;
@@ -13452,13 +13468,13 @@ function wireAuthoritativePveCombatV3() {
     if (!client) return;
     try {
       const response = await client.resume();
+      applyServerPlayer(response);
       if (!response?.session) return;
       const type = MONSTER_TYPES_V3[response.session.monsterKey];
       const monster = (game.forestMonsters || []).find((candidate) => (
         candidate.alive && !candidate.elite && candidate.type === type
       ));
       if (!monster) return;
-      applyServerPlayer(response);
       applySession(response.session, monster);
       renderAuthorityMenuV3('진행 중이던 전투를 이어갑니다.');
     } catch (error) {

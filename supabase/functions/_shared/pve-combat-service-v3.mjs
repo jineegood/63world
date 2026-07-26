@@ -68,6 +68,7 @@ export function createPveCombatService({ store, random = Math.random } = {}) {
     return publicSafe(await store.start({
       userId,
       monsterKey:String(body.monsterKey),
+      expectedPlayerRevision:Number(projection.revision),
       state,
       requestId:String(body.requestId),
     }));

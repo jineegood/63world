@@ -37,9 +37,16 @@ test('server character creation is awaited before entering the game', () => {
   assert.match(game, /game\.player\s*=\s*normalizePlayer\s*\(\s*created\.player\s*\)/);
 });
 
-test('v3 map adapter exists but ordinary map handlers stay untouched until cutover', () => {
+test('v3 map adapter gates ordinary hunting transitions before local map state changes', () => {
   assert.match(game, /async\s+function\s+requestServerMapTransitionV3\s*\(\s*targetMap\s*\)/);
   assert.match(game, /secureStudentAccess\.transitionMap\s*\(/);
+  assert.match(game, /async\s+function\s+confirmServerMapTransitionV3\s*\(\s*targetMap\s*\)/);
+  for (const target of ['forest', 'desert', 'swamp', 'town']) {
+    assert.match(
+      game,
+      new RegExp(`await\\s+confirmServerMapTransitionV3\\('${target}'\\)[\\s\\S]{0,500}?game\\.currentMap\\s*=\\s*'${target}'`),
+    );
+  }
   assert.match(config, /serverAuthorityV3Enabled\s*:\s*false/);
 });
 

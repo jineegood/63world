@@ -63,6 +63,17 @@ test('server snapshots drive hp, rewards, resume, defeat, and surrender presenta
   assert.doesNotMatch(patch, /startMonsterDefeatSequence|handlePlayerDefeat\(/);
 });
 
+test('surrender and expired resume apply the authoritative hp snapshot before closing', () => {
+  assert.match(
+    patch,
+    /const\s+response\s*=\s*await\s+getClient\(\)\.surrender\([^)]*\);\s*applyServerPlayer\(response\)/,
+  );
+  assert.match(
+    patch,
+    /const\s+response\s*=\s*await\s+client\.resume\(\);\s*applyServerPlayer\(response\);\s*if\s*\(!response\?\.session\)\s*return/,
+  );
+});
+
 test('answer keys never enter authoritative browser state', () => {
   assert.doesNotMatch(patch, /\.answer\s*=/);
   assert.doesNotMatch(patch, /answerKey|answer_key/);
