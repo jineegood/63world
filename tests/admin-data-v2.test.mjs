@@ -66,6 +66,22 @@ function setup(overrides = {}) {
         return overrides.invokeResult || { data:{ ok:true, displayName:'별빛' }, error:null };
       },
     },
+    async rpc(name, args) {
+      calls.push(['rpc', name, args]);
+      return overrides.rpcResult || {
+        data:{
+          ok:true,
+          events:[{
+            id:9,
+            user_id:studentId,
+            event_type:'invalid_map_transition',
+            details:{ from_map:'forest', target_map:'swamp', secret:'must-disappear' },
+            created_at:'2026-07-26T01:02:03.000Z',
+          }],
+        },
+        error:null,
+      };
+    },
   };
   return { calls, service:loadApi().create({ client }) };
 }
@@ -142,4 +158,44 @@ test('backend failures map to safe errors without leaking raw details', async ()
     assert.doesNotMatch(error.message, /secret-host/i);
     return true;
   });
+});
+
+test('resetPlayerV3 invokes only the teacher reset Edge Function with one UUID', async () => {
+  const { calls, service } = setup();
+  const result = await service.resetPlayerV3(studentId);
+  const invoke = calls.find(([name, functionName]) => (
+    name === 'invoke' && functionName === 'teacher-reset-player-v3'
+  ));
+  assert.equal(result.displayName.length > 0, true);
+  assert.equal(JSON.stringify(invoke), JSON.stringify([
+    'invoke',
+    'teacher-reset-player-v3',
+    { body:{ userId:studentId } },
+  ]));
+});
+
+test('listSecurityEventsV3 returns bounded sanitized newest-first audit summaries', async () => {
+  const { calls, service } = setup();
+  const events = await service.listSecurityEventsV3({ limit:999 });
+  assert.equal(JSON.stringify(events), JSON.stringify([{
+    id:9,
+    userId:studentId,
+    eventType:'invalid_map_transition',
+    details:{ fromMap:'forest', targetMap:'swamp' },
+    createdAt:'2026-07-26T01:02:03.000Z',
+  }]));
+  assert.doesNotMatch(JSON.stringify(events), /secret|must-disappear/i);
+  assert.equal(JSON.stringify(calls.find(([name]) => name === 'rpc')), JSON.stringify([
+    'rpc',
+    'list_security_events_v3',
+    { p_limit:100 },
+  ]));
+});
+
+test('non-teachers cannot reset v3 characters or inspect security events', async () => {
+  const { service } = setup({
+    teacher:{ id:studentId, user_metadata:{ role:'teacher' } },
+  });
+  await assert.rejects(service.resetPlayerV3(studentId), (error) => error.code === 'FORBIDDEN');
+  await assert.rejects(service.listSecurityEventsV3(), (error) => error.code === 'FORBIDDEN');
 });

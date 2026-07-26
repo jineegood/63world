@@ -101,6 +101,28 @@
     return Object.freeze(reward);
   }
 
+  function sanitizeSecurityEvent(row) {
+    const raw = row?.details && typeof row.details === 'object' && !Array.isArray(row.details)
+      ? row.details
+      : {};
+    const details = {};
+    if (typeof raw.from_map === 'string') details.fromMap = safeText(raw.from_map, 40);
+    if (typeof raw.target_map === 'string') details.targetMap = safeText(raw.target_map, 40);
+    if (Number.isInteger(raw.current_revision) && raw.current_revision >= 0) {
+      details.currentRevision = raw.current_revision;
+    }
+    if (Number.isInteger(raw.required_level) && raw.required_level >= 0) {
+      details.requiredLevel = raw.required_level;
+    }
+    return Object.freeze({
+      id:nonNegativeInteger(row?.id),
+      userId:safeText(row?.user_id, 36),
+      eventType:safeText(row?.event_type, 80),
+      details:Object.freeze(details),
+      createdAt:safeText(row?.created_at, 40),
+    });
+  }
+
   function create(options) {
     const client = options?.client;
     if (!client?.auth || typeof client.auth.getUser !== 'function'
@@ -164,7 +186,42 @@
       return Object.freeze({ displayName:safeText(data.displayName, 20) });
     }
 
-    return Object.freeze({ listStudents, grantReward, deleteStudent });
+    async function resetPlayerV3(userId) {
+      const targetUserId = validateUserId(userId);
+      await requireTeacher();
+      const { data, error:resetError } = await client.functions.invoke('teacher-reset-player-v3', {
+        body:{ userId:targetUserId },
+      });
+      if (resetError) throw mapError(resetError, 'DELETE_FAILED');
+      if (!data?.ok || typeof data.displayName !== 'string') throw error('DELETE_FAILED');
+      return Object.freeze({ displayName:safeText(data.displayName, 20) });
+    }
+
+    async function listSecurityEventsV3(options = {}) {
+      await requireTeacher();
+      if (typeof client.rpc !== 'function') throw error('LOAD_FAILED');
+      const requested = Number(options.limit);
+      const limit = Number.isInteger(requested)
+        ? Math.min(100, Math.max(1, requested))
+        : 50;
+      const { data, error:listError } = await client.rpc('list_security_events_v3', {
+        p_limit:limit,
+      });
+      if (listError) throw mapError(listError, 'LOAD_FAILED');
+      if (!data?.ok || !Array.isArray(data.events)) {
+        if (data?.code === 'FORBIDDEN') throw error('FORBIDDEN');
+        throw error('LOAD_FAILED');
+      }
+      return Object.freeze(data.events.map(sanitizeSecurityEvent));
+    }
+
+    return Object.freeze({
+      listStudents,
+      grantReward,
+      deleteStudent,
+      resetPlayerV3,
+      listSecurityEventsV3,
+    });
   }
 
   global.YuksamAdminDataV2 = Object.freeze({ AdminDataV2Error, create });

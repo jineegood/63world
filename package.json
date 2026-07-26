@@ -41,6 +41,7 @@
     "test:secure-student-login-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 secure-student-login-v2",
     "test:admin-auth-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 admin-auth-v2",
     "test:teacher-reset-function": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 teacher-reset-function",
+    "test:teacher-reset-player-v3": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 teacher-reset-player-v3",
     "test:secure-teacher-auth-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 secure-teacher-auth-v2",
     "test:admin-data-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 admin-data-v2",
     "test:student-reward-grants-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 student-reward-grants-v2",

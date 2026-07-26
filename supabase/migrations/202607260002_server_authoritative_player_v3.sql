@@ -1052,3 +1052,104 @@ grant execute on function public.transition_student_map_v3(text, bigint, uuid)
   to authenticated;
 grant execute on function public.cleanup_server_authority_v3()
   to authenticated;
+
+create or replace function public.list_security_events_v3(
+  p_limit integer default 50
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_limit integer := least(100, greatest(1, coalesce(p_limit, 50)));
+  v_events jsonb;
+begin
+  if not public.private_is_teacher_v3() then
+    return jsonb_build_object('ok', false, 'code', 'FORBIDDEN');
+  end if;
+
+  select coalesce(jsonb_agg(event_row order by event_row.created_at desc), '[]'::jsonb)
+  into v_events
+  from (
+    select
+      e.id,
+      e.user_id,
+      e.event_type,
+      e.details,
+      e.created_at
+    from public.security_events_v3 as e
+    order by e.created_at desc
+    limit v_limit
+  ) as event_row;
+
+  return jsonb_build_object('ok', true, 'events', v_events);
+end;
+$$;
+
+create or replace function public.reset_student_character_v3(
+  p_user_id uuid,
+  p_teacher_user_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_display_name text;
+begin
+  if p_user_id is null or p_teacher_user_id is null then
+    return jsonb_build_object('ok', false, 'code', 'INVALID_REQUEST');
+  end if;
+
+  if not exists (
+    select 1
+    from auth.users as teacher_user
+    where teacher_user.id = p_teacher_user_id
+      and teacher_user.raw_app_meta_data ->> 'role' = 'teacher'
+  ) then
+    return jsonb_build_object('ok', false, 'code', 'FORBIDDEN');
+  end if;
+
+  select p.display_name
+  into v_display_name
+  from public.player_profiles_v2 as p
+  where p.user_id = p_user_id
+  for update;
+
+  if v_display_name is null then
+    return jsonb_build_object('ok', false, 'code', 'STUDENT_NOT_FOUND');
+  end if;
+
+  delete from public.game_action_receipts_v3
+  where user_id = p_user_id;
+
+  delete from public.player_core_v3
+  where user_id = p_user_id;
+
+  insert into public.security_events_v3(user_id, event_type, details)
+  values (
+    p_user_id,
+    'teacher_reset_character',
+    jsonb_build_object('teacher_user_id', p_teacher_user_id)
+  );
+
+  return jsonb_build_object(
+    'ok', true,
+    'code', 'OK',
+    'display_name', v_display_name
+  );
+end;
+$$;
+
+revoke all on function public.list_security_events_v3(integer)
+  from public, anon;
+grant execute on function public.list_security_events_v3(integer)
+  to authenticated;
+
+revoke all on function public.reset_student_character_v3(uuid, uuid)
+  from public, anon, authenticated;
+grant execute on function public.reset_student_character_v3(uuid, uuid)
+  to service_role;
