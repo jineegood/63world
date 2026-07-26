@@ -9,9 +9,9 @@ const config = fs.readFileSync(path.join(root, 'src/cloud-config.js'), 'utf8');
 const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const normalizerSource = (
   game.match(
-    /function\s+normalizePlayer\s*\([\s\S]*?\n\}\n\nfunction\s+defaultWeaponIdForClass/,
+    /function\s+normalizePlayer\s*\([\s\S]*?\n\}\n\nfunction\s+applyAuthoritySnapshotV3/,
   )?.[0] || ''
-).replace(/\n\nfunction\s+defaultWeaponIdForClass$/, '');
+).replace(/\n\nfunction\s+applyAuthoritySnapshotV3$/, '');
 
 test('v3 cutover remains disabled while incomplete gameplay phases still use v2', () => {
   assert.match(config, /serverAuthorityV3Enabled\s*:\s*false/);

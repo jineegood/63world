@@ -14,10 +14,17 @@ const context = vm.createContext({ window:{} });
 for (const relative of ['src/core-utils.js', 'src/game-data.js']) {
   vm.runInContext(fs.readFileSync(path.join(root, relative), 'utf8'), context);
 }
-const baseItems = Object.values(context.window.YuksamData.ITEM_DEFS);
+const starterItems = [
+  { id:'training_greatsword', slot:'weapon', classOnly:'warrior', levelReq:1, price:0, questOnly:true },
+  { id:'training_staff', slot:'weapon', classOnly:'mage', levelReq:1, price:0, questOnly:true },
+  { id:'training_book', slot:'weapon', classOnly:'priest', levelReq:1, price:0, questOnly:true },
+];
+const baseItems = [...Object.values(context.window.YuksamData.ITEM_DEFS), ...starterItems];
 vm.runInContext(fs.readFileSync(path.join(root, 'src/costume-data.js'), 'utf8'), context);
 const costumes = Object.values(context.window.COSTUME_DEFS_V55);
 const skills = Object.values(context.window.YuksamData.V24_SKILLS);
+vm.runInContext(fs.readFileSync(path.join(root, 'src/patch-data.js'), 'utf8'), context);
+const pets = Object.values(context.window.YuksamPatchData.PET_DEFS_V27);
 
 const quote = (value) => value === null || value === undefined
   ? 'null'
@@ -62,6 +69,15 @@ const skillRow = (skill) => `(${[
   integer(skill.cost, 1) || 1,
   jsonSql(prerequisites(skill)),
 ].join(',')})`;
+const petWeights = Object.freeze({
+  chick:19,
+  miniMushroom:19,
+  dragon:19,
+  cat:19,
+  dog:19,
+  yuksam:5,
+});
+const petRow = (pet) => `(${quote(pet.id)},${integer(petWeights[pet.id])})`;
 
 const specs = [
   ['warrior', '방어'], ['warrior', '무기'],
@@ -75,6 +91,7 @@ const sql = [
   `-- costumes: ${costumes.length}`,
   `-- total-items: ${baseItems.length + costumes.length}`,
   `-- skills: ${skills.length}`,
+  `-- pets: ${pets.length}`,
   '',
   'insert into public.game_item_catalog_v3',
   '  (item_id, inventory_kind, currency_kind, price, slot, class_name, level_required, quest_only)',
@@ -93,6 +110,10 @@ const sql = [
   '  class_name = excluded.class_name, spec_name = excluded.spec_name,',
   '  unlock_level = excluded.unlock_level, max_rank = excluded.max_rank,',
   '  point_cost = excluded.point_cost, prerequisites = excluded.prerequisites;',
+  '',
+  'insert into public.game_pet_catalog_v3(pet_id, summon_weight) values',
+  sorted(pets).map(petRow).join(',\n') +
+    '\non conflict (pet_id) do update set summon_weight = excluded.summon_weight;',
   '',
   'insert into public.game_specialization_catalog_v3(class_name, spec_name) values',
   specs.map(([klass, spec]) => `(${quote(klass)},${quote(spec)})`).join(',\n') +

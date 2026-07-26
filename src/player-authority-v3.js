@@ -111,7 +111,8 @@
   function snapshotToLegacyPlayer(snapshot) {
     if (!isPlainObject(snapshot) || !isPlainObject(snapshot.core)
       || !Array.isArray(snapshot.inventory) || !Array.isArray(snapshot.skills)
-      || !Array.isArray(snapshot.quests) || !isPlainObject(snapshot.preferences)) {
+      || !Array.isArray(snapshot.quests) || !Array.isArray(snapshot.pets)
+      || !isPlainObject(snapshot.preferences)) {
       failSnapshot();
     }
 
@@ -124,6 +125,10 @@
     if (!CLASSES.has(className)) failSnapshot();
     const currentMap = safeString(core.current_map, 1, 40);
     if (!MAPS.has(currentMap)) failSnapshot();
+    const pets = snapshot.pets.map((petId) => safeString(petId, 1, 80));
+    if (new Set(pets).size !== pets.length) failSnapshot();
+    const activePet = safeNullableString(snapshot.active_pet, 80);
+    if (activePet && !pets.includes(activePet)) failSnapshot();
 
     const equipment = { weapon:null, head:null, armor:null, accessory:null };
     const costume = {};
@@ -222,8 +227,8 @@
       costumeInventory,
       inventory,
       serverInventoryInstances:inventoryInstances,
-      pets:[],
-      activePet:null,
+      pets,
+      activePet,
       equipment,
       weaponUpgrades,
       quests,
@@ -281,12 +286,20 @@
       const player = snapshotToLegacyPlayer(snapshot);
       const result = { player, revision:player.serverRevision };
       if (outcome !== undefined) {
-        if (!isPlainObject(outcome) || typeof outcome.success !== 'boolean') failSnapshot();
-        result.outcome = Object.freeze({
-          success:outcome.success,
-          oldTier:safeInteger(outcome.old_tier, 0, 4),
-          newTier:safeInteger(outcome.new_tier, 0, 4),
-        });
+        if (!isPlainObject(outcome)) failSnapshot();
+        if (typeof outcome.success === 'boolean') {
+          result.outcome = Object.freeze({
+            success:outcome.success,
+            oldTier:safeInteger(outcome.old_tier, 0, 4),
+            newTier:safeInteger(outcome.new_tier, 0, 4),
+          });
+        } else if (typeof outcome.pet_id === 'string') {
+          const petId = safeString(outcome.pet_id, 1, 80);
+          if (!player.pets.includes(petId) || player.activePet !== petId) failSnapshot();
+          result.outcome = Object.freeze({ petId });
+        } else {
+          failSnapshot();
+        }
       }
       return Object.freeze(result);
     }
@@ -426,6 +439,24 @@
       });
     }
 
+    async function summonPet({ expectedRevision:revision, requestId:id } = {}) {
+      return call('summon_student_pet_v3', {
+        p_expected_revision:expectedRevision(revision),
+        p_request_id:requestId(id),
+      });
+    }
+
+    async function setActivePet({
+      petId = null, expectedRevision:revision, requestId:id,
+    } = {}) {
+      if (petId !== null) actionIdentifier(petId);
+      return call('set_student_active_pet_v3', {
+        p_pet_id:petId,
+        p_expected_revision:expectedRevision(revision),
+        p_request_id:requestId(id),
+      });
+    }
+
     return Object.freeze({
       createCharacter,
       loadGame,
@@ -437,6 +468,8 @@
       enhanceWeapon,
       chooseSpecialization,
       learnSkill,
+      summonPet,
+      setActivePet,
     });
   }
 

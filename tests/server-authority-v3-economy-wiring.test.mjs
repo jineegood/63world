@@ -37,12 +37,19 @@ test('final game handlers route purchases, equipment, enhancement, spec, and ski
     'enhanceWeapon',
     'chooseSpecialization',
     'learnSkill',
+    'summonPet',
+    'setActivePet',
   ]) {
     assert.match(game, new RegExp(`authorityActionRunnerV3\\.run\\(\\s*'${method}'`));
   }
   assert.match(game, /serverInventoryInstances[\s\S]*?itemDefinitionId\s*===\s*itemId/);
   assert.match(game, /pendingKey\s*:\s*'economy'/);
   assert.match(game, /pendingKey\s*:\s*'enhancement'/);
+  assert.match(game, /pendingKey\s*:\s*'pet'/);
+  assert.match(game, /dropItemOnEquip\s*=\s*async[\s\S]*?authorityV3Enabled[\s\S]*?await\s+window\.equipItem\s*\(\s*itemId\s*\)[\s\S]*?return;/);
+  assert.match(game, /rollPetV34\s*=\s*async[\s\S]*?run\(\s*'summonPet'/);
+  assert.match(game, /equipPetV27\s*=\s*async[\s\S]*?run\(\s*'setActivePet'/);
+  assert.match(game, /unequipPetV27\s*=\s*async[\s\S]*?petId\s*:\s*null/);
 });
 
 test('costume purchase and equipment use v3 ownership without optimistic currency changes', () => {
@@ -57,4 +64,3 @@ test('costume purchase and equipment use v3 ownership without optimistic currenc
   assert.match(purchase, /await\s+authorityActionRunnerV3\.run/);
   assert.match(purchase, /return;/);
 });
-

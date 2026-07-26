@@ -31,7 +31,7 @@
 - Consumes: `window.YuksamData.ITEM_DEFS`, `window.YuksamData.V24_SKILLS`, `window.COSTUME_DEFS_V55`.
 - Produces: repeatable SQL rows for `game_item_catalog_v3`, `game_skill_catalog_v3`, and `game_specialization_catalog_v3`.
 
-- [ ] Write a failing test that runs the generator in check mode, asserts 40 base item rows, 11 costume rows (51 total), 42 skill rows, and representative price/class/prerequisite values.
+- [ ] Write a failing test that runs the generator in check mode, asserts 43 base/starter item rows, 11 costume rows (54 total), 42 skill rows, 6 pet rows, and representative price/class/prerequisite values.
 - [ ] Run `npm.cmd run test:authority-catalog-v3` and verify it fails because the generator is absent.
 - [ ] Implement a VM-based generator that loads `core-utils.js`, `game-data.js`, and `costume-data.js`, normalizes only security fields, sorts IDs, safely SQL-quotes JSON, and supports `--check`.
 - [ ] Generate `supabase/generated/authority-catalog-v3.sql`; rerun the focused test and `git diff --check`.
@@ -136,9 +136,17 @@
 - [ ] Run `git diff --check`, secret-name scans, direct mutation grant scans, and inspect `git status --short`.
 - [ ] Record that live PostgreSQL execution and production rollout remain pending explicit approval; commit with `test: verify authoritative economy foundation`.
 
+### Review follow-up: Close remaining non-combat authority paths
+
+- [x] Add the three class starter weapons to the immutable server catalog so they can be re-equipped.
+- [x] Route drag-and-drop equipment through the same authoritative equip action.
+- [x] Add a weighted pet catalog, server-owned pet inventory, 10-building summon RPC, active-pet RPC, snapshot projection, browser adapter, and flag-on UI routing.
+- [x] Keep pet animation local while accepting only the server-selected pet result.
+
 ## Phase 2 Exit Criteria
 
 - Browser clients cannot choose prices, currency results, ownership, equipment, enhancement results, specialization, or skill ranks in the v3 path.
+- Browser clients cannot choose pet summon results, pet ownership, or the active pet in the v3 path.
 - Replays and revision conflicts cannot duplicate spending or ownership.
 - Flag-on executable tests cover every Phase 2 action; flag-off regressions remain green.
 - The cutover switch remains off and no external deployment has occurred.

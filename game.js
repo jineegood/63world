@@ -3499,7 +3499,7 @@ window.dropItemOnBag = function dropItemOnBag(event, targetIndex) {
   openCharacterPanel();
   playSfx('open');
 };
-window.dropItemOnEquip = function dropItemOnEquip(event, slot) {
+window.dropItemOnEquip = async function dropItemOnEquip(event, slot) {
   event.preventDefault();
   const fromIndex = Number(event.dataTransfer.getData('text/plain'));
   const itemId = game.player.inventory[fromIndex];
@@ -3507,6 +3507,10 @@ window.dropItemOnEquip = function dropItemOnEquip(event, slot) {
   const item = getItemDefinition(itemId, game.player.class);
   if (!item || item.slot !== slot) { toast(`${slotLabel(slot)} 칸에 맞는 아이템이 아닙니다.`); return; }
   if (!canEquip(item, game.player)) { toast('이 직업은 해당 장비를 착용할 수 없습니다.'); return; }
+  if (secureStudentAccess.authorityV3Enabled) {
+    await window.equipItem(itemId);
+    return;
+  }
   game.player.equipment[slot] = itemId;
   savePlayer();
   updateHud();
@@ -5548,6 +5552,9 @@ function wireAuthoritativeEconomyV3() {
   const legacyEnhanceWeapon = window.upgradeCurrentWeaponV33;
   const legacyChooseSpec = window.chooseSpec;
   const legacyLearnSkill = window.learnSkill;
+  const legacyRollPet = window.rollPetV34;
+  const legacyEquipPet = window.equipPetV27;
+  const legacyUnequipPet = window.unequipPetV27;
 
   const enabled = () => Boolean(secureStudentAccess.authorityV3Enabled);
   const reportError = (error) => {
@@ -5711,6 +5718,73 @@ function wireAuthoritativeEconomyV3() {
       const rank = Number(game.player?.skills?.[skillId] || 0);
       const max = Number(skill.maxPoints || 1);
       toast(max > 1 ? `${skill.name} 습득! (${rank}/${max})` : `${skill.name} 습득!`);
+    } catch (error) {
+      reportError(error);
+    }
+  };
+
+  window.rollPetV34 = async function rollPetAuthoritativeV3() {
+    if (!enabled()) return legacyRollPet();
+    const startedAt = Date.now();
+    closeModal();
+    window.playPetSummonSfxV35?.();
+    const overlay = document.createElement('div');
+    overlay.className = 'pet-summon-modal-v31';
+    overlay.innerHTML = '<div class="pet-summon-box-v31"><div class="pet-orb-loader-v31"></div><h2>펫을 만나는 중...</h2><p>수정구 너머에서 작은 친구가 다가오고 있습니다.</p><div class="pet-loading-bar-v31"><b></b></div></div>';
+    document.body.appendChild(overlay);
+    try {
+      const handled = await authorityActionRunnerV3.run(
+        'summonPet',
+        {},
+        { pendingKey:'pet' },
+      );
+      if (handled.pending) { overlay.remove(); return; }
+      const petId = handled.result?.outcome?.petId;
+      const pet = window.PET_DEFS_V27?.[petId];
+      if (!pet) throw new Error('서버의 펫 정보를 확인하지 못했습니다.');
+      const remaining = Math.max(0, 5000 - (Date.now() - startedAt));
+      setTimeout(() => {
+        window.recordQuestActionV38?.('pet');
+        updateHud?.();
+        const icon = escapeHtml(pet.icon || '＋');
+        overlay.innerHTML = `<div class="pet-summon-box-v31"><div class="pet-icon-result-v31">${icon}</div><h2>${escapeHtml(pet.name)}을(를) 만났습니다!</h2>${pet.legendary ? '<p class="badge gold">전설 펫</p>' : ''}<button class="primary wide" onclick="closePetSummonResultV31()">확인</button></div>`;
+        appendChatMessage?.('system', '펫', `${pet.name}을(를) 만났습니다!`);
+      }, remaining);
+    } catch (error) {
+      overlay.remove();
+      reportError(error);
+    }
+  };
+
+  window.equipPetV27 = async function equipPetAuthoritativeV3(petId) {
+    if (!enabled()) return legacyEquipPet(petId);
+    try {
+      const handled = await authorityActionRunnerV3.run(
+        'setActivePet',
+        { petId },
+        { pendingKey:'pet' },
+      );
+      if (handled.pending) return;
+      playSfx?.('open');
+      openPetShopModalV27();
+      const pet = window.PET_DEFS_V27?.[petId];
+      if (pet) toast(`${pet.name}이(가) 동행합니다.`);
+    } catch (error) {
+      reportError(error);
+    }
+  };
+
+  window.unequipPetV27 = async function unequipPetAuthoritativeV3() {
+    if (!enabled()) return legacyUnequipPet();
+    try {
+      const handled = await authorityActionRunnerV3.run(
+        'setActivePet',
+        { petId:null },
+        { pendingKey:'pet' },
+      );
+      if (handled.pending) return;
+      openCharacterPanel();
+      toast('펫 동행을 해제했습니다.');
     } catch (error) {
       reportError(error);
     }

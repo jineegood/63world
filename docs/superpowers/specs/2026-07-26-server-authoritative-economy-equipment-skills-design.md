@@ -33,6 +33,8 @@ Expose these authenticated, `security definer`, locked-search-path RPCs:
 - `enhance_student_weapon_v3`
 - `choose_student_specialization_v3`
 - `learn_student_skill_v3`
+- `summon_student_pet_v3`
+- `set_student_active_pet_v3`
 
 Every mutation derives the student from `auth.uid()`, validates a text request
 ID inside the function, serializes replay handling through the Phase 1 receipt
@@ -52,6 +54,18 @@ gold, have no gameplay stats, and use the costume equipment layer.
 Starter and quest-only items cannot be purchased. Class and level restrictions
 are enforced for purchases and gear equips. A student may equip only an owned
 instance. Unequip affects only the requested kind and slot.
+
+The three class starter weapons remain non-purchasable catalog rows so an
+owned starter can still be re-equipped after changing weapons. Drag-and-drop
+equipment uses the same owned-instance RPC as button-based equipment.
+
+## Pets
+
+The server owns the six-pet weighted summon catalog, the student's unique pet
+ownership rows, and the active pet. A summon costs exactly 10 building
+currency and PostgreSQL selects the weighted result; the browser receives only
+the presentation result. Selecting or clearing an active pet requires an owned
+pet and the current revision. The five-second reveal animation stays local.
 
 ## Enhancement
 
@@ -73,8 +87,8 @@ points; the browser cannot submit or store a skill-point balance.
 ## Client integration
 
 Extend the Phase 1 authority adapter with one method per RPC. When the v3 flag
-is on, existing shop, equipment, enhancement, specialization, costume, and
-skill UI handlers await the server result, replace the local authoritative
+is on, existing shop, equipment, enhancement, specialization, costume, pet,
+and skill UI handlers await the server result, replace the local authoritative
 projection, and then play their existing animation or notification. They never
 subtract currency or add ownership before the response. With the flag off,
 current behavior remains byte-for-byte compatible.

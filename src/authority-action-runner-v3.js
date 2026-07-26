@@ -8,6 +8,8 @@
     'enhanceWeapon',
     'chooseSpecialization',
     'learnSkill',
+    'summonPet',
+    'setActivePet',
   ]);
 
   function create({ service, isEnabled, getRevision, applySnapshot } = {}) {

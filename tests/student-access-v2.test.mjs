@@ -61,6 +61,8 @@ function dependencies(overrides = {}) {
     async enhanceWeapon(input) { calls.push(['authorityEnhanceWeapon', input]); return { revision:13 }; },
     async chooseSpecialization(input) { calls.push(['authorityChooseSpecialization', input]); return { revision:14 }; },
     async learnSkill(input) { calls.push(['authorityLearnSkill', input]); return { revision:15 }; },
+    async summonPet(input) { calls.push(['authoritySummonPet', input]); return { revision:16 }; },
+    async setActivePet(input) { calls.push(['authoritySetActivePet', input]); return { revision:17 }; },
     ...overrides.authorityService,
   };
   return {
@@ -316,6 +318,8 @@ test('v3 forwards bounded economy and skill actions only after authentication', 
   await service.enhanceWeapon({});
   await service.chooseSpecialization({ specName:'냉기' });
   await service.learnSkill({ skillId:'mage_frost_focus_v24' });
+  await service.summonPet({});
+  await service.setActivePet({ petId:'chick' });
   assert.deepEqual(
     deps.calls.filter(([name]) => name.startsWith('authority')).map(([name]) => name),
     [
@@ -326,6 +330,8 @@ test('v3 forwards bounded economy and skill actions only after authentication', 
       'authorityEnhanceWeapon',
       'authorityChooseSpecialization',
       'authorityLearnSkill',
+      'authoritySummonPet',
+      'authoritySetActivePet',
     ],
   );
 });

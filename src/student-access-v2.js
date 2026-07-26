@@ -209,6 +209,8 @@
     const enhanceWeapon = (input) => forwardAuthorityAction('enhanceWeapon', input);
     const chooseSpecialization = (input) => forwardAuthorityAction('chooseSpecialization', input);
     const learnSkill = (input) => forwardAuthorityAction('learnSkill', input);
+    const summonPet = (input) => forwardAuthorityAction('summonPet', input);
+    const setActivePet = (input) => forwardAuthorityAction('setActivePet', input);
 
     async function signOut() {
       try {
@@ -233,6 +235,8 @@
       enhanceWeapon,
       chooseSpecialization,
       learnSkill,
+      summonPet,
+      setActivePet,
       savePlayer,
       flush,
       signOut,

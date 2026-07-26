@@ -67,6 +67,8 @@ function validSnapshot(overrides = {}) {
       accepted_at:'2026-07-26T00:00:00Z',
       completed_at:null,
     }],
+    pets:['chick'],
+    active_pet:'chick',
     preferences:{
       shirt_color:'#123456',
       pants_color:'#234567',
@@ -305,6 +307,72 @@ test('economy methods send only action identifiers, revisions, and request ids',
     ['choose_student_specialization_v3', { p_spec_name:'냉기', p_expected_revision:8, p_request_id:requestIds[4] }],
     ['learn_student_skill_v3', { p_skill_id:'mage_frost_focus_v24', p_expected_revision:8, p_request_id:requestIds[5] }],
   ]));
+});
+
+test('pet summon and active-pet methods accept only server-owned outcomes and identifiers', async () => {
+  const summonSnapshot = validSnapshot({
+    core:{ revision:8 },
+    revision:8,
+    pets:['chick', 'yuksam'],
+    active_pet:'yuksam',
+  });
+  const unequipSnapshot = validSnapshot({
+    core:{ revision:9 },
+    revision:9,
+    pets:['chick', 'yuksam'],
+    active_pet:null,
+  });
+  const summonRequest = '88888888-8888-4888-8888-888888888888';
+  const equipRequest = '99999999-9999-4999-8999-999999999999';
+  const { service, calls } = setup([
+    {
+      data:{
+        ok:true,
+        code:'OK',
+        snapshot:summonSnapshot,
+        outcome:{ pet_id:'yuksam' },
+      },
+      error:null,
+    },
+    { data:{ ok:true, code:'OK', snapshot:unequipSnapshot }, error:null },
+  ]);
+
+  const summoned = await service.summonPet({
+    expectedRevision:7,
+    requestId:summonRequest,
+  });
+  assert.equal(summoned.outcome.petId, 'yuksam');
+  assert.equal(summoned.player.activePet, 'yuksam');
+  await service.setActivePet({
+    petId:null,
+    expectedRevision:8,
+    requestId:equipRequest,
+  });
+  assert.equal(JSON.stringify(calls), JSON.stringify([
+    ['summon_student_pet_v3', {
+      p_expected_revision:7,
+      p_request_id:summonRequest,
+    }],
+    ['set_student_active_pet_v3', {
+      p_pet_id:null,
+      p_expected_revision:8,
+      p_request_id:equipRequest,
+    }],
+  ]));
+
+  const malformed = setup([{
+    data:{
+      ok:true,
+      code:'OK',
+      snapshot:validSnapshot({ pets:['chick'], active_pet:'chick' }),
+      outcome:{ pet_id:'yuksam' },
+    },
+    error:null,
+  }]).service;
+  await assert.rejects(
+    malformed.summonPet({ expectedRevision:7, requestId:summonRequest }),
+    (error) => error.code === 'MALFORMED_SNAPSHOT',
+  );
 });
 
 test('enhancement returns a validated presentation outcome', async () => {
