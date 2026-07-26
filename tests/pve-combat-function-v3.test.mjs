@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
+import { createSupabasePveCombatStore } from '../supabase/functions/_shared/pve-combat-store-v3.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const entryPath = path.join(root, 'supabase/functions/student-combat-v3/index.ts');
@@ -54,4 +55,21 @@ test('store maps only bounded private RPC calls', () => {
     assert.ok(source.includes(`'${rpc}'`), `${rpc} must be used`);
   }
   assert.doesNotMatch(source, /\.from\(\s*['"]player_combat_question_secrets_v3/i);
+});
+
+test('store turns private application rejections into stable service errors', async () => {
+  const store = createSupabasePveCombatStore({
+    async rpc() {
+      return { data:{ ok:false, code:'REQUEST_ID_REUSED' }, error:null };
+    },
+  });
+  await assert.rejects(
+    store.start({
+      userId:'user-a',
+      monsterKey:'forest_mushroom',
+      state:{},
+      requestId:'request-a',
+    }),
+    (error) => error.code === 'REQUEST_ID_REUSED',
+  );
 });

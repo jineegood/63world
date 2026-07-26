@@ -5,7 +5,14 @@ function resultData(result) {
     error.code = /^[A-Z][A-Z0-9_]{2,80}$/.test(message) ? message : 'COMBAT_STORE_ERROR';
     throw error;
   }
-  return result?.data ?? null;
+  const data = result?.data ?? null;
+  if (data?.ok === false) {
+    const rawCode = String(data.code || '');
+    const error = new Error('COMBAT_STORE_ERROR');
+    error.code = /^[A-Z][A-Z0-9_]{2,80}$/.test(rawCode) ? rawCode : 'COMBAT_STORE_ERROR';
+    throw error;
+  }
+  return data;
 }
 
 export function createSupabasePveCombatStore(client) {
