@@ -6,6 +6,10 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const moduleOutput = path.join(root, 'supabase/functions/_shared/generated-combat-catalog-v3.mjs');
 const sqlOutput = path.join(root, 'supabase/generated/combat-monster-catalog-v3.sql');
+const migrationPath = path.join(
+  root,
+  'supabase/migrations/202607260004_server_authoritative_pve_combat_v3.sql',
+);
 const context = vm.createContext({ window:{} });
 
 for (const relative of ['src/core-utils.js', 'src/game-data.js', 'src/patch-data.js']) {
@@ -170,10 +174,22 @@ const sql = [
   '',
 ].join('\n');
 
+const beginMarker = '-- BEGIN GENERATED COMBAT MONSTER CATALOG V3';
+const endMarker = '-- END GENERATED COMBAT MONSTER CATALOG V3';
+const renderMigration = (source) => {
+  const begin = source.indexOf(beginMarker);
+  const end = source.indexOf(endMarker);
+  if (begin < 0 || end < begin) throw new Error('combat catalog migration markers are missing');
+  const afterEnd = end + endMarker.length;
+  return `${source.slice(0, begin + beginMarker.length)}\n${sql.trimEnd()}\n${endMarker}${source.slice(afterEnd)}`;
+};
+const migrationSource = fs.readFileSync(migrationPath, 'utf8');
+const expectedMigration = renderMigration(migrationSource);
 const outputs = [[moduleOutput, js], [sqlOutput, sql]];
 if (process.argv.includes('--check')) {
   const stale = outputs.some(([file, expected]) => !fs.existsSync(file)
-    || fs.readFileSync(file, 'utf8') !== expected);
+    || fs.readFileSync(file, 'utf8') !== expected)
+    || migrationSource !== expectedMigration;
   if (stale) {
     console.error('combat catalog is missing or stale; run node tools/generate-combat-catalog-v3.mjs');
     process.exit(1);
@@ -183,4 +199,5 @@ if (process.argv.includes('--check')) {
     fs.mkdirSync(path.dirname(file), { recursive:true });
     fs.writeFileSync(file, source, 'utf8');
   }
+  fs.writeFileSync(migrationPath, expectedMigration, 'utf8');
 }
