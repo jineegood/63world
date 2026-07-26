@@ -215,3 +215,262 @@ revoke all on function public.private_build_student_snapshot_v3_phase1(uuid)
   from public, anon, authenticated;
 revoke all on function public.private_build_student_snapshot_v3(uuid)
   from public, anon, authenticated;
+
+create or replace function public.purchase_student_item_v3(
+  p_item_id text,
+  p_expected_revision bigint,
+  p_request_id text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_request_id uuid;
+  v_receipt jsonb;
+  v_response jsonb;
+  v_current_revision bigint;
+  v_class_name text;
+  v_level integer;
+  v_gold integer;
+  v_building integer;
+  v_kind text;
+  v_currency_kind text;
+  v_price integer;
+  v_slot text;
+  v_item_class text;
+  v_level_required integer;
+  v_quest_only boolean;
+begin
+  if v_user_id is null then return jsonb_build_object('ok', false, 'code', 'UNAUTHORIZED'); end if;
+  if public.private_is_teacher_v3() then return jsonb_build_object('ok', false, 'code', 'FORBIDDEN'); end if;
+  if p_request_id is null or p_request_id !~* '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89ab][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$' then
+    perform public.private_log_security_event_v3('invalid_request_id', '{}'::jsonb);
+    return jsonb_build_object('ok', false, 'code', 'INVALID_REQUEST');
+  end if;
+  v_request_id := p_request_id::uuid;
+  v_receipt := public.private_read_receipt_v3(v_request_id, 'purchase_student_item_v3');
+  if v_receipt is not null then return v_receipt; end if;
+
+  select c.revision, c.class_name, c.level, c.gold, c.building
+  into v_current_revision, v_class_name, v_level, v_gold, v_building
+  from public.player_core_v3 as c where c.user_id = v_user_id for update;
+  if v_current_revision is null then
+    return public.private_store_receipt_v3(v_request_id, 'purchase_student_item_v3',
+      jsonb_build_object('ok', false, 'code', 'CHARACTER_NOT_FOUND'));
+  end if;
+  if p_expected_revision is distinct from v_current_revision then
+    v_response := jsonb_build_object('ok', false, 'code', 'REVISION_CONFLICT',
+      'snapshot', public.private_build_student_snapshot_v3(v_user_id));
+    return public.private_store_receipt_v3(v_request_id, 'purchase_student_item_v3', v_response);
+  end if;
+  if p_item_id is null or char_length(p_item_id) not between 1 and 80 then
+    return public.private_store_receipt_v3(v_request_id, 'purchase_student_item_v3',
+      jsonb_build_object('ok', false, 'code', 'INVALID_ITEM'));
+  end if;
+
+  select i.inventory_kind, i.currency_kind, i.price, i.slot, i.class_name,
+    i.level_required, i.quest_only
+  into v_kind, v_currency_kind, v_price, v_slot, v_item_class,
+    v_level_required, v_quest_only
+  from public.game_item_catalog_v3 as i where i.item_id = p_item_id;
+  if v_kind is null then
+    return public.private_store_receipt_v3(v_request_id, 'purchase_student_item_v3',
+      jsonb_build_object('ok', false, 'code', 'INVALID_ITEM'));
+  end if;
+  if v_quest_only or v_currency_kind = 'none' then
+    perform public.private_log_security_event_v3('item_not_purchasable', '{}'::jsonb);
+    return public.private_store_receipt_v3(v_request_id, 'purchase_student_item_v3',
+      jsonb_build_object('ok', false, 'code', 'ITEM_NOT_PURCHASABLE'));
+  end if;
+  if v_item_class is not null and v_item_class is distinct from v_class_name then
+    return public.private_store_receipt_v3(v_request_id, 'purchase_student_item_v3',
+      jsonb_build_object('ok', false, 'code', 'CLASS_REQUIRED'));
+  end if;
+  if v_level < v_level_required then
+    return public.private_store_receipt_v3(v_request_id, 'purchase_student_item_v3',
+      jsonb_build_object('ok', false, 'code', 'LEVEL_REQUIRED'));
+  end if;
+  if exists (
+    select 1 from public.player_inventory_v3
+    where user_id = v_user_id and inventory_kind = v_kind
+      and item_definition_id = p_item_id
+  ) then
+    return public.private_store_receipt_v3(v_request_id, 'purchase_student_item_v3',
+      jsonb_build_object('ok', false, 'code', 'ALREADY_OWNED'));
+  end if;
+  if (v_currency_kind = 'gold' and v_gold < v_price)
+    or (v_currency_kind = 'building' and v_building < v_price) then
+    return public.private_store_receipt_v3(v_request_id, 'purchase_student_item_v3',
+      jsonb_build_object('ok', false, 'code', 'INSUFFICIENT_FUNDS'));
+  end if;
+
+  update public.player_core_v3
+  set gold = case when v_currency_kind = 'gold' then gold - v_price else gold end,
+      building = case when v_currency_kind = 'building' then building - v_price else building end,
+      revision = revision + 1,
+      updated_at = now()
+  where user_id = v_user_id;
+  insert into public.player_inventory_v3(
+    user_id, item_definition_id, inventory_kind, enhancement_tier, equipped_slot, grant_source
+  ) values (v_user_id, p_item_id, v_kind, 0, null, 'purchase');
+
+  v_response := jsonb_build_object('ok', true, 'code', 'OK',
+    'snapshot', public.private_build_student_snapshot_v3(v_user_id));
+  return public.private_store_receipt_v3(v_request_id, 'purchase_student_item_v3', v_response);
+end;
+$$;
+
+create or replace function public.equip_student_item_v3(
+  p_inventory_id uuid,
+  p_expected_revision bigint,
+  p_request_id text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_request_id uuid;
+  v_receipt jsonb;
+  v_response jsonb;
+  v_current_revision bigint;
+  v_class_name text;
+  v_level integer;
+  v_kind text;
+  v_slot text;
+  v_item_class text;
+  v_level_required integer;
+begin
+  if v_user_id is null then return jsonb_build_object('ok', false, 'code', 'UNAUTHORIZED'); end if;
+  if public.private_is_teacher_v3() then return jsonb_build_object('ok', false, 'code', 'FORBIDDEN'); end if;
+  if p_request_id is null or p_request_id !~* '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89ab][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$' then
+    perform public.private_log_security_event_v3('invalid_request_id', '{}'::jsonb);
+    return jsonb_build_object('ok', false, 'code', 'INVALID_REQUEST');
+  end if;
+  v_request_id := p_request_id::uuid;
+  v_receipt := public.private_read_receipt_v3(v_request_id, 'equip_student_item_v3');
+  if v_receipt is not null then return v_receipt; end if;
+
+  select c.revision, c.class_name, c.level
+  into v_current_revision, v_class_name, v_level
+  from public.player_core_v3 as c where c.user_id = v_user_id for update;
+  if v_current_revision is null then
+    return public.private_store_receipt_v3(v_request_id, 'equip_student_item_v3',
+      jsonb_build_object('ok', false, 'code', 'CHARACTER_NOT_FOUND'));
+  end if;
+  if p_expected_revision is distinct from v_current_revision then
+    v_response := jsonb_build_object('ok', false, 'code', 'REVISION_CONFLICT',
+      'snapshot', public.private_build_student_snapshot_v3(v_user_id));
+    return public.private_store_receipt_v3(v_request_id, 'equip_student_item_v3', v_response);
+  end if;
+
+  select i.inventory_kind, c.slot, c.class_name, c.level_required
+  into v_kind, v_slot, v_item_class, v_level_required
+  from public.player_inventory_v3 as i
+  join public.game_item_catalog_v3 as c on c.item_id = i.item_definition_id
+  where i.user_id = v_user_id and i.id = p_inventory_id
+  for update of i;
+  if v_kind is null then
+    perform public.private_log_security_event_v3('equip_unowned_item', '{}'::jsonb);
+    return public.private_store_receipt_v3(v_request_id, 'equip_student_item_v3',
+      jsonb_build_object('ok', false, 'code', 'ITEM_NOT_OWNED'));
+  end if;
+  if v_item_class is not null and v_item_class is distinct from v_class_name then
+    return public.private_store_receipt_v3(v_request_id, 'equip_student_item_v3',
+      jsonb_build_object('ok', false, 'code', 'CLASS_REQUIRED'));
+  end if;
+  if v_level < v_level_required then
+    return public.private_store_receipt_v3(v_request_id, 'equip_student_item_v3',
+      jsonb_build_object('ok', false, 'code', 'LEVEL_REQUIRED'));
+  end if;
+
+  update public.player_inventory_v3
+  set equipped_slot = null, updated_at = now()
+  where user_id = v_user_id and inventory_kind = v_kind and equipped_slot = v_slot;
+  update public.player_inventory_v3
+  set equipped_slot = v_slot, updated_at = now()
+  where user_id = v_user_id and id = p_inventory_id;
+  update public.player_core_v3
+  set revision = revision + 1, updated_at = now() where user_id = v_user_id;
+
+  v_response := jsonb_build_object('ok', true, 'code', 'OK',
+    'snapshot', public.private_build_student_snapshot_v3(v_user_id));
+  return public.private_store_receipt_v3(v_request_id, 'equip_student_item_v3', v_response);
+end;
+$$;
+
+create or replace function public.unequip_student_slot_v3(
+  p_inventory_kind text,
+  p_slot text,
+  p_expected_revision bigint,
+  p_request_id text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_request_id uuid;
+  v_receipt jsonb;
+  v_response jsonb;
+  v_current_revision bigint;
+  v_changed integer;
+begin
+  if v_user_id is null then return jsonb_build_object('ok', false, 'code', 'UNAUTHORIZED'); end if;
+  if public.private_is_teacher_v3() then return jsonb_build_object('ok', false, 'code', 'FORBIDDEN'); end if;
+  if p_request_id is null or p_request_id !~* '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89ab][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$' then
+    perform public.private_log_security_event_v3('invalid_request_id', '{}'::jsonb);
+    return jsonb_build_object('ok', false, 'code', 'INVALID_REQUEST');
+  end if;
+  v_request_id := p_request_id::uuid;
+  v_receipt := public.private_read_receipt_v3(v_request_id, 'unequip_student_slot_v3');
+  if v_receipt is not null then return v_receipt; end if;
+
+  select c.revision into v_current_revision
+  from public.player_core_v3 as c where c.user_id = v_user_id for update;
+  if v_current_revision is null then
+    return public.private_store_receipt_v3(v_request_id, 'unequip_student_slot_v3',
+      jsonb_build_object('ok', false, 'code', 'CHARACTER_NOT_FOUND'));
+  end if;
+  if p_expected_revision is distinct from v_current_revision then
+    v_response := jsonb_build_object('ok', false, 'code', 'REVISION_CONFLICT',
+      'snapshot', public.private_build_student_snapshot_v3(v_user_id));
+    return public.private_store_receipt_v3(v_request_id, 'unequip_student_slot_v3', v_response);
+  end if;
+  if p_inventory_kind is null or p_inventory_kind not in ('gear', 'costume')
+    or p_slot is null or p_slot not in ('weapon', 'head', 'armor', 'accessory') then
+    return public.private_store_receipt_v3(v_request_id, 'unequip_student_slot_v3',
+      jsonb_build_object('ok', false, 'code', 'INVALID_SLOT'));
+  end if;
+
+  update public.player_inventory_v3
+  set equipped_slot = null, updated_at = now()
+  where user_id = v_user_id
+    and inventory_kind = p_inventory_kind
+    and equipped_slot = p_slot;
+  get diagnostics v_changed = row_count;
+  if v_changed = 0 then
+    return public.private_store_receipt_v3(v_request_id, 'unequip_student_slot_v3',
+      jsonb_build_object('ok', false, 'code', 'SLOT_EMPTY'));
+  end if;
+  update public.player_core_v3
+  set revision = revision + 1, updated_at = now() where user_id = v_user_id;
+  v_response := jsonb_build_object('ok', true, 'code', 'OK',
+    'snapshot', public.private_build_student_snapshot_v3(v_user_id));
+  return public.private_store_receipt_v3(v_request_id, 'unequip_student_slot_v3', v_response);
+end;
+$$;
+
+revoke all on function public.purchase_student_item_v3(text, bigint, text) from public, anon;
+revoke all on function public.equip_student_item_v3(uuid, bigint, text) from public, anon;
+revoke all on function public.unequip_student_slot_v3(text, text, bigint, text) from public, anon;
+grant execute on function public.purchase_student_item_v3(text, bigint, text) to authenticated;
+grant execute on function public.equip_student_item_v3(uuid, bigint, text) to authenticated;
+grant execute on function public.unequip_student_slot_v3(text, text, bigint, text) to authenticated;
