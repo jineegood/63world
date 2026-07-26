@@ -1,3 +1,5 @@
+import { buildPvpSnapshotV3 } from './pvp-snapshot-v3.mjs';
+
 function rowMatch(row) {
   if (!row) return null;
   return {
@@ -56,27 +58,31 @@ export function decideDisconnectV1(match, lastSeen, now) {
 
 export function createSupabasePvpStore(client) {
   async function getAuthoritativeProfile(id) {
-    const row = check(await client.from('player_profiles_v2')
-      .select('display_name,data').eq('user_id', id).maybeSingle());
-    if (!row) return null;
-    const data = row.data && typeof row.data === 'object' ? row.data : {};
-    const className = ['warrior', 'mage', 'priest'].includes(data.class) ? data.class : 'warrior';
-    const balance = {
-      warrior:{ maxHp:120, attack:18, defense:5 },
-      mage:{ maxHp:95, attack:24, defense:2 },
-      priest:{ maxHp:105, attack:20, defense:3 },
-    }[className];
+    const [core, inventory, skills, preferences] = await Promise.all([
+      client.from('player_core_v3')
+        .select('user_id,display_name,class_name,spec,level,current_hp,current_map,active_pet,pvp_wins,pvp_losses')
+        .eq('user_id', id).maybeSingle().then(check),
+      client.from('player_inventory_v3')
+        .select('item_definition_id,inventory_kind,equipped_slot,enhancement_tier')
+        .eq('user_id', id).then(check),
+      client.from('player_skills_v3')
+        .select('skill_id,rank').eq('user_id', id).then(check),
+      client.from('player_preferences_v3')
+        .select('shirt_color,pants_color,hair_color,hair_style,skin_color,accessory')
+        .eq('user_id', id).maybeSingle().then(check),
+    ]);
+    if (!core || !preferences) return null;
+    const snapshot = buildPvpSnapshotV3({
+      core,
+      inventory:inventory || [],
+      skills:skills || [],
+      preferences,
+    });
     return {
-      name:String(data.name || row.display_name || '학생').slice(0, 24),
-      level:Math.max(1, Math.min(100, Math.trunc(Number(data.level) || 1))),
-      className,
-      spec:String(data.spec || ''),
-      appearance:data.appearance || {},
-      equipment:data.equipment || {},
-      costume:data.costume || {},
-      skills:data.skills || {},
-      map:String(data.map || 'town'),
-      ...balance,
+      ...snapshot,
+      map:String(core.current_map || ''),
+      wins:Number(core.pvp_wins) || 0,
+      losses:Number(core.pvp_losses) || 0,
     };
   }
   async function getMatch(id) {
@@ -161,9 +167,16 @@ export function createSupabasePvpStore(client) {
     async getPublicProfile(id) {
       const [presence, record] = await Promise.all([
         this.getPresence(id),
-        client.from('pvp_records_v1').select('wins,losses').eq('user_id', id).maybeSingle().then(check),
+        client.from('player_core_v3').select('pvp_wins,pvp_losses')
+          .eq('user_id', id).maybeSingle().then(check),
       ]);
-      return presence ? { ...presence.publicProfile, userId:id, pvpAvailable:presence.map === 'town' && !presence.busy, wins:record?.wins || 0, losses:record?.losses || 0 } : null;
+      return presence && record ? {
+        ...presence.publicProfile,
+        userId:id,
+        pvpAvailable:presence.map === 'town' && !presence.busy,
+        wins:Number(record.pvp_wins) || 0,
+        losses:Number(record.pvp_losses) || 0,
+      } : null;
     },
     async findActiveMatchForUser(id) {
       const row = check(await client.from('pvp_matches_v1').select('*').or(`player_a_id.eq.${id},player_b_id.eq.${id}`).is('finished_at', null).neq('phase', 'cancelled').limit(1).maybeSingle());
@@ -180,13 +193,15 @@ export function createSupabasePvpStore(client) {
       const match = await getMatch(id);
       return match && (match.playerAId === userId || match.playerBId === userId) ? match : null;
     },
-    async insertRoundInputOnce(value) {
-      const result = await client.from('pvp_round_inputs_v1').upsert({
-        match_id:value.matchId, round_no:value.round, user_id:value.userId,
-        request_id:value.requestId, action_id:value.actionId,
-        submitted_answer:value.answer, submitted_at:new Date(value.submittedAt).toISOString(),
-      }, { onConflict:'match_id,round_no,user_id', ignoreDuplicates:true });
-      check(result); return true;
+    async submitRoundInput(value) {
+      return check(await client.rpc('private_submit_pvp_round_v3', {
+        p_user_id:value.userId,
+        p_match_id:value.matchId,
+        p_round_no:value.round,
+        p_request_id:value.requestId,
+        p_action_id:value.actionId,
+        p_answer:value.answer,
+      }));
     },
     async listRoundInputs(matchId, round) {
       return (check(await client.from('pvp_round_inputs_v1').select('*').eq('match_id', matchId).eq('round_no', round)) || [])
@@ -200,6 +215,11 @@ export function createSupabasePvpStore(client) {
       if (patch.playerBState) row.player_b_state = patch.playerBState;
       if (patch.question) row.question_public = patch.question;
       if (patch.deadline) row.question_deadline = new Date(patch.deadline).toISOString();
+      if (patch.phase) {
+        row.resolution_started_at = patch.phase === 'resolving'
+          ? new Date().toISOString()
+          : null;
+      }
       row.updated_at = new Date().toISOString();
       check(await client.from('pvp_matches_v1').update(row).eq('id', id));
       if (patch.answerKey) check(await client.from('pvp_match_secrets_v1').upsert({ match_id:id, answer_key:patch.answerKey }));
