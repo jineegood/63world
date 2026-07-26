@@ -55,6 +55,12 @@ function dependencies(overrides = {}) {
       calls.push(['authorityTransitionMap', input]);
       return { player:{ name:'별빛', level:3, map:'town', serverRevision:9 }, revision:9 };
     },
+    async purchaseItem(input) { calls.push(['authorityPurchaseItem', input]); return { revision:10 }; },
+    async equipItem(input) { calls.push(['authorityEquipItem', input]); return { revision:11 }; },
+    async unequipSlot(input) { calls.push(['authorityUnequipSlot', input]); return { revision:12 }; },
+    async enhanceWeapon(input) { calls.push(['authorityEnhanceWeapon', input]); return { revision:13 }; },
+    async chooseSpecialization(input) { calls.push(['authorityChooseSpecialization', input]); return { revision:14 }; },
+    async learnSkill(input) { calls.push(['authorityLearnSkill', input]); return { revision:15 }; },
     ...overrides.authorityService,
   };
   return {
@@ -293,6 +299,35 @@ test('v3 exposes only bounded server actions and blocks the legacy whole-player 
   assert.equal(saved.revision, 8);
   assert.equal(moved.revision, 9);
   assert.equal(deps.calls.some(([name]) => name === 'queueSave'), false);
+});
+
+test('v3 forwards bounded economy and skill actions only after authentication', async () => {
+  const api = loadApi();
+  const deps = dependencies();
+  const service = api.create({
+    config:validConfig({ serverAuthorityV3Enabled:true }),
+    ...deps,
+  });
+  await assert.rejects(service.purchaseItem({ itemId:'noviceHat' }), (error) => error.code === 'NOT_AUTHENTICATED');
+  await service.enter('별빛', 'secret-123');
+  await service.purchaseItem({ itemId:'noviceHat' });
+  await service.equipItem({ inventoryId:'owned-id' });
+  await service.unequipSlot({ inventoryKind:'gear', slot:'head' });
+  await service.enhanceWeapon({});
+  await service.chooseSpecialization({ specName:'냉기' });
+  await service.learnSkill({ skillId:'mage_frost_focus_v24' });
+  assert.deepEqual(
+    deps.calls.filter(([name]) => name.startsWith('authority')).map(([name]) => name),
+    [
+      'authorityLoadGame',
+      'authorityPurchaseItem',
+      'authorityEquipItem',
+      'authorityUnequipSlot',
+      'authorityEnhanceWeapon',
+      'authorityChooseSpecialization',
+      'authorityLearnSkill',
+    ],
+  );
 });
 
 test('v3 signout skips legacy profile flush and still signs out Auth', async () => {

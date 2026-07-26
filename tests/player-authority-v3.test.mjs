@@ -245,3 +245,85 @@ test('snapshot conversion discards unknown server fields and returns independent
   assert.equal(source.inventory.length, 2);
   assert.equal(source.preferences.shirt_color, '#123456');
 });
+
+test('snapshot conversion separates gear and costume slots by authoritative inventory kind', () => {
+  const api = loadApi();
+  const snapshot = validSnapshot({
+    inventory:[
+      {
+        id:'11111111-1111-4111-8111-111111111111',
+        item_definition_id:'training_staff',
+        inventory_kind:'gear',
+        enhancement_tier:1,
+        equipped_slot:'weapon',
+      },
+      {
+        id:'22222222-2222-4222-8222-222222222222',
+        item_definition_id:'cs_starryRobe',
+        inventory_kind:'costume',
+        enhancement_tier:0,
+        equipped_slot:'armor',
+      },
+    ],
+  });
+
+  const player = api.snapshotToLegacyPlayer(snapshot);
+  assert.equal(JSON.stringify(player.inventory), JSON.stringify(['training_staff']));
+  assert.equal(JSON.stringify(player.costumeInventory), JSON.stringify(['cs_starryRobe']));
+  assert.equal(JSON.stringify(player.equipment), JSON.stringify({
+    weapon:'training_staff', head:null, armor:null, accessory:null,
+  }));
+  assert.equal(JSON.stringify(player.costume), JSON.stringify({ armor:'cs_starryRobe' }));
+  assert.equal(player.serverInventoryInstances[1].inventoryKind, 'costume');
+});
+
+test('economy methods send only action identifiers, revisions, and request ids', async () => {
+  const snapshot = validSnapshot({ core:{ revision:8 }, revision:8 });
+  const ok = { data:{ ok:true, code:'OK', snapshot }, error:null };
+  const { service, calls } = setup([ok, ok, ok, ok, ok, ok]);
+  const requestIds = [
+    '11111111-1111-4111-8111-111111111111',
+    '22222222-2222-4222-8222-222222222222',
+    '33333333-3333-4333-8333-333333333333',
+    '44444444-4444-4444-8444-444444444444',
+    '55555555-5555-4555-8555-555555555555',
+    '66666666-6666-4666-8666-666666666666',
+  ];
+
+  await service.purchaseItem({ itemId:'noviceHat', expectedRevision:7, requestId:requestIds[0] });
+  await service.equipItem({ inventoryId:requestIds[1], expectedRevision:8, requestId:requestIds[1] });
+  await service.unequipSlot({ inventoryKind:'gear', slot:'head', expectedRevision:8, requestId:requestIds[2] });
+  await service.enhanceWeapon({ expectedRevision:8, requestId:requestIds[3] });
+  await service.chooseSpecialization({ specName:'냉기', expectedRevision:8, requestId:requestIds[4] });
+  await service.learnSkill({ skillId:'mage_frost_focus_v24', expectedRevision:8, requestId:requestIds[5] });
+
+  assert.equal(JSON.stringify(calls), JSON.stringify([
+    ['purchase_student_item_v3', { p_item_id:'noviceHat', p_expected_revision:7, p_request_id:requestIds[0] }],
+    ['equip_student_item_v3', { p_inventory_id:requestIds[1], p_expected_revision:8, p_request_id:requestIds[1] }],
+    ['unequip_student_slot_v3', { p_inventory_kind:'gear', p_slot:'head', p_expected_revision:8, p_request_id:requestIds[2] }],
+    ['enhance_student_weapon_v3', { p_expected_revision:8, p_request_id:requestIds[3] }],
+    ['choose_student_specialization_v3', { p_spec_name:'냉기', p_expected_revision:8, p_request_id:requestIds[4] }],
+    ['learn_student_skill_v3', { p_skill_id:'mage_frost_focus_v24', p_expected_revision:8, p_request_id:requestIds[5] }],
+  ]));
+});
+
+test('enhancement returns a validated presentation outcome', async () => {
+  const snapshot = validSnapshot({ core:{ revision:8 }, revision:8 });
+  const { service } = setup([{
+    data:{
+      ok:true,
+      code:'OK',
+      snapshot,
+      outcome:{ success:false, old_tier:2, new_tier:1 },
+    },
+    error:null,
+  }]);
+  const result = await service.enhanceWeapon({
+    expectedRevision:7,
+    requestId:'77777777-7777-4777-8777-777777777777',
+  });
+  assert.equal(
+    JSON.stringify(result.outcome),
+    JSON.stringify({ success:false, oldTier:2, newTier:1 }),
+  );
+});

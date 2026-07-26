@@ -29,6 +29,12 @@
       createCharacter:reject,
       savePreferences:reject,
       transitionMap:reject,
+      purchaseItem:reject,
+      equipItem:reject,
+      unequipSlot:reject,
+      enhanceWeapon:reject,
+      chooseSpecialization:reject,
+      learnSkill:reject,
       savePlayer:rejectSync,
       flush:reject,
       signOut:reject,
@@ -189,6 +195,21 @@
       return authority.transitionMap(input);
     }
 
+    async function forwardAuthorityAction(method, input) {
+      requireIdentity();
+      if (!authorityV3Enabled) {
+        throw new StudentAccessV2Error('DISABLED', '서버 캐릭터 기능이 꺼져 있습니다.');
+      }
+      return authority[method](input);
+    }
+
+    const purchaseItem = (input) => forwardAuthorityAction('purchaseItem', input);
+    const equipItem = (input) => forwardAuthorityAction('equipItem', input);
+    const unequipSlot = (input) => forwardAuthorityAction('unequipSlot', input);
+    const enhanceWeapon = (input) => forwardAuthorityAction('enhanceWeapon', input);
+    const chooseSpecialization = (input) => forwardAuthorityAction('chooseSpecialization', input);
+    const learnSkill = (input) => forwardAuthorityAction('learnSkill', input);
+
     async function signOut() {
       try {
         if (!authorityV3Enabled) await cloud.flush();
@@ -206,6 +227,12 @@
       createCharacter,
       savePreferences,
       transitionMap,
+      purchaseItem,
+      equipItem,
+      unequipSlot,
+      enhanceWeapon,
+      chooseSpecialization,
+      learnSkill,
       savePlayer,
       flush,
       signOut,

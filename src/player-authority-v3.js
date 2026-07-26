@@ -16,6 +16,7 @@
     'finalBossRoom',
   ]);
   const EQUIPMENT_SLOTS = new Set(['weapon', 'head', 'armor', 'accessory']);
+  const INVENTORY_KINDS = new Set(['gear', 'costume']);
   const QUEST_STATUSES = new Set(['ready', 'active', 'complete', 'claimed']);
   const ERROR_MESSAGES = Object.freeze({
     UNAUTHORIZED:'로그인이 만료되었습니다. 다시 로그인해 주세요.',
@@ -33,6 +34,23 @@
     REQUEST_ID_REUSED:'중복 요청을 안전하게 차단했습니다. 다시 시도해 주세요.',
     INVALID_REQUEST:'요청 값이 올바르지 않습니다.',
     RPC_FAILED:'서버와 통신하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+    INVALID_ITEM:'존재하지 않는 아이템입니다.',
+    ITEM_NOT_PURCHASABLE:'구매할 수 없는 아이템입니다.',
+    ALREADY_OWNED:'이미 가지고 있는 아이템입니다.',
+    INSUFFICIENT_FUNDS:'재화가 부족합니다.',
+    ITEM_NOT_OWNED:'보유하지 않은 아이템입니다.',
+    INVALID_SLOT:'장착 칸이 올바르지 않습니다.',
+    SLOT_EMPTY:'장착된 아이템이 없습니다.',
+    WEAPON_NOT_EQUIPPED:'강화할 무기를 먼저 장착해 주세요.',
+    MAX_TIER:'이미 최대 강화 단계입니다.',
+    SPECIALIZATION_ALREADY_CHOSEN:'이미 전문화를 선택했습니다.',
+    INVALID_SPECIALIZATION:'선택할 수 없는 전문화입니다.',
+    INVALID_SKILL:'존재하지 않는 스킬입니다.',
+    CLASS_REQUIRED:'현재 직업으로 사용할 수 없습니다.',
+    SPECIALIZATION_REQUIRED:'전문화 조건이 맞지 않습니다.',
+    SKILL_POINTS_REQUIRED:'스킬 포인트가 부족합니다.',
+    MAX_RANK:'이미 최대 단계입니다.',
+    PREREQUISITE_REQUIRED:'먼저 배워야 하는 스킬이 있습니다.',
     MALFORMED_SNAPSHOT:'서버의 캐릭터 정보가 올바르지 않습니다.',
   });
 
@@ -108,7 +126,9 @@
     if (!MAPS.has(currentMap)) failSnapshot();
 
     const equipment = { weapon:null, head:null, armor:null, accessory:null };
+    const costume = {};
     const inventory = [];
+    const costumeInventory = [];
     const inventoryInstances = [];
     const weaponUpgrades = {};
     const seenInstanceIds = new Set();
@@ -119,15 +139,26 @@
       if (seenInstanceIds.has(id)) failSnapshot();
       seenInstanceIds.add(id);
       const tier = safeInteger(row.enhancement_tier, 0, 20);
+      const inventoryKind = row.inventory_kind === undefined
+        ? 'gear'
+        : safeString(row.inventory_kind, 1, 20);
+      if (!INVENTORY_KINDS.has(inventoryKind)) failSnapshot();
       const slot = safeNullableString(row.equipped_slot, 20);
       if (slot && !EQUIPMENT_SLOTS.has(slot)) failSnapshot();
-      if (slot && equipment[slot] !== null) failSnapshot();
-      if (slot) equipment[slot] = itemId;
-      inventory.push(itemId);
-      weaponUpgrades[itemId] = Math.max(weaponUpgrades[itemId] || 0, tier);
+      const equipped = inventoryKind === 'gear' ? equipment : costume;
+      if (slot && equipped[slot]) failSnapshot();
+      if (slot) equipped[slot] = itemId;
+      if (inventoryKind === 'gear') {
+        inventory.push(itemId);
+        weaponUpgrades[itemId] = Math.max(weaponUpgrades[itemId] || 0, tier);
+      } else {
+        if (tier !== 0) failSnapshot();
+        costumeInventory.push(itemId);
+      }
       inventoryInstances.push({
         id,
         itemDefinitionId:itemId,
+        inventoryKind,
         enhancementTier:tier,
         equippedSlot:slot,
       });
@@ -187,8 +218,8 @@
       maxHp:safeInteger(core.max_hp, 1),
       map:currentMap,
       appearance,
-      costume:{},
-      costumeInventory:[],
+      costume,
+      costumeInventory,
       inventory,
       serverInventoryInstances:inventoryInstances,
       pets:[],
@@ -246,9 +277,18 @@
       throw new TypeError('player authority v3 requires a Supabase client');
     }
 
-    function resultFromSnapshot(snapshot) {
+    function resultFromSnapshot(snapshot, outcome) {
       const player = snapshotToLegacyPlayer(snapshot);
-      return Object.freeze({ player, revision:player.serverRevision });
+      const result = { player, revision:player.serverRevision };
+      if (outcome !== undefined) {
+        if (!isPlainObject(outcome) || typeof outcome.success !== 'boolean') failSnapshot();
+        result.outcome = Object.freeze({
+          success:outcome.success,
+          oldTier:safeInteger(outcome.old_tier, 0, 4),
+          newTier:safeInteger(outcome.new_tier, 0, 4),
+        });
+      }
+      return Object.freeze(result);
     }
 
     async function call(name, args) {
@@ -277,7 +317,7 @@
           { player:conflictPlayer, revision },
         );
       }
-      return resultFromSnapshot(data.snapshot);
+      return resultFromSnapshot(data.snapshot, data.outcome);
     }
 
     async function createCharacter({ className, appearance, requestId:providedRequestId } = {}) {
@@ -319,11 +359,84 @@
       });
     }
 
+    function actionIdentifier(value, maximum = 80) {
+      if (typeof value !== 'string') throw new PlayerAuthorityV3Error('INVALID_REQUEST');
+      const length = Array.from(value).length;
+      if (length < 1 || length > maximum || /[\u0000-\u001f\u007f-\u009f]/.test(value)) {
+        throw new PlayerAuthorityV3Error('INVALID_REQUEST');
+      }
+      return value;
+    }
+
+    async function purchaseItem({ itemId, expectedRevision:revision, requestId:id } = {}) {
+      return call('purchase_student_item_v3', {
+        p_item_id:actionIdentifier(itemId),
+        p_expected_revision:expectedRevision(revision),
+        p_request_id:requestId(id),
+      });
+    }
+
+    async function equipItem({ inventoryId, expectedRevision:revision, requestId:id } = {}) {
+      if (typeof inventoryId !== 'string' || !UUID.test(inventoryId)) {
+        throw new PlayerAuthorityV3Error('INVALID_REQUEST');
+      }
+      return call('equip_student_item_v3', {
+        p_inventory_id:inventoryId,
+        p_expected_revision:expectedRevision(revision),
+        p_request_id:requestId(id),
+      });
+    }
+
+    async function unequipSlot({
+      inventoryKind, slot, expectedRevision:revision, requestId:id,
+    } = {}) {
+      if (!INVENTORY_KINDS.has(inventoryKind) || !EQUIPMENT_SLOTS.has(slot)) {
+        throw new PlayerAuthorityV3Error('INVALID_REQUEST');
+      }
+      return call('unequip_student_slot_v3', {
+        p_inventory_kind:inventoryKind,
+        p_slot:slot,
+        p_expected_revision:expectedRevision(revision),
+        p_request_id:requestId(id),
+      });
+    }
+
+    async function enhanceWeapon({ expectedRevision:revision, requestId:id } = {}) {
+      return call('enhance_student_weapon_v3', {
+        p_expected_revision:expectedRevision(revision),
+        p_request_id:requestId(id),
+      });
+    }
+
+    async function chooseSpecialization({
+      specName, expectedRevision:revision, requestId:id,
+    } = {}) {
+      return call('choose_student_specialization_v3', {
+        p_spec_name:actionIdentifier(specName, 40),
+        p_expected_revision:expectedRevision(revision),
+        p_request_id:requestId(id),
+      });
+    }
+
+    async function learnSkill({ skillId, expectedRevision:revision, requestId:id } = {}) {
+      return call('learn_student_skill_v3', {
+        p_skill_id:actionIdentifier(skillId),
+        p_expected_revision:expectedRevision(revision),
+        p_request_id:requestId(id),
+      });
+    }
+
     return Object.freeze({
       createCharacter,
       loadGame,
       savePreferences,
       transitionMap,
+      purchaseItem,
+      equipItem,
+      unequipSlot,
+      enhanceWeapon,
+      chooseSpecialization,
+      learnSkill,
     });
   }
 
