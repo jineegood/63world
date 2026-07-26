@@ -474,3 +474,303 @@ revoke all on function public.unequip_student_slot_v3(text, text, bigint, text) 
 grant execute on function public.purchase_student_item_v3(text, bigint, text) to authenticated;
 grant execute on function public.equip_student_item_v3(uuid, bigint, text) to authenticated;
 grant execute on function public.unequip_student_slot_v3(text, text, bigint, text) to authenticated;
+
+create or replace function public.enhance_student_weapon_v3(
+  p_expected_revision bigint,
+  p_request_id text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_request_id uuid;
+  v_receipt jsonb;
+  v_response jsonb;
+  v_current_revision bigint;
+  v_building integer;
+  v_inventory_id uuid;
+  v_current_tier integer;
+  v_new_tier integer;
+  v_chance numeric;
+  v_success boolean;
+begin
+  if v_user_id is null then return jsonb_build_object('ok', false, 'code', 'UNAUTHORIZED'); end if;
+  if public.private_is_teacher_v3() then return jsonb_build_object('ok', false, 'code', 'FORBIDDEN'); end if;
+  if p_request_id is null or p_request_id !~* '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89ab][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$' then
+    perform public.private_log_security_event_v3('invalid_request_id', '{}'::jsonb);
+    return jsonb_build_object('ok', false, 'code', 'INVALID_REQUEST');
+  end if;
+  v_request_id := p_request_id::uuid;
+  v_receipt := public.private_read_receipt_v3(v_request_id, 'enhance_student_weapon_v3');
+  if v_receipt is not null then return v_receipt; end if;
+
+  select c.revision, c.building into v_current_revision, v_building
+  from public.player_core_v3 as c where c.user_id = v_user_id for update;
+  if v_current_revision is null then
+    return public.private_store_receipt_v3(v_request_id, 'enhance_student_weapon_v3',
+      jsonb_build_object('ok', false, 'code', 'CHARACTER_NOT_FOUND'));
+  end if;
+  if p_expected_revision is distinct from v_current_revision then
+    v_response := jsonb_build_object('ok', false, 'code', 'REVISION_CONFLICT',
+      'snapshot', public.private_build_student_snapshot_v3(v_user_id));
+    return public.private_store_receipt_v3(v_request_id, 'enhance_student_weapon_v3', v_response);
+  end if;
+
+  select i.id, i.enhancement_tier into v_inventory_id, v_current_tier
+  from public.player_inventory_v3 as i
+  where i.user_id = v_user_id and i.inventory_kind = 'gear'
+    and i.equipped_slot = 'weapon'
+  for update;
+  if v_inventory_id is null then
+    return public.private_store_receipt_v3(v_request_id, 'enhance_student_weapon_v3',
+      jsonb_build_object('ok', false, 'code', 'WEAPON_NOT_EQUIPPED'));
+  end if;
+  if v_current_tier >= 4 then
+    return public.private_store_receipt_v3(v_request_id, 'enhance_student_weapon_v3',
+      jsonb_build_object('ok', false, 'code', 'MAX_TIER'));
+  end if;
+  if v_building < 3 then
+    return public.private_store_receipt_v3(v_request_id, 'enhance_student_weapon_v3',
+      jsonb_build_object('ok', false, 'code', 'INSUFFICIENT_FUNDS'));
+  end if;
+
+  v_chance := case v_current_tier
+    when 0 then 0.80 when 1 then 0.60 when 2 then 0.40 when 3 then 0.20
+    else 0
+  end;
+  v_success := pg_catalog.random() < v_chance;
+  v_new_tier := case when v_success then v_current_tier + 1
+    else greatest(0, v_current_tier - 1) end;
+  update public.player_inventory_v3
+  set enhancement_tier = v_new_tier, updated_at = now()
+  where id = v_inventory_id and user_id = v_user_id;
+  update public.player_core_v3
+  set building = building - 3, revision = revision + 1, updated_at = now()
+  where user_id = v_user_id;
+
+  v_response := jsonb_build_object(
+    'ok', true, 'code', 'OK',
+    'snapshot', public.private_build_student_snapshot_v3(v_user_id),
+    'outcome', jsonb_build_object(
+      'success', v_success, 'old_tier', v_current_tier, 'new_tier', v_new_tier
+    )
+  );
+  return public.private_store_receipt_v3(v_request_id, 'enhance_student_weapon_v3', v_response);
+end;
+$$;
+
+create or replace function public.choose_student_specialization_v3(
+  p_spec_name text,
+  p_expected_revision bigint,
+  p_request_id text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_request_id uuid;
+  v_receipt jsonb;
+  v_response jsonb;
+  v_current_revision bigint;
+  v_class_name text;
+  v_level integer;
+  v_current_spec text;
+begin
+  if v_user_id is null then return jsonb_build_object('ok', false, 'code', 'UNAUTHORIZED'); end if;
+  if public.private_is_teacher_v3() then return jsonb_build_object('ok', false, 'code', 'FORBIDDEN'); end if;
+  if p_request_id is null or p_request_id !~* '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89ab][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$' then
+    perform public.private_log_security_event_v3('invalid_request_id', '{}'::jsonb);
+    return jsonb_build_object('ok', false, 'code', 'INVALID_REQUEST');
+  end if;
+  v_request_id := p_request_id::uuid;
+  v_receipt := public.private_read_receipt_v3(v_request_id, 'choose_student_specialization_v3');
+  if v_receipt is not null then return v_receipt; end if;
+
+  select c.revision, c.class_name, c.level, c.spec
+  into v_current_revision, v_class_name, v_level, v_current_spec
+  from public.player_core_v3 as c where c.user_id = v_user_id for update;
+  if v_current_revision is null then
+    return public.private_store_receipt_v3(v_request_id, 'choose_student_specialization_v3',
+      jsonb_build_object('ok', false, 'code', 'CHARACTER_NOT_FOUND'));
+  end if;
+  if p_expected_revision is distinct from v_current_revision then
+    v_response := jsonb_build_object('ok', false, 'code', 'REVISION_CONFLICT',
+      'snapshot', public.private_build_student_snapshot_v3(v_user_id));
+    return public.private_store_receipt_v3(v_request_id, 'choose_student_specialization_v3', v_response);
+  end if;
+  if v_current_spec is not null then
+    return public.private_store_receipt_v3(v_request_id, 'choose_student_specialization_v3',
+      jsonb_build_object('ok', false, 'code', 'SPECIALIZATION_ALREADY_CHOSEN'));
+  end if;
+  if v_level < 5 then
+    return public.private_store_receipt_v3(v_request_id, 'choose_student_specialization_v3',
+      jsonb_build_object('ok', false, 'code', 'LEVEL_REQUIRED'));
+  end if;
+  if p_spec_name is null or not exists (
+    select 1 from public.game_specialization_catalog_v3
+    where class_name = v_class_name and spec_name = p_spec_name
+  ) then
+    perform public.private_log_security_event_v3('invalid_specialization', '{}'::jsonb);
+    return public.private_store_receipt_v3(v_request_id, 'choose_student_specialization_v3',
+      jsonb_build_object('ok', false, 'code', 'INVALID_SPECIALIZATION'));
+  end if;
+  update public.player_core_v3
+  set spec = p_spec_name, revision = revision + 1, updated_at = now()
+  where user_id = v_user_id;
+  v_response := jsonb_build_object('ok', true, 'code', 'OK',
+    'snapshot', public.private_build_student_snapshot_v3(v_user_id));
+  return public.private_store_receipt_v3(v_request_id, 'choose_student_specialization_v3', v_response);
+end;
+$$;
+
+create or replace function public.learn_student_skill_v3(
+  p_skill_id text,
+  p_expected_revision bigint,
+  p_request_id text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_request_id uuid;
+  v_receipt jsonb;
+  v_response jsonb;
+  v_current_revision bigint;
+  v_class_name text;
+  v_spec text;
+  v_level integer;
+  v_skill_class text;
+  v_skill_spec text;
+  v_unlock_level integer;
+  v_max_rank integer;
+  v_point_cost integer;
+  v_prerequisites jsonb;
+  v_current_rank integer;
+  v_spent_points integer;
+  v_available_points integer;
+begin
+  if v_user_id is null then return jsonb_build_object('ok', false, 'code', 'UNAUTHORIZED'); end if;
+  if public.private_is_teacher_v3() then return jsonb_build_object('ok', false, 'code', 'FORBIDDEN'); end if;
+  if p_request_id is null or p_request_id !~* '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89ab][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$' then
+    perform public.private_log_security_event_v3('invalid_request_id', '{}'::jsonb);
+    return jsonb_build_object('ok', false, 'code', 'INVALID_REQUEST');
+  end if;
+  v_request_id := p_request_id::uuid;
+  v_receipt := public.private_read_receipt_v3(v_request_id, 'learn_student_skill_v3');
+  if v_receipt is not null then return v_receipt; end if;
+
+  select c.revision, c.class_name, c.spec, c.level
+  into v_current_revision, v_class_name, v_spec, v_level
+  from public.player_core_v3 as c where c.user_id = v_user_id for update;
+  if v_current_revision is null then
+    return public.private_store_receipt_v3(v_request_id, 'learn_student_skill_v3',
+      jsonb_build_object('ok', false, 'code', 'CHARACTER_NOT_FOUND'));
+  end if;
+  if p_expected_revision is distinct from v_current_revision then
+    v_response := jsonb_build_object('ok', false, 'code', 'REVISION_CONFLICT',
+      'snapshot', public.private_build_student_snapshot_v3(v_user_id));
+    return public.private_store_receipt_v3(v_request_id, 'learn_student_skill_v3', v_response);
+  end if;
+
+  select s.class_name, s.spec_name, s.unlock_level, s.max_rank,
+    s.point_cost, s.prerequisites
+  into v_skill_class, v_skill_spec, v_unlock_level, v_max_rank,
+    v_point_cost, v_prerequisites
+  from public.game_skill_catalog_v3 as s where s.skill_id = p_skill_id;
+  if v_skill_class is null then
+    return public.private_store_receipt_v3(v_request_id, 'learn_student_skill_v3',
+      jsonb_build_object('ok', false, 'code', 'INVALID_SKILL'));
+  end if;
+  if v_skill_class is distinct from v_class_name then
+    return public.private_store_receipt_v3(v_request_id, 'learn_student_skill_v3',
+      jsonb_build_object('ok', false, 'code', 'CLASS_REQUIRED'));
+  end if;
+  if v_skill_spec is not null and v_skill_spec is distinct from v_spec then
+    return public.private_store_receipt_v3(v_request_id, 'learn_student_skill_v3',
+      jsonb_build_object('ok', false, 'code', 'SPECIALIZATION_REQUIRED'));
+  end if;
+  if v_level < v_unlock_level then
+    return public.private_store_receipt_v3(v_request_id, 'learn_student_skill_v3',
+      jsonb_build_object('ok', false, 'code', 'LEVEL_REQUIRED'));
+  end if;
+
+  select coalesce(s.rank, 0) into v_current_rank
+  from public.player_skills_v3 as s
+  where s.user_id = v_user_id and s.skill_id = p_skill_id;
+  v_current_rank := coalesce(v_current_rank, 0);
+  if v_current_rank >= v_max_rank then
+    return public.private_store_receipt_v3(v_request_id, 'learn_student_skill_v3',
+      jsonb_build_object('ok', false, 'code', 'MAX_RANK'));
+  end if;
+  select coalesce(sum(ps.rank * catalog.point_cost), 0)::integer
+  into v_spent_points
+  from public.player_skills_v3 as ps
+  join public.game_skill_catalog_v3 as catalog on catalog.skill_id = ps.skill_id
+  where ps.user_id = v_user_id;
+  v_available_points := (v_level - 1) * 2 - v_spent_points;
+  if v_available_points < v_point_cost then
+    return public.private_store_receipt_v3(v_request_id, 'learn_student_skill_v3',
+      jsonb_build_object('ok', false, 'code', 'SKILL_POINTS_REQUIRED'));
+  end if;
+
+  if exists (
+    select 1 from jsonb_array_elements_text(v_prerequisites -> 'all') as req(skill_id)
+    where coalesce((
+      select rank from public.player_skills_v3
+      where user_id = v_user_id and skill_id = req.skill_id
+    ), 0) < 1
+  ) or exists (
+    select 1 from jsonb_each_text(v_prerequisites -> 'ranks') as req(skill_id, required_rank)
+    where coalesce((
+      select rank from public.player_skills_v3
+      where user_id = v_user_id and skill_id = req.skill_id
+    ), 0) < req.required_rank::integer
+  ) then
+    return public.private_store_receipt_v3(v_request_id, 'learn_student_skill_v3',
+      jsonb_build_object('ok', false, 'code', 'PREREQUISITE_REQUIRED'));
+  end if;
+  if jsonb_array_length(v_prerequisites -> 'any') > 0 and not exists (
+    select 1 from jsonb_array_elements_text(v_prerequisites -> 'any') as req(skill_id)
+    join public.player_skills_v3 as owned
+      on owned.user_id = v_user_id and owned.skill_id = req.skill_id and owned.rank > 0
+  ) then
+    return public.private_store_receipt_v3(v_request_id, 'learn_student_skill_v3',
+      jsonb_build_object('ok', false, 'code', 'PREREQUISITE_REQUIRED'));
+  end if;
+  if jsonb_typeof(v_prerequisites -> 'total') = 'object' and (
+    select coalesce(sum(owned.rank), 0)
+    from jsonb_array_elements_text(v_prerequisites -> 'total' -> 'ids') as req(skill_id)
+    left join public.player_skills_v3 as owned
+      on owned.user_id = v_user_id and owned.skill_id = req.skill_id
+  ) < (v_prerequisites -> 'total' ->> 'points')::integer then
+    return public.private_store_receipt_v3(v_request_id, 'learn_student_skill_v3',
+      jsonb_build_object('ok', false, 'code', 'PREREQUISITE_REQUIRED'));
+  end if;
+
+  insert into public.player_skills_v3(user_id, skill_id, rank)
+  values (v_user_id, p_skill_id, 1)
+  on conflict (user_id, skill_id) do update
+  set rank = public.player_skills_v3.rank + 1, updated_at = now();
+  update public.player_core_v3
+  set revision = revision + 1, updated_at = now() where user_id = v_user_id;
+  v_response := jsonb_build_object('ok', true, 'code', 'OK',
+    'snapshot', public.private_build_student_snapshot_v3(v_user_id));
+  return public.private_store_receipt_v3(v_request_id, 'learn_student_skill_v3', v_response);
+end;
+$$;
+
+revoke all on function public.enhance_student_weapon_v3(bigint, text) from public, anon;
+revoke all on function public.choose_student_specialization_v3(text, bigint, text) from public, anon;
+revoke all on function public.learn_student_skill_v3(text, bigint, text) from public, anon;
+grant execute on function public.enhance_student_weapon_v3(bigint, text) to authenticated;
+grant execute on function public.choose_student_specialization_v3(text, bigint, text) to authenticated;
+grant execute on function public.learn_student_skill_v3(text, bigint, text) to authenticated;

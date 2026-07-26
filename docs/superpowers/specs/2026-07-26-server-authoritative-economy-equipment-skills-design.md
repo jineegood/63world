@@ -57,7 +57,7 @@ instance. Unequip affects only the requested kind and slot.
 
 Only the currently equipped weapon can be enhanced. Each attempt costs exactly
 3 building currency. The server reads the current tier, uses the existing
-success chances (80%, 65%, 50%, 35%), rolls with PostgreSQL `random()`, raises
+success chances (80%, 60%, 40%, 20%), rolls with PostgreSQL `random()`, raises
 the tier on success, and lowers it by one on failure without going below zero.
 The response includes a presentation-only outcome object; the inventory row is
 the source of truth.
@@ -100,4 +100,3 @@ animation cannot trigger a second request while one is pending.
 No production migration, GitHub push, Vercel deployment, or cutover flag change
 is included. Runtime PostgreSQL integration remains a required deployment
 check because this workstation has no local PostgreSQL/Supabase runtime.
-
