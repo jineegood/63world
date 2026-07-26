@@ -19,6 +19,16 @@ alter table public.pvp_matches_v1
     'cancelled'
   ));
 
+alter table public.pvp_matches_v1
+  drop constraint if exists pvp_matches_v1_resume_phase_check;
+
+alter table public.pvp_matches_v1
+  add constraint pvp_matches_v1_resume_phase_check
+  check (
+    resume_phase is null
+    or resume_phase in ('question', 'waiting', 'resolving', 'dice', 'effects')
+  );
+
 create or replace function public.private_submit_pvp_round_v3(
   p_user_id uuid,
   p_match_id uuid,

@@ -27,6 +27,8 @@ test('authoritative PvP migration serializes one resolver for each round', () =>
 
   assert.match(source, /add\s+column\s+if\s+not\s+exists\s+resolution_started_at\s+timestamptz/i);
   assert.match(source, /phase\s+in\s*\([^)]*'resolving'/i);
+  assert.match(source, /drop\s+constraint\s+if\s+exists\s+pvp_matches_v1_resume_phase_check/i);
+  assert.match(source, /resume_phase\s+is\s+null\s+or\s+resume_phase\s+in\s*\([^)]*'resolving'/i);
   assert.match(submit, /from\s+public\.pvp_matches_v1[\s\S]*for\s+update/i);
   assert.match(submit, /p_user_id\s+not\s+in\s*\(\s*v_match\.player_a_id\s*,\s*v_match\.player_b_id\s*\)/i);
   assert.match(submit, /p_round_no\s*<>\s*v_match\.round_no/i);

@@ -60,6 +60,21 @@ test('disconnect decisions pause, resume, forfeit, or cancel a match after the g
     }, { a:now - 40_000, b:now - 40_000 }, now),
     { type:'cancel', reason:'both_disconnected' },
   );
+
+  assert.deepEqual(
+    decideDisconnectV1(
+      { ...match, phase:'resolving' },
+      { a:now - 11_000, b:now - 1_000 },
+      now,
+    ),
+    {
+      type:'reconnect',
+      disconnectedUserId:'a',
+      reconnectDeadline:now + 30_000,
+      resumePhase:'resolving',
+      pausedQuestionMs:12_000,
+    },
+  );
 });
 
 test('first PvP profile use shows one tutorial with green key phrases before opening the profile', async () => {
