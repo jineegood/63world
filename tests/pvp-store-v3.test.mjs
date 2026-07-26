@@ -11,6 +11,7 @@ const storeUrl = pathToFileURL(
 function fakeClient() {
   const reads = [];
   const rpcCalls = [];
+  const writes = [];
   const rows = {
     player_core_v3:{
       user_id:'00000000-0000-4000-8000-000000000001',
@@ -69,6 +70,10 @@ function fakeClient() {
       limit() { return query; },
       maybeSingle:async () => result(table, true),
       single:async () => result(table, true),
+      upsert(values, options) {
+        writes.push({ table, values, options });
+        return Promise.resolve({ data:null, error:null });
+      },
       then(resolve, reject) {
         return Promise.resolve(result(table, false)).then(resolve, reject);
       },
@@ -91,6 +96,7 @@ function fakeClient() {
     },
     reads,
     rpcCalls,
+    writes,
   };
 }
 
@@ -162,4 +168,22 @@ test('round input crosses only the locked v3 submission RPC', async () => {
       p_answer:'5',
     },
   }]);
+});
+
+test('recovered round resolution can store the same public events without duplication', async () => {
+  const { createSupabasePvpStore } = await import(storeUrl.href);
+  const { client, writes } = fakeClient();
+  const store = createSupabasePvpStore(client);
+  const events = [{ id:'m1:2:dice', kind:'dice', rolls:[{ a:4, b:9 }], first:'b' }];
+
+  await store.appendEvents('m1', 2, events);
+
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].table, 'pvp_match_events_v1');
+  assert.deepEqual(writes[0].options, {
+    onConflict:'match_id,sequence_no',
+    ignoreDuplicates:true,
+  });
+  assert.equal(writes[0].values[0].sequence_no, 2000);
+  assert.deepEqual(writes[0].values[0].event, events[0]);
 });

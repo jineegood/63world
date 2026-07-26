@@ -68,7 +68,7 @@ export function createPvpService({ store, now = Date.now, randomInt }) {
     if (match.finishedAt || match.phase === 'finished' || match.phase === 'cancelled') fail('MATCH_CLOSED');
     if (match.phase === 'reconnect') fail('RECONNECTING');
     if (Number(body.round) !== Number(match.round)) fail('ROUND_CHANGED');
-    await store.insertRoundInputOnce({
+    const claim = await store.submitRoundInput({
       matchId:match.id,
       round:Number(match.round),
       userId,
@@ -77,11 +77,10 @@ export function createPvpService({ store, now = Date.now, randomInt }) {
       answer:String(body.answer ?? ''),
       submittedAt:now(),
     });
-    const inputs = await store.listRoundInputs(match.id, match.round);
-    if (inputs.length < 2 && now() < Number(match.deadline)) {
-      await store.updateMatch(match.id, { phase:'waiting' });
+    if (!claim || claim.resolver !== true) {
       return { waiting:true, round:Number(match.round) };
     }
+    const inputs = await store.listRoundInputs(match.id, match.round);
     if (!match.playerAState || !match.playerBState || !match.answerKey) {
       fail('MATCH_STATE_MISSING');
     }

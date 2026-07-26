@@ -55,9 +55,11 @@ test('early answer submission reveals only waiting state', async () => {
     randomInt:(min) => min,
     store:{
       getMatchForUpdate:async () => match,
-      insertRoundInputOnce:async (input) => { inputs.push(input); return true; },
-      listRoundInputs:async () => inputs,
-      updateMatch:async () => {},
+      submitRoundInput:async (input) => {
+        inputs.push(input);
+        return { waiting:true, resolver:false, round:1 };
+      },
+      listRoundInputs:async () => { throw new Error('non-resolver must not read answers'); },
     },
   });
   assert.deepEqual(
@@ -107,14 +109,31 @@ test('resolved simultaneous submissions publish dice before ordered combat effec
     randomInt:(minimum) => rolls.shift() ?? minimum,
     store:{
       getMatchForUpdate:async () => match,
-      insertRoundInputOnce:async (input) => { inputs.push(input); },
+      submitRoundInput:async (input) => {
+        inputs.push(input);
+        return { waiting:false, resolver:true, round:1 };
+      },
       listRoundInputs:async () => inputs,
       appendEvents:async (_id, _round, events) => appended.push(...events),
       readEnabledWorkbooks:async () => [{ enabled:true, questions:[{ id:'q2', prompt:'3+3', answer:'6' }] }],
       updateMatch:async () => {},
     },
   });
-  await service.handle('b', { op:'submit', matchId:'m1', round:1, actionId:'basic', answer:'5', requestId:'b1' });
+  await service.handle('b', {
+    op:'submit',
+    matchId:'m1',
+    round:1,
+    actionId:'basic',
+    answer:'5',
+    requestId:'b1',
+    attack:999999,
+    defense:999999,
+    correct:false,
+    dice:[30, 1],
+    damage:999999,
+    wins:999,
+    losses:-999,
+  });
   assert.equal(appended[0].kind, 'dice');
   assert.deepEqual(appended[0].rolls, [{ a:7, b:21 }]);
   assert.equal(appended[1].kind, 'damage');
@@ -137,7 +156,10 @@ test('heartbeat resolves an expired unanswered round so neither player can stall
     store:{
       heartbeat:async () => { calls.push('heartbeat'); return { ok:true }; },
       getMatchForUpdate:async () => match,
-      insertRoundInputOnce:async (input) => { inputs.push(input); },
+      submitRoundInput:async (input) => {
+        inputs.push(input);
+        return { waiting:false, resolver:true, round:1 };
+      },
       listRoundInputs:async () => inputs,
       appendEvents:async () => { calls.push('events'); },
       readEnabledWorkbooks:async () => [{ enabled:true, questions:[{ id:'q2', prompt:'3+3', answer:'6' }] }],
@@ -148,6 +170,39 @@ test('heartbeat resolves an expired unanswered round so neither player can stall
   await service.handle('a', { op:'heartbeat', matchId:'m1' });
   assert.deepEqual(calls, ['heartbeat', 'events', 'next']);
   assert.equal(inputs[0].requestId, 'timeout-m1-1-a');
+});
+
+test('a duplicate submission while another request resolves the round stays waiting', async () => {
+  const { createPvpService } = await import(serviceUrl.href);
+  let listed = false;
+  const service = createPvpService({
+    now:() => 6000,
+    randomInt:(minimum) => minimum,
+    store:{
+      getMatchForUpdate:async () => ({
+        id:'m1',
+        playerAId:'a',
+        playerBId:'b',
+        round:1,
+        phase:'resolving',
+        deadline:21000,
+      }),
+      submitRoundInput:async () => ({ waiting:true, resolver:false, round:1 }),
+      listRoundInputs:async () => { listed = true; return []; },
+    },
+  });
+
+  const result = await service.handle('a', {
+    op:'submit',
+    matchId:'m1',
+    round:1,
+    actionId:'basic',
+    answer:'5',
+    requestId:'duplicate-a',
+  });
+
+  assert.deepEqual(result, { waiting:true, round:1 });
+  assert.equal(listed, false);
 });
 
 test('answers cannot be submitted while a disconnected opponent is in the reconnect grace period', async () => {

@@ -226,9 +226,12 @@ export function createSupabasePvpStore(client) {
     },
     async appendEvents(matchId, round, events) {
       if (!events.length) return;
-      check(await client.from('pvp_match_events_v1').insert(events.map((event, index) => ({
+      check(await client.from('pvp_match_events_v1').upsert(events.map((event, index) => ({
         match_id:matchId, round_no:round, sequence_no:round * 1000 + index, event,
-      }))));
+      })), {
+        onConflict:'match_id,sequence_no',
+        ignoreDuplicates:true,
+      }));
     },
     async readEnabledWorkbooks() {
       const row = check(await client.from('shared_state_v2').select('data').eq('key', 'workbooks').maybeSingle());
