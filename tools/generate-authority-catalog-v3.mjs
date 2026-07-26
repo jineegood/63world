@@ -5,6 +5,10 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outputPath = path.join(root, 'supabase/generated/authority-catalog-v3.sql');
+const migrationPath = path.join(
+  root,
+  'supabase/migrations/202607260003_server_authoritative_economy_v3.sql',
+);
 const context = vm.createContext({ window:{} });
 
 for (const relative of ['src/core-utils.js', 'src/game-data.js']) {
@@ -96,12 +100,27 @@ const sql = [
   '',
 ].join('\n');
 
+const beginMarker = '-- BEGIN GENERATED AUTHORITY CATALOG V3';
+const endMarker = '-- END GENERATED AUTHORITY CATALOG V3';
+const renderMigration = (source) => {
+  const begin = source.indexOf(beginMarker);
+  const end = source.indexOf(endMarker);
+  if (begin < 0 || end < begin) throw new Error('authority catalog migration markers are missing');
+  const afterEnd = end + endMarker.length;
+  return `${source.slice(0, begin + beginMarker.length)}\n${sql.trimEnd()}\n${endMarker}${source.slice(afterEnd)}`;
+};
+const migrationSource = fs.readFileSync(migrationPath, 'utf8');
+const expectedMigration = renderMigration(migrationSource);
+
 if (process.argv.includes('--check')) {
-  if (!fs.existsSync(outputPath) || fs.readFileSync(outputPath, 'utf8') !== sql) {
+  if (!fs.existsSync(outputPath)
+    || fs.readFileSync(outputPath, 'utf8') !== sql
+    || migrationSource !== expectedMigration) {
     console.error('authority catalog is missing or stale; run node tools/generate-authority-catalog-v3.mjs');
     process.exit(1);
   }
 } else {
   fs.mkdirSync(path.dirname(outputPath), { recursive:true });
   fs.writeFileSync(outputPath, sql, 'utf8');
+  fs.writeFileSync(migrationPath, expectedMigration, 'utf8');
 }
