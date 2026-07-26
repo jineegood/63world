@@ -106,11 +106,13 @@
       }
 
       currentIdentity = entered.identity;
-      try {
-        await shared.refreshWorkbooks();
-      } catch (error) {
-        currentIdentity = null;
-        throw error;
+      if (!authorityV3Enabled) {
+        try {
+          await shared.refreshWorkbooks();
+        } catch (error) {
+          currentIdentity = null;
+          throw error;
+        }
       }
       if (entered.isNewAccount) {
         return Object.freeze({ kind:'new', identity:currentIdentity });

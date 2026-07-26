@@ -249,6 +249,11 @@ test('v3 flag loads server-authoritative state without reading the writable v2 p
   assert.equal(deps.calls.some(([name]) => name === 'authorityLoadGame'), true);
   assert.equal(deps.calls.some(([name]) => name === 'loadPlayer'), false);
   assert.equal(deps.calls.some(([name]) => name === 'createCloudService'), false);
+  assert.equal(
+    deps.calls.some(([name]) => name === 'refreshWorkbooks'),
+    false,
+    'authoritative students must not download workbook answers',
+  );
 });
 
 test('v3 treats only CHARACTER_NOT_FOUND as a new character', async () => {

@@ -9,6 +9,8 @@ const YuksamAuthorityActionRunnerV3 = window.YuksamAuthorityActionRunnerV3;
 if (!YuksamAuthorityActionRunnerV3) throw new Error('YuksamAuthorityActionRunnerV3 must be loaded before game.js');
 const YuksamPvpClient = window.YuksamPvpClient;
 if (!YuksamPvpClient) throw new Error('YuksamPvpClient must be loaded before game.js');
+const YuksamPveCombatClientV3 = window.YuksamPveCombatClientV3;
+if (!YuksamPveCombatClientV3) throw new Error('YuksamPveCombatClientV3 must be loaded before game.js');
 const YuksamInputRouter = window.YuksamInputRouter;
 if (!YuksamInputRouter) throw new Error('YuksamInputRouter must be loaded before game.js');
 const YuksamWorldInteractionRegistry = window.YuksamWorldInteractionRegistry;
@@ -13085,3 +13087,383 @@ window.cheatUpgradeEquippedWeapon = function cheatUpgradeEquippedWeapon() {
 })();
 
 wireAuthoritativeEconomyV3();
+
+/* Server-authoritative PvE combat v3 browser wiring.
+   The browser presents server results; it never grades or calculates rewards here. */
+function wireAuthoritativePveCombatV3() {
+  const MONSTER_KEYS_V3 = Object.freeze({
+    'forest:mushroom':'forest_mushroom',
+    'forest:slime':'forest_slime',
+    'desert:stomp':'desert_stomp',
+    'desert:snake':'desert_snake',
+    'swamp:tarantula':'swamp_tarantula',
+    'swamp:zombie':'swamp_zombie',
+  });
+  const MONSTER_TYPES_V3 = Object.freeze(Object.fromEntries(
+    Object.entries(MONSTER_KEYS_V3).map(([local, server]) => [server, local.split(':')[1]]),
+  ));
+  let combatClient = null;
+  let session = null;
+  let activeMonster = null;
+  let busy = false;
+
+  function getClient() {
+    const client = secureStudentAccess.getClient();
+    if (!client) return null;
+    if (!combatClient) combatClient = YuksamPveCombatClientV3.create({ client });
+    return combatClient;
+  }
+
+  function monsterKey(monster) {
+    if (monster?.elite) return null;
+    return MONSTER_KEYS_V3[`${game.currentMap}:${monster?.type || ''}`] || null;
+  }
+
+  function isActive() {
+    return Boolean(secureStudentAccess.authorityV3Enabled && session && activeMonster);
+  }
+  window.isAuthorityPveCombatV3Active = isActive;
+
+  function resetLocalCombat() {
+    session = null;
+    activeMonster = null;
+    busy = false;
+    game.currentCombatMonsterId = null;
+    game.currentQuestion = null;
+    game.currentCombatAction = null;
+    game.combatShield = 0;
+    game.combatHpDisplay = null;
+  }
+
+  function applyServerPlayer(response, followServerMap = false) {
+    if (!response?.player) return;
+    const converted = window.YuksamPlayerAuthorityV3.snapshotToLegacyPlayer(response.player);
+    const x = game.player?.x;
+    const y = game.player?.y;
+    const localMap = game.currentMap;
+    game.player = normalizePlayer(converted);
+    if (followServerMap) {
+      game.currentMap = game.player.map;
+      const spawn = worldDefs[game.currentMap]?.playerSpawn || worldDefs.town.playerSpawn;
+      game.player.x = spawn.x;
+      game.player.y = spawn.y;
+    } else {
+      game.currentMap = localMap;
+      game.player.map = localMap;
+      game.player.x = x;
+      game.player.y = y;
+    }
+    updateHud();
+  }
+
+  function applySession(nextSession, monster = activeMonster) {
+    if (!nextSession || !monster) return false;
+    session = nextSession;
+    activeMonster = monster;
+    game.currentCombatMonsterId = monster.id;
+    game.currentQuestion = {
+      q:String(session.question?.prompt || ''),
+      choices:Array.isArray(session.question?.choices) ? [...session.question.choices] : [],
+      questionToken:String(session.question?.questionToken || ''),
+    };
+    game.currentCombatAction = null;
+    game.combatShield = Number(session.playerShield) || 0;
+    game.player.hp = Number(session.playerHp) || 0;
+    game.player.maxHp = Number(session.playerMaxHp) || game.player.maxHp;
+    game.player.skillCooldowns = { ...(session.cooldowns || {}) };
+    monster.hp = Number(session.monsterHp) || 0;
+    monster.maxHp = Number(session.monsterMaxHp) || monster.maxHp;
+    monster.attack = Number(session.monsterAttack) || monster.attack;
+    monster.shield = Number(session.monsterShield) || 0;
+    monster.alive = monster.hp > 0;
+    monster.chasing = true;
+    game.combatHpDisplay = {
+      player:Math.max(0, Math.min(100, Math.round((game.player.hp / game.player.maxHp) * 100))),
+      monster:Math.max(0, Math.min(100, Math.round((monster.hp / monster.maxHp) * 100))),
+    };
+    syncAudioFileBgm();
+    updateHud();
+    return true;
+  }
+
+  function messageForEvent(event, response) {
+    const monsterName = activeMonster?.name || '몬스터';
+    switch (event?.type) {
+      case 'answer-correct': return { text:'정답!', duration:800 };
+      case 'answer-wrong': return {
+        text:`오답입니다. 정답은 ${String(response.correctAnswer || '')}`,
+        duration:Math.max(2200, Number(event.minimumDurationMs) || 0),
+        tone:'correct-answer',
+      };
+      case 'monster-damage': return {
+        text:`${event.critical ? '💥 치명타! ' : ''}${monsterName}에게 ${Number(event.amount) || 0}의 피해!`,
+        duration:1200,
+      };
+      case 'player-miss': return { text:'공격이 빗나갔다!', duration:900 };
+      case 'player-shield': return { text:`보호막 +${Number(event.amount) || 0}`, duration:900 };
+      case 'player-heal': return { text:`HP +${Number(event.amount) || 0}`, duration:900 };
+      case 'monster-miss': return { text:`${monsterName}의 공격이 빗나갔다!`, duration:900 };
+      case 'player-damage': return {
+        text:`${monsterName}의 반격! ${Number(event.amount) || 0}의 피해`,
+        duration:1200,
+        tone:'enemy-action',
+      };
+      case 'monster-shield': return { text:`${monsterName}이 보호막을 펼쳤다!`, duration:900 };
+      case 'player-status': return { text:`상태 이상: ${String(event.status || '')}`, duration:900 };
+      case 'monster-status': return { text:`${monsterName} 상태 변화: ${String(event.status || '')}`, duration:900 };
+      default: return null;
+    }
+  }
+
+  function finishVictory(response, monster) {
+    monster.hp = 0;
+    monster.alive = false;
+    monster.dying = false;
+    monster.respawnAt = Date.now() + 9000;
+    const rewards = response.rewards || {};
+    resetLocalCombat();
+    closeModal();
+    playSfx('victory');
+    showRewardSequenceV2('몬스터를 처치했습니다!', monster.name, rewards, {
+      monsterRandomBuilding:Number(rewards.building) > 0,
+    });
+    appendChatMessage?.(
+      'system',
+      '전투',
+      `${monster.name} 처치! EXP +${Number(rewards.exp) || 0}, Gold +${Number(rewards.gold) || 0}`,
+    );
+  }
+
+  function finishDefeat(response) {
+    const goldLost = Number(response.death?.goldLost) || 0;
+    resetLocalCombat();
+    closeModal();
+    playSfx('defeat');
+    showCinematicMessage(
+      '으윽.. 쓰러졌다..!',
+      goldLost > 0 ? `Gold -${goldLost} · 63마을에서 회복했습니다.` : '63마을에서 회복했습니다.',
+      2200,
+    );
+    game.forestMonsters = [];
+    $('returnTownBtn')?.classList.add('hidden');
+    updateHud();
+    syncAudioFileBgm();
+  }
+
+  function presentResponse(response) {
+    const monster = activeMonster;
+    const outcome = String(response?.outcome || 'continue');
+    applyServerPlayer(response, response.outcome === 'defeat');
+    if (response?.session) applySession(response.session, monster);
+    const notices = (Array.isArray(response?.events) ? response.events : [])
+      .map((event) => messageForEvent(event, response))
+      .filter(Boolean);
+    const finish = () => {
+      if (outcome === 'victory') finishVictory(response, monster);
+      else if (outcome === 'defeat') finishDefeat(response);
+      else {
+        busy = false;
+        renderAuthorityMenuV3('다음 행동을 선택하세요.');
+      }
+    };
+    if (notices.length) queueCombatSequence(notices, finish);
+    else finish();
+  }
+
+  function renderAuthorityQuestionV3() {
+    if (!isActive()) return;
+    const prompt = escapeHtml(game.currentQuestion?.q || '문제를 확인하세요.');
+    const choices = game.currentQuestion?.choices || [];
+    const answerBox = choices.length
+      ? `<div class="combat-choices">${choices.map((choice, index) => (
+        `<button class="primary" onclick="submitAuthorityPveChoiceV3(${index})">${escapeHtml(String(choice))}</button>`
+      )).join('')}</div>`
+      : `<input id="combatAnswer" autocomplete="off" maxlength="512" placeholder="정답 입력">
+         <button class="primary" onclick="submitCombatAnswer()">정답 제출</button>`;
+    renderCombatFrame('서버가 안전하게 출제한 문제입니다.', `
+      <div class="panel-card"><b>${prompt}</b></div>
+      ${answerBox}
+      <p class="muted">정답과 피해량은 서버가 확인합니다.</p>
+    `);
+  }
+
+  function renderAuthorityMenuV3(message = '무엇을 할까?') {
+    if (!isActive()) return;
+    renderCombatFrame(message, `
+      <div class="combat-menu">
+        <button class="primary" ${busy ? 'disabled' : ''} onclick="chooseCombatAction('attack')">공격</button>
+        <button class="primary" ${busy ? 'disabled' : ''} onclick="chooseCombatAction('skill')">스킬</button>
+        <button class="ghost" ${busy ? 'disabled' : ''} onclick="escapeCombat()">전투 그만두기</button>
+      </div>
+      <p class="muted">전투 결과는 서버가 계산하고 이 화면은 결과만 보여줍니다.</p>
+    `);
+  }
+
+  function showSkillsV3() {
+    const buttons = getLearnedActiveSkills().map((skill) => {
+      const actionId = `active:${skill.id}`;
+      const cooldown = Number(session?.cooldowns?.[skill.id]) || 0;
+      return `<button class="primary" ${cooldown > 0 ? 'disabled' : ''}
+        onclick="chooseAuthorityPveSkillV3('${escapeHtml(skill.id)}')">${escapeHtml(skill.active?.name || skill.id)}${cooldown ? ` · ${cooldown}턴` : ''}</button>`;
+    }).join('');
+    renderCombatFrame('사용할 스킬을 선택하세요.', `
+      <div class="combat-menu">${buttons || '<p>배운 액티브 스킬이 없습니다.</p>'}
+      <button class="ghost" onclick="renderCombatMenu()">뒤로</button></div>
+    `);
+  }
+
+  async function submitTurnV3(given) {
+    if (!isActive() || busy) return;
+    const actionId = game.currentCombatAction === 'attack' ? 'basic' : String(game.currentCombatAction || '');
+    if (!actionId) return;
+    busy = true;
+    renderCombatFrame('서버가 채점하고 있습니다...', '<p class="muted">잠시만 기다려 주세요.</p>');
+    try {
+      const response = await getClient().submitTurn(
+        session.question.questionToken,
+        session.sessionRevision,
+        actionId,
+        String(given ?? ''),
+      );
+      presentResponse(response);
+    } catch (error) {
+      busy = false;
+      toast(error?.message || '전투 서버와 통신하지 못했습니다.');
+      try {
+        const resumed = await getClient().resume();
+        if (resumed?.session) {
+          applySession(resumed.session, activeMonster);
+          renderAuthorityMenuV3('전투 상태를 다시 불러왔습니다.');
+        }
+      } catch {
+        resetLocalCombat();
+        closeModal();
+      }
+    }
+  }
+
+  async function startV3(monster) {
+    const key = monsterKey(monster);
+    if (!key) {
+      toast('이 몬스터의 서버 전투는 아직 준비 중입니다.');
+      return false;
+    }
+    const client = getClient();
+    if (!client || busy) return false;
+    busy = true;
+    activeMonster = monster;
+    game.currentCombatMonsterId = monster.id;
+    renderCombatFrame('전투 서버에 연결하고 있습니다...', '<p class="muted">잠시만 기다려 주세요.</p>');
+    try {
+      const response = await client.start(key);
+      applyServerPlayer(response);
+      applySession(response.session, monster);
+      busy = false;
+      playSfx('open');
+      renderAuthorityMenuV3(response.resumed ? '진행 중이던 전투를 이어갑니다.' : '야생의 적이 나타났다!');
+      return true;
+    } catch (error) {
+      resetLocalCombat();
+      closeModal();
+      toast(error?.message || '전투를 시작하지 못했습니다.');
+      return false;
+    }
+  }
+
+  window.chooseAuthorityPveSkillV3 = (skillId) => {
+    if (!isActive() || busy) return;
+    game.currentCombatAction = `active:${String(skillId || '')}`;
+    renderAuthorityQuestionV3();
+  };
+  window.submitAuthorityPveChoiceV3 = (index) => {
+    const choice = game.currentQuestion?.choices?.[Number(index)];
+    if (choice === undefined) return;
+    submitTurnV3(choice);
+  };
+
+  const legacyChooseCombatAction = window.chooseCombatAction;
+  window.chooseCombatAction = function chooseCombatActionAuthorityV3(action) {
+    if (!isActive()) return legacyChooseCombatAction(action);
+    if (busy) return;
+    if (action === 'skill') {
+      showSkillsV3();
+      return;
+    }
+    game.currentCombatAction = 'attack';
+    renderAuthorityQuestionV3();
+  };
+
+  const legacySubmitCombatAnswer = window.submitCombatAnswer;
+  window.submitCombatAnswer = function submitCombatAnswerAuthorityV3() {
+    if (!isActive()) return legacySubmitCombatAnswer();
+    const given = $('combatAnswer')?.value || '';
+    if (!String(given).trim()) {
+      toast('정답을 입력하세요.');
+      return;
+    }
+    submitTurnV3(given);
+  };
+
+  const legacyRenderCombatMenu = renderCombatMenu;
+  renderCombatMenu = function renderCombatMenuAuthorityV3(message = '무엇을 할까?') {
+    if (isActive()) return renderAuthorityMenuV3(message);
+    return legacyRenderCombatMenu(message);
+  };
+
+  const legacyEscapeCombat = window.escapeCombat;
+  window.escapeCombat = async function escapeCombatAuthorityV3() {
+    if (!isActive()) return legacyEscapeCombat();
+    if (busy) return;
+    busy = true;
+    try {
+      await getClient().surrender(session.sessionRevision);
+      const monster = activeMonster;
+      resetLocalCombat();
+      if (monster) monster.ignorePlayerUntil = Date.now() + 1800;
+      closeModal();
+      toast('전투를 그만두었습니다.');
+    } catch (error) {
+      busy = false;
+      toast(error?.message || '전투를 끝내지 못했습니다.');
+    }
+  };
+
+  combatEntryPipeline.register({
+    id:'server-authoritative-pve-v3',
+    priority:1000,
+    handle:({ monster }, next) => {
+      if (!secureStudentAccess.authorityV3Enabled) return next();
+      return startV3(monster);
+    },
+  });
+
+  async function resumeV3() {
+    if (!secureStudentAccess.authorityV3Enabled || !game.player || session || busy) return;
+    const client = getClient();
+    if (!client) return;
+    try {
+      const response = await client.resume();
+      if (!response?.session) return;
+      const type = MONSTER_TYPES_V3[response.session.monsterKey];
+      const monster = (game.forestMonsters || []).find((candidate) => (
+        candidate.alive && !candidate.elite && candidate.type === type
+      ));
+      if (!monster) return;
+      applyServerPlayer(response);
+      applySession(response.session, monster);
+      renderAuthorityMenuV3('진행 중이던 전투를 이어갑니다.');
+    } catch (error) {
+      toast(error?.message || '진행 중인 전투를 불러오지 못했습니다.');
+    }
+  }
+  window.resumeAuthorityPveCombatV3 = resumeV3;
+
+  const legacyStartGame = startGame;
+  startGame = function startGameAuthorityPveV3(existing = false, options = {}) {
+    const result = legacyStartGame(existing, options);
+    if (secureStudentAccess.authorityV3Enabled) setTimeout(resumeV3, options?.skipLoading ? 0 : 2800);
+    return result;
+  };
+}
+
+wireAuthoritativePveCombatV3();
