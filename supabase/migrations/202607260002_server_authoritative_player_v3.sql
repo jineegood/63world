@@ -561,3 +561,494 @@ grant execute on function public.create_student_character_v3(text, jsonb, uuid)
   to authenticated;
 grant execute on function public.load_student_game_v3()
   to authenticated;
+
+create or replace function public.private_store_receipt_v3(
+  p_request_id uuid,
+  p_action_name text,
+  p_response jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_action_name text;
+  v_response jsonb;
+begin
+  insert into public.game_action_receipts_v3(
+    user_id,
+    request_id,
+    action_name,
+    response_json
+  )
+  values (v_user_id, p_request_id, p_action_name, p_response)
+  on conflict (user_id, request_id) do nothing;
+
+  select r.action_name, r.response_json
+  into v_action_name, v_response
+  from public.game_action_receipts_v3 as r
+  where r.user_id = v_user_id
+    and r.request_id = p_request_id;
+
+  if v_action_name is distinct from p_action_name then
+    return jsonb_build_object('ok', false, 'code', 'REQUEST_ID_REUSED');
+  end if;
+  return v_response;
+end;
+$$;
+
+revoke all on function public.private_store_receipt_v3(uuid, text, jsonb)
+  from public, anon, authenticated;
+
+create or replace function public.save_student_preferences_v3(
+  p_preferences jsonb,
+  p_expected_revision bigint,
+  p_request_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_receipt jsonb;
+  v_response jsonb;
+  v_current_revision bigint;
+  v_appearance jsonb;
+  v_audio jsonb;
+  v_tutorial jsonb;
+begin
+  if v_user_id is null then
+    return jsonb_build_object('ok', false, 'code', 'UNAUTHORIZED');
+  end if;
+  if public.private_is_teacher_v3() then
+    return jsonb_build_object('ok', false, 'code', 'FORBIDDEN');
+  end if;
+  if p_request_id is null then
+    return jsonb_build_object('ok', false, 'code', 'INVALID_REQUEST');
+  end if;
+
+  v_receipt := public.private_read_receipt_v3(
+    p_request_id,
+    'save_student_preferences_v3'
+  );
+  if v_receipt is not null then
+    return v_receipt;
+  end if;
+
+  select c.revision
+  into v_current_revision
+  from public.player_core_v3 as c
+  where c.user_id = v_user_id
+  for update;
+
+  if v_current_revision is null then
+    v_response := jsonb_build_object('ok', false, 'code', 'CHARACTER_NOT_FOUND');
+    return public.private_store_receipt_v3(
+      p_request_id,
+      'save_student_preferences_v3',
+      v_response
+    );
+  end if;
+
+  if p_expected_revision is distinct from v_current_revision then
+    perform public.private_log_security_event_v3(
+      'preference_revision_conflict',
+      jsonb_build_object('current_revision', v_current_revision)
+    );
+    v_response := jsonb_build_object(
+      'ok', false,
+      'code', 'REVISION_CONFLICT',
+      'snapshot', public.private_build_student_snapshot_v3(v_user_id)
+    );
+    return public.private_store_receipt_v3(
+      p_request_id,
+      'save_student_preferences_v3',
+      v_response
+    );
+  end if;
+
+  -- Explicitly name authoritative fields so audits show that they are rejected.
+  if jsonb_typeof(p_preferences) is distinct from 'object'
+    or exists (
+      select 1
+      from jsonb_object_keys(
+        case when jsonb_typeof(p_preferences) = 'object'
+          then p_preferences else '{}'::jsonb end
+      ) as pref_key
+      where pref_key in (
+        'level', 'exp', 'gold', 'building', 'hp', 'map', 'inventory',
+        'equipment', 'skills', 'quests', 'records', 'pvp_wins', 'pvp_losses'
+      )
+    )
+    or exists (
+      select 1
+      from jsonb_object_keys(
+        case when jsonb_typeof(p_preferences) = 'object'
+          then p_preferences else '{}'::jsonb end
+      ) as pref_key
+      where pref_key not in ('appearance', 'audio', 'tutorialAcknowledgements')
+    )
+  then
+    perform public.private_log_security_event_v3(
+      'invalid_preference_fields',
+      '{}'::jsonb
+    );
+    v_response := jsonb_build_object('ok', false, 'code', 'INVALID_PREFERENCES');
+    return public.private_store_receipt_v3(
+      p_request_id,
+      'save_student_preferences_v3',
+      v_response
+    );
+  end if;
+
+  v_appearance := p_preferences -> 'appearance';
+  v_audio := p_preferences -> 'audio';
+  v_tutorial := p_preferences -> 'tutorialAcknowledgements';
+
+  if v_appearance is not null and (
+    jsonb_typeof(v_appearance) is distinct from 'object'
+    or exists (
+      select 1
+      from jsonb_object_keys(
+        case when jsonb_typeof(v_appearance) = 'object'
+          then v_appearance else '{}'::jsonb end
+      ) as appearance_key
+      where appearance_key not in (
+        'shirt', 'pants', 'hair', 'hairStyle', 'skin', 'accessory'
+      )
+    )
+    or exists (
+      select 1
+      from jsonb_object_keys(
+        case when jsonb_typeof(v_appearance) = 'object'
+          then v_appearance else '{}'::jsonb end
+      ) as appearance_key
+      where jsonb_typeof(v_appearance -> appearance_key) is distinct from 'string'
+        or char_length(v_appearance ->> appearance_key) not between 1 and 32
+        or (v_appearance ->> appearance_key) ~ '[[:cntrl:]]'
+    )
+  ) then
+    perform public.private_log_security_event_v3('invalid_preference_appearance', '{}'::jsonb);
+    v_response := jsonb_build_object('ok', false, 'code', 'INVALID_PREFERENCES');
+    return public.private_store_receipt_v3(
+      p_request_id,
+      'save_student_preferences_v3',
+      v_response
+    );
+  end if;
+
+  if v_audio is not null and (
+    jsonb_typeof(v_audio) is distinct from 'object'
+    or exists (
+      select 1
+      from jsonb_object_keys(
+        case when jsonb_typeof(v_audio) = 'object'
+          then v_audio else '{}'::jsonb end
+      ) as audio_key
+      where audio_key not in ('bgmVolume', 'sfxVolume', 'bgmEnabled', 'sfxEnabled')
+    )
+    or (
+      v_audio ? 'bgmVolume'
+      and (
+        jsonb_typeof(v_audio -> 'bgmVolume') <> 'number'
+        or (v_audio ->> 'bgmVolume')::numeric not between 0 and 100
+        or trunc((v_audio ->> 'bgmVolume')::numeric) <> (v_audio ->> 'bgmVolume')::numeric
+      )
+    )
+    or (
+      v_audio ? 'sfxVolume'
+      and (
+        jsonb_typeof(v_audio -> 'sfxVolume') <> 'number'
+        or (v_audio ->> 'sfxVolume')::numeric not between 0 and 100
+        or trunc((v_audio ->> 'sfxVolume')::numeric) <> (v_audio ->> 'sfxVolume')::numeric
+      )
+    )
+    or (
+      v_audio ? 'bgmEnabled'
+      and jsonb_typeof(v_audio -> 'bgmEnabled') <> 'boolean'
+    )
+    or (
+      v_audio ? 'sfxEnabled'
+      and jsonb_typeof(v_audio -> 'sfxEnabled') <> 'boolean'
+    )
+  ) then
+    perform public.private_log_security_event_v3('invalid_preference_audio', '{}'::jsonb);
+    v_response := jsonb_build_object('ok', false, 'code', 'INVALID_PREFERENCES');
+    return public.private_store_receipt_v3(
+      p_request_id,
+      'save_student_preferences_v3',
+      v_response
+    );
+  end if;
+
+  if v_tutorial is not null and (
+    jsonb_typeof(v_tutorial) is distinct from 'object'
+    or octet_length(v_tutorial::text) > 8192
+  ) then
+    perform public.private_log_security_event_v3('invalid_preference_tutorial', '{}'::jsonb);
+    v_response := jsonb_build_object('ok', false, 'code', 'INVALID_PREFERENCES');
+    return public.private_store_receipt_v3(
+      p_request_id,
+      'save_student_preferences_v3',
+      v_response
+    );
+  end if;
+
+  update public.player_preferences_v3
+  set
+    shirt_color = case when v_appearance ? 'shirt' then v_appearance ->> 'shirt' else shirt_color end,
+    pants_color = case when v_appearance ? 'pants' then v_appearance ->> 'pants' else pants_color end,
+    hair_color = case when v_appearance ? 'hair' then v_appearance ->> 'hair' else hair_color end,
+    hair_style = case when v_appearance ? 'hairStyle' then v_appearance ->> 'hairStyle' else hair_style end,
+    skin_color = case when v_appearance ? 'skin' then v_appearance ->> 'skin' else skin_color end,
+    accessory = case when v_appearance ? 'accessory' then v_appearance ->> 'accessory' else accessory end,
+    bgm_volume = case when v_audio ? 'bgmVolume' then (v_audio ->> 'bgmVolume')::integer else bgm_volume end,
+    sfx_volume = case when v_audio ? 'sfxVolume' then (v_audio ->> 'sfxVolume')::integer else sfx_volume end,
+    bgm_enabled = case when v_audio ? 'bgmEnabled' then (v_audio ->> 'bgmEnabled')::boolean else bgm_enabled end,
+    sfx_enabled = case when v_audio ? 'sfxEnabled' then (v_audio ->> 'sfxEnabled')::boolean else sfx_enabled end,
+    tutorial_acknowledgements = coalesce(v_tutorial, tutorial_acknowledgements),
+    updated_at = now()
+  where user_id = v_user_id;
+
+  update public.player_core_v3
+  set revision = revision + 1, updated_at = now()
+  where user_id = v_user_id;
+
+  v_response := jsonb_build_object(
+    'ok', true,
+    'code', 'OK',
+    'snapshot', public.private_build_student_snapshot_v3(v_user_id)
+  );
+  return public.private_store_receipt_v3(
+    p_request_id,
+    'save_student_preferences_v3',
+    v_response
+  );
+end;
+$$;
+
+create or replace function public.transition_student_map_v3(
+  p_target_map text,
+  p_expected_revision bigint,
+  p_request_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_receipt jsonb;
+  v_response jsonb;
+  v_current_map text;
+  v_level integer;
+  v_current_revision bigint;
+  v_allowed boolean := false;
+begin
+  if v_user_id is null then
+    return jsonb_build_object('ok', false, 'code', 'UNAUTHORIZED');
+  end if;
+  if public.private_is_teacher_v3() then
+    return jsonb_build_object('ok', false, 'code', 'FORBIDDEN');
+  end if;
+  if p_request_id is null then
+    return jsonb_build_object('ok', false, 'code', 'INVALID_REQUEST');
+  end if;
+
+  v_receipt := public.private_read_receipt_v3(
+    p_request_id,
+    'transition_student_map_v3'
+  );
+  if v_receipt is not null then
+    return v_receipt;
+  end if;
+
+  select c.current_map, c.level, c.revision
+  into v_current_map, v_level, v_current_revision
+  from public.player_core_v3 as c
+  where c.user_id = v_user_id
+  for update;
+
+  if v_current_revision is null then
+    v_response := jsonb_build_object('ok', false, 'code', 'CHARACTER_NOT_FOUND');
+    return public.private_store_receipt_v3(
+      p_request_id,
+      'transition_student_map_v3',
+      v_response
+    );
+  end if;
+
+  if p_expected_revision is distinct from v_current_revision then
+    perform public.private_log_security_event_v3(
+      'map_revision_conflict',
+      jsonb_build_object('current_revision', v_current_revision)
+    );
+    v_response := jsonb_build_object(
+      'ok', false,
+      'code', 'REVISION_CONFLICT',
+      'snapshot', public.private_build_student_snapshot_v3(v_user_id)
+    );
+    return public.private_store_receipt_v3(
+      p_request_id,
+      'transition_student_map_v3',
+      v_response
+    );
+  end if;
+
+  if p_target_map is null or p_target_map not in (
+    'town',
+    'equipmentShop',
+    'buildingShopInterior',
+    'petShopInterior',
+    'upgradeShopInterior',
+    'forest',
+    'desert',
+    'swamp',
+    'bossRoom',
+    'finalBossRoom'
+  ) then
+    perform public.private_log_security_event_v3('invalid_map_name', '{}'::jsonb);
+    v_response := jsonb_build_object('ok', false, 'code', 'INVALID_MAP');
+    return public.private_store_receipt_v3(
+      p_request_id,
+      'transition_student_map_v3',
+      v_response
+    );
+  end if;
+
+  if p_target_map in ('bossRoom', 'finalBossRoom') then
+    perform public.private_log_security_event_v3(
+      'locked_map_entry',
+      jsonb_build_object('target_map', p_target_map)
+    );
+    v_response := jsonb_build_object('ok', false, 'code', 'LOCKED_MAP');
+    return public.private_store_receipt_v3(
+      p_request_id,
+      'transition_student_map_v3',
+      v_response
+    );
+  end if;
+
+  if p_target_map = 'desert' and v_level < 4 then
+    perform public.private_log_security_event_v3(
+      'map_level_gate',
+      jsonb_build_object('target_map', 'desert', 'required_level', 4)
+    );
+    v_response := jsonb_build_object('ok', false, 'code', 'LEVEL_REQUIRED');
+    return public.private_store_receipt_v3(
+      p_request_id,
+      'transition_student_map_v3',
+      v_response
+    );
+  end if;
+
+  if p_target_map = 'swamp' and v_level < 7 then
+    perform public.private_log_security_event_v3(
+      'map_level_gate',
+      jsonb_build_object('target_map', 'swamp', 'required_level', 7)
+    );
+    v_response := jsonb_build_object('ok', false, 'code', 'LEVEL_REQUIRED');
+    return public.private_store_receipt_v3(
+      p_request_id,
+      'transition_student_map_v3',
+      v_response
+    );
+  end if;
+
+  v_allowed := (
+    v_current_map = 'town'
+    and p_target_map in (
+      'equipmentShop',
+      'buildingShopInterior',
+      'petShopInterior',
+      'upgradeShopInterior',
+      'forest',
+      'desert',
+      'swamp'
+    )
+  ) or (
+    v_current_map <> 'town'
+    and v_current_map not in ('bossRoom', 'finalBossRoom')
+    and p_target_map = 'town'
+  );
+
+  if not v_allowed then
+    perform public.private_log_security_event_v3(
+      'invalid_map_transition',
+      jsonb_build_object('from_map', v_current_map, 'target_map', p_target_map)
+    );
+    v_response := jsonb_build_object('ok', false, 'code', 'INVALID_MAP_TRANSITION');
+    return public.private_store_receipt_v3(
+      p_request_id,
+      'transition_student_map_v3',
+      v_response
+    );
+  end if;
+
+  update public.player_core_v3
+  set
+    current_map = p_target_map,
+    revision = revision + 1,
+    updated_at = now()
+  where user_id = v_user_id;
+
+  v_response := jsonb_build_object(
+    'ok', true,
+    'code', 'OK',
+    'snapshot', public.private_build_student_snapshot_v3(v_user_id)
+  );
+  return public.private_store_receipt_v3(
+    p_request_id,
+    'transition_student_map_v3',
+    v_response
+  );
+end;
+$$;
+
+create or replace function public.cleanup_server_authority_v3()
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_receipts_deleted integer;
+  v_events_deleted integer;
+begin
+  if not public.private_is_teacher_v3() then
+    return jsonb_build_object('ok', false, 'code', 'FORBIDDEN');
+  end if;
+
+  delete from public.game_action_receipts_v3
+  where created_at < now() - interval '7 days';
+  get diagnostics v_receipts_deleted = row_count;
+
+  delete from public.security_events_v3
+  where created_at < now() - interval '30 days';
+  get diagnostics v_events_deleted = row_count;
+
+  return jsonb_build_object(
+    'ok', true,
+    'receipts_deleted', v_receipts_deleted,
+    'events_deleted', v_events_deleted
+  );
+end;
+$$;
+
+revoke all on function public.save_student_preferences_v3(jsonb, bigint, uuid)
+  from public, anon;
+revoke all on function public.transition_student_map_v3(text, bigint, uuid)
+  from public, anon;
+revoke all on function public.cleanup_server_authority_v3()
+  from public, anon;
+grant execute on function public.save_student_preferences_v3(jsonb, bigint, uuid)
+  to authenticated;
+grant execute on function public.transition_student_map_v3(text, bigint, uuid)
+  to authenticated;
+grant execute on function public.cleanup_server_authority_v3()
+  to authenticated;

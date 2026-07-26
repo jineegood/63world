@@ -210,3 +210,103 @@ test('student character RPCs are security definer functions with a locked search
   assert.match(sql, /grant\s+execute\s+on\s+function\s+public\.load_student_game_v3\(\)\s+to\s+authenticated/i);
   assert.match(sql, /revoke\s+all\s+on\s+function\s+public\.private_build_student_snapshot_v3\(uuid\)\s+from\s+public\s*,\s*anon\s*,\s*authenticated/i);
 });
+
+test('preference RPC rejects authoritative fields and uses revision plus request replay protection', () => {
+  const sql = migration();
+  assert.match(
+    sql,
+    /create\s+or\s+replace\s+function\s+public\.save_student_preferences_v3\s*\(\s*p_preferences\s+jsonb\s*,\s*p_expected_revision\s+bigint\s*,\s*p_request_id\s+uuid\s*\)/i,
+  );
+  const body = sql.match(
+    /create\s+or\s+replace\s+function\s+public\.save_student_preferences_v3[\s\S]*?as\s+\$\$([\s\S]*?)\$\$;/i,
+  )?.[1] || '';
+
+  assert.match(body, /private_read_receipt_v3\s*\(\s*p_request_id\s*,\s*'save_student_preferences_v3'\s*\)/i);
+  assert.match(body, /from\s+public\.player_core_v3[\s\S]*?for\s+update/i);
+  assert.match(body, /p_expected_revision\s+is\s+distinct\s+from\s+v_current_revision/i);
+  assert.match(body, /REVISION_CONFLICT/);
+  assert.match(body, /update\s+public\.player_preferences_v3/i);
+  assert.match(body, /revision\s*=\s*revision\s*\+\s*1/i);
+  assert.match(body, /private_store_receipt_v3\s*\(/i);
+  for (const forbidden of [
+    'level',
+    'exp',
+    'gold',
+    'building',
+    'hp',
+    'map',
+    'inventory',
+    'equipment',
+    'skills',
+    'quests',
+    'records',
+    'pvp_wins',
+    'pvp_losses',
+  ]) {
+    assert.match(body, new RegExp(`'${forbidden}'`, 'i'));
+  }
+});
+
+test('map RPC enforces server-owned map names, edges, and level gates', () => {
+  const sql = migration();
+  assert.match(
+    sql,
+    /create\s+or\s+replace\s+function\s+public\.transition_student_map_v3\s*\(\s*p_target_map\s+text\s*,\s*p_expected_revision\s+bigint\s*,\s*p_request_id\s+uuid\s*\)/i,
+  );
+  const body = sql.match(
+    /create\s+or\s+replace\s+function\s+public\.transition_student_map_v3[\s\S]*?as\s+\$\$([\s\S]*?)\$\$;/i,
+  )?.[1] || '';
+
+  for (const map of [
+    'town',
+    'equipmentShop',
+    'buildingShopInterior',
+    'petShopInterior',
+    'upgradeShopInterior',
+    'forest',
+    'desert',
+    'swamp',
+    'bossRoom',
+    'finalBossRoom',
+  ]) {
+    assert.match(body, new RegExp(`'${map}'`));
+  }
+  assert.match(body, /p_target_map\s*=\s*'desert'[\s\S]*?v_level\s*<\s*4/i);
+  assert.match(body, /p_target_map\s*=\s*'swamp'[\s\S]*?v_level\s*<\s*7/i);
+  assert.match(body, /p_target_map\s+in\s*\(\s*'bossRoom'\s*,\s*'finalBossRoom'\s*\)[\s\S]*?LOCKED_MAP/i);
+  assert.match(body, /p_expected_revision\s+is\s+distinct\s+from\s+v_current_revision/i);
+  assert.match(body, /update\s+public\.player_core_v3[\s\S]*?current_map\s*=\s*p_target_map[\s\S]*?revision\s*=\s*revision\s*\+\s*1/i);
+});
+
+test('rejected mutations create bounded audit events while successful calls return snapshots', () => {
+  const sql = migration();
+  for (const fn of ['save_student_preferences_v3', 'transition_student_map_v3']) {
+    const body = sql.match(
+      new RegExp(`create\\s+or\\s+replace\\s+function\\s+public\\.${fn}[\\s\\S]*?as\\s+\\$\\$([\\s\\S]*?)\\$\\$;`, 'i'),
+    )?.[1] || '';
+    assert.match(body, /private_log_security_event_v3/i);
+    assert.match(body, /private_build_student_snapshot_v3/i);
+    assert.match(body, /'ok'\s*,\s*true[\s\S]*?'snapshot'/i);
+  }
+  assert.match(sql, /create\s+or\s+replace\s+function\s+public\.cleanup_server_authority_v3\s*\(\s*\)/i);
+  assert.match(sql, /created_at\s*<\s*now\(\)\s*-\s*interval\s*'7 days'/i);
+  assert.match(sql, /created_at\s*<\s*now\(\)\s*-\s*interval\s*'30 days'/i);
+  assert.match(sql, /if\s+not\s+public\.private_is_teacher_v3\(\)/i);
+});
+
+test('new mutation RPCs are callable only by authenticated users', () => {
+  const sql = migration();
+  for (const signature of [
+    'save_student_preferences_v3\\(jsonb,\\s*bigint,\\s*uuid\\)',
+    'transition_student_map_v3\\(text,\\s*bigint,\\s*uuid\\)',
+  ]) {
+    assert.match(
+      sql,
+      new RegExp(`revoke\\s+all\\s+on\\s+function\\s+public\\.${signature}\\s+from\\s+public\\s*,\\s*anon`, 'i'),
+    );
+    assert.match(
+      sql,
+      new RegExp(`grant\\s+execute\\s+on\\s+function\\s+public\\.${signature}\\s+to\\s+authenticated`, 'i'),
+    );
+  }
+});
