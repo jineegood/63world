@@ -36,6 +36,8 @@
     "test:server-authority-v3": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 server-authority-v3",
     "test:authority-catalog-v3": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 authority-catalog-v3",
     "test:server-authority-v3-economy": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 server-authority-v3-economy",
+    "test:authority-action-runner-v3": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 authority-action-runner-v3",
+    "test:server-authority-v3-economy-wiring": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 server-authority-v3-economy-wiring",
     "test:player-authority-v3": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 player-authority-v3",
     "test:server-authority-v3-game-wiring": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 server-authority-v3-game-wiring",
     "test:cloud-sync-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 cloud-sync-v2",

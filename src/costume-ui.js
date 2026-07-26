@@ -8,6 +8,8 @@
   const call = (n) => (typeof window[n] === 'function' ? window[n] : null);
   const esc = (t) => (call('escapeHtml') ? window.escapeHtml(t) : String(t));
   const defs = () => window.COSTUME_DEFS_V55 || {};
+  const authorityActionRunnerV3 = window.authorityActionRunnerV3;
+  const authorityV3Enabled = () => Boolean(window.authorityV3Enabled?.());
 
   function ensureFields() {
     const p = g()?.player;
@@ -51,9 +53,22 @@
     `, { type: 'costumeShop', pause: true });
   };
 
-  window.buyCostumeV55 = function buyCostumeV55(id) {
+  window.buyCostumeV55 = async function buyCostumeV55(id) {
     const p = ensureFields(); const item = defs()[id];
     if (!p || !item) return;
+    if (authorityV3Enabled()) {
+      try {
+        const handled = await authorityActionRunnerV3.run('purchaseItem', { itemId:id }, { pendingKey:'economy' });
+        if (handled.pending) return;
+        call('playSfx')?.('coin');
+        window.recordQuestActionV38?.('buyCostume');
+        call('toast')?.(`${item.name} 구매 완료!`);
+        window.openCostumeShopV55();
+      } catch (error) {
+        call('toast')?.(error?.message || '서버와 통신하지 못했습니다.');
+      }
+      return;
+    }
     if (p.costumeInventory.includes(id)) { call('toast')?.('이미 가지고 있는 코스튬입니다.'); return; }
     if ((p.gold || 0) < item.price) { call('toast')?.('골드가 부족합니다.'); return; }
     p.gold -= item.price;
@@ -127,15 +142,49 @@
     } catch {}
   }
 
-  window.equipCostumeV55 = function equipCostumeV55(id) {
+  window.equipCostumeV55 = async function equipCostumeV55(id) {
     const p = ensureFields(); const item = defs()[id];
     if (!p || !item || !p.costumeInventory.includes(id)) return;
+    if (authorityV3Enabled()) {
+      const instance = p.serverInventoryInstances?.find((entry) => (
+        entry.inventoryKind === 'costume' && entry.itemDefinitionId === id
+      ));
+      if (!instance) { call('toast')?.('보유한 코스튬 정보를 찾지 못했습니다.'); return; }
+      try {
+        const handled = await authorityActionRunnerV3.run(
+          'equipItem',
+          { inventoryId:instance.id },
+          { pendingKey:'economy' },
+        );
+        if (handled.pending) return;
+        call('playSfx')?.('open');
+        window.openCostumePanelV55();
+      } catch (error) {
+        call('toast')?.(error?.message || '서버와 통신하지 못했습니다.');
+      }
+      return;
+    }
     p.costume[item.slot] = id;
     call('savePlayer')?.(); call('playSfx')?.('open');
     window.openCostumePanelV55();
   };
-  window.unequipCostumeV55 = function unequipCostumeV55(slot) {
+  window.unequipCostumeV55 = async function unequipCostumeV55(slot) {
     const p = ensureFields(); if (!p) return;
+    if (authorityV3Enabled()) {
+      try {
+        const handled = await authorityActionRunnerV3.run(
+          'unequipSlot',
+          { inventoryKind:'costume', slot },
+          { pendingKey:'economy' },
+        );
+        if (handled.pending) return;
+        call('playSfx')?.('open');
+        window.openCostumePanelV55();
+      } catch (error) {
+        call('toast')?.(error?.message || '서버와 통신하지 못했습니다.');
+      }
+      return;
+    }
     delete p.costume[slot];
     call('savePlayer')?.(); call('playSfx')?.('open');
     window.openCostumePanelV55();

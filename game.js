@@ -5,6 +5,8 @@ const YuksamPlayerStore = window.YuksamPlayerStore;
 if (!YuksamPlayerStore) throw new Error('YuksamPlayerStore must be loaded before game.js');
 const YuksamStudentAccessV2 = window.YuksamStudentAccessV2;
 if (!YuksamStudentAccessV2) throw new Error('YuksamStudentAccessV2 must be loaded before game.js');
+const YuksamAuthorityActionRunnerV3 = window.YuksamAuthorityActionRunnerV3;
+if (!YuksamAuthorityActionRunnerV3) throw new Error('YuksamAuthorityActionRunnerV3 must be loaded before game.js');
 const YuksamPvpClient = window.YuksamPvpClient;
 if (!YuksamPvpClient) throw new Error('YuksamPvpClient must be loaded before game.js');
 const YuksamInputRouter = window.YuksamInputRouter;
@@ -596,6 +598,27 @@ function normalizePlayer(p) {
   }
   return normalized;
 }
+
+function applyAuthoritySnapshotV3(result) {
+  if (!game.player || !result?.player) return;
+  const { x, y } = game.player;
+  const currentMap = game.currentMap;
+  game.player = normalizePlayer(result.player);
+  game.player.x = x;
+  game.player.y = y;
+  game.player.map = currentMap;
+  game.currentMap = currentMap;
+  updateHud();
+}
+
+const authorityActionRunnerV3 = YuksamAuthorityActionRunnerV3.create({
+  service:secureStudentAccess,
+  isEnabled:() => Boolean(secureStudentAccess.authorityV3Enabled),
+  getRevision:() => game.player?.serverRevision,
+  applySnapshot:applyAuthoritySnapshotV3,
+});
+window.authorityActionRunnerV3 = authorityActionRunnerV3;
+window.authorityV3Enabled = () => Boolean(secureStudentAccess.authorityV3Enabled);
 
 function defaultWeaponIdForClass(klass) {
   if (klass === 'warrior') return 'training_greatsword';
@@ -5512,6 +5535,187 @@ function updateQuestTracker() {
   // 새로고침 없이 즉시 UI 동기화
   updateHud();
 })();
+
+/* Server-authoritative economy/equipment/skill cutover.
+   The wrappers are intentionally last: when the flag is off they delegate to the
+   existing game unchanged; when it is on, only the returned server snapshot mutates
+   protected player state. */
+function wireAuthoritativeEconomyV3() {
+  const legacyBuyItem = window.buyItem;
+  const legacyBuyBuildingItem = window.buyBuildingItem;
+  const legacyEquipItem = window.equipItem;
+  const legacyUnequipSlot = window.unequipSlot;
+  const legacyEnhanceWeapon = window.upgradeCurrentWeaponV33;
+  const legacyChooseSpec = window.chooseSpec;
+  const legacyLearnSkill = window.learnSkill;
+
+  const enabled = () => Boolean(secureStudentAccess.authorityV3Enabled);
+  const reportError = (error) => {
+    toast(error?.message || '서버와 통신하지 못했습니다.');
+  };
+  const ownedInstance = (itemId, inventoryKind = 'gear') => (
+    game.player?.serverInventoryInstances?.find((entry) => (
+      entry.inventoryKind === inventoryKind && entry.itemDefinitionId === itemId
+    ))
+  );
+
+  window.buyItem = async function buyItemAuthoritativeV3(itemId, returnKind = 'all') {
+    if (!enabled()) return legacyBuyItem(itemId, returnKind);
+    const item = ITEM_DEFS[itemId];
+    if (!item) return;
+    try {
+      const handled = await authorityActionRunnerV3.run(
+        'purchaseItem',
+        { itemId },
+        { pendingKey:'economy' },
+      );
+      if (handled.pending) return;
+      playSfx?.('coin');
+      openShopModal(returnKind);
+      toast(`${item.name} 구매 완료!`);
+      window.recordQuestActionV38?.('buy');
+    } catch (error) {
+      reportError(error);
+    }
+  };
+
+  window.buyBuildingItem = async function buyBuildingItemAuthoritativeV3(itemId) {
+    if (!enabled()) return legacyBuyBuildingItem(itemId);
+    const item = BUILDING_ITEM_DEFS[itemId];
+    if (!item) return;
+    try {
+      const handled = await authorityActionRunnerV3.run(
+        'purchaseItem',
+        { itemId },
+        { pendingKey:'economy' },
+      );
+      if (handled.pending) return;
+      playSfx?.('coin');
+      openBuildingShopModal();
+      toast(`${item.name} 구매 완료!`);
+      window.recordQuestActionV38?.('buy');
+      if (item.slot === 'accessory') window.recordQuestActionV38?.('buyAccessory');
+    } catch (error) {
+      reportError(error);
+    }
+  };
+
+  window.equipItem = async function equipItemAuthoritativeV3(itemId) {
+    if (!enabled()) return legacyEquipItem(itemId);
+    const item = getItemDefinition(itemId, game.player?.class);
+    const instance = ownedInstance(itemId);
+    if (!item || !instance) {
+      toast('보유한 장비 정보를 찾지 못했습니다.');
+      return;
+    }
+    try {
+      const handled = await authorityActionRunnerV3.run(
+        'equipItem',
+        { inventoryId:instance.id },
+        { pendingKey:'economy' },
+      );
+      if (handled.pending) return;
+      playSfx?.('open');
+      openCharacterPanel();
+      toast(`${item.name} 장착 완료!`);
+      window.recordQuestActionV38?.('equip');
+    } catch (error) {
+      reportError(error);
+    }
+  };
+
+  window.unequipSlot = async function unequipSlotAuthoritativeV3(slot) {
+    if (!enabled()) return legacyUnequipSlot(slot);
+    try {
+      const handled = await authorityActionRunnerV3.run(
+        'unequipSlot',
+        { inventoryKind:'gear', slot },
+        { pendingKey:'economy' },
+      );
+      if (handled.pending) return;
+      playSfx?.('open');
+      openCharacterPanel();
+    } catch (error) {
+      reportError(error);
+    }
+  };
+
+  window.upgradeCurrentWeaponV33 = async function enhanceWeaponAuthoritativeV3() {
+    if (!enabled()) return legacyEnhanceWeapon();
+    if (game.upgradeInProgress) return;
+    const weaponId = game.player?.equipment?.weapon;
+    const item = weaponId ? getItemDefinition(weaponId, game.player.class) : null;
+    if (!item) { toast('강화할 무기를 장착해 주세요.'); return; }
+    game.upgradeInProgress = true;
+    playSfx?.('upgradeCharge');
+    try {
+      const handled = await authorityActionRunnerV3.run(
+        'enhanceWeapon',
+        {},
+        { pendingKey:'enhancement' },
+      );
+      if (handled.pending) return;
+      const outcome = handled.result?.outcome;
+      playSfx?.(outcome?.success ? 'upgradeSuccess' : 'upgradeFail');
+      const tierName = (window.TIER_INFO_V27 || [])[outcome?.newTier]?.name || '';
+      const message = outcome?.success
+        ? `${item.name} 강화 성공! ${tierName} 등급이 되었습니다.`
+        : `${item.name} 강화 실패... ${tierName} 등급이 되었습니다.`;
+      if (outcome?.success) {
+        showCinematicMessage?.('강화 성공!', `${item.name} · ${tierName} 등급`, 1600);
+      }
+      appendChatMessage?.('system', '강화', message);
+      toast(message);
+      window.recordQuestActionV38?.('enhance');
+      openUpgradeShopModalV33();
+    } catch (error) {
+      reportError(error);
+    } finally {
+      game.upgradeInProgress = false;
+    }
+  };
+
+  window.chooseSpec = async function chooseSpecAuthoritativeV3(spec) {
+    if (!enabled()) return legacyChooseSpec(spec);
+    try {
+      const handled = await authorityActionRunnerV3.run(
+        'chooseSpecialization',
+        { specName:spec },
+        { pendingKey:'economy' },
+      );
+      if (handled.pending) return;
+      closeModal();
+      game.levelUpEffect = { until:Date.now() + 2100, start:Date.now() };
+      showCinematicMessage?.(`${spec} 전문화를 선택하셨습니다!`, '새로운 힘이 깨어납니다.', 2000);
+      playSfx?.('quest');
+      toast(`${spec} 전문화를 습득했습니다!`);
+    } catch (error) {
+      reportError(error);
+    }
+  };
+
+  window.learnSkill = async function learnSkillAuthoritativeV3(skillId) {
+    if (!enabled()) return legacyLearnSkill(skillId);
+    const skill = SKILL_DEFS[skillId];
+    if (!skill) return;
+    try {
+      const handled = await authorityActionRunnerV3.run(
+        'learnSkill',
+        { skillId },
+        { pendingKey:'economy' },
+      );
+      if (handled.pending) return;
+      playSfx?.('quest');
+      window.recordQuestActionV38?.('learnSkill');
+      openSkillTreeModal();
+      const rank = Number(game.player?.skills?.[skillId] || 0);
+      const max = Number(skill.maxPoints || 1);
+      toast(max > 1 ? `${skill.name} 습득! (${rank}/${max})` : `${skill.name} 습득!`);
+    } catch (error) {
+      reportError(error);
+    }
+  };
+}
 
 /* v18: delayed monster defeat animation + class skill trees */
 (() => {
@@ -12805,3 +13009,5 @@ window.cheatUpgradeEquippedWeapon = function cheatUpgradeEquippedWeapon() {
     },
   });
 })();
+
+wireAuthoritativeEconomyV3();
