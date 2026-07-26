@@ -13,6 +13,15 @@ window.YuksamSupabaseClient = {
     };
     return {
       async rpc() { return { data:null, error:null }; },
+      channel(name) {
+        const channel = {
+          name,
+          on() { return channel; },
+          subscribe() { return channel; }
+        };
+        return channel;
+      },
+      removeChannel() {},
       auth:{
         async signInWithPassword() {
           if (window.__secureLoginMode === 'existing') return { data:{ user, session:{ user } }, error:null };
