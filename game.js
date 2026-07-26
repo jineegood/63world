@@ -548,6 +548,7 @@ function normalizePlayer(p) {
     y: Number(p.y) || worldDefs.town.playerSpawn.y,
     map: p.map || 'town',
     bossReturnMap: typeof p.bossReturnMap === 'string' ? p.bossReturnMap : null,
+    finalBossPortalUnlocked: Boolean(p.finalBossPortalUnlocked),
     costume: (p.costume && typeof p.costume === 'object' && !Array.isArray(p.costume)) ? { ...p.costume } : {},
     costumeInventory: Array.isArray(p.costumeInventory) ? [...p.costumeInventory] : [],
     inventory: Array.isArray(p.inventory) ? p.inventory : [],

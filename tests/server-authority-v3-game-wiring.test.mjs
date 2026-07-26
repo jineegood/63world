@@ -103,6 +103,8 @@ test('flag-on normalization executes without rewriting authoritative values', ()
     inventory:['server_weapon'],
     equipment:{ weapon:'server_weapon' },
     records:{ pvpWins:7, pvpLosses:3 },
+    bossReturnMap:'swamp',
+    finalBossPortalUnlocked:true,
     serverInventoryInstances:[{ id:'instance-1', itemDefinitionId:'server_weapon' }],
     serverPreferences:preferences,
     serverRevision:12,
@@ -112,6 +114,8 @@ test('flag-on normalization executes without rewriting authoritative values', ()
   assert.equal(normalized.hp, 0);
   assert.equal(normalized.maxHp, 22);
   assert.equal(normalized.serverRevision, 12);
+  assert.equal(normalized.bossReturnMap, 'swamp');
+  assert.equal(normalized.finalBossPortalUnlocked, true);
   assert.deepEqual(normalized.serverPreferences, preferences);
   assert.deepEqual(normalized.serverInventoryInstances, [
     { id:'instance-1', itemDefinitionId:'server_weapon' },
