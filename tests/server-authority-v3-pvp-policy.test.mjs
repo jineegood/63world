@@ -93,3 +93,27 @@ test('authoritative PvP migration is additive and transactional', () => {
   assert.doesNotMatch(source, /\bdrop\s+table\b/i);
   assert.doesNotMatch(source, /\btruncate\b/i);
 });
+
+test('the local runner exposes one complete authoritative PvP verification mode', () => {
+  const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  const runner = fs.readFileSync(path.join(root, 'tools/run-baseline.ps1'), 'utf8');
+
+  assert.equal(
+    packageJson.scripts['test:server-authority-v3-pvp'],
+    'powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 server-authority-v3-pvp',
+  );
+  assert.match(runner, /'server-authority-v3-pvp'/);
+  for (const file of [
+    'pvp-snapshot-v3.test.mjs',
+    'server-authority-v3-pvp-policy.test.mjs',
+    'pvp-store-v3.test.mjs',
+    'pvp-function-v1.test.mjs',
+    'pvp-rules.test.mjs',
+    'pvp-client.test.mjs',
+    'pvp-profile-ui.test.mjs',
+    'pvp-battle-ui.test.mjs',
+    'pvp-reconnect-v1.test.mjs',
+  ]) {
+    assert.match(runner, new RegExp(file.replaceAll('.', '\\.')));
+  }
+});
