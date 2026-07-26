@@ -19,6 +19,15 @@ window.YuksamSupabaseClient = {
     const user = { id:'shared-student', app_metadata:{ role:'student' }, user_metadata:{ display_name:'Student', normalized_name:'student' } };
     return {
       async rpc() { return { data:null, error:null }; },
+      channel(name) {
+        const channel = {
+          name,
+          on() { return channel; },
+          subscribe() { return channel; }
+        };
+        return channel;
+      },
+      removeChannel() {},
       auth:{
         async signInWithPassword() {
           window.__studentAuthCalls += 1;
