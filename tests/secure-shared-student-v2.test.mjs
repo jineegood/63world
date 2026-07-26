@@ -13,13 +13,13 @@ function runMode(mode) {
   assert.match(result.stdout, /RESULT: PASS/);
 }
 
-test('shared module loads before student access and secure workbook routing stays behind the false switch', () => {
+test('shared module loads before student access and secure workbook routing is enabled', () => {
   const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   const config = fs.readFileSync(path.join(root, 'src/cloud-config.js'), 'utf8');
   const shared = index.indexOf('src="src/shared-state-v2.js"');
   const student = index.indexOf('src="src/student-access-v2.js"');
   assert.ok(shared >= 0 && student > shared);
-  assert.match(config, /securityV2Enabled\s*:\s*false/);
+  assert.match(config, /securityV2Enabled\s*:\s*true/);
 });
 
 test('closed classroom blocks before any student Auth request', () => runMode('closed'));

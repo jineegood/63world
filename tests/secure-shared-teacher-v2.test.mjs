@@ -13,13 +13,13 @@ function runMode(mode) {
   assert.match(result.stdout, /RESULT: PASS/);
 }
 
-test('secure teacher dashboard uses the separate shared-state service and keeps production disabled', () => {
+test('secure teacher dashboard uses the separate shared-state service in production', () => {
   const source = fs.readFileSync(path.join(root, 'src/admin-dashboard.js'), 'utf8');
   const config = fs.readFileSync(path.join(root, 'src/cloud-config.js'), 'utf8');
   assert.match(source, /secureAdminSharedV2\s*=\s*window\.YuksamSharedStateV2\.create/);
   assert.match(source, /await secureAdminSharedV2\.saveWorkbooks/);
   assert.match(source, /await secureAdminSharedV2\.setServerOpen/);
-  assert.match(config, /securityV2Enabled\s*:\s*false/);
+  assert.match(config, /securityV2Enabled\s*:\s*true/);
 });
 
 test('teacher manages shared workbooks and classroom state without legacy writes', () => runMode('manage'));

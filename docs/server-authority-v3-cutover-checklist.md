@@ -1,7 +1,8 @@
 # 63월드 서버 보안 전환 체크리스트
 
 이 문서는 새 서버 보안 방식을 실제 수업용 게임에 켜기 전에 확인할 항목을 정리한다.
-현재 `serverAuthorityV3Enabled`는 `false`이며, 아래 승인과 실서버 검사가 끝날 때까지 그대로 유지한다.
+2026-07-26 승인 후 Supabase migration과 Edge Function을 적용하고
+`securityV2Enabled`, `serverAuthorityV3Enabled`를 `true`로 전환했다.
 
 ## 현재 코드로 준비된 것
 
@@ -35,9 +36,9 @@
 
 ## 실제 서버 적용 전 필수 검사
 
-- [ ] 운영 수업이 없는 시간에 Supabase migration을 순서대로 적용
-- [ ] 실 Supabase에서 migration 전체가 오류 없이 실행되는지 확인
-- [ ] `student-combat-v3` Edge Function과 `ALLOWED_ORIGINS`를 먼저 배포
+- [x] 운영 수업이 없는 시간에 Supabase migration을 순서대로 적용
+- [x] 실 Supabase에서 migration 전체가 오류 없이 실행되는지 확인
+- [x] `student-combat-v3` Edge Function과 `ALLOWED_ORIGINS`를 먼저 배포
 - [ ] 학생 토큰으로 `workbooks` 행을 직접 읽을 수 없고 `classroom_settings`만 읽히는지 확인
 - [ ] 학생 토큰으로 전투용 private RPC를 직접 실행하면 거부되는지 확인
 - [ ] 오답 응답에 그 턴의 정답만 있고 다음 문제 정답·서비스 키·다른 학생 ID가 없는지 확인
@@ -52,8 +53,8 @@
 - [ ] Supabase 무료 한도 사용량과 경고 설정 확인
 - [ ] Edge 호출량이 전투 시작 1회 + 제출한 답마다 1회 수준인지 확인
 - [ ] 전체 자동검사와 실제 브라우저 확인을 모두 통과
-- [ ] 사용자에게 Supabase migration 적용 승인을 받음
-- [ ] 사용자에게 GitHub 업로드와 Vercel 배포 승인을 받음
+- [x] 사용자에게 Supabase migration 적용 승인을 받음
+- [x] 사용자에게 GitHub 업로드와 Vercel 배포 승인을 받음
 
 ## 전환 순서
 
@@ -98,5 +99,7 @@ v3 진행값을 예전 v2 JSON 저장값으로 자동 복사하지 않는다. �
 - [x] PvP 비공개 정답·원본 답안과 참가자 전용 경기 이벤트 권한 검사
 - [x] 전환 스위치가 `false`인 상태 확인
 - [x] GitHub 업로드, Vercel 배포, Supabase 실서버 변경을 하지 않음
-- [ ] 실 PostgreSQL/Supabase 실행 검증 — 사용자 승인 후 진행
+- [x] 사용자 승인 후 Supabase migration 10개와 Edge Function 5개를 실서버에 적용
+- [x] 사용자 승인 후 보안 로그인과 v3 서버 판정 전환 스위치를 `true`로 변경
+- [x] 실 PostgreSQL/Supabase migration 및 Edge Function 배포 검증
 - [ ] 실제 배포 전 브라우저 다기기 검증 — 사용자 승인 후 진행

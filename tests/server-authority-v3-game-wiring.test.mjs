@@ -13,8 +13,8 @@ const normalizerSource = (
   )?.[0] || ''
 ).replace(/\n\nfunction\s+applyAuthoritySnapshotV3$/, '');
 
-test('v3 cutover remains disabled while incomplete gameplay phases still use v2', () => {
-  assert.match(config, /serverAuthorityV3Enabled\s*:\s*false/);
+test('v3 cutover is enabled after every gameplay phase is server-authoritative', () => {
+  assert.match(config, /serverAuthorityV3Enabled\s*:\s*true/);
 });
 
 test('game injects the authority adapter and does not send full players in v3 mode', () => {
@@ -49,7 +49,7 @@ test('v3 map adapter gates ordinary hunting transitions before local map state c
   }
   assert.match(game, /await\s+confirmServerMapTransitionV3\('finalBossRoom'\)[\s\S]{0,120}?setupFinalBossRoomV35\(\)/);
   assert.match(game, /function\s+setupFinalBossRoomV35\(\)[\s\S]{0,120}?game\.currentMap\s*=\s*'finalBossRoom'/);
-  assert.match(config, /serverAuthorityV3Enabled\s*:\s*false/);
+  assert.match(config, /serverAuthorityV3Enabled\s*:\s*true/);
 });
 
 test('authority browser script loads before student access and game code', () => {

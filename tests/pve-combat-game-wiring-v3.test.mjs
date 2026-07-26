@@ -19,14 +19,14 @@ test('secure PvE client loads before game and is created lazily from the authent
   assert.match(patch, /YuksamPveCombatClientV3\.create\(\{\s*client/);
 });
 
-test('authority combat short-circuits the legacy entry only behind the disabled cutover flag', () => {
+test('authority combat short-circuits the legacy entry behind the enabled cutover flag', () => {
   assert.match(patch, /combatEntryPipeline\.register\(\{/);
   assert.match(patch, /secureStudentAccess\.authorityV3Enabled/);
   assert.match(patch, /if\s*\(!secureStudentAccess\.authorityV3Enabled\)\s*return\s+next\(\)/);
   assert.match(patch, /priority:\s*1000/);
   assert.match(
     fs.readFileSync(path.join(root, 'src/cloud-config.js'), 'utf8'),
-    /serverAuthorityV3Enabled\s*:\s*false/,
+    /serverAuthorityV3Enabled\s*:\s*true/,
   );
 });
 

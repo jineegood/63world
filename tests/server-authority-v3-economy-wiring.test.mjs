@@ -8,13 +8,13 @@ const game = fs.readFileSync(path.join(root, 'game.js'), 'utf8');
 const costume = fs.readFileSync(path.join(root, 'src/costume-ui.js'), 'utf8');
 const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 
-test('authority action runner loads before game and the cutover remains disabled', () => {
+test('authority action runner loads before game and the cutover is enabled', () => {
   assert.ok(
     index.indexOf('src/authority-action-runner-v3.js') < index.indexOf('game.js'),
   );
   assert.match(
     fs.readFileSync(path.join(root, 'src/cloud-config.js'), 'utf8'),
-    /serverAuthorityV3Enabled\s*:\s*false/,
+    /serverAuthorityV3Enabled\s*:\s*true/,
   );
 });
 
