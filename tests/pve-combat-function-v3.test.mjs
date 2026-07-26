@@ -35,6 +35,7 @@ test('endpoint returns stable sanitized errors and never logs or responds with a
   const source = fs.readFileSync(entryPath, 'utf8');
   assert.match(source, /publicErrorCode/);
   assert.match(source, /SERVER_ERROR/);
+  assert.match(source, /HEALING_NOT_ACTIVE/);
   assert.doesNotMatch(source, /console\.(?:log|error)\s*\([^)]*(?:answer|body|result)/i);
   assert.doesNotMatch(source, /JSON\.stringify\s*\([^)]*answerKey/i);
 });
@@ -51,6 +52,8 @@ test('store maps only bounded private RPC calls', () => {
     'private_commit_student_combat_turn_v3',
     'private_surrender_student_combat_v3',
     'private_resume_student_combat_v3',
+    'private_start_student_healing_v3',
+    'private_submit_student_healing_v3',
   ]) {
     assert.ok(source.includes(`'${rpc}'`), `${rpc} must be used`);
   }

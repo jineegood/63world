@@ -120,6 +120,29 @@ export function createPveCombatService({ store, random = Math.random } = {}) {
     }));
   }
 
+  async function startHealing(userId, body) {
+    if (!validRevision(body.expectedRevision) || !validRequest(body.requestId)) fail('INVALID_REQUEST');
+    return publicSafe(await store.startHealing({
+      userId,
+      expectedRevision:Number(body.expectedRevision),
+      requestId:String(body.requestId),
+    }));
+  }
+
+  async function submitHealing(userId, body) {
+    if (!UUID.test(String(body.questionToken || ''))
+      || String(body.answer ?? '').length > 512
+      || !validRevision(body.expectedRevision)
+      || !validRequest(body.requestId)) fail('INVALID_REQUEST');
+    return publicSafe(await store.submitHealing({
+      userId,
+      questionToken:String(body.questionToken),
+      answer:String(body.answer ?? ''),
+      expectedRevision:Number(body.expectedRevision),
+      requestId:String(body.requestId),
+    }));
+  }
+
   async function handle(userId, body = {}) {
     if (!userId) fail('UNAUTHENTICATED');
     if (!body || typeof body !== 'object' || Array.isArray(body)) fail('INVALID_REQUEST');
@@ -128,6 +151,8 @@ export function createPveCombatService({ store, random = Math.random } = {}) {
       case 'submit_turn': return submitTurn(userId, body);
       case 'surrender': return surrender(userId, body);
       case 'resume': return publicSafe(await store.resume(userId));
+      case 'start_healing': return startHealing(userId, body);
+      case 'submit_healing': return submitHealing(userId, body);
       default: fail('INVALID_OPERATION');
     }
   }

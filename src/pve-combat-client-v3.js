@@ -21,6 +21,7 @@
     ACTION_NOT_LEARNED:'아직 배우지 않은 스킬입니다.',
     ACTION_ON_COOLDOWN:'아직 다시 사용할 수 없는 스킬입니다.',
     INVALID_ACTION:'사용할 수 없는 전투 행동입니다.',
+    HEALING_NOT_ACTIVE:'치유 문제가 만료되었습니다. 다시 우물에 말을 걸어 주세요.',
     COMBAT_NETWORK_ERROR:'전투 서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.',
     COMBAT_SERVER_ERROR:'전투 서버에서 안전하게 처리하지 못했습니다.',
     UNSAFE_SERVER_RESPONSE:'전투 서버 응답을 안전하게 확인하지 못했습니다.',
@@ -155,6 +156,33 @@
       },
       resume() {
         return once('resume', { op:'resume' });
+      },
+      startHealing(expectedRevision, explicitRequestId) {
+        const revision = Number(expectedRevision);
+        if (!Number.isSafeInteger(revision) || revision < 1) {
+          return Promise.reject(failure('COMBAT_SERVER_ERROR'));
+        }
+        const id = requestId(explicitRequestId);
+        return once(`healing:start:${revision}`, {
+          op:'start_healing', expectedRevision:revision, requestId:id,
+        });
+      },
+      submitHealing(questionToken, answer, expectedRevision, explicitRequestId) {
+        const token = String(questionToken || '');
+        const given = String(answer ?? '');
+        const revision = Number(expectedRevision);
+        if (!UUID.test(token) || given.length > 512
+          || !Number.isSafeInteger(revision) || revision < 1) {
+          return Promise.reject(failure('COMBAT_SERVER_ERROR'));
+        }
+        const id = requestId(explicitRequestId);
+        return once(`healing:submit:${token}`, {
+          op:'submit_healing',
+          questionToken:token,
+          answer:given,
+          expectedRevision:revision,
+          requestId:id,
+        });
       },
     });
   }

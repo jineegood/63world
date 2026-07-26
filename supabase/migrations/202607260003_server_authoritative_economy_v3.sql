@@ -367,6 +367,10 @@ begin
   insert into public.player_inventory_v3(
     user_id, item_definition_id, inventory_kind, enhancement_tier, equipped_slot, grant_source
   ) values (v_user_id, p_item_id, v_kind, 0, null, 'purchase');
+  perform public.private_progress_student_quest_v3(v_user_id, 'action', 'buy');
+  if v_slot = 'accessory' then
+    perform public.private_progress_student_quest_v3(v_user_id, 'action', 'buyAccessory');
+  end if;
 
   v_response := jsonb_build_object('ok', true, 'code', 'OK',
     'snapshot', public.private_build_student_snapshot_v3(v_user_id));
@@ -446,6 +450,7 @@ begin
   update public.player_inventory_v3
   set equipped_slot = v_slot, updated_at = now()
   where user_id = v_user_id and id = p_inventory_id;
+  perform public.private_progress_student_quest_v3(v_user_id, 'action', 'equip');
   update public.player_core_v3
   set revision = revision + 1, updated_at = now() where user_id = v_user_id;
 
@@ -598,6 +603,7 @@ begin
   update public.player_inventory_v3
   set enhancement_tier = v_new_tier, updated_at = now()
   where id = v_inventory_id and user_id = v_user_id;
+  perform public.private_progress_student_quest_v3(v_user_id, 'action', 'enhance');
   update public.player_core_v3
   set building = building - 3, revision = revision + 1, updated_at = now()
   where user_id = v_user_id;
@@ -819,6 +825,7 @@ begin
   values (v_user_id, p_skill_id, 1)
   on conflict (user_id, skill_id) do update
   set rank = public.player_skills_v3.rank + 1, updated_at = now();
+  perform public.private_progress_student_quest_v3(v_user_id, 'action', 'learnSkill');
   update public.player_core_v3
   set revision = revision + 1, updated_at = now() where user_id = v_user_id;
   v_response := jsonb_build_object('ok', true, 'code', 'OK',
@@ -898,6 +905,7 @@ begin
   insert into public.player_pets_v3(user_id, pet_id)
   values (v_user_id, v_pet_id)
   on conflict (user_id, pet_id) do nothing;
+  perform public.private_progress_student_quest_v3(v_user_id, 'action', 'pet');
   update public.player_core_v3
   set building = building - 10,
       active_pet = v_pet_id,

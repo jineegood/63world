@@ -750,6 +750,9 @@ begin
         revision = revision + 1,
         updated_at = now()
     where user_id = p_user_id;
+    perform public.private_progress_student_quest_v3(
+      p_user_id, 'monster', v_session.monster_key
+    );
     delete from public.player_combat_sessions_v3 where user_id = p_user_id;
     v_response := (p_outcome - 'state' - 'submittedAnswer') || jsonb_build_object(
       'ok', true,

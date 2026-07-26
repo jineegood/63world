@@ -5564,6 +5564,172 @@ function updateQuestTracker() {
   updateHud();
 })();
 
+/* Server-authoritative quest and healing-well cutover. */
+function installAuthoritativeQuestFlowV3() {
+  let pending = false;
+  let healingClient = null;
+  let healingQuestion = null;
+
+  const enabled = () => Boolean(secureStudentAccess.authorityV3Enabled);
+  const getHealingClient = () => {
+    if (!healingClient) {
+      healingClient = YuksamPveCombatClientV3.create({ client:secureStudentAccess.getClient() });
+    }
+    return healingClient;
+  };
+  const applyRawSnapshot = (snapshot) => {
+    if (!snapshot) return;
+    const player = YuksamPlayerAuthorityV3.snapshotToLegacyPlayer(snapshot);
+    applyAuthoritySnapshotV3({ player });
+    updateQuestTracker();
+  };
+
+  const legacyAcceptCurrentQuest = window.acceptCurrentQuest;
+  window.acceptCurrentQuest = async function acceptCurrentQuestAuthorityV3(id) {
+    if (!enabled()) return legacyAcceptCurrentQuest(id);
+    if (pending || getQuestState(id)) return;
+    pending = true;
+    try {
+      const result = await secureStudentAccess.acceptQuest({
+        questId:id,
+        expectedRevision:game.player.serverRevision,
+      });
+      applyAuthoritySnapshotV3(result);
+      closeModal();
+      if (id === 'tut_healing_well') {
+        playSfx('enemyAttack');
+        try { triggerScreenShakeV19(); } catch { triggerScreenShake?.(); }
+        showCinematicMessage('회복 훈련!', '명진쌤의 안전한 훈련 공격! HP가 1이 되었어요. 치유의 우물로 가 보세요.', 2600);
+      } else {
+        playSfx('quest');
+        showCinematicMessage('퀘스트 수락!', `${QUEST_DEFS[id].title} 퀘스트를 시작합니다.`, 1600);
+      }
+      updateQuestTracker();
+    } catch (error) {
+      toast(error?.message || '퀘스트를 받지 못했습니다.');
+    } finally {
+      pending = false;
+    }
+  };
+
+  const legacyClaimQuestReward = window.claimQuestReward;
+  window.claimQuestReward = async function claimQuestRewardAuthorityV3(id) {
+    if (!enabled()) return legacyClaimQuestReward(id);
+    if (pending) return;
+    pending = true;
+    try {
+      const result = await secureStudentAccess.claimQuest({
+        questId:id,
+        expectedRevision:game.player.serverRevision,
+      });
+      applyAuthoritySnapshotV3(result);
+      closeModal();
+      if (!window.playQuestCompletionSoundV42?.()) playSfx('quest');
+      showRewardSequenceV2('퀘스트 보상 획득!', `${QUEST_DEFS[id].title} 완료`, QUEST_DEFS[id].reward || {});
+      updateQuestTracker();
+    } catch (error) {
+      toast(error?.message || '퀘스트 보상을 받지 못했습니다.');
+    } finally {
+      pending = false;
+    }
+  };
+
+  const legacyReceiveQuestCostume = window.receiveQuestCostumeV3;
+  window.receiveQuestCostumeV3 = async function receiveQuestCostumeAuthorityV3() {
+    if (!enabled()) return legacyReceiveQuestCostume();
+    if (pending) return;
+    pending = true;
+    try {
+      const result = await secureStudentAccess.receiveQuestGift({
+        questId:'tut_costume',
+        expectedRevision:game.player.serverRevision,
+      });
+      applyAuthoritySnapshotV3(result);
+      closeModal();
+      playSfx('quest');
+      showCinematicMessage('새싹 리본 획득!', '상남에게 특별한 퀘스트 코스튬을 선물받았습니다.', 2200);
+      updateQuestTracker();
+    } catch (error) {
+      toast(error?.message || '퀘스트 선물을 받지 못했습니다.');
+    } finally {
+      pending = false;
+    }
+  };
+
+  const legacyRecordQuestAction = window.recordQuestActionV38;
+  window.recordQuestActionV38 = function recordQuestActionAuthorityV3(kind) {
+    if (enabled()) return;
+    return legacyRecordQuestAction?.(kind);
+  };
+  const legacyIncrementQuestMonster = window.incrementQuestProgressByMonster;
+  window.incrementQuestProgressByMonster = function incrementQuestProgressByMonsterAuthorityV3(monster) {
+    if (enabled()) return;
+    return legacyIncrementQuestMonster?.(monster);
+  };
+  const legacyRecordHealing = window.recordHealingQuestSuccessV3;
+  window.recordHealingQuestSuccessV3 = function recordHealingQuestSuccessAuthorityV3() {
+    if (enabled()) return false;
+    return legacyRecordHealing?.();
+  };
+
+  const legacyOpenHealingWell = window.openHealingWellModal;
+  window.openHealingWellModal = async function openHealingWellAuthorityV3() {
+    if (!enabled()) return legacyOpenHealingWell();
+    if (pending) return;
+    pending = true;
+    try {
+      const response = await getHealingClient().startHealing(game.player.serverRevision);
+      healingQuestion = response.question;
+      const prompt = escapeHtml(healingQuestion?.prompt || '문제를 확인하세요.');
+      const choices = Array.isArray(healingQuestion?.choices) ? healingQuestion.choices : [];
+      const answerUi = choices.length
+        ? `<div class="choice-list">${choices.map((choice, index) => (
+          `<button class="primary" onclick="submitAuthorityHealingChoiceV3(${index})">${escapeHtml(String(choice))}</button>`
+        )).join('')}</div>`
+        : `<div class="answer-row"><input id="healingAnswer" maxlength="512" placeholder="정답 입력">
+           <button class="primary" onclick="submitAuthorityHealingAnswerV3(document.getElementById('healingAnswer').value)">회복</button></div>`;
+      openModal(`<h2>치유의 우물</h2><div class="panel-card">
+        <p>문제를 맞히면 HP가 모두 회복됩니다.</p><h3>${prompt}</h3>${answerUi}
+        <p class="muted">정답은 서버가 안전하게 확인합니다.</p></div>`,
+      { type:'healingWell', pause:true });
+    } catch (error) {
+      toast(error?.message || '치유 문제를 불러오지 못했습니다.');
+    } finally {
+      pending = false;
+    }
+  };
+
+  window.submitAuthorityHealingChoiceV3 = (index) => {
+    const choice = healingQuestion?.choices?.[Number(index)];
+    if (choice !== undefined) window.submitAuthorityHealingAnswerV3(choice);
+  };
+  window.submitAuthorityHealingAnswerV3 = async (answer) => {
+    if (!enabled() || pending || !healingQuestion?.questionToken) return;
+    pending = true;
+    try {
+      const response = await getHealingClient().submitHealing(
+        healingQuestion.questionToken,
+        String(answer ?? ''),
+        game.player.serverRevision,
+      );
+      applyRawSnapshot(response.player);
+      closeModal();
+      if (response.correct) {
+        playSfx('quest');
+        showCinematicMessage('회복 완료!', '치유의 우물빛이 몸을 감싸며 HP가 모두 회복되었습니다.', 1500);
+      } else {
+        playSfx('hit');
+        showCinematicMessage('회복 실패', '정답이 아닙니다. 다시 도전하세요.', 1500);
+      }
+    } catch (error) {
+      toast(error?.message || '치유 결과를 확인하지 못했습니다.');
+    } finally {
+      healingQuestion = null;
+      pending = false;
+    }
+  };
+}
+
 /* Server-authoritative economy/equipment/skill cutover.
    The wrappers are intentionally last: when the flag is off they delegate to the
    existing game unchanged; when it is on, only the returned server snapshot mutates
@@ -13534,3 +13700,4 @@ function wireAuthoritativePveCombatV3() {
 }
 
 wireAuthoritativePveCombatV3();
+installAuthoritativeQuestFlowV3();

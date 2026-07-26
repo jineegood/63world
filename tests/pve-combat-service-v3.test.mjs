@@ -46,6 +46,50 @@ const session = {
   },
 };
 
+test('healing operations forward only authenticated user, revision, answer, and request ids', async () => {
+  const calls = [];
+  const service = createPveCombatService({
+    store:{
+      startHealing:async (value) => {
+        calls.push(['startHealing', value]);
+        return { ok:true, question:{ questionToken:'22222222-2222-4222-8222-222222222222' } };
+      },
+      submitHealing:async (value) => {
+        calls.push(['submitHealing', value]);
+        return { ok:true, correct:true, player:{ revision:8 } };
+      },
+    },
+  });
+  await service.handle('user-a', {
+    op:'start_healing',
+    expectedRevision:7,
+    requestId:'33333333-3333-4333-8333-333333333333',
+    answerKey:'forged',
+  });
+  await service.handle('user-a', {
+    op:'submit_healing',
+    questionToken:'22222222-2222-4222-8222-222222222222',
+    answer:'4',
+    expectedRevision:7,
+    requestId:'44444444-4444-4444-8444-444444444444',
+  });
+
+  assert.deepEqual(calls, [
+    ['startHealing', {
+      userId:'user-a',
+      expectedRevision:7,
+      requestId:'33333333-3333-4333-8333-333333333333',
+    }],
+    ['submitHealing', {
+      userId:'user-a',
+      questionToken:'22222222-2222-4222-8222-222222222222',
+      answer:'4',
+      expectedRevision:7,
+      requestId:'44444444-4444-4444-8444-444444444444',
+    }],
+  ]);
+});
+
 test('start ignores forged browser stats and builds the encounter from server rows', async () => {
   const calls = [];
   const service = createPveCombatService({

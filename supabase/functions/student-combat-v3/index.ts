@@ -24,6 +24,7 @@ const PUBLIC_ERRORS = new Set([
   'ACTION_NOT_LEARNED',
   'ACTION_ON_COOLDOWN',
   'INVALID_ACTION',
+  'HEALING_NOT_ACTIVE',
 ]);
 
 function publicErrorCode(error: unknown) {

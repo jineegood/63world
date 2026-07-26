@@ -49,10 +49,16 @@ test('combat client sends only bounded action identifiers to the secure endpoint
   );
   await api.surrender(3);
   await api.resume();
+  await api.startHealing(7);
+  await api.submitHealing(
+    '33333333-3333-4333-8333-333333333333',
+    '4',
+    7,
+  );
 
   assert.equal(calls.every((call) => call.name === 'student-combat-v3'), true);
   assert.deepEqual(calls.map((call) => call.body.op), [
-    'start', 'submit_turn', 'surrender', 'resume',
+    'start', 'submit_turn', 'surrender', 'resume', 'start_healing', 'submit_healing',
   ]);
   for (const call of calls) {
     assert.equal('userId' in call.body, false);
@@ -64,6 +70,8 @@ test('combat client sends only bounded action identifiers to the secure endpoint
   assert.match(calls[0].body.requestId, /^[0-9a-f-]{36}$/i);
   assert.equal(calls[1].body.sessionRevision, 2);
   assert.equal(calls[1].body.answer, '4');
+  assert.equal(calls[4].body.expectedRevision, 7);
+  assert.equal(calls[5].body.answer, '4');
 });
 
 test('duplicate pending submissions share one network request', async () => {

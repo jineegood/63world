@@ -8,6 +8,7 @@ const root = path.resolve(import.meta.dirname, '..');
 const generator = path.join(root, 'tools/generate-quest-catalog-v3.mjs');
 const moduleOutput = path.join(root, 'supabase/functions/_shared/generated-quest-catalog-v3.mjs');
 const sqlOutput = path.join(root, 'supabase/generated/quest-catalog-v3.sql');
+const migration = path.join(root, 'supabase/migrations/202607260005_server_authoritative_quests_v3.sql');
 
 test('quest catalog generator is deterministic and current', () => {
   const result = spawnSync(process.execPath, [generator, '--check'], {
@@ -63,4 +64,13 @@ test('quest SQL contains immutable sequence, goals, grants, and rewards', () => 
   assert.match(sql, /\('tut_costume',7,'questGift','cs_questSproutRibbon',1,10,35,3,null,0,0,null\)/);
   assert.match(sql, /\('elite_snake_hunt',14,'monster','desert_elite_snake',1,34,110,15,'starCape',0,0,null\)/);
   assert.match(sql, /on conflict \(quest_id\) do update set/i);
+});
+
+test('quest migration embeds the exact generated catalog', () => {
+  const sql = fs.readFileSync(sqlOutput, 'utf8').trim();
+  const migrationSql = fs.readFileSync(migration, 'utf8');
+  const embedded = migrationSql.match(
+    /-- BEGIN GENERATED QUEST CATALOG V3\r?\n([\s\S]*?)\r?\n-- END GENERATED QUEST CATALOG V3/
+  )?.[1]?.trim();
+  assert.equal(embedded, sql);
 });

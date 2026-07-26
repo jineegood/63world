@@ -6,6 +6,10 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const moduleOutput = path.join(root, 'supabase/functions/_shared/generated-quest-catalog-v3.mjs');
 const sqlOutput = path.join(root, 'supabase/generated/quest-catalog-v3.sql');
+const migrationPath = path.join(
+  root,
+  'supabase/migrations/202607260005_server_authoritative_quests_v3.sql',
+);
 const context = vm.createContext({ window:{} });
 vm.runInContext(fs.readFileSync(path.join(root, 'src/quest-data.js'), 'utf8'), context);
 
@@ -101,10 +105,20 @@ const sql = [
 ].join('\n');
 
 const outputs = [[moduleOutput, js], [sqlOutput, sql]];
+const beginMarker = '-- BEGIN GENERATED QUEST CATALOG V3';
+const endMarker = '-- END GENERATED QUEST CATALOG V3';
+const migrationSource = fs.readFileSync(migrationPath, 'utf8');
+const renderMigration = (source) => {
+  const begin = source.indexOf(beginMarker);
+  const end = source.indexOf(endMarker);
+  if (begin < 0 || end < begin) throw new Error('quest catalog migration markers are missing');
+  return `${source.slice(0, begin + beginMarker.length)}\n${sql.trimEnd()}\n${source.slice(end)}`;
+};
+const expectedMigration = renderMigration(migrationSource);
 if (process.argv.includes('--check')) {
   const stale = outputs.some(([file, expected]) => (
     !fs.existsSync(file) || fs.readFileSync(file, 'utf8') !== expected
-  ));
+  )) || migrationSource !== expectedMigration;
   if (stale) {
     console.error('quest catalog is missing or stale; run node tools/generate-quest-catalog-v3.mjs');
     process.exit(1);
@@ -114,4 +128,5 @@ if (process.argv.includes('--check')) {
     fs.mkdirSync(path.dirname(file), { recursive:true });
     fs.writeFileSync(file, source, 'utf8');
   }
+  fs.writeFileSync(migrationPath, expectedMigration, 'utf8');
 }

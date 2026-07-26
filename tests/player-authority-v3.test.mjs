@@ -170,6 +170,7 @@ test('loadGame calls the no-argument RPC and converts inventory, skills, quests,
   assert.equal(result.player.weaponUpgrades.noviceHat, 2);
   assert.equal(result.player.skills.mage_fireball, 2);
   assert.equal(result.player.quests.mushroom_hunt.progress, 3);
+  assert.equal(result.player.quests.mushroom_hunt.status, 'accepted');
   assert.equal(result.player.appearance.shirt, '#123456');
   assert.equal(result.player.serverPreferences.audio.sfxEnabled, false);
   assert.equal(result.player.records.pvpWins, 4);
@@ -321,6 +322,33 @@ test('economy methods send only action identifiers, revisions, and request ids',
     ['enhance_student_weapon_v3', { p_expected_revision:8, p_request_id:requestIds[3] }],
     ['choose_student_specialization_v3', { p_spec_name:'냉기', p_expected_revision:8, p_request_id:requestIds[4] }],
     ['learn_student_skill_v3', { p_skill_id:'mage_frost_focus_v24', p_expected_revision:8, p_request_id:requestIds[5] }],
+  ]));
+});
+
+test('quest mutations send only quest identifiers, revisions, and request ids', async () => {
+  const snapshot = validSnapshot({ core:{ revision:8 }, revision:8 });
+  const ok = { data:{ ok:true, code:'OK', snapshot }, error:null };
+  const { service, calls } = setup([ok, ok, ok]);
+  const ids = [
+    'a1111111-1111-4111-8111-111111111111',
+    'a2222222-2222-4222-8222-222222222222',
+    'a3333333-3333-4333-8333-333333333333',
+  ];
+
+  await service.acceptQuest({ questId:'tut_equip', expectedRevision:7, requestId:ids[0] });
+  await service.claimQuest({ questId:'tut_equip', expectedRevision:8, requestId:ids[1] });
+  await service.receiveQuestGift({ questId:'tut_costume', expectedRevision:8, requestId:ids[2] });
+
+  assert.equal(JSON.stringify(calls), JSON.stringify([
+    ['accept_student_quest_v3', {
+      p_quest_id:'tut_equip', p_expected_revision:7, p_request_id:ids[0],
+    }],
+    ['claim_student_quest_v3', {
+      p_quest_id:'tut_equip', p_expected_revision:8, p_request_id:ids[1],
+    }],
+    ['receive_student_quest_gift_v3', {
+      p_quest_id:'tut_costume', p_expected_revision:8, p_request_id:ids[2],
+    }],
   ]));
 });
 

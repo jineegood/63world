@@ -67,5 +67,21 @@ export function createSupabasePveCombatStore(client) {
         p_user_id:userId,
       }));
     },
+    async startHealing({ userId, expectedRevision, requestId }) {
+      return resultData(await client.rpc('private_start_student_healing_v3', {
+        p_user_id:userId,
+        p_expected_revision:expectedRevision,
+        p_request_id:requestId,
+      }));
+    },
+    async submitHealing({ userId, questionToken, answer, expectedRevision, requestId }) {
+      return resultData(await client.rpc('private_submit_student_healing_v3', {
+        p_user_id:userId,
+        p_question_token:questionToken,
+        p_answer:answer,
+        p_expected_revision:expectedRevision,
+        p_request_id:requestId,
+      }));
+    },
   });
 }

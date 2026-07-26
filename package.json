@@ -37,6 +37,8 @@
     "test:authority-catalog-v3": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 authority-catalog-v3",
     "test:combat-catalog-v3": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 combat-catalog-v3",
     "test:quest-catalog-v3": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 quest-catalog-v3",
+    "test:server-authority-v3-quests": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 server-authority-v3-quests",
+    "test:quest-game-wiring-v3": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 quest-game-wiring-v3",
     "test:server-authority-v3-combat": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 server-authority-v3-combat",
     "test:pve-combat-rules-v3": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 pve-combat-rules-v3",
     "test:pve-combat-service-v3": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 pve-combat-service-v3",

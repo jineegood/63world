@@ -18,6 +18,12 @@
   const EQUIPMENT_SLOTS = new Set(['weapon', 'head', 'armor', 'accessory']);
   const INVENTORY_KINDS = new Set(['gear', 'costume']);
   const QUEST_STATUSES = new Set(['ready', 'active', 'complete', 'claimed']);
+  const LEGACY_QUEST_STATUS = Object.freeze({
+    active:'accepted',
+    ready:'ready',
+    complete:'ready',
+    claimed:'completed',
+  });
   const ERROR_MESSAGES = Object.freeze({
     UNAUTHORIZED:'로그인이 만료되었습니다. 다시 로그인해 주세요.',
     FORBIDDEN:'학생 캐릭터 기능을 사용할 권한이 없습니다.',
@@ -187,7 +193,7 @@
       const status = safeString(row.status, 1, 20);
       if (Object.hasOwn(quests, questId) || !QUEST_STATUSES.has(status)) failSnapshot();
       quests[questId] = {
-        status,
+        status:LEGACY_QUEST_STATUS[status],
         progress:safeInteger(row.progress, 0),
         acceptedAt:safeNullableString(row.accepted_at, 80),
         completedAt:safeNullableString(row.completed_at, 80),
@@ -444,6 +450,30 @@
       });
     }
 
+    async function acceptQuest({ questId, expectedRevision:revision, requestId:id } = {}) {
+      return call('accept_student_quest_v3', {
+        p_quest_id:actionIdentifier(questId),
+        p_expected_revision:expectedRevision(revision),
+        p_request_id:requestId(id),
+      });
+    }
+
+    async function claimQuest({ questId, expectedRevision:revision, requestId:id } = {}) {
+      return call('claim_student_quest_v3', {
+        p_quest_id:actionIdentifier(questId),
+        p_expected_revision:expectedRevision(revision),
+        p_request_id:requestId(id),
+      });
+    }
+
+    async function receiveQuestGift({ questId, expectedRevision:revision, requestId:id } = {}) {
+      return call('receive_student_quest_gift_v3', {
+        p_quest_id:actionIdentifier(questId),
+        p_expected_revision:expectedRevision(revision),
+        p_request_id:requestId(id),
+      });
+    }
+
     async function summonPet({ expectedRevision:revision, requestId:id } = {}) {
       return call('summon_student_pet_v3', {
         p_expected_revision:expectedRevision(revision),
@@ -473,6 +503,9 @@
       enhanceWeapon,
       chooseSpecialization,
       learnSkill,
+      acceptQuest,
+      claimQuest,
+      receiveQuestGift,
       summonPet,
       setActivePet,
     });
