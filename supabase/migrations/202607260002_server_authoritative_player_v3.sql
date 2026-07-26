@@ -253,16 +253,39 @@ create or replace function public.private_read_receipt_v3(
   p_action_name text
 )
 returns jsonb
-language sql
-stable
+language plpgsql
 security definer
 set search_path = ''
 as $$
-  select r.response_json
+declare
+  v_action_name text;
+  v_response jsonb;
+begin
+  -- Serialize every action sharing this user/request pair. The transaction
+  -- lock closes the race where two different RPCs both mutate before either
+  -- receipt is visible.
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(auth.uid()::text || ':' || p_request_id::text, 0)
+  );
+
+  select r.action_name, r.response_json
+  into v_action_name, v_response
   from public.game_action_receipts_v3 as r
   where r.user_id = auth.uid()
-    and r.request_id = p_request_id
-    and r.action_name = p_action_name;
+    and r.request_id = p_request_id;
+
+  if v_action_name is null then
+    return null;
+  end if;
+  if v_action_name is distinct from p_action_name then
+    perform public.private_log_security_event_v3(
+      'request_id_reused',
+      jsonb_build_object('original_action', v_action_name, 'requested_action', p_action_name)
+    );
+    return jsonb_build_object('ok', false, 'code', 'REQUEST_ID_REUSED');
+  end if;
+  return v_response;
+end;
 $$;
 
 revoke all on function public.private_is_teacher_v3() from public, anon, authenticated;
@@ -349,7 +372,7 @@ revoke all on function public.private_build_student_snapshot_v3(uuid)
 create or replace function public.create_student_character_v3(
   p_class_name text,
   p_appearance jsonb,
-  p_request_id uuid
+  p_request_id text
 )
 returns jsonb
 language plpgsql
@@ -365,6 +388,7 @@ declare
   v_response jsonb;
   v_starter_item text;
   v_max_hp integer;
+  v_request_id uuid;
 begin
   if v_user_id is null then
     return jsonb_build_object('ok', false, 'code', 'UNAUTHORIZED');
@@ -372,12 +396,14 @@ begin
   if public.private_is_teacher_v3() then
     return jsonb_build_object('ok', false, 'code', 'FORBIDDEN');
   end if;
-  if p_request_id is null then
+  if p_request_id is null or p_request_id !~* '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89ab][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$' then
+    perform public.private_log_security_event_v3('invalid_request_id', '{}'::jsonb);
     return jsonb_build_object('ok', false, 'code', 'INVALID_REQUEST');
   end if;
+  v_request_id := p_request_id::uuid;
 
   v_receipt := public.private_read_receipt_v3(
-    p_request_id,
+    v_request_id,
     'create_student_character_v3'
   );
   if v_receipt is not null then
@@ -408,7 +434,7 @@ begin
     v_snapshot := public.private_build_student_snapshot_v3(v_user_id);
     v_response := jsonb_build_object('ok', true, 'code', 'OK', 'snapshot', v_snapshot);
     insert into public.game_action_receipts_v3(user_id, request_id, action_name, response_json)
-    values (v_user_id, p_request_id, 'create_student_character_v3', v_response)
+    values (v_user_id, v_request_id, 'create_student_character_v3', v_response)
     on conflict (user_id, request_id) do nothing;
     return v_response;
   end if;
@@ -520,7 +546,7 @@ begin
   v_response := jsonb_build_object('ok', true, 'code', 'OK', 'snapshot', v_snapshot);
 
   insert into public.game_action_receipts_v3(user_id, request_id, action_name, response_json)
-  values (v_user_id, p_request_id, 'create_student_character_v3', v_response);
+  values (v_user_id, v_request_id, 'create_student_character_v3', v_response);
 
   return v_response;
 end;
@@ -553,11 +579,11 @@ begin
 end;
 $$;
 
-revoke all on function public.create_student_character_v3(text, jsonb, uuid)
+revoke all on function public.create_student_character_v3(text, jsonb, text)
   from public, anon;
 revoke all on function public.load_student_game_v3()
   from public, anon;
-grant execute on function public.create_student_character_v3(text, jsonb, uuid)
+grant execute on function public.create_student_character_v3(text, jsonb, text)
   to authenticated;
 grant execute on function public.load_student_game_v3()
   to authenticated;
@@ -605,7 +631,7 @@ revoke all on function public.private_store_receipt_v3(uuid, text, jsonb)
 create or replace function public.save_student_preferences_v3(
   p_preferences jsonb,
   p_expected_revision bigint,
-  p_request_id uuid
+  p_request_id text
 )
 returns jsonb
 language plpgsql
@@ -620,6 +646,7 @@ declare
   v_appearance jsonb;
   v_audio jsonb;
   v_tutorial jsonb;
+  v_request_id uuid;
 begin
   if v_user_id is null then
     return jsonb_build_object('ok', false, 'code', 'UNAUTHORIZED');
@@ -627,12 +654,14 @@ begin
   if public.private_is_teacher_v3() then
     return jsonb_build_object('ok', false, 'code', 'FORBIDDEN');
   end if;
-  if p_request_id is null then
+  if p_request_id is null or p_request_id !~* '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89ab][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$' then
+    perform public.private_log_security_event_v3('invalid_request_id', '{}'::jsonb);
     return jsonb_build_object('ok', false, 'code', 'INVALID_REQUEST');
   end if;
+  v_request_id := p_request_id::uuid;
 
   v_receipt := public.private_read_receipt_v3(
-    p_request_id,
+    v_request_id,
     'save_student_preferences_v3'
   );
   if v_receipt is not null then
@@ -648,7 +677,7 @@ begin
   if v_current_revision is null then
     v_response := jsonb_build_object('ok', false, 'code', 'CHARACTER_NOT_FOUND');
     return public.private_store_receipt_v3(
-      p_request_id,
+      v_request_id,
       'save_student_preferences_v3',
       v_response
     );
@@ -665,7 +694,7 @@ begin
       'snapshot', public.private_build_student_snapshot_v3(v_user_id)
     );
     return public.private_store_receipt_v3(
-      p_request_id,
+      v_request_id,
       'save_student_preferences_v3',
       v_response
     );
@@ -699,7 +728,7 @@ begin
     );
     v_response := jsonb_build_object('ok', false, 'code', 'INVALID_PREFERENCES');
     return public.private_store_receipt_v3(
-      p_request_id,
+      v_request_id,
       'save_student_preferences_v3',
       v_response
     );
@@ -735,7 +764,7 @@ begin
     perform public.private_log_security_event_v3('invalid_preference_appearance', '{}'::jsonb);
     v_response := jsonb_build_object('ok', false, 'code', 'INVALID_PREFERENCES');
     return public.private_store_receipt_v3(
-      p_request_id,
+      v_request_id,
       'save_student_preferences_v3',
       v_response
     );
@@ -779,7 +808,7 @@ begin
     perform public.private_log_security_event_v3('invalid_preference_audio', '{}'::jsonb);
     v_response := jsonb_build_object('ok', false, 'code', 'INVALID_PREFERENCES');
     return public.private_store_receipt_v3(
-      p_request_id,
+      v_request_id,
       'save_student_preferences_v3',
       v_response
     );
@@ -792,7 +821,7 @@ begin
     perform public.private_log_security_event_v3('invalid_preference_tutorial', '{}'::jsonb);
     v_response := jsonb_build_object('ok', false, 'code', 'INVALID_PREFERENCES');
     return public.private_store_receipt_v3(
-      p_request_id,
+      v_request_id,
       'save_student_preferences_v3',
       v_response
     );
@@ -824,7 +853,7 @@ begin
     'snapshot', public.private_build_student_snapshot_v3(v_user_id)
   );
   return public.private_store_receipt_v3(
-    p_request_id,
+    v_request_id,
     'save_student_preferences_v3',
     v_response
   );
@@ -834,7 +863,7 @@ $$;
 create or replace function public.transition_student_map_v3(
   p_target_map text,
   p_expected_revision bigint,
-  p_request_id uuid
+  p_request_id text
 )
 returns jsonb
 language plpgsql
@@ -849,6 +878,7 @@ declare
   v_level integer;
   v_current_revision bigint;
   v_allowed boolean := false;
+  v_request_id uuid;
 begin
   if v_user_id is null then
     return jsonb_build_object('ok', false, 'code', 'UNAUTHORIZED');
@@ -856,12 +886,14 @@ begin
   if public.private_is_teacher_v3() then
     return jsonb_build_object('ok', false, 'code', 'FORBIDDEN');
   end if;
-  if p_request_id is null then
+  if p_request_id is null or p_request_id !~* '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89ab][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$' then
+    perform public.private_log_security_event_v3('invalid_request_id', '{}'::jsonb);
     return jsonb_build_object('ok', false, 'code', 'INVALID_REQUEST');
   end if;
+  v_request_id := p_request_id::uuid;
 
   v_receipt := public.private_read_receipt_v3(
-    p_request_id,
+    v_request_id,
     'transition_student_map_v3'
   );
   if v_receipt is not null then
@@ -877,7 +909,7 @@ begin
   if v_current_revision is null then
     v_response := jsonb_build_object('ok', false, 'code', 'CHARACTER_NOT_FOUND');
     return public.private_store_receipt_v3(
-      p_request_id,
+      v_request_id,
       'transition_student_map_v3',
       v_response
     );
@@ -894,7 +926,7 @@ begin
       'snapshot', public.private_build_student_snapshot_v3(v_user_id)
     );
     return public.private_store_receipt_v3(
-      p_request_id,
+      v_request_id,
       'transition_student_map_v3',
       v_response
     );
@@ -915,7 +947,7 @@ begin
     perform public.private_log_security_event_v3('invalid_map_name', '{}'::jsonb);
     v_response := jsonb_build_object('ok', false, 'code', 'INVALID_MAP');
     return public.private_store_receipt_v3(
-      p_request_id,
+      v_request_id,
       'transition_student_map_v3',
       v_response
     );
@@ -928,7 +960,7 @@ begin
     );
     v_response := jsonb_build_object('ok', false, 'code', 'LOCKED_MAP');
     return public.private_store_receipt_v3(
-      p_request_id,
+      v_request_id,
       'transition_student_map_v3',
       v_response
     );
@@ -941,7 +973,7 @@ begin
     );
     v_response := jsonb_build_object('ok', false, 'code', 'LEVEL_REQUIRED');
     return public.private_store_receipt_v3(
-      p_request_id,
+      v_request_id,
       'transition_student_map_v3',
       v_response
     );
@@ -954,7 +986,7 @@ begin
     );
     v_response := jsonb_build_object('ok', false, 'code', 'LEVEL_REQUIRED');
     return public.private_store_receipt_v3(
-      p_request_id,
+      v_request_id,
       'transition_student_map_v3',
       v_response
     );
@@ -984,7 +1016,7 @@ begin
     );
     v_response := jsonb_build_object('ok', false, 'code', 'INVALID_MAP_TRANSITION');
     return public.private_store_receipt_v3(
-      p_request_id,
+      v_request_id,
       'transition_student_map_v3',
       v_response
     );
@@ -1003,7 +1035,7 @@ begin
     'snapshot', public.private_build_student_snapshot_v3(v_user_id)
   );
   return public.private_store_receipt_v3(
-    p_request_id,
+    v_request_id,
     'transition_student_map_v3',
     v_response
   );
@@ -1040,15 +1072,15 @@ begin
 end;
 $$;
 
-revoke all on function public.save_student_preferences_v3(jsonb, bigint, uuid)
+revoke all on function public.save_student_preferences_v3(jsonb, bigint, text)
   from public, anon;
-revoke all on function public.transition_student_map_v3(text, bigint, uuid)
+revoke all on function public.transition_student_map_v3(text, bigint, text)
   from public, anon;
 revoke all on function public.cleanup_server_authority_v3()
   from public, anon;
-grant execute on function public.save_student_preferences_v3(jsonb, bigint, uuid)
+grant execute on function public.save_student_preferences_v3(jsonb, bigint, text)
   to authenticated;
-grant execute on function public.transition_student_map_v3(text, bigint, uuid)
+grant execute on function public.transition_student_map_v3(text, bigint, text)
   to authenticated;
 grant execute on function public.cleanup_server_authority_v3()
   to authenticated;

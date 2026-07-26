@@ -509,6 +509,11 @@ function loadPlayer(name) {
 }
 
 function normalizePlayer(p) {
+  const authorityV3 = Boolean(
+    secureStudentAccess.enabled
+      && secureStudentAccess.authorityV3Enabled
+      && Number.isSafeInteger(Number(p.serverRevision)),
+  );
   const klass = p.class && CLASS_META[p.class] ? p.class : 'warrior';
   const combatStatuses = YuksamCombatRules.normalizeCombatStatuses({
     ...(p.combatStatuses || {}),
@@ -521,12 +526,12 @@ function normalizePlayer(p) {
     class: klass,
     baseStatsVersion: Number(p.baseStatsVersion) || 0,
     spec: p.spec === '분노' ? '무기' : (p.spec || null),
-    level: Number(p.level) || 1,
+    level: authorityV3 ? Number(p.level) : (Number(p.level) || 1),
     exp: Number(p.exp) || 0,
     gold: Number(p.gold) || 0,
     building: Number(p.building) || 0,
-    hp: Number(p.hp) || 0,
-    maxHp: Number(p.maxHp) || 0,
+    hp: authorityV3 ? Number(p.hp) : (Number(p.hp) || 0),
+    maxHp: authorityV3 ? Number(p.maxHp) : (Number(p.maxHp) || 0),
     appearance: {
       shirt: p.appearance?.shirt || '#38bdf8',
       pants: p.appearance?.pants || '#334155',
@@ -558,20 +563,37 @@ function normalizePlayer(p) {
         answered: Number(r.answered) || 0,
         correct: Number(r.correct) || 0,
         wrongLog: Array.isArray(r.wrongLog) ? r.wrongLog.slice(-30) : [],
+        pvpWins: Number(r.pvpWins) || 0,
+        pvpLosses: Number(r.pvpLosses) || 0,
       };
     })(),
+    ...(authorityV3 ? {
+      serverInventoryInstances: Array.isArray(p.serverInventoryInstances)
+        ? p.serverInventoryInstances.map((item) => ({ ...item }))
+        : [],
+      serverPreferences: {
+        appearance: { ...(p.serverPreferences?.appearance || {}) },
+        audio: { ...(p.serverPreferences?.audio || {}) },
+        tutorialAcknowledgements: {
+          ...(p.serverPreferences?.tutorialAcknowledgements || {}),
+        },
+      },
+      serverRevision: Number(p.serverRevision),
+    } : {}),
   };
   if (!secureStudentAccess.enabled) normalized.password = String(p.password || '1234');
-  const classWeapon = defaultWeaponIdForClass(klass);
-  if (!normalized.equipment.weapon) normalized.equipment.weapon = classWeapon;
-  if (!normalized.inventory.includes(classWeapon)) normalized.inventory.unshift(classWeapon);
-  if (!normalized.equipment.head) normalized.equipment.head = null;
-  if (!normalized.equipment.accessory) normalized.equipment.accessory = null;
-  if (!normalized.equipment.armor) normalized.equipment.armor = null;
-  normalized.level = computeLevelFromExp(normalized.exp);
-  const baseHp = maxHpForPlayer(normalized);
-  normalized.maxHp = normalized.maxHp || baseHp;
-  if (!normalized.hp || normalized.hp > normalized.maxHp) normalized.hp = normalized.maxHp;
+  if (!authorityV3) {
+    const classWeapon = defaultWeaponIdForClass(klass);
+    if (!normalized.equipment.weapon) normalized.equipment.weapon = classWeapon;
+    if (!normalized.inventory.includes(classWeapon)) normalized.inventory.unshift(classWeapon);
+    if (!normalized.equipment.head) normalized.equipment.head = null;
+    if (!normalized.equipment.accessory) normalized.equipment.accessory = null;
+    if (!normalized.equipment.armor) normalized.equipment.armor = null;
+    normalized.level = computeLevelFromExp(normalized.exp);
+    const baseHp = maxHpForPlayer(normalized);
+    normalized.maxHp = normalized.maxHp || baseHp;
+    if (!normalized.hp || normalized.hp > normalized.maxHp) normalized.hp = normalized.maxHp;
+  }
   return normalized;
 }
 

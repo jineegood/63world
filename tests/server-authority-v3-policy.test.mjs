@@ -139,7 +139,7 @@ test('private helpers are unavailable to browser roles and trust only app metada
 
 test('character creation derives identity and starter values entirely on the server', () => {
   const sql = migration();
-  const signature = /create\s+or\s+replace\s+function\s+public\.create_student_character_v3\s*\(\s*p_class_name\s+text\s*,\s*p_appearance\s+jsonb\s*,\s*p_request_id\s+uuid\s*\)/i;
+  const signature = /create\s+or\s+replace\s+function\s+public\.create_student_character_v3\s*\(\s*p_class_name\s+text\s*,\s*p_appearance\s+jsonb\s*,\s*p_request_id\s+text\s*\)/i;
   assert.match(sql, signature);
   assert.doesNotMatch(sql, /create_student_character_v3\s*\([^)]*\buser_id\b/i);
 
@@ -164,7 +164,7 @@ test('character creation is idempotent and does not replace an existing characte
   const body = sql.match(
     /create\s+or\s+replace\s+function\s+public\.create_student_character_v3[\s\S]*?as\s+\$\$([\s\S]*?)\$\$;/i,
   )?.[1] || '';
-  assert.match(body, /private_read_receipt_v3\s*\(\s*p_request_id\s*,\s*'create_student_character_v3'\s*\)/i);
+  assert.match(body, /private_read_receipt_v3\s*\(\s*v_request_id\s*,\s*'create_student_character_v3'\s*\)/i);
   assert.match(body, /select[\s\S]+from\s+public\.player_core_v3[\s\S]+for\s+update/i);
   assert.match(body, /private_build_student_snapshot_v3\s*\(\s*v_user_id\s*\)/i);
   assert.match(body, /on\s+conflict\s*\(\s*user_id\s*\)\s+do\s+nothing/i);
@@ -206,7 +206,7 @@ test('student character RPCs are security definer functions with a locked search
     assert.match(definition, /security\s+definer/i);
     assert.match(definition, /set\s+search_path\s*=\s*''/i);
   }
-  assert.match(sql, /grant\s+execute\s+on\s+function\s+public\.create_student_character_v3\(text,\s*jsonb,\s*uuid\)\s+to\s+authenticated/i);
+  assert.match(sql, /grant\s+execute\s+on\s+function\s+public\.create_student_character_v3\(text,\s*jsonb,\s*text\)\s+to\s+authenticated/i);
   assert.match(sql, /grant\s+execute\s+on\s+function\s+public\.load_student_game_v3\(\)\s+to\s+authenticated/i);
   assert.match(sql, /revoke\s+all\s+on\s+function\s+public\.private_build_student_snapshot_v3\(uuid\)\s+from\s+public\s*,\s*anon\s*,\s*authenticated/i);
 });
@@ -215,13 +215,13 @@ test('preference RPC rejects authoritative fields and uses revision plus request
   const sql = migration();
   assert.match(
     sql,
-    /create\s+or\s+replace\s+function\s+public\.save_student_preferences_v3\s*\(\s*p_preferences\s+jsonb\s*,\s*p_expected_revision\s+bigint\s*,\s*p_request_id\s+uuid\s*\)/i,
+    /create\s+or\s+replace\s+function\s+public\.save_student_preferences_v3\s*\(\s*p_preferences\s+jsonb\s*,\s*p_expected_revision\s+bigint\s*,\s*p_request_id\s+text\s*\)/i,
   );
   const body = sql.match(
     /create\s+or\s+replace\s+function\s+public\.save_student_preferences_v3[\s\S]*?as\s+\$\$([\s\S]*?)\$\$;/i,
   )?.[1] || '';
 
-  assert.match(body, /private_read_receipt_v3\s*\(\s*p_request_id\s*,\s*'save_student_preferences_v3'\s*\)/i);
+  assert.match(body, /private_read_receipt_v3\s*\(\s*v_request_id\s*,\s*'save_student_preferences_v3'\s*\)/i);
   assert.match(body, /from\s+public\.player_core_v3[\s\S]*?for\s+update/i);
   assert.match(body, /p_expected_revision\s+is\s+distinct\s+from\s+v_current_revision/i);
   assert.match(body, /REVISION_CONFLICT/);
@@ -251,7 +251,7 @@ test('map RPC enforces server-owned map names, edges, and level gates', () => {
   const sql = migration();
   assert.match(
     sql,
-    /create\s+or\s+replace\s+function\s+public\.transition_student_map_v3\s*\(\s*p_target_map\s+text\s*,\s*p_expected_revision\s+bigint\s*,\s*p_request_id\s+uuid\s*\)/i,
+    /create\s+or\s+replace\s+function\s+public\.transition_student_map_v3\s*\(\s*p_target_map\s+text\s*,\s*p_expected_revision\s+bigint\s*,\s*p_request_id\s+text\s*\)/i,
   );
   const body = sql.match(
     /create\s+or\s+replace\s+function\s+public\.transition_student_map_v3[\s\S]*?as\s+\$\$([\s\S]*?)\$\$;/i,
@@ -297,8 +297,8 @@ test('rejected mutations create bounded audit events while successful calls retu
 test('new mutation RPCs are callable only by authenticated users', () => {
   const sql = migration();
   for (const signature of [
-    'save_student_preferences_v3\\(jsonb,\\s*bigint,\\s*uuid\\)',
-    'transition_student_map_v3\\(text,\\s*bigint,\\s*uuid\\)',
+    'save_student_preferences_v3\\(jsonb,\\s*bigint,\\s*text\\)',
+    'transition_student_map_v3\\(text,\\s*bigint,\\s*text\\)',
   ]) {
     assert.match(
       sql,
@@ -308,5 +308,28 @@ test('new mutation RPCs are callable only by authenticated users', () => {
       sql,
       new RegExp(`grant\\s+execute\\s+on\\s+function\\s+public\\.${signature}\\s+to\\s+authenticated`, 'i'),
     );
+  }
+});
+
+test('request ids are validated inside RPCs and serialized across different actions', () => {
+  const sql = migration();
+  const helper = sql.match(
+    /create\s+or\s+replace\s+function\s+public\.private_read_receipt_v3[\s\S]*?as\s+\$\$([\s\S]*?)\$\$;/i,
+  )?.[1] || '';
+  assert.match(helper, /pg_advisory_xact_lock/i);
+  assert.match(helper, /action_name\s+is\s+distinct\s+from\s+p_action_name/i);
+  assert.match(helper, /REQUEST_ID_REUSED/i);
+
+  for (const fn of [
+    'create_student_character_v3',
+    'save_student_preferences_v3',
+    'transition_student_map_v3',
+  ]) {
+    const body = sql.match(
+      new RegExp(`create\\s+or\\s+replace\\s+function\\s+public\\.${fn}[\\s\\S]*?as\\s+\\$\\$([\\s\\S]*?)\\$\\$;`, 'i'),
+    )?.[1] || '';
+    assert.match(body, /p_request_id[\s\S]*?\^\[0-9a-fA-F\]/i);
+    assert.match(body, /invalid_request_id/i);
+    assert.match(body, /v_request_id\s*:=\s*p_request_id::uuid/i);
   }
 });

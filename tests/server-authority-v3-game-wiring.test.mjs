@@ -7,6 +7,11 @@ const root = path.resolve(import.meta.dirname, '..');
 const game = fs.readFileSync(path.join(root, 'game.js'), 'utf8');
 const config = fs.readFileSync(path.join(root, 'src/cloud-config.js'), 'utf8');
 const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+const normalizerSource = (
+  game.match(
+    /function\s+normalizePlayer\s*\([\s\S]*?\n\}\n\nfunction\s+defaultWeaponIdForClass/,
+  )?.[0] || ''
+).replace(/\n\nfunction\s+defaultWeaponIdForClass$/, '');
 
 test('v3 cutover remains disabled while incomplete gameplay phases still use v2', () => {
   assert.match(config, /serverAuthorityV3Enabled\s*:\s*false/);
@@ -43,4 +48,71 @@ test('authority browser script loads before student access and game code', () =>
   const student = index.indexOf('src/student-access-v2.js');
   const gameScript = index.indexOf('game.js');
   assert.ok(authority >= 0 && authority < student && student < gameScript);
+});
+
+test('authority normalization preserves revision, preferences, records, and zero hp', () => {
+  assert.match(normalizerSource, /const\s+authorityV3\s*=/);
+  assert.match(normalizerSource, /serverRevision\s*:\s*Number\(p\.serverRevision\)/);
+  assert.match(normalizerSource, /serverPreferences\s*:/);
+  assert.match(normalizerSource, /serverInventoryInstances\s*:/);
+  assert.match(normalizerSource, /pvpWins\s*:\s*Number\(r\.pvpWins\)/);
+  assert.match(normalizerSource, /if\s*\(!authorityV3\)\s*\{[\s\S]*?computeLevelFromExp/);
+  assert.match(normalizerSource, /if\s*\(!authorityV3[\s\S]*?normalized\.hp\s*=\s*normalized\.maxHp/);
+});
+
+test('flag-on normalization executes without rewriting authoritative values', () => {
+  const normalizePlayer = Function(
+    'secureStudentAccess',
+    'CLASS_META',
+    'YuksamCombatRules',
+    'worldDefs',
+    'computeLevelFromExp',
+    'maxHpForPlayer',
+    'defaultWeaponIdForClass',
+    `${normalizerSource}; return normalizePlayer;`,
+  )(
+    { enabled:true, authorityV3Enabled:true },
+    { warrior:{} },
+    { normalizeCombatStatuses:(value) => value },
+    { town:{ playerSpawn:{ x:123, y:456 } } },
+    () => 99,
+    () => 999,
+    () => 'synthetic_weapon',
+  );
+  const preferences = {
+    appearance:{ shirt:'#111' },
+    audio:{ bgmVolume:35, sfxVolume:45, bgmEnabled:true, sfxEnabled:false },
+    tutorialAcknowledgements:{ pvpTutorialSeen:true },
+  };
+  const normalized = normalizePlayer({
+    name:'Student',
+    class:'warrior',
+    level:4,
+    exp:0,
+    hp:0,
+    maxHp:22,
+    inventory:['server_weapon'],
+    equipment:{ weapon:'server_weapon' },
+    records:{ pvpWins:7, pvpLosses:3 },
+    serverInventoryInstances:[{ id:'instance-1', itemDefinitionId:'server_weapon' }],
+    serverPreferences:preferences,
+    serverRevision:12,
+  });
+
+  assert.equal(normalized.level, 4);
+  assert.equal(normalized.hp, 0);
+  assert.equal(normalized.maxHp, 22);
+  assert.equal(normalized.serverRevision, 12);
+  assert.deepEqual(normalized.serverPreferences, preferences);
+  assert.deepEqual(normalized.serverInventoryInstances, [
+    { id:'instance-1', itemDefinitionId:'server_weapon' },
+  ]);
+  assert.deepEqual(normalized.inventory, ['server_weapon']);
+  assert.deepEqual(normalized.records, {
+    answered:0,
+    correct:0,
+    wrongLog:[],
+    pvpWins:7,
+    pvpLosses:3,
+  });
 });
