@@ -41,12 +41,14 @@ test('v3 map adapter gates ordinary hunting transitions before local map state c
   assert.match(game, /async\s+function\s+requestServerMapTransitionV3\s*\(\s*targetMap\s*\)/);
   assert.match(game, /secureStudentAccess\.transitionMap\s*\(/);
   assert.match(game, /async\s+function\s+confirmServerMapTransitionV3\s*\(\s*targetMap\s*\)/);
-  for (const target of ['forest', 'desert', 'swamp', 'town']) {
+  for (const target of ['forest', 'desert', 'swamp', 'town', 'bossRoom']) {
     assert.match(
       game,
       new RegExp(`await\\s+confirmServerMapTransitionV3\\('${target}'\\)[\\s\\S]{0,500}?game\\.currentMap\\s*=\\s*'${target}'`),
     );
   }
+  assert.match(game, /await\s+confirmServerMapTransitionV3\('finalBossRoom'\)[\s\S]{0,120}?setupFinalBossRoomV35\(\)/);
+  assert.match(game, /function\s+setupFinalBossRoomV35\(\)[\s\S]{0,120}?game\.currentMap\s*=\s*'finalBossRoom'/);
   assert.match(config, /serverAuthorityV3Enabled\s*:\s*false/);
 });
 

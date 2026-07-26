@@ -344,6 +344,14 @@ function performPlayerAction({ player, state, actionId, wrong, random, events })
   }
   const chargeMultiplier = Number(state.playerStatuses.chargeMultiplier) || 1;
   if (chargeMultiplier > 1) delete state.playerStatuses.chargeMultiplier;
+  const playerChillTurns = finiteInteger(state.playerStatuses.chillTurns);
+  if (playerChillTurns > 0 && rawHits.some((raw) => raw > 0)) {
+    for (let index = 0; index < rawHits.length; index += 1) rawHits[index] *= 0.5;
+    const remaining = playerChillTurns - 1;
+    if (remaining > 0) state.playerStatuses.chillTurns = remaining;
+    else delete state.playerStatuses.chillTurns;
+    pushEvent(events, { type:'player-status', status:'chill', turns:Math.max(0, remaining) });
+  }
   let landed = false;
   for (let index = 0; index < rawHits.length && state.monsterHp > 0; index += 1) {
     let raw = rawHits[index];
@@ -533,6 +541,17 @@ function performMonsterAction({ player, state, random, events }) {
   if (finiteInteger(pattern?.stunTurns) > 0 && state.playerHp > 0) {
     state.playerStatuses.stunTurns = finiteInteger(pattern.stunTurns);
     pushEvent(events, { type:'player-status', status:'stun', turns:state.playerStatuses.stunTurns });
+  }
+  if (pattern?.kind === 'chillPlayer' && state.playerHp > 0) {
+    state.playerStatuses.chillTurns = Math.max(
+      finiteInteger(state.playerStatuses.chillTurns),
+      finiteInteger(pattern.turns, 1),
+    );
+    pushEvent(events, {
+      type:'player-status',
+      status:'chill',
+      turns:state.playerStatuses.chillTurns,
+    });
   }
 
   if (state.playerHp <= 0

@@ -697,6 +697,10 @@ async function requestServerMapTransitionV3(targetMap) {
   });
   game.player.serverRevision = moved.revision;
   game.player.map = moved.player.map;
+  game.player.bossReturnMap = moved.player.bossReturnMap || null;
+  game.player.finalBossPortalUnlocked = Boolean(moved.player.finalBossPortalUnlocked);
+  game.bossReturnMap = game.player.bossReturnMap;
+  game.finalBossPortalUnlocked = game.player.finalBossPortalUnlocked;
   return moved;
 }
 window.requestServerMapTransitionV3 = requestServerMapTransitionV3;
@@ -2953,11 +2957,12 @@ function confirmBossPortal(mapKey) {
   `, { type: 'bossConfirm', pause: true });
 }
 
-function returnToStageFromBossRoom() {
+async function returnToStageFromBossRoom() {
   const mapKey = game.bossReturnMap || game.player?.bossReturnMap || 'forest';
   game.finalBossPortalUnlocked = false; // [피드백] 방을 나가면 ??? 포탈 소멸
   closeModal();
-  showLoadingTransition(`${worldDefs[mapKey]?.label || '사냥터'}로 돌아가는 중입니다.`, () => {
+  showLoadingTransition(`${worldDefs[mapKey]?.label || '사냥터'}로 돌아가는 중입니다.`, async () => {
+    if (!await confirmServerMapTransitionV3(mapKey)) return;
     game.currentMap = mapKey;
     game.player.map = mapKey;
     const portals = ensureStagePortals(mapKey);
@@ -5355,7 +5360,8 @@ function updateQuestTracker() {
     if (game.player) game.player.bossReturnMap = mapKey;
     worldDefs.bossRoom.label = mapKey === 'desert' ? '황량한 사막 보스 방' : mapKey === 'swamp' ? '으스스한 늪지 보스 방' : '고요한 숲 보스 방';
     worldDefs.bossRoom.zoneKey = worldDefs[mapKey].zoneKey;
-    showLoadingTransition('보스 방으로 이동중입니다.', () => {
+    showLoadingTransition('보스 방으로 이동중입니다.', async () => {
+      if (!await confirmServerMapTransitionV3('bossRoom')) return;
       game.currentMap = 'bossRoom'; game.player.map = 'bossRoom';
       game.player.x = worldDefs.bossRoom.playerSpawn.x; game.player.y = worldDefs.bossRoom.playerSpawn.y;
       game.forestMonsters = [boss];
@@ -12857,7 +12863,10 @@ function wireAuthoritativeEconomyV3() {
   window.enterFinalBossRoomV21 = function enterFinalBossRoomV35() {
     closeModal();
     game.finalBossReturn = { map:'bossRoom', x:760, y:540 };
-    showLoadingTransition('???로 이동중입니다.', () => setupFinalBossRoomV35());
+    showLoadingTransition('???로 이동중입니다.', async () => {
+      if (!await confirmServerMapTransitionV3('finalBossRoom')) return;
+      setupFinalBossRoomV35();
+    });
   };
   function drawFinalBossRoomV35() {
     updateCamera();
@@ -12906,10 +12915,11 @@ function wireAuthoritativeEconomyV3() {
     // [수정] v35가 보스전 진입을 끊고 티저 대사만 남겨두었던 것을, 살아있는 v34 전투 함수로 다시 연결.
     openModal(`<div class="dialogue-box final-teacher-dialogue-v26"><div class="dialogue-speaker"><h2>LV.99 명진쌤 <span class="badge danger">최종 보스</span></h2><div class="badge">E키로 진행</div></div><div class="dialogue-text">여기까지 오다니… 정말 대단하구나!<br>하지만 이 모든 모험은 너희의 성장을 위한 것이었단다.<br>이제, 나를 뛰어넘어 보렴!</div><div class="dialogue-options"><button class="primary" onclick="startFinalTeacherBattleV34()">도전한다</button><button class="ghost" onclick="closeModal()">아직 준비가 안 됐습니다</button></div></div>`, { type:'dialogue', pause:true });
   }
-  function exitFinalBossRoomV35() {
+  async function exitFinalBossRoomV35() {
     closeModal();
     hideTooltipV35();
     const ret = game.finalBossReturn || { map:'bossRoom', x:760, y:540 };
+    if (!await confirmServerMapTransitionV3('bossRoom')) return;
     game.currentMap = ret.map; game.player.map = ret.map; game.player.x = ret.x; game.player.y = ret.y;
     game.keys = {}; game.isMoving = false; updateHud?.(); syncAudioFileBgm?.(); savePlayer?.();
   }
@@ -13117,6 +13127,11 @@ function wireAuthoritativePveCombatV3() {
   const MONSTER_TYPES_V3 = Object.freeze(Object.fromEntries(
     Object.entries(MONSTER_KEYS_V3).map(([local, server]) => [server, local.split(':')[1]]),
   ));
+  const ELITE_MONSTER_KEYS_V3 = Object.freeze({
+    forest:'forest_elite_slime',
+    desert:'desert_elite_snake',
+    swamp:'swamp_elite_zombie',
+  });
   let combatClient = null;
   let session = null;
   let activeMonster = null;
@@ -13130,6 +13145,12 @@ function wireAuthoritativePveCombatV3() {
   }
 
   function monsterKey(monster) {
+    if (monster?.type === 'teacherBoss' && game.currentMap === 'finalBossRoom') {
+      return 'final_teacher';
+    }
+    if (monster?.elite && game.currentMap === 'bossRoom') {
+      return ELITE_MONSTER_KEYS_V3[game.bossReturnMap || game.player?.bossReturnMap] || null;
+    }
     if (monster?.elite) return null;
     return MONSTER_KEYS_V3[`${game.currentMap}:${monster?.type || ''}`] || null;
   }
@@ -13168,6 +13189,8 @@ function wireAuthoritativePveCombatV3() {
       game.player.x = x;
       game.player.y = y;
     }
+    game.bossReturnMap = game.player.bossReturnMap || null;
+    game.finalBossPortalUnlocked = Boolean(game.player.finalBossPortalUnlocked);
     updateHud();
   }
 
@@ -13470,10 +13493,20 @@ function wireAuthoritativePveCombatV3() {
       const response = await client.resume();
       applyServerPlayer(response);
       if (!response?.session) return;
-      const type = MONSTER_TYPES_V3[response.session.monsterKey];
-      const monster = (game.forestMonsters || []).find((candidate) => (
-        candidate.alive && !candidate.elite && candidate.type === type
-      ));
+      const serverMonsterKey = response.session.monsterKey;
+      const eliteTypes = {
+        forest_elite_slime:'slime',
+        desert_elite_snake:'snake',
+        swamp_elite_zombie:'zombie',
+      };
+      const type = MONSTER_TYPES_V3[serverMonsterKey] || eliteTypes[serverMonsterKey];
+      const monster = serverMonsterKey === 'final_teacher'
+        ? game.finalTeacherBossV34
+        : (game.forestMonsters || []).find((candidate) => (
+          candidate.alive
+          && candidate.type === type
+          && Boolean(candidate.elite) === Boolean(eliteTypes[serverMonsterKey])
+        ));
       if (!monster) return;
       applySession(response.session, monster);
       renderAuthorityMenuV3('진행 중이던 전투를 이어갑니다.');

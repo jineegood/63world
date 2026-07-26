@@ -147,6 +147,31 @@ test('wrong answers deal half damage and reveal the answer without skipping reta
   assert.equal(result.events[0].minimumDurationMs, 2000);
 });
 
+test('teacher chill halves the next damaging player action and is then consumed', () => {
+  const player = buildCombatant({ ...basicPlayer, inventory:[], activePet:null, skills:{} });
+  const state = {
+    ...startEncounter({ player, monsterKey:'final_teacher', random:sequence(0, 0) }),
+    monsterHp:20,
+    monsterMaxHp:20,
+    monsterAttack:1,
+    playerStatuses:{ chillTurns:1 },
+    monsterPatterns:[],
+  };
+  const result = resolveTurn({
+    state,
+    player,
+    actionId:'basic',
+    answer:'4',
+    answerKey:'4',
+    random:sequence(0.5, 0.9, 0.9, 0.9, 0.9),
+  });
+  assert.equal(result.state.monsterHp, 18);
+  assert.equal(result.state.playerStatuses.chillTurns, undefined);
+  assert.ok(result.events.some((event) => (
+    event.type === 'player-status' && event.status === 'chill' && event.turns === 0
+  )));
+});
+
 test('learned support skills create shields and enforce cooldowns', () => {
   const player = buildCombatant({
     ...basicPlayer,

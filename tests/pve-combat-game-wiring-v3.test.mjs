@@ -41,7 +41,16 @@ test('ordinary hunting monsters map to bounded server catalog identifiers', () =
   ]) {
     assert.match(patch, new RegExp(`${pair[0]}:${pair[1]}'\\s*:\\s*'${pair[2]}'`));
   }
-  assert.match(patch, /if\s*\(monster\?\.elite\)\s*return\s+null/);
+  for (const key of [
+    'forest_elite_slime',
+    'desert_elite_snake',
+    'swamp_elite_zombie',
+    'final_teacher',
+  ]) {
+    assert.match(patch, new RegExp(`'${key}'`));
+  }
+  assert.match(patch, /monster\?\.type\s*===\s*'teacherBoss'[\s\S]*?final_teacher/);
+  assert.match(patch, /ELITE_MONSTER_KEYS_V3\[\s*game\.bossReturnMap\s*\|\|\s*game\.player\?\.bossReturnMap\s*\]/);
 });
 
 test('authoritative turns send only action and answer identifiers and never calculate browser damage', () => {
@@ -61,6 +70,7 @@ test('server snapshots drive hp, rewards, resume, defeat, and surrender presenta
   assert.match(patch, /\.surrender\(session\.sessionRevision\)/);
   assert.match(patch, /response\.outcome\s*===\s*'defeat'/);
   assert.doesNotMatch(patch, /startMonsterDefeatSequence|handlePlayerDefeat\(/);
+  assert.match(patch, /game\.finalBossPortalUnlocked\s*=\s*Boolean\(game\.player\.finalBossPortalUnlocked\)/);
 });
 
 test('surrender and expired resume apply the authoritative hp snapshot before closing', () => {
