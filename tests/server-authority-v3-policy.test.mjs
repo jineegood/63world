@@ -136,3 +136,77 @@ test('private helpers are unavailable to browser roles and trust only app metada
     );
   }
 });
+
+test('character creation derives identity and starter values entirely on the server', () => {
+  const sql = migration();
+  const signature = /create\s+or\s+replace\s+function\s+public\.create_student_character_v3\s*\(\s*p_class_name\s+text\s*,\s*p_appearance\s+jsonb\s*,\s*p_request_id\s+uuid\s*\)/i;
+  assert.match(sql, signature);
+  assert.doesNotMatch(sql, /create_student_character_v3\s*\([^)]*\buser_id\b/i);
+
+  const body = sql.match(
+    /create\s+or\s+replace\s+function\s+public\.create_student_character_v3[\s\S]*?as\s+\$\$([\s\S]*?)\$\$;/i,
+  )?.[1] || '';
+  assert.match(body, /auth\.uid\(\)/i);
+  assert.match(body, /from\s+public\.player_profiles_v2[\s\S]*?display_name[\s\S]*?for\s+update/i);
+  assert.match(body, /p_class_name\s+is\s+null\s+or\s+p_class_name\s+not\s+in\s*\(\s*'warrior'\s*,\s*'mage'\s*,\s*'priest'\s*\)/i);
+  assert.match(body, /jsonb_object_keys\s*\([\s\S]*?p_appearance[\s\S]*?\)/i);
+  assert.match(body, /insert\s+into\s+public\.player_core_v3/i);
+  assert.match(body, /values[\s\S]*?\b1\b[\s\S]*?\b0\b[\s\S]*?\b20\b[\s\S]*?\b0\b/i);
+  for (const item of ['training_greatsword', 'training_staff', 'training_book']) {
+    assert.match(body, new RegExp(item));
+  }
+  assert.match(body, /insert\s+into\s+public\.player_inventory_v3/i);
+  assert.match(body, /insert\s+into\s+public\.game_action_receipts_v3/i);
+});
+
+test('character creation is idempotent and does not replace an existing character', () => {
+  const sql = migration();
+  const body = sql.match(
+    /create\s+or\s+replace\s+function\s+public\.create_student_character_v3[\s\S]*?as\s+\$\$([\s\S]*?)\$\$;/i,
+  )?.[1] || '';
+  assert.match(body, /private_read_receipt_v3\s*\(\s*p_request_id\s*,\s*'create_student_character_v3'\s*\)/i);
+  assert.match(body, /select[\s\S]+from\s+public\.player_core_v3[\s\S]+for\s+update/i);
+  assert.match(body, /private_build_student_snapshot_v3\s*\(\s*v_user_id\s*\)/i);
+  assert.match(body, /on\s+conflict\s*\(\s*user_id\s*\)\s+do\s+nothing/i);
+});
+
+test('snapshot loading returns only the authenticated student normalized state', () => {
+  const sql = migration();
+  assert.match(sql, /create\s+or\s+replace\s+function\s+public\.load_student_game_v3\s*\(\s*\)/i);
+  assert.doesNotMatch(sql, /load_student_game_v3\s*\([^)]*\buser_id\b/i);
+
+  const helper = sql.match(
+    /create\s+or\s+replace\s+function\s+public\.private_build_student_snapshot_v3[\s\S]*?as\s+\$\$([\s\S]*?)\$\$;/i,
+  )?.[1] || '';
+  for (const key of ['core', 'inventory', 'skills', 'quests', 'preferences', 'revision']) {
+    assert.match(helper, new RegExp(`'${key}'\\s*,`, 'i'));
+  }
+  assert.match(helper, /order\s+by\s+i\.item_definition_id\s*,\s*i\.id/i);
+  assert.match(helper, /order\s+by\s+s\.skill_id/i);
+  assert.match(helper, /order\s+by\s+q\.quest_id/i);
+
+  const loadBody = sql.match(
+    /create\s+or\s+replace\s+function\s+public\.load_student_game_v3[\s\S]*?as\s+\$\$([\s\S]*?)\$\$;/i,
+  )?.[1] || '';
+  assert.match(loadBody, /v_user_id(?:\s+uuid)?\s*:=\s*auth\.uid\(\)/i);
+  assert.match(loadBody, /private_build_student_snapshot_v3\s*\(\s*v_user_id\s*\)/i);
+  assert.doesNotMatch(loadBody, /player_profiles_v2\.data/i);
+});
+
+test('student character RPCs are security definer functions with a locked search path', () => {
+  const sql = migration();
+  for (const fn of [
+    'create_student_character_v3',
+    'load_student_game_v3',
+    'private_build_student_snapshot_v3',
+  ]) {
+    const definition = sql.match(
+      new RegExp(`create\\s+or\\s+replace\\s+function\\s+public\\.${fn}[\\s\\S]*?\\$\\$;`, 'i'),
+    )?.[0] || '';
+    assert.match(definition, /security\s+definer/i);
+    assert.match(definition, /set\s+search_path\s*=\s*''/i);
+  }
+  assert.match(sql, /grant\s+execute\s+on\s+function\s+public\.create_student_character_v3\(text,\s*jsonb,\s*uuid\)\s+to\s+authenticated/i);
+  assert.match(sql, /grant\s+execute\s+on\s+function\s+public\.load_student_game_v3\(\)\s+to\s+authenticated/i);
+  assert.match(sql, /revoke\s+all\s+on\s+function\s+public\.private_build_student_snapshot_v3\(uuid\)\s+from\s+public\s*,\s*anon\s*,\s*authenticated/i);
+});

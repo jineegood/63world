@@ -268,3 +268,296 @@ $$;
 revoke all on function public.private_is_teacher_v3() from public, anon, authenticated;
 revoke all on function public.private_log_security_event_v3(text, jsonb) from public, anon, authenticated;
 revoke all on function public.private_read_receipt_v3(uuid, text) from public, anon, authenticated;
+
+create or replace function public.private_build_student_snapshot_v3(
+  p_user_id uuid
+)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select jsonb_build_object(
+    'core', jsonb_build_object(
+      'display_name', c.display_name,
+      'class_name', c.class_name,
+      'spec', c.spec,
+      'level', c.level,
+      'exp', c.exp,
+      'gold', c.gold,
+      'building', c.building,
+      'current_hp', c.current_hp,
+      'max_hp', c.max_hp,
+      'current_map', c.current_map,
+      'pvp_wins', c.pvp_wins,
+      'pvp_losses', c.pvp_losses,
+      'revision', c.revision
+    ),
+    'inventory', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', i.id,
+        'item_definition_id', i.item_definition_id,
+        'enhancement_tier', i.enhancement_tier,
+        'equipped_slot', i.equipped_slot
+      ) order by i.item_definition_id, i.id)
+      from public.player_inventory_v3 as i
+      where i.user_id = c.user_id
+    ), '[]'::jsonb),
+    'skills', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'skill_id', s.skill_id,
+        'rank', s.rank
+      ) order by s.skill_id)
+      from public.player_skills_v3 as s
+      where s.user_id = c.user_id
+    ), '[]'::jsonb),
+    'quests', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'quest_id', q.quest_id,
+        'status', q.status,
+        'progress', q.progress,
+        'accepted_at', q.accepted_at,
+        'completed_at', q.completed_at
+      ) order by q.quest_id)
+      from public.player_quests_v3 as q
+      where q.user_id = c.user_id
+    ), '[]'::jsonb),
+    'preferences', jsonb_build_object(
+      'shirt_color', p.shirt_color,
+      'pants_color', p.pants_color,
+      'hair_color', p.hair_color,
+      'hair_style', p.hair_style,
+      'skin_color', p.skin_color,
+      'accessory', p.accessory,
+      'bgm_volume', p.bgm_volume,
+      'sfx_volume', p.sfx_volume,
+      'bgm_enabled', p.bgm_enabled,
+      'sfx_enabled', p.sfx_enabled,
+      'tutorial_acknowledgements', p.tutorial_acknowledgements
+    ),
+    'revision', c.revision
+  )
+  from public.player_core_v3 as c
+  join public.player_preferences_v3 as p on p.user_id = c.user_id
+  where c.user_id = p_user_id;
+$$;
+
+revoke all on function public.private_build_student_snapshot_v3(uuid)
+  from public, anon, authenticated;
+
+create or replace function public.create_student_character_v3(
+  p_class_name text,
+  p_appearance jsonb,
+  p_request_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_display_name text;
+  v_existing integer;
+  v_receipt jsonb;
+  v_snapshot jsonb;
+  v_response jsonb;
+  v_starter_item text;
+  v_max_hp integer;
+begin
+  if v_user_id is null then
+    return jsonb_build_object('ok', false, 'code', 'UNAUTHORIZED');
+  end if;
+  if public.private_is_teacher_v3() then
+    return jsonb_build_object('ok', false, 'code', 'FORBIDDEN');
+  end if;
+  if p_request_id is null then
+    return jsonb_build_object('ok', false, 'code', 'INVALID_REQUEST');
+  end if;
+
+  v_receipt := public.private_read_receipt_v3(
+    p_request_id,
+    'create_student_character_v3'
+  );
+  if v_receipt is not null then
+    return v_receipt;
+  end if;
+
+  select p.display_name
+  into v_display_name
+  from public.player_profiles_v2 as p
+  where p.user_id = v_user_id
+  for update;
+
+  if v_display_name is null then
+    perform public.private_log_security_event_v3(
+      'create_character_without_student_profile',
+      '{}'::jsonb
+    );
+    return jsonb_build_object('ok', false, 'code', 'STUDENT_NOT_FOUND');
+  end if;
+
+  select 1
+  into v_existing
+  from public.player_core_v3 as c
+  where c.user_id = v_user_id
+  for update;
+
+  if v_existing = 1 then
+    v_snapshot := public.private_build_student_snapshot_v3(v_user_id);
+    v_response := jsonb_build_object('ok', true, 'code', 'OK', 'snapshot', v_snapshot);
+    insert into public.game_action_receipts_v3(user_id, request_id, action_name, response_json)
+    values (v_user_id, p_request_id, 'create_student_character_v3', v_response)
+    on conflict (user_id, request_id) do nothing;
+    return v_response;
+  end if;
+
+  if p_class_name is null
+    or p_class_name not in ('warrior', 'mage', 'priest')
+  then
+    perform public.private_log_security_event_v3(
+      'invalid_character_class',
+      jsonb_build_object('class_length', char_length(coalesce(p_class_name, '')))
+    );
+    return jsonb_build_object('ok', false, 'code', 'INVALID_CLASS');
+  end if;
+
+  if jsonb_typeof(p_appearance) is distinct from 'object'
+    or exists (
+      select 1
+      from jsonb_object_keys(
+        case
+          when jsonb_typeof(p_appearance) = 'object' then p_appearance
+          else '{}'::jsonb
+        end
+      ) as appearance_key
+      where appearance_key not in (
+        'shirt', 'pants', 'hair', 'hairStyle', 'skin', 'accessory'
+      )
+    )
+    or exists (
+      select 1
+      from unnest(array['shirt', 'pants', 'hair', 'hairStyle', 'skin', 'accessory']) as required_key
+      where jsonb_typeof(p_appearance -> required_key) is distinct from 'string'
+        or char_length(p_appearance ->> required_key) not between 1 and 32
+        or (p_appearance ->> required_key) ~ '[[:cntrl:]]'
+    )
+  then
+    perform public.private_log_security_event_v3(
+      'invalid_character_appearance',
+      '{}'::jsonb
+    );
+    return jsonb_build_object('ok', false, 'code', 'INVALID_APPEARANCE');
+  end if;
+
+  v_starter_item := case p_class_name
+    when 'warrior' then 'training_greatsword'
+    when 'mage' then 'training_staff'
+    else 'training_book'
+  end;
+  v_max_hp := case p_class_name when 'warrior' then 22 else 16 end;
+
+  insert into public.player_core_v3(
+    user_id,
+    display_name,
+    class_name,
+    spec,
+    level,
+    exp,
+    gold,
+    building,
+    current_hp,
+    max_hp,
+    current_map,
+    revision
+  )
+  values (
+    v_user_id,
+    v_display_name,
+    p_class_name,
+    null,
+    1,
+    0,
+    20,
+    0,
+    v_max_hp,
+    v_max_hp,
+    'town',
+    1
+  )
+  on conflict (user_id) do nothing;
+
+  insert into public.player_inventory_v3(
+    user_id,
+    item_definition_id,
+    enhancement_tier,
+    equipped_slot,
+    grant_source
+  )
+  values (v_user_id, v_starter_item, 0, 'weapon', 'character_creation');
+
+  insert into public.player_preferences_v3(
+    user_id,
+    shirt_color,
+    pants_color,
+    hair_color,
+    hair_style,
+    skin_color,
+    accessory
+  )
+  values (
+    v_user_id,
+    p_appearance ->> 'shirt',
+    p_appearance ->> 'pants',
+    p_appearance ->> 'hair',
+    p_appearance ->> 'hairStyle',
+    p_appearance ->> 'skin',
+    p_appearance ->> 'accessory'
+  );
+
+  v_snapshot := public.private_build_student_snapshot_v3(v_user_id);
+  v_response := jsonb_build_object('ok', true, 'code', 'OK', 'snapshot', v_snapshot);
+
+  insert into public.game_action_receipts_v3(user_id, request_id, action_name, response_json)
+  values (v_user_id, p_request_id, 'create_student_character_v3', v_response);
+
+  return v_response;
+end;
+$$;
+
+create or replace function public.load_student_game_v3()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_snapshot jsonb;
+begin
+  if v_user_id is null then
+    return jsonb_build_object('ok', false, 'code', 'UNAUTHORIZED');
+  end if;
+  if public.private_is_teacher_v3() then
+    return jsonb_build_object('ok', false, 'code', 'FORBIDDEN');
+  end if;
+
+  v_snapshot := public.private_build_student_snapshot_v3(v_user_id);
+  if v_snapshot is null then
+    return jsonb_build_object('ok', false, 'code', 'CHARACTER_NOT_FOUND');
+  end if;
+
+  return jsonb_build_object('ok', true, 'code', 'OK', 'snapshot', v_snapshot);
+end;
+$$;
+
+revoke all on function public.create_student_character_v3(text, jsonb, uuid)
+  from public, anon;
+revoke all on function public.load_student_game_v3()
+  from public, anon;
+grant execute on function public.create_student_character_v3(text, jsonb, uuid)
+  to authenticated;
+grant execute on function public.load_student_game_v3()
+  to authenticated;
