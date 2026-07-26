@@ -12915,13 +12915,21 @@ function wireAuthoritativeEconomyV3() {
     // [수정] v35가 보스전 진입을 끊고 티저 대사만 남겨두었던 것을, 살아있는 v34 전투 함수로 다시 연결.
     openModal(`<div class="dialogue-box final-teacher-dialogue-v26"><div class="dialogue-speaker"><h2>LV.99 명진쌤 <span class="badge danger">최종 보스</span></h2><div class="badge">E키로 진행</div></div><div class="dialogue-text">여기까지 오다니… 정말 대단하구나!<br>하지만 이 모든 모험은 너희의 성장을 위한 것이었단다.<br>이제, 나를 뛰어넘어 보렴!</div><div class="dialogue-options"><button class="primary" onclick="startFinalTeacherBattleV34()">도전한다</button><button class="ghost" onclick="closeModal()">아직 준비가 안 됐습니다</button></div></div>`, { type:'dialogue', pause:true });
   }
-  async function exitFinalBossRoomV35() {
+  function exitFinalBossRoomV35() {
     closeModal();
     hideTooltipV35();
     const ret = game.finalBossReturn || { map:'bossRoom', x:760, y:540 };
-    if (!await confirmServerMapTransitionV3('bossRoom')) return;
-    game.currentMap = ret.map; game.player.map = ret.map; game.player.x = ret.x; game.player.y = ret.y;
-    game.keys = {}; game.isMoving = false; updateHud?.(); syncAudioFileBgm?.(); savePlayer?.();
+    const finishExit = () => {
+      game.currentMap = ret.map; game.player.map = ret.map; game.player.x = ret.x; game.player.y = ret.y;
+      game.keys = {}; game.isMoving = false; updateHud?.(); syncAudioFileBgm?.(); savePlayer?.();
+    };
+    if (!secureStudentAccess.authorityV3Enabled) {
+      finishExit();
+      return;
+    }
+    confirmServerMapTransitionV3('bossRoom').then((confirmed) => {
+      if (confirmed) finishExit();
+    });
   }
   worldInteractionRegistry.registerCandidate({ id:'final-world-candidates-v35', priority:350, find:() => {
     if (game.currentMap === 'finalBossRoom') {
