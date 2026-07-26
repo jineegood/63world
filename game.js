@@ -94,6 +94,7 @@ const secureStudentAccess = YuksamStudentAccessV2.create({
   clientFactory:window.YuksamSupabaseClient?.createClient,
   authApi:window.YuksamAuthV2,
   cloudApi:window.YuksamCloudSyncV2,
+  authorityApi:window.YuksamPlayerAuthorityV3,
   sharedApi:window.YuksamSharedStateV2,
   storage:localStorage,
   defaultWorkbooks,
@@ -426,10 +427,67 @@ function getAllPlayers() {
   return list;
 }
 
+let lastServerPreferenceSignatureV3 = '';
+let serverPreferenceSaveChainV3 = Promise.resolve();
+
+function projectPlayerPreferencesV3(player) {
+  return {
+    appearance:{
+      shirt:String(player?.appearance?.shirt || '#38bdf8'),
+      pants:String(player?.appearance?.pants || '#334155'),
+      hair:String(player?.appearance?.hair || '#3f2d20'),
+      hairStyle:String(player?.appearance?.hairStyle || 'short'),
+      skin:String(player?.appearance?.skin || '#f1d2b6'),
+      accessory:String(player?.appearance?.accessory || 'none'),
+    },
+    audio:{
+      bgmVolume:Math.round(clamp(Number(game.settings.bgmVolume) || 0, 0, 1) * 100),
+      sfxVolume:Math.round(clamp(Number(game.settings.sfxVolume) || 0, 0, 1) * 100),
+      bgmEnabled:game.settings.bgmEnabled !== false,
+      sfxEnabled:game.settings.sfxEnabled !== false,
+    },
+    tutorialAcknowledgements:{
+      ...(player?.serverPreferences?.tutorialAcknowledgements || {}),
+      pvpTutorialSeen:Boolean(player?.pvpTutorialSeen),
+    },
+  };
+}
+
+function queueServerPreferenceSaveV3() {
+  const player = game.player;
+  if (!player || !secureStudentAccess.authorityV3Enabled) return serverPreferenceSaveChainV3;
+  const preferences = projectPlayerPreferencesV3(player);
+  const signature = JSON.stringify(preferences);
+  if (signature === lastServerPreferenceSignatureV3) return serverPreferenceSaveChainV3;
+  lastServerPreferenceSignatureV3 = signature;
+  serverPreferenceSaveChainV3 = serverPreferenceSaveChainV3.then(async () => {
+    if (!game.player) return;
+    try {
+      const saved = await secureStudentAccess.savePreferences({
+        preferences,
+        expectedRevision:game.player.serverRevision,
+      });
+      if (!game.player) return;
+      game.player.serverRevision = saved.revision;
+      game.player.serverPreferences = saved.player.serverPreferences;
+    } catch (error) {
+      if (game.player && Number.isInteger(error?.revision)) {
+        game.player.serverRevision = error.revision;
+      }
+      lastServerPreferenceSignatureV3 = '';
+    }
+  });
+  return serverPreferenceSaveChainV3;
+}
+
 function savePlayer() {
   if (!game.player) return;
   game.player.updatedAt = Date.now();
   if (secureStudentAccess.enabled) {
+    if (secureStudentAccess.authorityV3Enabled) {
+      queueServerPreferenceSaveV3();
+      return;
+    }
     secureStudentAccess.savePlayer(game.player);
     return;
   }
@@ -560,6 +618,41 @@ function createNewPlayer(name) {
     updatedAt: Date.now(),
   });
 }
+
+function restoreServerMapSpawnV3(player) {
+  if (!player || !secureStudentAccess.authorityV3Enabled) return player;
+  const spawn = worldDefs[player.map]?.playerSpawn || worldDefs.town.playerSpawn;
+  player.x = spawn.x;
+  player.y = spawn.y;
+  return player;
+}
+
+function applyServerPreferencesV3(player) {
+  if (!player || !secureStudentAccess.authorityV3Enabled) return;
+  const audio = player.serverPreferences?.audio;
+  if (audio) {
+    game.settings.bgmVolume = clamp(Number(audio.bgmVolume) / 100, 0, 1);
+    game.settings.sfxVolume = clamp(Number(audio.sfxVolume) / 100, 0, 1);
+    game.settings.bgmEnabled = audio.bgmEnabled !== false;
+    game.settings.sfxEnabled = audio.sfxEnabled !== false;
+  }
+  game.player.pvpTutorialSeen = Boolean(
+    player.serverPreferences?.tutorialAcknowledgements?.pvpTutorialSeen,
+  );
+  lastServerPreferenceSignatureV3 = JSON.stringify(projectPlayerPreferencesV3(player));
+}
+
+async function requestServerMapTransitionV3(targetMap) {
+  if (!game.player || !secureStudentAccess.authorityV3Enabled) return null;
+  const moved = await secureStudentAccess.transitionMap({
+    targetMap,
+    expectedRevision:game.player.serverRevision,
+  });
+  game.player.serverRevision = moved.revision;
+  game.player.map = moved.player.map;
+  return moved;
+}
+window.requestServerMapTransitionV3 = requestServerMapTransitionV3;
 
 function computeLevelFromExp(exp) {
   const value = Number(exp) || 0;
@@ -3658,7 +3751,7 @@ function bindEvents() {
     game.currentAppearance = randomAppearance();
     drawPreview();
   });
-  $('createCharacterBtn').addEventListener('click', () => {
+  $('createCharacterBtn').addEventListener('click', async () => {
     if (!secureStudentAccess.enabled) {
       const stored = readPlayerStorage(game.currentName);
       if (stored.status === 'corrupt') {
@@ -3666,6 +3759,26 @@ function bindEvents() {
         toast('저장 데이터가 손상되어 캐릭터를 만들 수 없습니다.');
         return;
       }
+    }
+    if (secureStudentAccess.authorityV3Enabled) {
+      $('createCharacterBtn').disabled = true;
+      try {
+        const created = await secureStudentAccess.createCharacter({
+          className:game.selectedClass,
+          appearance:{ ...game.currentAppearance },
+        });
+        game.player = normalizePlayer(created.player);
+        restoreServerMapSpawnV3(game.player);
+        applyServerPreferencesV3(game.player);
+        startGame(false, { loading:true });
+        setTimeout(() => { try { window.startTutorialV53?.(); } catch {} }, 2200);
+      } catch (error) {
+        game.player = null;
+        toast(error?.message || '캐릭터를 만들지 못했습니다.');
+      } finally {
+        $('createCharacterBtn').disabled = false;
+      }
+      return;
     }
     game.player = createNewPlayer(game.currentName);
     savePlayer();
@@ -4582,6 +4695,8 @@ async function handleStudentLogin() {
       game.currentName = entered.identity.displayName || name;
       if (entered.kind === 'existing') {
         game.player = normalizePlayer(entered.player);
+        restoreServerMapSpawnV3(game.player);
+        applyServerPreferencesV3(game.player);
         startGame(true, { loading: true });
         return;
       }

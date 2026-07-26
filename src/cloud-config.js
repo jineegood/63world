@@ -3,6 +3,7 @@
    값이 비어 있으면 기존처럼 이 컴퓨터(localStorage)에만 저장됩니다. */
 window.YUKSAM_CLOUD = {
   securityV2Enabled: false, // 실제 Supabase v2 전환을 승인한 뒤에만 true로 변경
+  serverAuthorityV3Enabled: false, // 전투·상점·퀘스트까지 서버화한 최종 전환 때만 true
   url: 'https://eabxfedywcxbnfyyufcs.supabase.co/rest/v1/',      // 
   anonKey: 'sb_publishable_ouCM28TznJ203HdBOTW9BQ__liCiBJ-',  // 
 };

@@ -23,8 +23,12 @@
     function rejectSync() { throw error; }
     return Object.freeze({
       enabled:false,
+      authorityV3Enabled:false,
       status,
       enter:reject,
+      createCharacter:reject,
+      savePreferences:reject,
+      transitionMap:reject,
       savePlayer:rejectSync,
       flush:reject,
       signOut:reject,
@@ -39,17 +43,29 @@
     });
   }
 
-  function create({ config, clientFactory, authApi, cloudApi, sharedApi, storage, defaultWorkbooks } = {}) {
+  function create({
+    config,
+    clientFactory,
+    authApi,
+    cloudApi,
+    authorityApi,
+    sharedApi,
+    storage,
+    defaultWorkbooks,
+  } = {}) {
     if (config?.securityV2Enabled !== true) {
       return closedController('off', new StudentAccessV2Error('DISABLED', '새 보안 로그인이 아직 켜지지 않았어요.'));
     }
 
     const projectUrl = normalizeProjectUrl(config.url);
     const anonKey = typeof config.anonKey === 'string' ? config.anonKey.trim() : '';
+    const authorityV3Enabled = config?.serverAuthorityV3Enabled === true;
     if (!/^https:\/\/[^/]+$/i.test(projectUrl) || anonKey.length < 20
       || typeof clientFactory !== 'function'
       || typeof authApi?.createAuthService !== 'function'
-      || typeof cloudApi?.create !== 'function'
+      || (authorityV3Enabled
+        ? typeof authorityApi?.create !== 'function'
+        : typeof cloudApi?.create !== 'function')
       || typeof sharedApi?.create !== 'function') {
       return closedController(
         'misconfigured',
@@ -59,7 +75,8 @@
 
     const client = clientFactory(projectUrl, anonKey);
     const auth = authApi.createAuthService({ client });
-    const cloud = cloudApi.create({ client, storage });
+    const cloud = authorityV3Enabled ? null : cloudApi.create({ client, storage });
+    const authority = authorityV3Enabled ? authorityApi.create({ client }) : null;
     const shared = sharedApi.create({ client, storage, defaultWorkbooks });
     let currentIdentity = null;
 
@@ -94,6 +111,22 @@
       }
 
       try {
+        if (authorityV3Enabled) {
+          try {
+            const loaded = await authority.loadGame();
+            return Object.freeze({
+              kind:'existing',
+              identity:currentIdentity,
+              player:loaded.player,
+              offline:false,
+            });
+          } catch (error) {
+            if (error?.code === 'CHARACTER_NOT_FOUND') {
+              return Object.freeze({ kind:'new', identity:currentIdentity });
+            }
+            throw error;
+          }
+        }
         const loaded = await cloud.loadPlayer(currentIdentity.userId);
         if (!loaded) return Object.freeze({ kind:'new', identity:currentIdentity });
         return Object.freeze({
@@ -110,16 +143,55 @@
 
     function savePlayer(player) {
       if (!currentIdentity) throw new StudentAccessV2Error('NOT_AUTHENTICATED', '로그인한 뒤 캐릭터를 저장할 수 있어요.');
+      if (authorityV3Enabled) {
+        throw new StudentAccessV2Error(
+          'AUTHORITATIVE_SAVE_REQUIRED',
+          '서버가 관리하는 캐릭터 전체 값은 직접 저장할 수 없습니다.',
+        );
+      }
       cloud.queueSave(currentIdentity.userId, player);
     }
 
     async function flush() {
-      await cloud.flush();
+      if (!authorityV3Enabled) await cloud.flush();
+    }
+
+    function requireIdentity() {
+      if (!currentIdentity) {
+        throw new StudentAccessV2Error(
+          'NOT_AUTHENTICATED',
+          '로그인한 뒤 캐릭터 기능을 사용할 수 있습니다.',
+        );
+      }
+    }
+
+    async function createCharacter(input) {
+      requireIdentity();
+      if (!authorityV3Enabled) {
+        throw new StudentAccessV2Error('DISABLED', '서버 캐릭터 저장 기능이 꺼져 있습니다.');
+      }
+      return authority.createCharacter(input);
+    }
+
+    async function savePreferences(input) {
+      requireIdentity();
+      if (!authorityV3Enabled) {
+        throw new StudentAccessV2Error('DISABLED', '서버 설정 저장 기능이 꺼져 있습니다.');
+      }
+      return authority.savePreferences(input);
+    }
+
+    async function transitionMap(input) {
+      requireIdentity();
+      if (!authorityV3Enabled) {
+        throw new StudentAccessV2Error('DISABLED', '서버 맵 이동 기능이 꺼져 있습니다.');
+      }
+      return authority.transitionMap(input);
     }
 
     async function signOut() {
       try {
-        await cloud.flush();
+        if (!authorityV3Enabled) await cloud.flush();
         await auth.signOut();
       } finally {
         currentIdentity = null;
@@ -128,8 +200,12 @@
 
     return Object.freeze({
       enabled:true,
+      authorityV3Enabled,
       status:'ready',
       enter,
+      createCharacter,
+      savePreferences,
+      transitionMap,
       savePlayer,
       flush,
       signOut,

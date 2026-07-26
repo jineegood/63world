@@ -38,12 +38,32 @@ function dependencies(overrides = {}) {
     stopPolling() { calls.push(['stopPolling']); },
     ...overrides.sharedService,
   };
+  const authorityService = {
+    async loadGame() {
+      calls.push(['authorityLoadGame']);
+      return { player:{ name:'별빛', level:3, serverRevision:7 }, revision:7 };
+    },
+    async createCharacter(input) {
+      calls.push(['authorityCreateCharacter', input]);
+      return { player:{ name:'별빛', level:1, serverRevision:1 }, revision:1 };
+    },
+    async savePreferences(input) {
+      calls.push(['authoritySavePreferences', input]);
+      return { player:{ name:'별빛', level:3, serverRevision:8 }, revision:8 };
+    },
+    async transitionMap(input) {
+      calls.push(['authorityTransitionMap', input]);
+      return { player:{ name:'별빛', level:3, map:'town', serverRevision:9 }, revision:9 };
+    },
+    ...overrides.authorityService,
+  };
   return {
     calls,
     identity,
     clientFactory(url, key) { calls.push(['createClient', url, key]); return { auth:{} }; },
     authApi:{ createAuthService({ client }) { calls.push(['createAuthService', client]); return authService; } },
     cloudApi:{ create({ client, storage }) { calls.push(['createCloudService', client, storage]); return cloudService; } },
+    authorityApi:{ create({ client }) { calls.push(['createAuthorityService', client]); return authorityService; } },
     sharedApi:{ create({ client, storage }) { calls.push(['createSharedService', client, storage]); return sharedService; } },
     defaultWorkbooks:[],
     storage:{ getItem() { return null; }, setItem() {}, removeItem() {} },
@@ -203,4 +223,90 @@ test('closed controller exposes no authenticated PvP boundary', () => {
   const service = api.create({ config:{ securityV2Enabled:false } });
   assert.equal(service.getIdentity(), null);
   assert.equal(service.getClient(), null);
+});
+
+test('v3 flag loads server-authoritative state without reading the writable v2 profile', async () => {
+  const api = loadApi();
+  const deps = dependencies();
+  const service = api.create({
+    config:validConfig({ serverAuthorityV3Enabled:true }),
+    ...deps,
+  });
+
+  const result = await service.enter('별빛', 'secret-123');
+
+  assert.equal(service.authorityV3Enabled, true);
+  assert.equal(result.kind, 'existing');
+  assert.equal(result.player.serverRevision, 7);
+  assert.equal(deps.calls.some(([name]) => name === 'authorityLoadGame'), true);
+  assert.equal(deps.calls.some(([name]) => name === 'loadPlayer'), false);
+  assert.equal(deps.calls.some(([name]) => name === 'createCloudService'), false);
+});
+
+test('v3 treats only CHARACTER_NOT_FOUND as a new character', async () => {
+  const api = loadApi();
+  const missing = Object.assign(new Error('missing'), { code:'CHARACTER_NOT_FOUND' });
+  const deps = dependencies({
+    authorityService:{ async loadGame() { throw missing; } },
+  });
+  const service = api.create({
+    config:validConfig({ serverAuthorityV3Enabled:true }),
+    ...deps,
+  });
+  const result = await service.enter('별빛', 'secret-123');
+  assert.equal(result.kind, 'new');
+
+  const brokenDeps = dependencies({
+    authorityService:{ async loadGame() { throw Object.assign(new Error('offline'), { code:'RPC_FAILED' }); } },
+  });
+  const broken = api.create({
+    config:validConfig({ serverAuthorityV3Enabled:true }),
+    ...brokenDeps,
+  });
+  await assert.rejects(broken.enter('별빛', 'secret-123'), (error) => error.code === 'RPC_FAILED');
+});
+
+test('v3 exposes only bounded server actions and blocks the legacy whole-player save', async () => {
+  const api = loadApi();
+  const deps = dependencies();
+  const service = api.create({
+    config:validConfig({ serverAuthorityV3Enabled:true }),
+    ...deps,
+  });
+  await service.enter('별빛', 'secret-123');
+
+  assert.throws(
+    () => service.savePlayer({ gold:999999 }),
+    (error) => error.code === 'AUTHORITATIVE_SAVE_REQUIRED',
+  );
+  const created = await service.createCharacter({
+    className:'mage',
+    appearance:{ shirt:'#123456' },
+  });
+  const saved = await service.savePreferences({
+    preferences:{ audio:{ bgmVolume:30 } },
+    expectedRevision:7,
+  });
+  const moved = await service.transitionMap({ targetMap:'town', expectedRevision:8 });
+
+  assert.equal(created.revision, 1);
+  assert.equal(saved.revision, 8);
+  assert.equal(moved.revision, 9);
+  assert.equal(deps.calls.some(([name]) => name === 'queueSave'), false);
+});
+
+test('v3 signout skips legacy profile flush and still signs out Auth', async () => {
+  const api = loadApi();
+  const deps = dependencies();
+  const service = api.create({
+    config:validConfig({ serverAuthorityV3Enabled:true }),
+    ...deps,
+  });
+  await service.enter('별빛', 'secret-123');
+  await service.signOut();
+
+  const important = deps.calls
+    .filter(([name]) => ['flush', 'signOut'].includes(name))
+    .map(([name]) => name);
+  assert.equal(JSON.stringify(important), JSON.stringify(['signOut']));
 });
