@@ -846,6 +846,8 @@ revoke all on function public.private_resume_student_combat_v3(uuid)
 
 grant execute on function public.private_start_student_combat_v3(uuid, text, jsonb, text)
   to service_role;
+grant execute on function public.private_read_combatant_v3(uuid)
+  to service_role;
 grant execute on function public.private_prepare_student_combat_turn_v3(uuid, uuid, bigint, text)
   to service_role;
 grant execute on function public.private_commit_student_combat_turn_v3(uuid, bigint, bigint, text, jsonb)

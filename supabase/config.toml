@@ -9,3 +9,6 @@ verify_jwt = true
 
 [functions.pvp-match-v1]
 verify_jwt = true
+
+[functions.student-combat-v3]
+verify_jwt = true
