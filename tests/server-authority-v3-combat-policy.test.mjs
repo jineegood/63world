@@ -224,4 +224,15 @@ test('combat start rejects stale projections and incompatible active monsters', 
   assert.match(start, /p_expected_player_revision/i);
   assert.match(start, /v_core\.revision\s*<>\s*p_expected_player_revision/i);
   assert.match(start, /v_session\.monster_key\s*<>\s*p_monster_key[\s\S]*?COMBAT_ALREADY_ACTIVE/i);
+  assert.match(start, /v_monster\.map_name\s*=\s*'bossRoom'[\s\S]*?v_core\.boss_origin_map\s*<>\s*v_monster\.question_map/i);
+  assert.match(start, /v_monster\.map_name\s*=\s*'finalBossRoom'[\s\S]*?v_core\.final_boss_unlocked/i);
+});
+
+test('swamp elite victory alone unlocks the final boss and defeat clears boss-room state', () => {
+  const sql = migration();
+  const commit = sql.match(
+    /create\s+or\s+replace\s+function\s+public\.private_commit_student_combat_turn_v3[\s\S]*?as\s+\$\$([\s\S]*?)\$\$;/i,
+  )?.[1] || '';
+  assert.match(commit, /v_session\.monster_key\s*=\s*'swamp_elite_zombie'[\s\S]*?final_boss_unlocked/i);
+  assert.match(commit, /\belse\b[\s\S]*?current_map\s*=\s*'town'[\s\S]*?boss_origin_map\s*=\s*null[\s\S]*?final_boss_unlocked\s*=\s*false/i);
 });

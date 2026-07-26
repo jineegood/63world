@@ -38,6 +38,9 @@ create table if not exists public.player_core_v3 (
       'bossRoom',
       'finalBossRoom'
     )),
+  boss_origin_map text
+    check (boss_origin_map is null or boss_origin_map in ('forest', 'desert', 'swamp')),
+  final_boss_unlocked boolean not null default false,
   pvp_wins integer not null default 0 check (pvp_wins >= 0),
   pvp_losses integer not null default 0 check (pvp_losses >= 0),
   revision bigint not null default 1
@@ -313,6 +316,8 @@ as $$
       'current_hp', c.current_hp,
       'max_hp', c.max_hp,
       'current_map', c.current_map,
+      'boss_origin_map', c.boss_origin_map,
+      'final_boss_unlocked', c.final_boss_unlocked,
       'pvp_wins', c.pvp_wins,
       'pvp_losses', c.pvp_losses,
       'revision', c.revision
@@ -875,6 +880,8 @@ declare
   v_receipt jsonb;
   v_response jsonb;
   v_current_map text;
+  v_boss_origin_map text;
+  v_final_boss_unlocked boolean;
   v_level integer;
   v_current_revision bigint;
   v_allowed boolean := false;
@@ -900,8 +907,8 @@ begin
     return v_receipt;
   end if;
 
-  select c.current_map, c.level, c.revision
-  into v_current_map, v_level, v_current_revision
+  select c.current_map, c.boss_origin_map, c.final_boss_unlocked, c.level, c.revision
+  into v_current_map, v_boss_origin_map, v_final_boss_unlocked, v_level, v_current_revision
   from public.player_core_v3 as c
   where c.user_id = v_user_id
   for update;
@@ -953,19 +960,6 @@ begin
     );
   end if;
 
-  if p_target_map in ('bossRoom', 'finalBossRoom') then
-    perform public.private_log_security_event_v3(
-      'locked_map_entry',
-      jsonb_build_object('target_map', p_target_map)
-    );
-    v_response := jsonb_build_object('ok', false, 'code', 'LOCKED_MAP');
-    return public.private_store_receipt_v3(
-      v_request_id,
-      'transition_student_map_v3',
-      v_response
-    );
-  end if;
-
   if p_target_map = 'desert' and v_level < 4 then
     perform public.private_log_security_event_v3(
       'map_level_gate',
@@ -1007,6 +1001,20 @@ begin
     v_current_map <> 'town'
     and v_current_map not in ('bossRoom', 'finalBossRoom')
     and p_target_map = 'town'
+  ) or (
+    v_current_map in ('forest', 'desert', 'swamp')
+    and p_target_map = 'bossRoom'
+  ) or (
+    v_current_map = 'bossRoom'
+    and p_target_map = v_boss_origin_map
+  ) or (
+    v_current_map = 'bossRoom'
+    and v_boss_origin_map = 'swamp'
+    and p_target_map = 'finalBossRoom'
+    and v_final_boss_unlocked
+  ) or (
+    v_current_map = 'finalBossRoom'
+    and p_target_map = 'bossRoom'
   );
 
   if not v_allowed then
@@ -1025,6 +1033,22 @@ begin
   update public.player_core_v3
   set
     current_map = p_target_map,
+    boss_origin_map = case
+      when v_current_map in ('forest', 'desert', 'swamp') and p_target_map = 'bossRoom'
+        then v_current_map
+      when p_target_map = 'town'
+        or (v_current_map = 'bossRoom' and p_target_map = v_boss_origin_map)
+        then null
+      else boss_origin_map
+    end,
+    final_boss_unlocked = case
+      when v_current_map in ('forest', 'desert', 'swamp') and p_target_map = 'bossRoom'
+        then false
+      when p_target_map = 'town'
+        or (v_current_map = 'bossRoom' and p_target_map = v_boss_origin_map)
+        then false
+      else final_boss_unlocked
+    end,
     revision = revision + 1,
     updated_at = now()
   where user_id = v_user_id;

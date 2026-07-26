@@ -386,6 +386,16 @@ begin
   if v_core.current_map <> v_monster.map_name then
     raise exception using errcode = 'P0001', message = 'MONSTER_MAP_MISMATCH';
   end if;
+  if v_monster.map_name = 'bossRoom'
+    and v_core.boss_origin_map <> v_monster.question_map
+  then
+    raise exception using errcode = 'P0001', message = 'BOSS_ORIGIN_MISMATCH';
+  end if;
+  if v_monster.map_name = 'finalBossRoom'
+    and (not v_core.final_boss_unlocked or v_monster.monster_key <> 'final_teacher')
+  then
+    raise exception using errcode = 'P0001', message = 'FINAL_BOSS_LOCKED';
+  end if;
 
   select s.* into v_session
   from public.player_combat_sessions_v3 as s
@@ -733,6 +743,10 @@ begin
         max_hp = v_new_max_hp,
         current_hp = case when v_new_level > level then v_new_max_hp
           else (v_state ->> 'playerHp')::integer end,
+        final_boss_unlocked = case
+          when v_session.monster_key = 'swamp_elite_zombie' then true
+          else final_boss_unlocked
+        end,
         revision = revision + 1,
         updated_at = now()
     where user_id = p_user_id;
@@ -754,6 +768,8 @@ begin
         gold = gold - v_gold_loss,
         current_hp = max_hp,
         current_map = 'town',
+        boss_origin_map = null,
+        final_boss_unlocked = false,
         revision = revision + 1,
         updated_at = now()
     where user_id = p_user_id;

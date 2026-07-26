@@ -256,7 +256,7 @@ test('preference RPC rejects authoritative fields and uses revision plus request
   }
 });
 
-test('map RPC enforces server-owned map names, edges, and level gates', () => {
+test('map RPC enforces server-owned map names, boss origins, unlocks, and level gates', () => {
   const sql = migration();
   assert.match(
     sql,
@@ -282,9 +282,20 @@ test('map RPC enforces server-owned map names, edges, and level gates', () => {
   }
   assert.match(body, /p_target_map\s*=\s*'desert'[\s\S]*?v_level\s*<\s*4/i);
   assert.match(body, /p_target_map\s*=\s*'swamp'[\s\S]*?v_level\s*<\s*7/i);
-  assert.match(body, /p_target_map\s+in\s*\(\s*'bossRoom'\s*,\s*'finalBossRoom'\s*\)[\s\S]*?LOCKED_MAP/i);
+  assert.match(body, /v_current_map\s+in\s*\(\s*'forest'\s*,\s*'desert'\s*,\s*'swamp'\s*\)[\s\S]*?p_target_map\s*=\s*'bossRoom'/i);
+  assert.match(body, /boss_origin_map\s*=\s*case[\s\S]*?then\s+v_current_map/i);
+  assert.match(body, /p_target_map\s*=\s*'finalBossRoom'[\s\S]*?v_final_boss_unlocked/i);
+  assert.match(body, /v_current_map\s*=\s*'bossRoom'[\s\S]*?p_target_map\s*=\s*v_boss_origin_map/i);
   assert.match(body, /p_expected_revision\s+is\s+distinct\s+from\s+v_current_revision/i);
   assert.match(body, /update\s+public\.player_core_v3[\s\S]*?current_map\s*=\s*p_target_map[\s\S]*?revision\s*=\s*revision\s*\+\s*1/i);
+});
+
+test('player core and snapshots carry only bounded temporary boss-room state', () => {
+  const sql = migration();
+  assert.match(sql, /boss_origin_map\s+text[\s\S]*?in\s*\(\s*'forest'\s*,\s*'desert'\s*,\s*'swamp'\s*\)/i);
+  assert.match(sql, /final_boss_unlocked\s+boolean\s+not\s+null\s+default\s+false/i);
+  assert.match(sql, /'boss_origin_map'\s*,\s*c\.boss_origin_map/i);
+  assert.match(sql, /'final_boss_unlocked'\s*,\s*c\.final_boss_unlocked/i);
 });
 
 test('rejected mutations create bounded audit events while successful calls return snapshots', () => {

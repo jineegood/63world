@@ -41,6 +41,8 @@ function validSnapshot(overrides = {}) {
       current_hp:18,
       max_hp:22,
       current_map:'forest',
+      boss_origin_map:null,
+      final_boss_unlocked:false,
       pvp_wins:4,
       pvp_losses:1,
       revision:7,
@@ -91,6 +93,19 @@ function validSnapshot(overrides = {}) {
     preferences:{ ...base.preferences, ...(overrides.preferences || {}) },
   };
 }
+
+test('snapshot conversion preserves bounded server-owned boss-room context', () => {
+  const api = loadApi();
+  const player = api.snapshotToLegacyPlayer(validSnapshot({
+    core:{
+      current_map:'bossRoom',
+      boss_origin_map:'swamp',
+      final_boss_unlocked:true,
+    },
+  }));
+  assert.equal(player.bossReturnMap, 'swamp');
+  assert.equal(player.finalBossPortalUnlocked, true);
+});
 
 function setup(responses) {
   const api = loadApi();

@@ -125,6 +125,9 @@
     if (!CLASSES.has(className)) failSnapshot();
     const currentMap = safeString(core.current_map, 1, 40);
     if (!MAPS.has(currentMap)) failSnapshot();
+    const bossReturnMap = safeNullableString(core.boss_origin_map, 20);
+    if (bossReturnMap && !['forest', 'desert', 'swamp'].includes(bossReturnMap)) failSnapshot();
+    if (typeof core.final_boss_unlocked !== 'boolean') failSnapshot();
     const pets = snapshot.pets.map((petId) => safeString(petId, 1, 80));
     if (new Set(pets).size !== pets.length) failSnapshot();
     const activePet = safeNullableString(snapshot.active_pet, 80);
@@ -222,6 +225,8 @@
       hp:safeInteger(core.current_hp, 0),
       maxHp:safeInteger(core.max_hp, 1),
       map:currentMap,
+      bossReturnMap,
+      finalBossPortalUnlocked:core.final_boss_unlocked,
       appearance,
       costume,
       costumeInventory,
