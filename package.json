@@ -34,6 +34,7 @@
     "test:patch-data": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 patch-data",
     "test:supabase-security-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 supabase-security-v2",
     "test:server-authority-v3": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 server-authority-v3",
+    "test:authority-catalog-v3": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 authority-catalog-v3",
     "test:player-authority-v3": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 player-authority-v3",
     "test:server-authority-v3-game-wiring": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 server-authority-v3-game-wiring",
     "test:cloud-sync-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 cloud-sync-v2",

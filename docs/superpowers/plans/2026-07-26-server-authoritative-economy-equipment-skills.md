@@ -31,7 +31,7 @@
 - Consumes: `window.YuksamData.ITEM_DEFS`, `window.YuksamData.V24_SKILLS`, `window.COSTUME_DEFS_V55`.
 - Produces: repeatable SQL rows for `game_item_catalog_v3`, `game_skill_catalog_v3`, and `game_specialization_catalog_v3`.
 
-- [ ] Write a failing test that runs the generator in check mode, asserts 51 base item rows, 11 costume rows, 42 skill rows, and representative price/class/prerequisite values.
+- [ ] Write a failing test that runs the generator in check mode, asserts 40 base item rows, 11 costume rows (51 total), 42 skill rows, and representative price/class/prerequisite values.
 - [ ] Run `npm.cmd run test:authority-catalog-v3` and verify it fails because the generator is absent.
 - [ ] Implement a VM-based generator that loads `core-utils.js`, `game-data.js`, and `costume-data.js`, normalizes only security fields, sorts IDs, safely SQL-quotes JSON, and supports `--check`.
 - [ ] Generate `supabase/generated/authority-catalog-v3.sql`; rerun the focused test and `git diff --check`.
@@ -142,4 +142,3 @@
 - Replays and revision conflicts cannot duplicate spending or ownership.
 - Flag-on executable tests cover every Phase 2 action; flag-off regressions remain green.
 - The cutover switch remains off and no external deployment has occurred.
-
