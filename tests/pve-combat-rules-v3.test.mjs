@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
 import {
   buildCombatant,
@@ -7,6 +9,7 @@ import {
   resolveSurrender,
   sanitizeCombatResponse,
 } from '../supabase/functions/_shared/pve-combat-rules-v3.mjs';
+import { SKILL_COMBAT_V3 } from '../supabase/functions/_shared/generated-combat-catalog-v3.mjs';
 
 function sequence(...values) {
   let index = 0;
@@ -29,6 +32,30 @@ const basicPlayer = {
   skills:{ warrior_basic_body:2 },
   activePet:'chick',
 };
+
+test('every generated combat passive is consumed by the trusted engine', () => {
+  const source = fs.readFileSync(
+    path.resolve(import.meta.dirname, '../supabase/functions/_shared/pve-combat-rules-v3.mjs'),
+    'utf8',
+  );
+  const passiveFields = new Set();
+  const structural = new Set([
+    'id', 'classOnly', 'specOnly', 'line', 'cost', 'maxPoints', 'prereq',
+    'kind', 'active', 'bonuses', 'flatBonuses',
+  ]);
+  for (const skill of Object.values(SKILL_COMBAT_V3)) {
+    for (const field of Object.keys(skill)) {
+      if (!structural.has(field)) passiveFields.add(field);
+    }
+  }
+  for (const field of passiveFields) {
+    assert.match(
+      source,
+      new RegExp(`(?:\\.|['"])${field}\\b`),
+      `${field} must affect authoritative combat`,
+    );
+  }
+});
 
 test('buildCombatant derives all combat stats from canonical catalogs', () => {
   const player = buildCombatant(basicPlayer);
@@ -255,6 +282,199 @@ test('poison and shadow damage tick after the monster action and remain server-o
       'player-dot',
     ],
   );
+});
+
+test('warrior passive extra hits and Guardian Oath resolve inside the trusted turn', () => {
+  const player = buildCombatant({
+    className:'warrior',
+    spec:'방어',
+    level:10,
+    currentHp:1,
+    inventory:[],
+    skills:{
+      warrior_def_armor:5,
+      warrior_weapon_breaker:3,
+      warrior_def_bastion:1,
+    },
+  });
+  const state = {
+    ...startEncounter({ player, monsterKey:'forest_mushroom', random:sequence(0, 0) }),
+    playerHp:1,
+    monsterHp:100,
+    monsterMaxHp:100,
+    monsterAttack:10,
+    monsterPatterns:[],
+  };
+  const result = resolveTurn({
+    state,
+    player,
+    actionId:'basic',
+    answer:'yes',
+    answerKey:'yes',
+    random:sequence(
+      0.5, 0.5,
+      0.9, 0.9,
+      0.9, 0.9,
+      0.9, 0.9,
+      0.9, 0.9,
+    ),
+  });
+
+  assert.equal(result.events.filter((event) => event.type === 'monster-damage').length, 3);
+  assert.equal(result.state.playerStatuses.guardianOathUsed, true);
+  assert.equal(result.state.playerHp, player.maxHp);
+  assert.ok(result.events.some((event) => event.source === 'guardian-oath'));
+  assert.equal(result.outcome, 'continue');
+});
+
+test('priest faith increases monster misses and Grace boosts healing', () => {
+  const player = buildCombatant({
+    className:'priest',
+    spec:'신성',
+    level:10,
+    currentHp:1,
+    inventory:[],
+    skills:{
+      priest_basic_life:5,
+      priest_holy_absorb_v24:1,
+      priest_holy_grace_v24:3,
+    },
+  });
+  const state = {
+    ...startEncounter({ player, monsterKey:'forest_mushroom', random:sequence(0, 0) }),
+    playerHp:1,
+    monsterHp:100,
+    monsterMaxHp:100,
+    monsterAttack:5,
+    monsterPatterns:[],
+  };
+  const healed = resolveTurn({
+    state,
+    player,
+    actionId:'active:priest_holy_absorb_v24',
+    answer:'4',
+    answerKey:'4',
+    random:sequence(0.30),
+  });
+
+  assert.equal(healed.state.playerHp, player.maxHp);
+  assert.ok(healed.events.some((event) => event.type === 'monster-miss'));
+  assert.ok(healed.events.some((event) => event.type === 'player-heal'));
+});
+
+test('mage execution and shadow periodic critical lifesteal are authoritative', () => {
+  const mage = buildCombatant({
+    className:'mage',
+    spec:'냉기',
+    level:10,
+    currentHp:50,
+    inventory:[],
+    skills:{ mage_basic_element:5, mage_basic_bolt:1 },
+  });
+  const mageState = {
+    ...startEncounter({ player:mage, monsterKey:'forest_mushroom', random:sequence(0, 0) }),
+    monsterHp:17,
+    monsterMaxHp:17,
+    monsterPatterns:[],
+  };
+  const executed = resolveTurn({
+    state:mageState,
+    player:mage,
+    actionId:'active:mage_basic_bolt',
+    answer:'4',
+    answerKey:'4',
+    random:sequence(0.5, 0.9, 0.9, 0.9, 0.9, 0.9),
+  });
+  assert.equal(executed.outcome, 'victory');
+  assert.ok(executed.events.some((event) => event.execute === true));
+
+  const priest = buildCombatant({
+    className:'priest',
+    spec:'암흑',
+    level:10,
+    currentHp:1,
+    inventory:[],
+    skills:{ priest_shadow_void_v24:5, priest_shadow_focus_v24:5 },
+  });
+  const shadowState = {
+    ...startEncounter({ player:priest, monsterKey:'forest_mushroom', random:sequence(0, 0) }),
+    playerHp:1,
+    monsterHp:30,
+    monsterMaxHp:30,
+    monsterStatuses:{ shadowStacks:2, stunTurns:1 },
+    monsterPatterns:[],
+  };
+  const shadowed = resolveTurn({
+    state:shadowState,
+    player:priest,
+    actionId:'basic',
+    answer:'4',
+    answerKey:'4',
+    random:sequence(0.5, 0.9, 0.9, 0.9, 0.1),
+  });
+  const dot = shadowed.events.find((event) => event.type === 'monster-dot');
+  assert.equal(dot.critical, true);
+  assert.equal(dot.amount, 4);
+  assert.ok(shadowed.events.some((event) => event.source === 'shadow-focus'));
+  assert.ok(shadowed.state.playerHp > 1);
+});
+
+test('monster chill covers every multi-hit and player stun consumes the next action', () => {
+  const player = buildCombatant({
+    className:'warrior',
+    spec:null,
+    level:10,
+    currentHp:100,
+    inventory:[],
+    skills:{},
+  });
+  const chilledState = {
+    ...startEncounter({ player, monsterKey:'swamp_tarantula', random:sequence(0, 0) }),
+    playerHp:player.maxHp,
+    monsterHp:100,
+    monsterMaxHp:100,
+    monsterAttack:10,
+    monsterStatuses:{ chillTurns:1 },
+    monsterPatterns:[{ chance:1, kind:'multi', hits:2, multiplier:0.62 }],
+  };
+  const chilled = resolveTurn({
+    state:chilledState,
+    player,
+    actionId:'basic',
+    answer:'4',
+    answerKey:'4',
+    random:sequence(0.5, 0.9, 0.9, 0, 0.9, 0.9, 0.9, 0.9),
+  });
+  assert.deepEqual(
+    chilled.events
+      .filter((event) => event.type === 'player-damage')
+      .map((event) => event.amount),
+    [4, 4],
+  );
+  assert.equal(chilled.state.monsterStatuses.chillTurns, 0);
+
+  const stunnedState = {
+    ...startEncounter({ player, monsterKey:'desert_stomp', random:sequence(0, 0) }),
+    playerHp:player.maxHp,
+    monsterHp:100,
+    monsterMaxHp:100,
+    monsterAttack:2,
+    monsterPatterns:[{ chance:0.5, kind:'heavy', multiplier:1, stunTurns:1 }],
+  };
+  const stunned = resolveTurn({
+    state:stunnedState,
+    player,
+    actionId:'basic',
+    answer:'4',
+    answerKey:'4',
+    random:sequence(
+      0.5, 0.9, 0.9,
+      0, 0.9, 0.9,
+      0.9, 0.9, 0.9,
+    ),
+  });
+  assert.equal(stunned.events.filter((event) => event.type === 'monster-action').length, 2);
+  assert.ok(stunned.events.some((event) => event.status === 'stun-skipped-action'));
 });
 
 test('invalid actions, state, answers, random values, and leaked fields fail closed', () => {

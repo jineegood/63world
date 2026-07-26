@@ -222,6 +222,17 @@ function playerCritMultiplier(player, isSkill) {
   return 2 + (Number(bonuses[rank]) || 0);
 }
 
+function skillScheduleValue(player, skillId, field) {
+  const rank = boundedRank(player.skills?.[skillId]);
+  const schedule = SKILL_COMBAT_V3[skillId]?.[field] || [];
+  return rank > 0 ? Number(schedule[rank]) || 0 : 0;
+}
+
+function boostedHeal(player, amount) {
+  const boost = skillScheduleValue(player, 'priest_holy_grace_v24', 'healBoost');
+  return Math.max(0, Math.ceil(Math.max(0, Number(amount) || 0) * (1 + boost)));
+}
+
 function applyMonsterDamage(state, damage, ignoreShield) {
   const amount = Math.max(0, finiteInteger(damage));
   const shieldDamage = ignoreShield ? 0 : Math.min(state.monsterShield, amount);
@@ -280,7 +291,10 @@ function performPlayerAction({ player, state, actionId, wrong, random, events })
   if (!wrong && active?.type === 'buff') {
     state.playerStatuses.intBuffTurns = finiteInteger(active.buffTurns, 3);
     state.playerStatuses.intBuffPct = Number(active.buffPct) || 0.30;
-    const heal = Math.max(0, Math.ceil(state.playerMaxHp * (Number(active.healMaxPct) || 0)));
+    const heal = boostedHeal(
+      player,
+      Math.max(0, Math.ceil(state.playerMaxHp * (Number(active.healMaxPct) || 0))),
+    );
     const actual = Math.min(heal, state.playerMaxHp - state.playerHp);
     state.playerHp += actual;
     state.cooldowns[activeId] = finiteInteger(active.cooldown, 3);
@@ -289,7 +303,10 @@ function performPlayerAction({ player, state, actionId, wrong, random, events })
     return;
   }
   if (!wrong && active?.type === 'healAllies') {
-    const heal = Math.max(1, Math.ceil(state.playerMaxHp * (Number(active.healMaxPct) || 0.5)));
+    const heal = Math.max(1, boostedHeal(
+      player,
+      Math.ceil(state.playerMaxHp * (Number(active.healMaxPct) || 0.5)),
+    ));
     const actual = Math.min(heal, state.playerMaxHp - state.playerHp);
     state.playerHp += actual;
     state.cooldowns[activeId] = finiteInteger(active.cooldown, 3);
@@ -314,20 +331,30 @@ function performPlayerAction({ player, state, actionId, wrong, random, events })
   const multiplier = active
     ? hitCount > 1 ? Number(active.hitMult) || 1 : Number(active.multiplier) || 0
     : 1;
-  for (let index = 0; index < hitCount && state.monsterHp > 0; index += 1) {
-    let raw = active?.type === 'shieldBash'
+  const rawHits = Array.from({ length:hitCount }, () => (
+    active?.type === 'shieldBash'
       ? Math.min(100, state.playerShield)
-      : rollAttackPower(player, state, random) * multiplier;
-    if (state.playerStatuses.chargeMultiplier > 1 && raw > 0) {
-      raw *= state.playerStatuses.chargeMultiplier;
-      delete state.playerStatuses.chargeMultiplier;
-    }
+      : rollAttackPower(player, state, random) * multiplier
+  ));
+  if (!wrong && !active) {
+    const armorPct = skillScheduleValue(player, 'warrior_def_armor', 'armorBonusPct');
+    if (armorPct > 0) rawHits.push(Math.max(1, Math.ceil(state.playerMaxHp * armorPct)));
+    const doublePct = skillScheduleValue(player, 'warrior_weapon_breaker', 'doubleAttackPct');
+    if (doublePct > 0) rawHits.push(rollAttackPower(player, state, random) * doublePct);
+  }
+  const chargeMultiplier = Number(state.playerStatuses.chargeMultiplier) || 1;
+  if (chargeMultiplier > 1) delete state.playerStatuses.chargeMultiplier;
+  let landed = false;
+  for (let index = 0; index < rawHits.length && state.monsterHp > 0; index += 1) {
+    let raw = rawHits[index];
+    if (chargeMultiplier > 1 && raw > 0) raw *= chargeMultiplier;
     if (raw <= 0) continue;
     const hit = resolveDamageHit({ player, state, raw, isSkill:!!active, wrong, random });
     if (hit.missed) {
       pushEvent(events, { type:'player-miss', hit:index });
       continue;
     }
+    landed = true;
     const applied = applyMonsterDamage(state, hit.damage, active?.ignoreShield === true);
     pushEvent(events, {
       type:'monster-damage',
@@ -337,6 +364,29 @@ function performPlayerAction({ player, state, actionId, wrong, random, events })
       critical:hit.critical,
       hit:index,
     });
+  }
+
+  if (!wrong && active && landed && state.monsterHp > 0) {
+    const frostChance = skillScheduleValue(player, 'mage_frost_focus_v24', 'activeStunChance');
+    if (frostChance > 0 && checkedRandom(random) < frostChance) {
+      state.monsterStatuses.stunTurns = Math.max(1, finiteInteger(state.monsterStatuses.stunTurns));
+      pushEvent(events, { type:'monster-status', status:'stun', turns:state.monsterStatuses.stunTurns });
+    }
+    const executeThreshold = finiteInteger(
+      SKILL_COMBAT_V3.mage_basic_element?.executeHp?.[
+        boundedRank(player.skills.mage_basic_element)
+      ],
+    );
+    if (executeThreshold > 0 && state.monsterHp <= executeThreshold) {
+      const applied = applyMonsterDamage(state, state.monsterHp, true);
+      pushEvent(events, {
+        type:'monster-damage',
+        amount:applied.amount,
+        hpDamage:applied.hpDamage,
+        shieldDamage:0,
+        execute:true,
+      });
+    }
   }
 
   if (!wrong && active) {
@@ -368,7 +418,7 @@ function performPlayerAction({ player, state, actionId, wrong, random, events })
       heal += Math.ceil(dealt * (Number(active.healRate) || 0.5));
     }
     if (Number(active.healMaxPct) > 0) heal += Math.ceil(state.playerMaxHp * Number(active.healMaxPct));
-    const actual = Math.min(Math.max(0, heal), state.playerMaxHp - state.playerHp);
+    const actual = Math.min(boostedHeal(player, heal), state.playerMaxHp - state.playerHp);
     if (actual > 0) {
       state.playerHp += actual;
       pushEvent(events, { type:'player-heal', amount:actual });
@@ -383,7 +433,15 @@ function chooseMonsterPattern(state, random) {
   return null;
 }
 
-function performMonsterAction({ state, random, events }) {
+function performMonsterAction({ player, state, random, events }) {
+  const guardPct = skillScheduleValue(player, 'warrior_basic_guard', 'guardShieldPct');
+  if (guardPct > 0 && state.playerHp > 0) {
+    const amount = Math.max(0, Math.floor(state.playerHp * guardPct));
+    if (amount > 0) {
+      state.playerShield = Math.min(1000000, state.playerShield + amount);
+      pushEvent(events, { type:'player-shield', amount, source:'guard-training' });
+    }
+  }
   if (finiteInteger(state.monsterStatuses.stunTurns) > 0) {
     state.monsterStatuses.stunTurns -= 1;
     pushEvent(events, { type:'monster-status', status:'stun', turns:state.monsterStatuses.stunTurns });
@@ -401,18 +459,20 @@ function performMonsterAction({ state, random, events }) {
   let multiplier = pattern?.kind === 'heavy' || pattern?.kind === 'multi'
     ? Number(pattern.multiplier) || 1
     : 1;
+  const faithMiss = skillScheduleValue(player, 'priest_basic_life', 'monsterMissChance');
+  const monsterMissChance = Math.min(1, COMBAT_BALANCE_V3.monsterMissChance + faithMiss);
+  const chilled = finiteInteger(state.monsterStatuses.chillTurns) > 0;
   for (let index = 0; index < hitCount && state.playerHp > 0; index += 1) {
-    if (checkedRandom(random) < COMBAT_BALANCE_V3.monsterMissChance) {
+    if (checkedRandom(random) < monsterMissChance) {
       pushEvent(events, { type:'monster-miss', hit:index });
       continue;
     }
     let damage = Math.max(1, Math.ceil(state.monsterAttack * multiplier));
     const critical = pattern?.kind === 'critical'
-      || checkedRandom(random) < (state.playerStatuses.defenseSpec ? 0.10 : 0.15);
+      || checkedRandom(random) < (player.spec === '방어' ? 0.10 : 0.15);
     if (critical) damage = Math.max(1, Math.ceil(damage * 1.8));
-    if (state.monsterStatuses.chillTurns > 0) {
+    if (chilled) {
       damage = Math.max(1, Math.ceil(damage * 0.5));
-      state.monsterStatuses.chillTurns -= 1;
     }
     const applied = applyPlayerDamage(state, damage);
     pushEvent(events, {
@@ -423,6 +483,35 @@ function performMonsterAction({ state, random, events }) {
       critical,
       hit:index,
     });
+    if (state.playerHp > 0 && index === 0) {
+      const prayerPct = skillScheduleValue(player, 'priest_basic_prayer', 'reflectPct');
+      const masteryPct = critical
+        ? skillScheduleValue(player, 'warrior_weapon_mastery', 'reflectPct')
+        : 0;
+      const prayerDamage = Math.max(0, Math.floor(damage * prayerPct));
+      const masteryDamage = Math.max(0, Math.floor(damage * masteryPct));
+      const reflected = prayerDamage + masteryDamage;
+      if (reflected > 0 && state.monsterHp > 0) {
+        const reflectedHit = applyMonsterDamage(state, reflected, false);
+        pushEvent(events, {
+          type:'monster-damage',
+          amount:reflectedHit.amount,
+          hpDamage:reflectedHit.hpDamage,
+          shieldDamage:reflectedHit.shieldDamage,
+          reflected:true,
+        });
+      }
+      if (prayerDamage > 0) {
+        const actualHeal = Math.min(
+          boostedHeal(player, prayerDamage),
+          state.playerMaxHp - state.playerHp,
+        );
+        if (actualHeal > 0) {
+          state.playerHp += actualHeal;
+          pushEvent(events, { type:'player-heal', amount:actualHeal, source:'prayer-barrier' });
+        }
+      }
+    }
     if (pattern?.kind === 'lifesteal' && applied.hpDamage > 0) {
       state.monsterHp = Math.min(
         state.monsterMaxHp,
@@ -430,6 +519,7 @@ function performMonsterAction({ state, random, events }) {
       );
     }
   }
+  if (chilled) state.monsterStatuses.chillTurns -= 1;
   if (pattern?.kind === 'poison' && state.playerHp > 0) {
     state.playerStatuses.poisonTurns = finiteInteger(pattern.turns, 2);
     state.playerStatuses.poisonDamage = Math.max(1, Math.ceil(state.monsterAttack * 0.3));
@@ -444,12 +534,35 @@ function performMonsterAction({ state, random, events }) {
     state.playerStatuses.stunTurns = finiteInteger(pattern.stunTurns);
     pushEvent(events, { type:'player-status', status:'stun', turns:state.playerStatuses.stunTurns });
   }
+
+  if (state.playerHp <= 0
+    && player.skills.warrior_def_bastion > 0
+    && !state.playerStatuses.guardianOathUsed) {
+    const rule = SKILL_COMBAT_V3.warrior_def_bastion;
+    state.playerStatuses.guardianOathUsed = true;
+    state.playerShield = 0;
+    state.playerHp = Math.max(1, Math.ceil(state.playerMaxHp * (Number(rule.reviveHealPct) || 1)));
+    state.cooldowns.warrior_def_bastion = finiteInteger(rule.reviveCooldown, 11);
+    pushEvent(events, {
+      type:'player-heal',
+      amount:state.playerHp,
+      source:'guardian-oath',
+    });
+    pushEvent(events, { type:'player-status', status:'guardian-oath', used:true });
+  }
 }
 
-function performRoundDamageOverTime({ state, events }) {
+function performRoundDamageOverTime({ player, state, random, events }) {
   const shadowStacks = finiteInteger(state.monsterStatuses.shadowStacks);
   if (shadowStacks > 0 && state.monsterHp > 0) {
-    const applied = applyMonsterDamage(state, shadowStacks, false);
+    const shadowCritChance = skillScheduleValue(
+      player,
+      'priest_shadow_void_v24',
+      'shadowCritChance',
+    );
+    const critical = shadowCritChance > 0 && checkedRandom(random) < shadowCritChance;
+    const damage = critical ? shadowStacks * 2 : shadowStacks;
+    const applied = applyMonsterDamage(state, damage, false);
     pushEvent(events, {
       type:'monster-dot',
       status:'shadow',
@@ -457,7 +570,23 @@ function performRoundDamageOverTime({ state, events }) {
       hpDamage:applied.hpDamage,
       shieldDamage:applied.shieldDamage,
       stacks:shadowStacks,
+      critical,
     });
+    const lifestealChance = skillScheduleValue(
+      player,
+      'priest_shadow_focus_v24',
+      'shadowLifestealChance',
+    );
+    if (applied.hpDamage > 0 && lifestealChance > 0 && checkedRandom(random) < lifestealChance) {
+      const actualHeal = Math.min(
+        boostedHeal(player, applied.hpDamage),
+        state.playerMaxHp - state.playerHp,
+      );
+      if (actualHeal > 0) {
+        state.playerHp += actualHeal;
+        pushEvent(events, { type:'player-heal', amount:actualHeal, source:'shadow-focus' });
+      }
+    }
   }
 
   const poisonTurns = finiteInteger(state.playerStatuses.poisonTurns);
@@ -475,6 +604,16 @@ function performRoundDamageOverTime({ state, events }) {
       amount,
       turns:Math.max(0, poisonTurns - 1),
     });
+  }
+
+  const hasAilment = finiteInteger(state.playerStatuses.poisonTurns) > 0
+    || finiteInteger(state.playerStatuses.stunTurns) > 0;
+  const cleanseChance = skillScheduleValue(player, 'warrior_def_resist', 'cleanseChance');
+  if (hasAilment && cleanseChance > 0 && checkedRandom(random) < cleanseChance) {
+    delete state.playerStatuses.poisonTurns;
+    delete state.playerStatuses.poisonDamage;
+    delete state.playerStatuses.stunTurns;
+    pushEvent(events, { type:'player-status', status:'cleanse' });
   }
 }
 
@@ -529,10 +668,30 @@ export function resolveTurn({
     });
   }
 
-  pushEvent(events, { type:'monster-action' });
-  performMonsterAction({ state, random, events });
-  performRoundDamageOverTime({ state, events });
-  state.cooldowns = tickCooldowns(state.cooldowns);
+  let enemyRounds = 0;
+  const takeEnemyRound = () => {
+    pushEvent(events, { type:'monster-action' });
+    performMonsterAction({ player, state, random, events });
+    performRoundDamageOverTime({ player, state, random, events });
+    state.cooldowns = tickCooldowns(state.cooldowns);
+    if (finiteInteger(state.playerStatuses.intBuffTurns) > 0) {
+      state.playerStatuses.intBuffTurns -= 1;
+    }
+    enemyRounds += 1;
+  };
+  takeEnemyRound();
+  while (state.playerHp > 0
+    && state.monsterHp > 0
+    && finiteInteger(state.playerStatuses.stunTurns) > 0
+    && enemyRounds < 4) {
+    state.playerStatuses.stunTurns -= 1;
+    pushEvent(events, {
+      type:'player-status',
+      status:'stun-skipped-action',
+      turns:state.playerStatuses.stunTurns,
+    });
+    takeEnemyRound();
+  }
   state.turnNumber += 1;
 
   if (state.playerHp <= 0) {
