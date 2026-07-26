@@ -176,6 +176,11 @@ test('turn prepare and commit bind question, player, and session revisions', () 
   assert.match(commit, /player_wrong_answers_v3/i);
   assert.match(commit, /delete\s+from\s+public\.player_wrong_answers_v3[\s\S]*?offset\s+30/i);
   assert.match(commit, /game_monster_catalog_v3[\s\S]*?exp_reward[\s\S]*?gold_reward/i);
+  assert.match(
+    commit,
+    /v_kind\s*=\s*'victory'[\s\S]*?v_session\.turn_number[\s\S]*?v_session\.turn_number\s*\+\s*1/i,
+    'victory must allow either an immediate hit or the server-owned end-of-round damage tick',
+  );
   assert.match(commit, /revision\s*=\s*revision\s*\+\s*1/i);
   assert.match(commit, /delete\s+from\s+public\.player_combat_sessions_v3/i);
 });

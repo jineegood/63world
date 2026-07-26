@@ -110,3 +110,26 @@ test('polling installs one 15000ms timer, reports changes, and cancels once', as
   service.stopPolling();
   assert.deepEqual(cancelled, [7]);
 });
+
+test('classroom-only polling never requests workbook answers', async () => {
+  const remote = setup({
+    classroom_settings:{ version:1, serverOpen:true },
+    workbooks:{ version:1, items:defaultBooks },
+  });
+  let scheduled;
+  const service = loadApi().create({
+    client:remote.client,
+    storage:remote.store,
+    defaultWorkbooks:defaultBooks,
+    schedule(fn) { scheduled = fn; return 8; },
+    cancelSchedule() {},
+  });
+
+  service.startPolling({ includeWorkbooks:false });
+  await scheduled();
+
+  const keys = remote.calls
+    .filter(([name]) => name === 'eq')
+    .map(([, , key]) => key);
+  assert.deepEqual(keys, ['classroom_settings']);
+});

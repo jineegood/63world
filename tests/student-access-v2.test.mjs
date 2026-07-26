@@ -74,7 +74,11 @@ function dependencies(overrides = {}) {
     authorityApi:{ create({ client }) { calls.push(['createAuthorityService', client]); return authorityService; } },
     sharedApi:{ create({ client, storage }) { calls.push(['createSharedService', client, storage]); return sharedService; } },
     defaultWorkbooks:[],
-    storage:{ getItem() { return null; }, setItem() {}, removeItem() {} },
+    storage:{
+      getItem() { return null; },
+      setItem() {},
+      removeItem(key) { calls.push(['removeItem', key]); },
+    },
   };
 }
 
@@ -253,6 +257,13 @@ test('v3 flag loads server-authoritative state without reading the writable v2 p
     deps.calls.some(([name]) => name === 'refreshWorkbooks'),
     false,
     'authoritative students must not download workbook answers',
+  );
+  service.startSharedPolling({});
+  const pollingOptions = deps.calls.find(([name]) => name === 'startPolling')?.[1];
+  assert.equal(pollingOptions.includeWorkbooks, false);
+  assert.deepEqual(
+    deps.calls.filter(([name]) => name === 'removeItem').map(([, key]) => key),
+    ['ysb_shared_v2_workbooks', 'ysb_workbooks_v3', 'ysb_questions_v2'],
   );
 });
 

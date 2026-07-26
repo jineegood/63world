@@ -13,12 +13,14 @@ const EVENT_TYPES = new Set([
   'answer-correct',
   'answer-wrong',
   'monster-damage',
+  'monster-dot',
   'monster-action',
   'monster-miss',
   'monster-status',
   'monster-shield',
   'player-action',
   'player-damage',
+  'player-dot',
   'player-heal',
   'player-miss',
   'player-shield',
@@ -444,6 +446,38 @@ function performMonsterAction({ state, random, events }) {
   }
 }
 
+function performRoundDamageOverTime({ state, events }) {
+  const shadowStacks = finiteInteger(state.monsterStatuses.shadowStacks);
+  if (shadowStacks > 0 && state.monsterHp > 0) {
+    const applied = applyMonsterDamage(state, shadowStacks, false);
+    pushEvent(events, {
+      type:'monster-dot',
+      status:'shadow',
+      amount:applied.amount,
+      hpDamage:applied.hpDamage,
+      shieldDamage:applied.shieldDamage,
+      stacks:shadowStacks,
+    });
+  }
+
+  const poisonTurns = finiteInteger(state.playerStatuses.poisonTurns);
+  if (poisonTurns > 0 && state.playerHp > 0) {
+    const amount = Math.max(1, finiteInteger(state.playerStatuses.poisonDamage, 1));
+    state.playerHp = Math.max(0, state.playerHp - amount);
+    state.playerStatuses.poisonTurns = poisonTurns - 1;
+    if (state.playerStatuses.poisonTurns <= 0) {
+      delete state.playerStatuses.poisonTurns;
+      delete state.playerStatuses.poisonDamage;
+    }
+    pushEvent(events, {
+      type:'player-dot',
+      status:'poison',
+      amount,
+      turns:Math.max(0, poisonTurns - 1),
+    });
+  }
+}
+
 function deathExperience(player) {
   if (!player.spec) return player.exp;
   const floor = Number(XP_REQUIREMENTS_V3[player.level - 1]) || 0;
@@ -497,6 +531,7 @@ export function resolveTurn({
 
   pushEvent(events, { type:'monster-action' });
   performMonsterAction({ state, random, events });
+  performRoundDamageOverTime({ state, events });
   state.cooldowns = tickCooldowns(state.cooldowns);
   state.turnNumber += 1;
 
@@ -508,6 +543,23 @@ export function resolveTurn({
       outcome:'defeat',
       rewards:{ exp:0, gold:0, building:0 },
       death:{ expAfter:deathExperience(player) },
+      events,
+      ...(!correct ? { correctAnswer:String(answerKey) } : {}),
+    });
+  }
+  if (state.monsterHp <= 0) {
+    state.status = 'resolved';
+    const rewards = {
+      exp:monsterRule.reward.exp,
+      gold:monsterRule.reward.gold,
+      building:checkedRandom(random) < COMBAT_BALANCE_V3.buildingDropChance ? 1 : 0,
+    };
+    pushEvent(events, { type:'rewards', ...rewards });
+    return sanitizeCombatResponse({
+      state,
+      correct,
+      outcome:'victory',
+      rewards,
       events,
       ...(!correct ? { correctAnswer:String(answerKey) } : {}),
     });

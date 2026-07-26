@@ -220,6 +220,43 @@ test('defeat preserves experience before specialization and surrender awards not
   assert.deepEqual(surrendered.rewards, { exp:0, gold:0, building:0 });
 });
 
+test('poison and shadow damage tick after the monster action and remain server-owned', () => {
+  const player = buildCombatant({ ...basicPlayer, inventory:[], activePet:null, skills:{} });
+  const state = {
+    ...startEncounter({ player, monsterKey:'forest_mushroom', random:sequence(0, 0) }),
+    monsterHp:30,
+    monsterMaxHp:30,
+    monsterAttack:3,
+    monsterPatterns:[],
+    playerStatuses:{ poisonTurns:2, poisonDamage:2 },
+    monsterStatuses:{ shadowStacks:3 },
+  };
+  const result = resolveTurn({
+    state,
+    player,
+    actionId:'basic',
+    answer:'4',
+    answerKey:'4',
+    random:sequence(0.5, 0.9, 0.9, 0.9, 0.9),
+  });
+
+  assert.equal(result.state.playerHp, player.maxHp - 5);
+  assert.equal(result.state.playerStatuses.poisonTurns, 1);
+  assert.equal(result.state.monsterHp, 23);
+  assert.equal(result.state.monsterStatuses.shadowStacks, 3);
+  assert.deepEqual(
+    result.events.map((event) => event.type),
+    [
+      'answer-correct',
+      'monster-damage',
+      'monster-action',
+      'player-damage',
+      'monster-dot',
+      'player-dot',
+    ],
+  );
+});
+
 test('invalid actions, state, answers, random values, and leaked fields fail closed', () => {
   const player = buildCombatant({ ...basicPlayer, inventory:[], activePet:null, skills:{} });
   const state = startEncounter({ player, monsterKey:'forest_mushroom', random:sequence(0, 0) });

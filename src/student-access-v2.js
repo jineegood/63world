@@ -83,7 +83,16 @@
     const auth = authApi.createAuthService({ client });
     const cloud = authorityV3Enabled ? null : cloudApi.create({ client, storage });
     const authority = authorityV3Enabled ? authorityApi.create({ client }) : null;
-    const shared = sharedApi.create({ client, storage, defaultWorkbooks });
+    const shared = sharedApi.create({
+      client,
+      storage,
+      defaultWorkbooks:authorityV3Enabled ? [] : defaultWorkbooks,
+    });
+    if (authorityV3Enabled) {
+      for (const key of ['ysb_shared_v2_workbooks', 'ysb_workbooks_v3', 'ysb_questions_v2']) {
+        storage.removeItem(key);
+      }
+    }
     let currentIdentity = null;
 
     const normalizeName = typeof authApi.normalizeStudentName === 'function'
@@ -246,7 +255,10 @@
       isServerOpen:shared.getServerOpen,
       getWorkbooks:shared.getWorkbooks,
       setLocalWorkbooks:shared.setLocalWorkbooks,
-      startSharedPolling:shared.startPolling,
+      startSharedPolling:(options = {}) => shared.startPolling({
+        ...options,
+        includeWorkbooks:!authorityV3Enabled,
+      }),
       stopSharedPolling:shared.stopPolling,
       getIdentity:() => currentIdentity ? Object.freeze({
         userId:currentIdentity.userId,

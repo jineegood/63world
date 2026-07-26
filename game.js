@@ -13199,6 +13199,10 @@ function wireAuthoritativePveCombatV3() {
         text:`${event.critical ? '💥 치명타! ' : ''}${monsterName}에게 ${Number(event.amount) || 0}의 피해!`,
         duration:1200,
       };
+      case 'monster-dot': return {
+        text:`암흑 중첩이 ${monsterName}에게 ${Number(event.amount) || 0}의 피해!`,
+        duration:1000,
+      };
       case 'player-miss': return { text:'공격이 빗나갔다!', duration:900 };
       case 'player-shield': return { text:`보호막 +${Number(event.amount) || 0}`, duration:900 };
       case 'player-heal': return { text:`HP +${Number(event.amount) || 0}`, duration:900 };
@@ -13206,6 +13210,11 @@ function wireAuthoritativePveCombatV3() {
       case 'player-damage': return {
         text:`${monsterName}의 반격! ${Number(event.amount) || 0}의 피해`,
         duration:1200,
+        tone:'enemy-action',
+      };
+      case 'player-dot': return {
+        text:`중독 피해 ${Number(event.amount) || 0}`,
+        duration:1000,
         tone:'enemy-action',
       };
       case 'monster-shield': return { text:`${monsterName}이 보호막을 펼쳤다!`, duration:900 };

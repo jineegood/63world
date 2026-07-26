@@ -165,7 +165,7 @@
     function setLocalWorkbooks(items) {
       workbooks = validateWorkbooks(items);
     }
-    function startPolling({ onClassroomChange, onWorkbooksChange } = {}) {
+    function startPolling({ onClassroomChange, onWorkbooksChange, includeWorkbooks = true } = {}) {
       if (timer !== null) return;
       timer = scheduleFn(async () => {
         const beforeOpen = classroom.serverOpen;
@@ -173,8 +173,10 @@
         try {
           await refreshClassroomSettings();
           if (beforeOpen !== classroom.serverOpen) onClassroomChange?.(classroom.serverOpen);
-          await refreshWorkbooks();
-          if (beforeBooks !== JSON.stringify(workbooks)) onWorkbooksChange?.(workbooks);
+          if (includeWorkbooks) {
+            await refreshWorkbooks();
+            if (beforeBooks !== JSON.stringify(workbooks)) onWorkbooksChange?.(workbooks);
+          }
         } catch (_) {}
       }, 15000);
     }

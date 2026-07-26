@@ -614,7 +614,12 @@ begin
   if jsonb_typeof(v_state) <> 'object'
     or v_kind not in ('continue', 'victory', 'defeat')
     or v_state ->> 'monsterKey' <> v_session.monster_key
-    or (v_state ->> 'turnNumber')::integer <> v_session.turn_number + case when v_kind = 'victory' then 0 else 1 end
+    or (
+      (v_kind = 'victory' and (v_state ->> 'turnNumber')::integer
+        not between v_session.turn_number and v_session.turn_number + 1)
+      or (v_kind <> 'victory' and (v_state ->> 'turnNumber')::integer
+        <> v_session.turn_number + 1)
+    )
     or (v_state ->> 'playerHp')::integer not between 0 and v_session.player_max_hp
     or (v_state ->> 'monsterHp')::integer not between 0 and v_session.monster_max_hp
     or (v_state ->> 'playerShield')::integer not between 0 and 1000000
