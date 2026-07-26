@@ -94,10 +94,24 @@ const patterns = Object.freeze({
     { chance:0.20, kind:'heavy', multiplier:1.3, stunTurns:1 },
   ],
   zombie:[{ chance:0.25, kind:'lifesteal', percent:1 }],
+  teacherBoss:[
+    { chance:0.25, kind:'heavy', multiplier:1.6 },
+    { chance:0.20, kind:'multi', hits:2, multiplier:0.72 },
+    { chance:0.15, kind:'chillPlayer', turns:1 },
+  ],
 });
 
+const elitePatterns = (type) => [
+  ...(patterns[type] || []).map((pattern) => ({
+    ...clone(pattern),
+    chance:Math.min(0.5, pattern.chance + 0.12),
+  })),
+  { chance:0.18, kind:'heavy', multiplier:1.5 },
+  { chance:0.15, kind:'selfShield', percent:0.225 },
+];
 const monster = (map, type, level, hp, attack, exp, gold, extra = {}) => ({
   map,
+  questionMap:map,
   type,
   level,
   hp,
@@ -111,10 +125,22 @@ const monster = (map, type, level, hp, attack, exp, gold, extra = {}) => ({
 const monsters = sortObject({
   forest_mushroom:monster('forest', 'mushroom', 1, [9, 11], [2, 4], 1, 2),
   forest_slime:monster('forest', 'slime', 3, [20, 23], [3, 5], 3, 4),
+  forest_elite_slime:monster('bossRoom', 'slime', 3, [36, 42], [6, 10], 6, 8, {
+    questionMap:'forest', elite:true, patterns:elitePatterns('slime'),
+  }),
   desert_stomp:monster('desert', 'stomp', 5, [41, 44], [7, 9], 6, 9),
   desert_snake:monster('desert', 'snake', 7, [59, 64], [10, 13], 9, 12),
+  desert_elite_snake:monster('bossRoom', 'snake', 7, [119, 128], [20, 25], 18, 24, {
+    questionMap:'desert', elite:true, patterns:elitePatterns('snake'),
+  }),
   swamp_tarantula:monster('swamp', 'tarantula', 9, [62, 66], [11, 13], 12, 15),
   swamp_zombie:monster('swamp', 'zombie', 11, [91, 95], [24, 28], 16, 20),
+  swamp_elite_zombie:monster('bossRoom', 'zombie', 11, [382, 399], [29, 34], 30, 40, {
+    questionMap:'swamp', elite:true, patterns:elitePatterns('zombie'),
+  }),
+  final_teacher:monster('finalBossRoom', 'teacherBoss', 99, [999, 999], [24, 30], 363, 363, {
+    questionMap:'swamp', elite:true, boss:true,
+  }),
 });
 
 const balance = Object.freeze({
@@ -146,6 +172,7 @@ const jsonSql = (value) => `${quote(JSON.stringify(value))}::jsonb`;
 const monsterRows = Object.entries(monsters).map(([key, value]) => `(${[
   quote(key),
   quote(value.map),
+  quote(value.questionMap),
   quote(value.type),
   value.level,
   value.hp[0],
@@ -163,10 +190,10 @@ const sql = [
   `-- monsters: ${monsterRows.length}`,
   '',
   'insert into public.game_monster_catalog_v3',
-  '  (monster_key, map_name, monster_type, level, hp_min, hp_max, attack_min, attack_max, exp_reward, gold_reward, elite, boss, patterns)',
+  '  (monster_key, map_name, question_map, monster_type, level, hp_min, hp_max, attack_min, attack_max, exp_reward, gold_reward, elite, boss, patterns)',
   'values',
   `${monsterRows.join(',\n')}\non conflict (monster_key) do update set`,
-  '  map_name = excluded.map_name, monster_type = excluded.monster_type,',
+  '  map_name = excluded.map_name, question_map = excluded.question_map, monster_type = excluded.monster_type,',
   '  level = excluded.level, hp_min = excluded.hp_min, hp_max = excluded.hp_max,',
   '  attack_min = excluded.attack_min, attack_max = excluded.attack_max,',
   '  exp_reward = excluded.exp_reward, gold_reward = excluded.gold_reward,',

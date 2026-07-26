@@ -27,7 +27,7 @@ test('combat catalog pins current security-relevant balance rules', async () => 
   assert.equal(Object.keys(catalog.SKILL_COMBAT_V3).length, 42);
   assert.equal(Object.keys(catalog.PET_COMBAT_V3).length, 6);
   assert.ok(Object.keys(catalog.ITEM_COMBAT_V3).length >= 40);
-  assert.ok(Object.keys(catalog.MONSTER_COMBAT_V3).length >= 6);
+  assert.ok(Object.keys(catalog.MONSTER_COMBAT_V3).length >= 10);
 
   assert.deepEqual(catalog.CLASS_COMBAT_V3.warrior.baseStats, {
     strength:8, intelligence:2, spirit:3, vitality:4,
@@ -59,12 +59,30 @@ test('combat catalog pins current security-relevant balance rules', async () => 
   assert.deepEqual(slime.hp, [20, 23], 'the slime keeps its effective 10% health buff');
   assert.deepEqual(slime.reward, { exp:3, gold:4 });
   assert.equal(slime.patterns[0].kind, 'selfShield');
+
+  const eliteZombie = catalog.MONSTER_COMBAT_V3.swamp_elite_zombie;
+  assert.equal(eliteZombie.map, 'bossRoom');
+  assert.equal(eliteZombie.questionMap, 'swamp');
+  assert.equal(eliteZombie.elite, true);
+  assert.deepEqual(eliteZombie.hp, [382, 399]);
+  assert.deepEqual(eliteZombie.attack, [29, 34]);
+  assert.deepEqual(eliteZombie.reward, { exp:30, gold:40 });
+
+  const teacher = catalog.MONSTER_COMBAT_V3.final_teacher;
+  assert.equal(teacher.map, 'finalBossRoom');
+  assert.equal(teacher.questionMap, 'swamp');
+  assert.equal(teacher.boss, true);
+  assert.deepEqual(teacher.hp, [999, 999]);
+  assert.deepEqual(teacher.attack, [24, 30], 'the catalog pins the teacher boss effective 1.2x combat attack');
+  assert.deepEqual(teacher.reward, { exp:363, gold:363 });
 });
 
 test('monster SQL contains the same canonical encounter rows', () => {
   const sql = fs.readFileSync(sqlOutput, 'utf8');
   assert.match(sql, /-- monsters: \d+\b/);
-  assert.match(sql, /\('forest_mushroom','forest','mushroom',1,9,11,2,4,1,2,false,false,/);
-  assert.match(sql, /\('forest_slime','forest','slime',3,20,23,3,5,3,4,false,false,/);
+  assert.match(sql, /\('forest_mushroom','forest','forest','mushroom',1,9,11,2,4,1,2,false,false,/);
+  assert.match(sql, /\('forest_slime','forest','forest','slime',3,20,23,3,5,3,4,false,false,/);
+  assert.match(sql, /\('swamp_elite_zombie','bossRoom','swamp','zombie',11,382,399,29,34,30,40,true,false,/);
+  assert.match(sql, /\('final_teacher','finalBossRoom','swamp','teacherBoss',99,999,999,24,30,363,363,true,true,/);
   assert.match(sql, /on conflict \(monster_key\) do update set/i);
 });

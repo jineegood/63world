@@ -81,8 +81,10 @@ test('student workbook answers are revoked while teacher administration remains'
 test('canonical monster catalog seed is embedded and generator-owned', () => {
   const sql = migration();
   assert.match(sql, /-- BEGIN GENERATED COMBAT MONSTER CATALOG V3/);
-  assert.match(sql, /-- monsters: 6\b/);
-  assert.match(sql, /\('forest_mushroom','forest','mushroom',1,9,11,2,4,1,2,false,false,/);
+  assert.match(sql, /-- monsters: 10\b/);
+  assert.match(sql, /\('forest_mushroom','forest','forest','mushroom',1,9,11,2,4,1,2,false,false,/);
+  assert.match(sql, /question_map\s+text\s+not\s+null/i);
+  assert.match(sql, /private_pick_combat_question_v3\(v_monster\.question_map\)/i);
   assert.match(sql, /-- END GENERATED COMBAT MONSTER CATALOG V3/);
 });
 

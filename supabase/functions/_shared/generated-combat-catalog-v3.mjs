@@ -1180,8 +1180,50 @@ export const SKILL_COMBAT_V3 = Object.freeze({
 });
 
 export const MONSTER_COMBAT_V3 = Object.freeze({
+  "desert_elite_snake": {
+    "map": "bossRoom",
+    "questionMap": "desert",
+    "type": "snake",
+    "level": 7,
+    "hp": [
+      119,
+      128
+    ],
+    "attack": [
+      20,
+      25
+    ],
+    "reward": {
+      "exp": 18,
+      "gold": 24
+    },
+    "elite": true,
+    "boss": false,
+    "patterns": [
+      {
+        "chance": 0.37,
+        "kind": "poison",
+        "turns": 3
+      },
+      {
+        "chance": 0.27,
+        "kind": "critical"
+      },
+      {
+        "chance": 0.18,
+        "kind": "heavy",
+        "multiplier": 1.5
+      },
+      {
+        "chance": 0.15,
+        "kind": "selfShield",
+        "percent": 0.225
+      }
+    ]
+  },
   "desert_snake": {
     "map": "desert",
+    "questionMap": "desert",
     "type": "snake",
     "level": 7,
     "hp": [
@@ -1212,6 +1254,7 @@ export const MONSTER_COMBAT_V3 = Object.freeze({
   },
   "desert_stomp": {
     "map": "desert",
+    "questionMap": "desert",
     "type": "stomp",
     "level": 5,
     "hp": [
@@ -1242,8 +1285,84 @@ export const MONSTER_COMBAT_V3 = Object.freeze({
       }
     ]
   },
+  "final_teacher": {
+    "map": "finalBossRoom",
+    "questionMap": "swamp",
+    "type": "teacherBoss",
+    "level": 99,
+    "hp": [
+      999,
+      999
+    ],
+    "attack": [
+      24,
+      30
+    ],
+    "reward": {
+      "exp": 363,
+      "gold": 363
+    },
+    "elite": true,
+    "boss": true,
+    "patterns": [
+      {
+        "chance": 0.25,
+        "kind": "heavy",
+        "multiplier": 1.6
+      },
+      {
+        "chance": 0.2,
+        "kind": "multi",
+        "hits": 2,
+        "multiplier": 0.72
+      },
+      {
+        "chance": 0.15,
+        "kind": "chillPlayer",
+        "turns": 1
+      }
+    ]
+  },
+  "forest_elite_slime": {
+    "map": "bossRoom",
+    "questionMap": "forest",
+    "type": "slime",
+    "level": 3,
+    "hp": [
+      36,
+      42
+    ],
+    "attack": [
+      6,
+      10
+    ],
+    "reward": {
+      "exp": 6,
+      "gold": 8
+    },
+    "elite": true,
+    "boss": false,
+    "patterns": [
+      {
+        "chance": 0.37,
+        "kind": "selfShield",
+        "percent": 0.35
+      },
+      {
+        "chance": 0.18,
+        "kind": "heavy",
+        "multiplier": 1.5
+      },
+      {
+        "chance": 0.15,
+        "kind": "selfShield",
+        "percent": 0.225
+      }
+    ]
+  },
   "forest_mushroom": {
     "map": "forest",
+    "questionMap": "forest",
     "type": "mushroom",
     "level": 1,
     "hp": [
@@ -1270,6 +1389,7 @@ export const MONSTER_COMBAT_V3 = Object.freeze({
   },
   "forest_slime": {
     "map": "forest",
+    "questionMap": "forest",
     "type": "slime",
     "level": 3,
     "hp": [
@@ -1294,8 +1414,46 @@ export const MONSTER_COMBAT_V3 = Object.freeze({
       }
     ]
   },
+  "swamp_elite_zombie": {
+    "map": "bossRoom",
+    "questionMap": "swamp",
+    "type": "zombie",
+    "level": 11,
+    "hp": [
+      382,
+      399
+    ],
+    "attack": [
+      29,
+      34
+    ],
+    "reward": {
+      "exp": 30,
+      "gold": 40
+    },
+    "elite": true,
+    "boss": false,
+    "patterns": [
+      {
+        "chance": 0.37,
+        "kind": "lifesteal",
+        "percent": 1
+      },
+      {
+        "chance": 0.18,
+        "kind": "heavy",
+        "multiplier": 1.5
+      },
+      {
+        "chance": 0.15,
+        "kind": "selfShield",
+        "percent": 0.225
+      }
+    ]
+  },
   "swamp_tarantula": {
     "map": "swamp",
+    "questionMap": "swamp",
     "type": "tarantula",
     "level": 9,
     "hp": [
@@ -1329,6 +1487,7 @@ export const MONSTER_COMBAT_V3 = Object.freeze({
   },
   "swamp_zombie": {
     "map": "swamp",
+    "questionMap": "swamp",
     "type": "zombie",
     "level": 11,
     "hp": [
