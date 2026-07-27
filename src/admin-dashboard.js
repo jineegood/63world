@@ -253,12 +253,14 @@ function teacherWorkbooksHtml(){
         여섯 칸(문제·정답·보기4개)이면 적어주신 보기를 그대로 씁니다. 첫 줄이 제목줄이면 알아서 건너뜁니다.</p>
     </div>
     <div class="panel-card" style="margin-top:12px">
-      <h3>AI 문제집 생성</h3>
-      <label>문제집 이름</label>
-      <input id="aiWorkbookName" placeholder="예: 문제집2 - 영어 단어 20문제 세트" />
-      <label>AI 요청 문장</label>
-      <textarea id="aiPrompt" placeholder="예: 초등학교 6학년 영단어 20개 문제집 만들어줘"></textarea>
-      <button class="primary wide" onclick="generateAiQuestionSet()">AI로 문제집 생성</button>
+      <h3>ChatGPT로 문제 만들기</h3>
+      <p class="muted">아래 버튼으로 문장을 복사해 ChatGPT에 붙여넣고, 나온 결과를 위 "엑셀 · CSV로 문제 추가" 칸에 붙여넣으면 됩니다.</p>
+      <label>주제</label>
+      <input id="chatGptTopic" placeholder="예: 초등학교 5학년 수학, 분수의 덧셈" />
+      <label>문제 수 (최대 20개)</label>
+      <input id="chatGptCount" type="number" min="1" max="20" value="20" style="max-width:140px" />
+      <button class="primary wide" onclick="copyChatGptPrompt()" style="margin-top:8px">ChatGPT에 넣을 문장 복사</button>
+      <textarea id="chatGptPromptBox" rows="4" readonly class="hidden" style="margin-top:8px"></textarea>
     </div>
     ${workbookImportReportHtml()}
     <div style="margin-top:12px">${cards}</div>
@@ -816,27 +818,34 @@ window.grantBuildingToStudent = function grantBuildingToStudent(name) {
   toast(`${name}에게 빌딩 ${amount}개를 지급했습니다.`);
 };
 
-window.generateAiQuestionSet = async function generateAiQuestionSet() {
+window.copyChatGptPrompt = async function copyChatGptPrompt() {
   if (!requireTeacherAuth()) return;
-  const prompt = $('aiPrompt').value.trim();
-  if (!prompt) { toast('AI 요청 문장을 입력하세요.'); return; }
-  const questions = generateAiQuestions(prompt, 'silent_forest');
-  const workbooks = getAdminWorkbooksV2().map((book) => ({ ...book, questions:[...book.questions] }));
-  const index = workbooks.length + 1;
-  const name = $('aiWorkbookName').value.trim() || `문제집${index} - ${inferSubject(prompt)} ${questions.length}문제 세트`;
-  const id = 'wb_' + uid();
-  workbooks.push(normalizeWorkbook({
-    id,
-    name,
-    zone: 'silent_forest',
-    subject: inferSubject(prompt),
-    prompt,
-    createdAt: Date.now(),
-    questions: questions.map((q) => ({ ...q, workbookId: id })),
-  }));
-  if (!(await saveAdminWorkbooksV2(workbooks))) return;
-  openAdminPanel('workbooks', { keepScroll: true });
-  toast(`AI 문제집 "${name}"을 추가했습니다.`);
+  const builder = window.YuksamChatGptPrompt;
+  if (!builder) { toast('문장 만들기 기능을 불러오지 못했습니다.'); return; }
+  const built = builder.buildPrompt({
+    topic:$('chatGptTopic')?.value,
+    count:$('chatGptCount')?.value,
+  });
+  if (!built.ok) { toast(built.reason); return; }
+
+  const box = $('chatGptPromptBox');
+  if (box) {
+    box.value = built.prompt;
+    box.classList.remove('hidden');
+  }
+  // 클립보드가 막힌 환경에서도 문장은 위 칸에 보이므로 직접 복사할 수 있다
+  try {
+    await navigator.clipboard.writeText(built.prompt);
+    toast('문장을 복사했습니다. ChatGPT에 붙여넣으세요.');
+    return;
+  } catch {}
+  try {
+    box?.select();
+    document.execCommand('copy');
+    toast('문장을 복사했습니다. ChatGPT에 붙여넣으세요.');
+  } catch {
+    toast('아래 칸의 문장을 직접 복사해 주세요.');
+  }
 };
 
 window.adminOpenGrantModal = function adminOpenGrantModal(name){

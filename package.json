@@ -33,6 +33,7 @@
     "test:quest-text": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 quest-text",
     "test:quest-dialogue-theme": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 quest-dialogue-theme",
     "test:workbook-import": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 workbook-import",
+    "test:chatgpt-prompt": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 chatgpt-prompt",
     "test:patch-data": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 patch-data",
     "test:supabase-security-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 supabase-security-v2",
     "test:server-authority-v3": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 server-authority-v3",

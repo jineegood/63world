@@ -12,3 +12,9 @@ Thumbs.db
 desktop.ini
 vendor/*.map
 ~$*
+
+# API 키 등 비밀 값은 절대 GitHub에 올리지 않는다
+*시크릿키*
+*시크릿 키*
+*secret*key*
+*.key
