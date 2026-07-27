@@ -6737,7 +6737,13 @@ function wireAuthoritativeEconomyV3() {
       options.push({ label: '대화 종료', action: 'closeModal()' });
     }
     game.dialogue.selected = Math.min(selected, Math.max(0, options.length - 1));
-    openModal(`<div class="dialogue-box"><div class="dialogue-speaker"><h2>명진쌤 ${marker ? `<span class="badge quest-marker-badge">${marker}</span>` : ''}</h2><div class="badge">클릭 또는 E키로 진행</div></div><div class="dialogue-text">${YuksamQuestText.emphasize(text)}</div><div class="dialogue-options">${options.map((opt,i)=>`<button class="${i===game.dialogue.selected?'selected':''}" onclick="${opt.action}">${YuksamQuestText.emphasize(opt.label)}</button>`).join('')}</div></div>`, { type:'dialogue', pause:true });
+    // [v59] 퀘스트 대화는 일반 대화와 배경색을 다르게 해 한눈에 구분되게 한다
+    const dialogueTheme = window.YuksamQuestDialogueTheme?.classSuffix({
+      mode:game.dialogue.mode,
+      questStatus:q?.status,
+      hasQuest:!!def,
+    }) || '';
+    openModal(`<div class="dialogue-box${dialogueTheme}"><div class="dialogue-speaker"><h2>명진쌤 ${marker ? `<span class="badge quest-marker-badge">${marker}</span>` : ''}</h2><div class="badge">클릭 또는 E키로 진행</div></div><div class="dialogue-text">${YuksamQuestText.emphasize(text)}</div><div class="dialogue-options">${options.map((opt,i)=>`<button class="${i===game.dialogue.selected?'selected':''}" onclick="${opt.action}">${YuksamQuestText.emphasize(opt.label)}</button>`).join('')}</div></div>`, { type:'dialogue', pause:true });
   }
   window.startQuestStory = function startQuestStoryV21() { game.dialogue = { page: 0, selected: 0, mode: 'quest' }; renderNpcDialogueV21(); };
   window.nextDialoguePage = function nextDialoguePageV21() { const id = getCurrentQuestIdForNpcV21(); const def = QUEST_DEFS[id]; game.dialogue.page = Math.min((def?.pages?.length || 1) - 1, (game.dialogue.page || 0) + 1); renderNpcDialogueV21(); };

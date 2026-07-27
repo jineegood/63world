@@ -2576,3 +2576,39 @@ body.defeated #app { filter: grayscale(1) brightness(.62); transition: filter .3
   justify-self: center;
   align-self: center;
 }
+
+
+/* ── v59: 퀘스트 대화창 색 구분 ──
+   일반 대화(남색)와 달리, 퀘스트 이야기는 양피지 느낌의 호박색,
+   퀘스트 완료·보상은 초록색으로 배경을 바꿔 한눈에 구분되게 한다. */
+.modal-box:has(.quest-dialogue) {
+  background: linear-gradient(180deg, rgba(58,42,18,.98), rgba(30,20,8,.98));
+  border-color: rgba(245,196,86,.42);
+}
+.quest-dialogue .dialogue-text {
+  background: rgba(245,196,86,.12);
+  border-color: rgba(245,196,86,.30);
+  color: #fdf3dd;
+  text-shadow: 0 0 14px rgba(245,196,86,.20);
+}
+.quest-dialogue .dialogue-options button.selected,
+.quest-dialogue .dialogue-options button:hover {
+  border-color: rgba(245,196,86,.55);
+  background: rgba(245,196,86,.16);
+}
+
+.modal-box:has(.quest-complete-dialogue) {
+  background: linear-gradient(180deg, rgba(16,52,34,.98), rgba(6,26,16,.98));
+  border-color: rgba(94,222,150,.42);
+}
+.quest-complete-dialogue .dialogue-text {
+  background: rgba(94,222,150,.12);
+  border-color: rgba(94,222,150,.30);
+  color: #e6fff1;
+  text-shadow: 0 0 14px rgba(94,222,150,.20);
+}
+.quest-complete-dialogue .dialogue-options button.selected,
+.quest-complete-dialogue .dialogue-options button:hover {
+  border-color: rgba(94,222,150,.55);
+  background: rgba(94,222,150,.16);
+}
