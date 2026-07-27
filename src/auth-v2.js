@@ -83,10 +83,32 @@
     if (sourceCode.includes('invalid_credentials') || sourceMessage.includes('invalid login credentials')) {
       return new AuthV2Error('INVALID_CREDENTIALS', '이름 또는 비밀번호가 맞지 않아요.');
     }
+    if (sourceCode.includes('email_not_confirmed') || sourceMessage.includes('not confirmed')) {
+      return new AuthV2Error(
+        'EMAIL_NOT_CONFIRMED',
+        '계정 확인 설정 때문에 로그인이 막혔어요. 선생님께 알려주세요. (확인 메일 요구 설정)',
+      );
+    }
+    if (sourceCode.includes('rate_limit')
+      || sourceMessage.includes('rate limit')
+      || sourceMessage.includes('security purposes')) {
+      return new AuthV2Error('RATE_LIMITED', '접속 요청이 너무 많아요. 1분쯤 기다렸다가 다시 시도해 주세요.');
+    }
+    if (sourceCode.includes('signup_disabled') || sourceMessage.includes('signups not allowed')) {
+      return new AuthV2Error('SIGNUP_DISABLED', '새 캐릭터 만들기가 잠겨 있어요. 선생님께 알려주세요.');
+    }
+    if (sourceCode.startsWith('p0')
+      || sourceCode.includes('unexpected_failure')
+      || sourceMessage.includes('database error')) {
+      return new AuthV2Error('SERVER_SETUP_FAILED', '서버 설정에 문제가 있어요. 선생님께 알려주세요. (서버 저장 단계 실패)');
+    }
     if (sourceCode.includes('weak_password') || sourceMessage.includes('password')) {
       return new AuthV2Error('INVALID_PASSWORD', '더 안전한 비밀번호를 사용해 주세요.');
     }
-    return new AuthV2Error(fallbackCode, '로그인 처리 중 문제가 생겼어요. 잠시 후 다시 시도해 주세요.');
+    return new AuthV2Error(
+      fallbackCode,
+      `로그인 처리 중 문제가 생겼어요. 잠시 후 다시 시도해 주세요. (오류: ${sourceCode || sourceMessage || 'unknown'})`,
+    );
   }
 
   function createAuthService(options) {
