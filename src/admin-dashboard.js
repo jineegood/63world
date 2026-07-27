@@ -13,6 +13,10 @@ let secureAdminStudentsV2 = [];
 let secureAdminStudentsStatusV2 = 'idle';
 let secureAdminStudentsErrorV2 = '';
 let secureAdminMutationV2 = false;
+// [v59] 문제집 화면을 다시 그려도 펼친 목록·수정 중인 문제·직전 등록 결과를 잃지 않게 보존
+const openWorkbookDetailsV2 = new Set();
+let editingWorkbookQuestionV2 = null;
+let workbookImportReportV2 = null;
 
 if (SECURE_ADMIN_MODE_V2) {
   const secureAdminUrlV2 = String(window.YUKSAM_CLOUD?.url || '')
@@ -141,6 +145,53 @@ function teacherStudentsHtml(){
   </div>`;
 }
 
+function teacherQuestionRowHtml(wb, q, qi){
+  const editing = editingWorkbookQuestionV2
+    && editingWorkbookQuestionV2.workbookId === wb.id
+    && editingWorkbookQuestionV2.questionId === q.id;
+  if (!editing) {
+    return `<tr>
+      <td>${qi + 1}</td>
+      <td>${escapeHtml(q.q)}</td>
+      <td class="good-text">${escapeHtml(q.answer)}</td>
+      <td class="t-actions">
+        <button class="ghost tiny" onclick="startEditWorkbookQuestion('${escapeJs(wb.id)}', '${escapeJs(q.id)}')">수정</button>
+        <button class="ghost tiny danger-text" onclick="removeQuestionFromWorkbook('${escapeJs(wb.id)}', '${escapeJs(q.id)}')">삭제</button>
+      </td>
+    </tr>`;
+  }
+  const choiceText = Array.isArray(q.choices) ? q.choices.join(', ') : '';
+  return `<tr>
+    <td>${qi + 1}</td>
+    <td colspan="2">
+      <input id="editQuestionText" value="${escapeHtml(q.q)}" placeholder="문제" />
+      <input id="editQuestionAnswer" value="${escapeHtml(q.answer)}" placeholder="정답" />
+      <input id="editQuestionChoices" value="${escapeHtml(choiceText)}" placeholder="보기 4개 (쉼표로 구분, 비우면 자동 생성)" />
+    </td>
+    <td class="t-actions">
+      <button class="primary tiny" onclick="saveEditWorkbookQuestion()">저장</button>
+      <button class="ghost tiny" onclick="cancelEditWorkbookQuestion()">취소</button>
+    </td>
+  </tr>`;
+}
+
+function workbookImportReportHtml(){
+  if (!workbookImportReportV2) return '';
+  const { added, skipped } = workbookImportReportV2;
+  const skippedRows = skipped.slice(0, 20).map((item) => `
+    <tr><td>${item.line}줄</td><td>${escapeHtml(item.text || '')}</td><td class="danger-text">${escapeHtml(item.reason)}</td></tr>
+  `).join('');
+  return `<div class="panel-card" style="margin-top:12px">
+    <h3>표 등록 결과</h3>
+    <p><b class="good-text">${added}개</b> 추가${skipped.length ? ` · <b class="danger-text">${skipped.length}개</b> 건너뜀` : ''}</p>
+    ${skipped.length ? `<table class="teacher-table" style="margin-top:8px">
+      <tr><th>위치</th><th>내용</th><th>건너뛴 이유</th></tr>
+      ${skippedRows}
+    </table>${skipped.length > 20 ? `<p class="muted">외 ${skipped.length - 20}줄 더 있습니다.</p>` : ''}` : ''}
+    <button class="ghost wide" onclick="adminClearImportReport()" style="margin-top:8px">결과 지우기</button>
+  </div>`;
+}
+
 function teacherWorkbooksHtml(){
   const workbooks = SECURE_ADMIN_MODE_V2 && secureAdminSharedV2
     ? secureAdminSharedV2.getWorkbooks()
@@ -163,18 +214,11 @@ function teacherWorkbooksHtml(){
         </div>
       </div>
       <p class="muted" style="margin:6px 0 2px">요청: ${escapeHtml(wb.prompt || '직접 생성')}</p>
-      <details>
-        <summary>문제 보기 / 삭제</summary>
+      <details ${openWorkbookDetailsV2.has(wb.id) ? 'open' : ''} ontoggle="adminTrackWorkbookDetails('${escapeJs(wb.id)}', this.open)">
+        <summary>문제 보기 / 수정 / 삭제</summary>
         <table class="teacher-table" style="margin-top:8px">
           <tr><th>#</th><th>문제</th><th>정답</th><th></th></tr>
-          ${wb.questions.length ? wb.questions.map((q, qi) => `
-            <tr>
-              <td>${qi + 1}</td>
-              <td>${escapeHtml(q.q)}</td>
-              <td class="good-text">${escapeHtml(q.answer)}</td>
-              <td><button class="ghost tiny danger-text" onclick="removeQuestionFromWorkbook('${wb.id}', '${q.id}')">삭제</button></td>
-            </tr>
-          `).join('') : '<tr><td colspan="4" class="muted">문제가 없습니다.</td></tr>'}
+          ${wb.questions.length ? wb.questions.map((q, qi) => teacherQuestionRowHtml(wb, q, qi)).join('') : '<tr><td colspan="4" class="muted">문제가 없습니다.</td></tr>'}
         </table>
       </details>
     </div>
@@ -198,6 +242,17 @@ function teacherWorkbooksHtml(){
       <p class="muted">마지막 "=" 뒤가 정답으로 인식됩니다.</p>
     </div>
     <div class="panel-card" style="margin-top:12px">
+      <h3>엑셀 · CSV로 문제 추가</h3>
+      <p class="muted">위에서 고른 문제집에 들어갑니다.</p>
+      <label>① 엑셀에서 칸을 드래그해 복사(Ctrl+C)한 뒤, 아래에 붙여넣기(Ctrl+V)</label>
+      <textarea id="adminImportTable" rows="5" placeholder="문제&#9;정답&#10;7 × 8 = ?&#9;56&#10;대한민국의 수도는?&#9;서울&#9;부산&#9;대구&#9;광주"></textarea>
+      <label>② 또는 CSV 파일 선택</label>
+      <input type="file" id="adminImportFile" accept=".csv,.tsv,.txt,text/csv,text/plain" onchange="adminImportTableFile(this)" />
+      <button class="primary wide" onclick="adminImportTable()" style="margin-top:8px">표에서 문제 추가</button>
+      <p class="muted">두 칸(문제·정답)이면 보기는 게임이 자동으로 만들어 줍니다.
+        여섯 칸(문제·정답·보기4개)이면 적어주신 보기를 그대로 씁니다. 첫 줄이 제목줄이면 알아서 건너뜁니다.</p>
+    </div>
+    <div class="panel-card" style="margin-top:12px">
       <h3>AI 문제집 생성</h3>
       <label>문제집 이름</label>
       <input id="aiWorkbookName" placeholder="예: 문제집2 - 영어 단어 20문제 세트" />
@@ -205,6 +260,7 @@ function teacherWorkbooksHtml(){
       <textarea id="aiPrompt" placeholder="예: 초등학교 6학년 영단어 20개 문제집 만들어줘"></textarea>
       <button class="primary wide" onclick="generateAiQuestionSet()">AI로 문제집 생성</button>
     </div>
+    ${workbookImportReportHtml()}
     <div style="margin-top:12px">${cards}</div>
   </div>`;
 }
@@ -610,6 +666,112 @@ window.addAdminQuestion = async function addAdminQuestion() {
   if (!(await saveAdminWorkbooksV2(workbooks))) return;
   openAdminPanel('workbooks', { keepScroll: true });
   toast('선택한 문제집에 문제가 추가되었습니다.');
+};
+
+window.adminTrackWorkbookDetails = function adminTrackWorkbookDetails(workbookId, open){
+  if (open) openWorkbookDetailsV2.add(workbookId);
+  else openWorkbookDetailsV2.delete(workbookId);
+};
+
+window.adminClearImportReport = function adminClearImportReport(){
+  workbookImportReportV2 = null;
+  openAdminPanel('workbooks', { keepScroll: true });
+};
+
+window.startEditWorkbookQuestion = function startEditWorkbookQuestion(workbookId, questionId){
+  if (!requireTeacherAuth()) return;
+  editingWorkbookQuestionV2 = { workbookId, questionId };
+  openWorkbookDetailsV2.add(workbookId);
+  openAdminPanel('workbooks', { keepScroll: true });
+};
+
+window.cancelEditWorkbookQuestion = function cancelEditWorkbookQuestion(){
+  editingWorkbookQuestionV2 = null;
+  openAdminPanel('workbooks', { keepScroll: true });
+};
+
+window.saveEditWorkbookQuestion = async function saveEditWorkbookQuestion(){
+  if (!requireTeacherAuth()) return;
+  if (!editingWorkbookQuestionV2) return;
+  const { workbookId, questionId } = editingWorkbookQuestionV2;
+  const q = ($('editQuestionText')?.value || '').trim();
+  const answer = ($('editQuestionAnswer')?.value || '').trim();
+  const choiceRaw = ($('editQuestionChoices')?.value || '').trim();
+  if (!q || !answer) { toast('문제와 정답을 모두 입력하세요.'); return; }
+  const limits = window.YuksamWorkbookImport;
+  if (limits && q.length > limits.MAX_QUESTION_LENGTH) { toast(`문제는 ${limits.MAX_QUESTION_LENGTH}자까지 쓸 수 있어요.`); return; }
+  if (limits && answer.length > limits.MAX_ANSWER_LENGTH) { toast(`정답은 ${limits.MAX_ANSWER_LENGTH}자까지 쓸 수 있어요.`); return; }
+
+  const workbooks = getAdminWorkbooksV2().map((book) => ({ ...book, questions:[...book.questions] }));
+  const wb = workbooks.find((book) => book.id === workbookId);
+  if (!wb) { toast('문제집을 찾을 수 없습니다.'); return; }
+  const index = wb.questions.findIndex((item) => item.id === questionId);
+  if (index < 0) { toast('문제를 찾을 수 없습니다.'); return; }
+
+  let choices = null;
+  if (choiceRaw) {
+    choices = choiceRaw.split(',').map((v) => v.trim()).filter(Boolean).slice(0, 4);
+    // 정답이 보기에 없으면 학생이 맞힐 수 없으므로 반드시 넣는다
+    if (!choices.includes(answer)) choices = [answer, ...choices].slice(0, 4);
+  }
+  wb.questions[index] = { ...wb.questions[index], q, answer, choices };
+  if (!(await saveAdminWorkbooksV2(workbooks))) return;
+  editingWorkbookQuestionV2 = null;
+  openAdminPanel('workbooks', { keepScroll: true });
+  toast('문제를 수정했습니다.');
+};
+
+window.adminImportTableFile = function adminImportTableFile(input){
+  const file = input?.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const box = $('adminImportTable');
+    if (box) box.value = String(reader.result || '');
+    toast(`"${file.name}"을 읽었습니다. 아래 버튼으로 추가하세요.`);
+  };
+  reader.onerror = () => toast('파일을 읽지 못했습니다.');
+  reader.readAsText(file, 'utf-8');
+};
+
+window.adminImportTable = async function adminImportTable(){
+  if (!requireTeacherAuth()) return;
+  const importer = window.YuksamWorkbookImport;
+  if (!importer) { toast('표 읽기 기능을 불러오지 못했습니다.'); return; }
+  const workbookId = $('adminWorkbook')?.value;
+  if (!workbookId) { toast('먼저 문제집을 선택하세요.'); return; }
+  const raw = ($('adminImportTable')?.value || '').trim();
+  if (!raw) { toast('붙여넣거나 파일을 선택하세요.'); return; }
+
+  const workbooks = getAdminWorkbooksV2().map((book) => ({ ...book, questions:[...book.questions] }));
+  const wb = workbooks.find((book) => book.id === workbookId);
+  if (!wb) { toast('문제집을 찾을 수 없습니다.'); return; }
+
+  const parsed = importer.parseTable(raw, { existingQuestions: wb.questions });
+  if (!parsed.questions.length) {
+    workbookImportReportV2 = { added: 0, skipped: parsed.skipped };
+    openAdminPanel('workbooks', { keepScroll: true });
+    toast('추가할 수 있는 문제가 없습니다. 건너뛴 이유를 확인하세요.');
+    return;
+  }
+  for (const item of parsed.questions) {
+    wb.questions.push({
+      id: uid(),
+      workbookId: wb.id,
+      zone: wb.zone,
+      q: item.q,
+      answer: item.answer,
+      choices: item.choices,
+      source: '표등록',
+    });
+  }
+  if (!(await saveAdminWorkbooksV2(workbooks))) return;
+  workbookImportReportV2 = { added: parsed.questions.length, skipped: parsed.skipped };
+  openWorkbookDetailsV2.add(wb.id);
+  const box = $('adminImportTable');
+  if (box) box.value = '';
+  openAdminPanel('workbooks', { keepScroll: true });
+  toast(`${parsed.questions.length}개 문제를 추가했습니다.`);
 };
 
 window.removeQuestionFromWorkbook = async function removeQuestionFromWorkbook(workbookId, questionId) {
