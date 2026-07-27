@@ -7,6 +7,7 @@ import vm from 'node:vm';
 const root = path.resolve(import.meta.dirname, '..');
 const coreSource = () => fs.readFileSync(path.join(root, 'src/multiplayer-core.js'), 'utf8');
 const multiplayerSource = () => fs.readFileSync(path.join(root, 'src/multiplayer.js'), 'utf8');
+const remoteMotionSource = () => fs.readFileSync(path.join(root, 'src/remote-motion.js'), 'utf8');
 
 test('Supabase REST configuration normalizes to one Realtime websocket endpoint', () => {
   const window = {};
@@ -56,6 +57,7 @@ test('two mocked browser sessions exchange positions and chat', async () => {
   function createSession(name, x) {
     const intervals = [];
     const chats = [];
+    const drawn = [];
     const canvasListeners = new Map();
     const layers = [];
     const window = {
@@ -96,13 +98,14 @@ test('two mocked browser sessions exchange positions and chat', async () => {
       setTimeout:() => 1,
       clearTimeout() {},
       worldRenderPipeline:{ registerLayer(layer) { layers.push(layer); } },
-      drawPlayerSprite() {},
+      drawPlayerSprite:(ctx, sx, sy, appearance, cls, state) => { drawn.push({ x:sx, y:sy, moving:state?.moving }); },
       worldToScreen:(px, py) => ({ x:px, y:py }),
       PLAYER_WORLD_SCALE:1.26,
     };
     vm.runInNewContext(coreSource(), context);
+    vm.runInNewContext(remoteMotionSource(), context);
     vm.runInNewContext(multiplayerSource(), context);
-    return { window, game, intervals, chats, canvasListeners, layers };
+    return { window, game, intervals, chats, canvasListeners, layers, drawn };
   }
 
   const first = createSession('첫째', 100);
@@ -126,6 +129,9 @@ test('two mocked browser sessions exchange positions and chat', async () => {
   assert.deepEqual(second.chats.at(-1), { type:'user', sender:'첫째', message:'안녕!' });
 
   first.layers[0].render();
+  // 처음 보이는 학생은 미끄러져 들어오지 않고 받은 좌표 그대로 그려져야 한다
+  assert.deepEqual(first.drawn.at(-1), { x:300, y:200, moving:false });
+
   const contextmenu = first.canvasListeners.get('contextmenu');
   let prevented = false;
   contextmenu({ clientX:300, clientY:200, preventDefault:() => { prevented = true; } });
