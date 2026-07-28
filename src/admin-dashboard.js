@@ -22,6 +22,7 @@ let selectedWorkbookV2 = '';
 const checkedWorkbookQuestionsV2 = new Set();
 let secureAdminWorkbookRefreshV2 = false;
 let secureAdminWorkbookSyncedAtV2 = 0;
+let secureAdminCheatPendingV3 = false;
 const CHEAT_ENABLED_KEY_V2 = 'ysb_teacher_cheat_enabled_v2';
 try {
   window.__cheatEnabledV54 = sessionStorage.getItem(CHEAT_ENABLED_KEY_V2) === '1';
@@ -69,6 +70,36 @@ if (SECURE_ADMIN_MODE_V2) {
     }
   }
 }
+
+window.adminApplyCurrentStudentCheatV3 = async function adminApplyCurrentStudentCheatV3(action) {
+  if (secureAdminCheatPendingV3) return;
+  const identity = window.getPvpIdentityV1?.();
+  if (!identity?.userId) {
+    toast('먼저 학생 캐릭터로 로그인해 주세요.');
+    return;
+  }
+  if (!requireTeacherAuth() || !secureAdminDataV2?.applyStudentCheatV3) return;
+  secureAdminCheatPendingV3 = true;
+  try {
+    const result = await secureAdminDataV2.applyStudentCheatV3(identity.userId, action);
+    if (!window.applyAuthoritySnapshotFromServerV3?.(result.snapshot)) {
+      throw new Error('서버 캐릭터 정보를 적용하지 못했어요.');
+    }
+    const labels = {
+      exp20:'EXP +20',
+      exp100:'EXP +100',
+      gold3000:'Gold +3000',
+      building200:'빌딩 +200',
+      heal:'HP 100% 회복',
+    };
+    toast(`테스트: ${labels[action] || '치트 적용 완료'}`);
+    appendChatMessage?.('system', '테스트', labels[action] || '치트 적용 완료');
+  } catch (error) {
+    toast(error?.message || '서버 치트를 적용하지 못했어요.');
+  } finally {
+    secureAdminCheatPendingV3 = false;
+  }
+};
 
 function fmtAcc(rec){
   const answered = rec && rec.answered ? rec.answered : 0;

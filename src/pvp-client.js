@@ -10,6 +10,10 @@
     RECONNECTING:'상대 학생의 재접속을 기다리는 중이에요.',
     PROFILE_MISSING:'저장된 캐릭터 정보를 확인한 뒤 다시 시도해 주세요.',
     UNAUTHENTICATED:'다시 로그인한 뒤 이용해 주세요.',
+    NOT_INVITED:'이미 끝났거나 내게 온 대전 신청이 아니에요.',
+    INVITE_CLOSED:'대전 신청 시간이 지나서 다시 신청해야 해요.',
+    INVALID_TARGET:'대전 상대를 다시 선택해 주세요.',
+    SERVER_ERROR:'대전 서버에서 오류가 났어요. 잠시 뒤 다시 시도해 주세요.',
   });
 
   function create({ client, getIdentity }) {
@@ -37,7 +41,15 @@
     async function invoke(body) {
       identity();
       const { data, error } = await client.functions.invoke('pvp-match-v1', { body });
-      const code = error?.context?.error || error?.message || data?.error;
+      let responseError = null;
+      if (error?.context && typeof error.context.clone === 'function') {
+        try {
+          responseError = (await error.context.clone().json())?.error || null;
+        } catch {
+          responseError = null;
+        }
+      }
+      const code = responseError || data?.error || error?.context?.error || error?.message;
       if (error || data?.error) {
         const failure = new Error(messages[code] || '대전 서버에 연결하지 못했어요.');
         failure.code = code || 'PVP_SERVER_ERROR';

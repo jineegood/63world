@@ -27,6 +27,7 @@
       status,
       enter:reject,
       createCharacter:reject,
+      loadHallOfFame:reject,
       savePreferences:reject,
       transitionMap:reject,
       purchaseItem:reject,
@@ -220,6 +221,7 @@
     }
 
     const purchaseItem = (input) => forwardAuthorityAction('purchaseItem', input);
+    const loadHallOfFame = () => forwardAuthorityAction('loadHallOfFame');
     const equipItem = (input) => forwardAuthorityAction('equipItem', input);
     const unequipSlot = (input) => forwardAuthorityAction('unequipSlot', input);
     const enhanceWeapon = (input) => forwardAuthorityAction('enhanceWeapon', input);
@@ -247,6 +249,7 @@
       status:'ready',
       enter,
       createCharacter,
+      loadHallOfFame,
       savePreferences,
       transitionMap,
       purchaseItem,

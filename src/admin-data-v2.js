@@ -215,12 +215,35 @@
       return Object.freeze(data.events.map(sanitizeSecurityEvent));
     }
 
+    async function applyStudentCheatV3(userId, action) {
+      const targetUserId = validateUserId(userId);
+      await requireTeacher();
+      if (!['exp20', 'exp100', 'gold3000', 'building200', 'heal'].includes(action)) {
+        throw error('GRANT_FAILED');
+      }
+      const { data, error:cheatError } = await client.rpc('teacher_apply_student_cheat_v3', {
+        p_user_id:targetUserId,
+        p_action:action,
+      });
+      if (cheatError) throw mapError(cheatError, 'GRANT_FAILED');
+      if (!data?.ok) {
+        if (data?.code === 'COMBAT_ACTIVE') {
+          throw new AdminDataV2Error('COMBAT_ACTIVE', '전투 중에는 이 치트를 사용할 수 없어요.');
+        }
+        if (data?.code === 'STUDENT_NOT_FOUND') throw error('STUDENT_NOT_FOUND');
+        throw error('GRANT_FAILED');
+      }
+      if (!data.snapshot || typeof data.snapshot !== 'object') throw error('GRANT_FAILED');
+      return Object.freeze({ snapshot:data.snapshot });
+    }
+
     return Object.freeze({
       listStudents,
       grantReward,
       deleteStudent,
       resetPlayerV3,
       listSecurityEventsV3,
+      applyStudentCheatV3,
     });
   }
 

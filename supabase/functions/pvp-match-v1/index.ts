@@ -36,6 +36,10 @@ Deno.serve(async (request) => {
     return Response.json({ data:result }, { headers:{ ...cors, 'Content-Type':'application/json' } });
   } catch (error) {
     const code = String(error?.code || 'SERVER_ERROR');
+    console.error('pvp-match-v1 request failed', {
+      code,
+      message:String(error?.message || '').slice(0, 300),
+    });
     const status = code === 'UNAUTHENTICATED' ? 401 : code === 'SERVER_ERROR' ? 500 : 400;
     return Response.json({ error:code }, { status, headers:{ ...cors, 'Content-Type':'application/json' } });
   }

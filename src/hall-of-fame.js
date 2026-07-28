@@ -18,15 +18,37 @@
     'linear-gradient(180deg,#94a3b8,#475569)',
   ];
 
-  window.openHallOfFameV52 = function openHallOfFameV52() {
+  window.openHallOfFameV52 = async function openHallOfFameV52() {
     const getAll = call('getAllPlayers');
     const open = call('openModal');
     const esc = call('escapeHtml') || ((t) => String(t));
-    if (!getAll || !open) return;
-    const players = (getAll() || [])
-      .slice()
-      .sort((a, b) => (b.level - a.level) || (b.exp - a.exp) || (b.gold - a.gold))
-      .slice(0, 5);
+    if (!open) return;
+    open(`
+      <h2>🏆 명예의 전당</h2>
+      <div class="panel-card" style="text-align:center">
+        <p class="muted">서버 기록을 불러오는 중..</p>
+      </div>
+    `, { type:'hall', pause:true, wide:true });
+    let players;
+    try {
+      if (window.authorityV3Enabled?.()) {
+        players = await window.secureStudentAccessV2?.loadHallOfFame?.();
+      } else {
+        players = (getAll?.() || [])
+          .slice()
+          .sort((a, b) => (b.exp - a.exp) || (b.level - a.level) || (b.gold - a.gold))
+          .slice(0, 5);
+      }
+    } catch {
+      open(`
+        <h2>🏆 명예의 전당</h2>
+        <div class="panel-card" style="text-align:center">
+          <p>명예의 전당 기록을 불러오지 못했어요.</p>
+          <button class="primary" onclick="openHallOfFameV52()">다시 시도</button>
+        </div>
+      `, { type:'hall', pause:true, wide:true });
+      return;
+    }
     const meta = (typeof CLASS_META !== 'undefined') ? CLASS_META : { warrior:{name:'전사'}, mage:{name:'마법사'}, priest:{name:'사제'} };
     // 시상대 배치: 4위, 2위, 1위, 3위, 5위
     const order = [3, 1, 0, 2, 4];
@@ -42,7 +64,8 @@
         <div style="background:${STAND_COLOR[rank]};width:118px;height:${STAND_H[rank]}px;border-radius:8px 8px 0 0;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:${rank === 0 ? 22 : 17}px;color:rgba(15,23,42,.82);box-shadow:inset 0 3px 6px rgba(255,255,255,.35), 0 4px 10px rgba(0,0,0,.35)">${rank + 1}</div>
         <div style="margin-top:6px;text-align:center;line-height:1.35;width:100%;padding:0 4px">
           <b>${esc(p.name)}</b><br>
-          <small class="muted" style="white-space:nowrap">${meta[p.class]?.name || p.class} · ${esc(p.spec || '전문화 전')} · Lv.${p.level}</small>
+          <small class="muted" style="white-space:nowrap">${meta[p.class]?.name || p.class} · ${esc(p.spec || '전문화 전')} · Lv.${p.level}</small><br>
+          <small style="color:#c4b5fd;font-weight:800">EXP ${p.exp}</small>
         </div>
       </div>`;
     }).join('');

@@ -103,6 +103,7 @@ const secureStudentAccess = YuksamStudentAccessV2.create({
   storage:localStorage,
   defaultWorkbooks,
 });
+window.secureStudentAccessV2 = secureStudentAccess;
 let pvpClientV1 = null;
 window.getPvpIdentityV1 = () => secureStudentAccess.getIdentity();
 window.getPvpClientV1 = () => {
@@ -613,6 +614,12 @@ function applyAuthoritySnapshotV3(result) {
   game.currentMap = currentMap;
   updateHud();
 }
+window.applyAuthoritySnapshotFromServerV3 = function applyAuthoritySnapshotFromServerV3(snapshot) {
+  const player = window.YuksamPlayerAuthorityV3?.snapshotToLegacyPlayer?.(snapshot);
+  if (!player) return false;
+  applyAuthoritySnapshotV3({ player });
+  return true;
+};
 
 const authorityActionRunnerV3 = YuksamAuthorityActionRunnerV3.create({
   service:secureStudentAccess,
@@ -3900,10 +3907,17 @@ function bindEvents() {
   $('chooseSpecBtn').addEventListener('click', () => openSpecModal());
   $('openCharacterPanelBtn').addEventListener('click', () => openCharacterPanel());
   if ($('openSkillTreeBtn')) $('openSkillTreeBtn').addEventListener('click', () => openSkillTreeModal());
-  $('testExpBtn').addEventListener('click', () => { addExp(20); toast('테스트 EXP +20'); });
-  if ($('testExp100Btn')) $('testExp100Btn').addEventListener('click', () => { addExp(100); toast('테스트 EXP +100'); });
-  $('testGoldBtn').addEventListener('click', () => { addGold(3000); appendChatMessage('system', '테스트', 'Gold +3000'); });
-  if ($('testBuildingBtn')) $('testBuildingBtn').addEventListener('click', () => { addBuilding(200); appendChatMessage('system', '테스트', '빌딩 +200'); });
+  const runTestCheat = (action, legacyAction) => {
+    if (secureStudentAccess.authorityV3Enabled && window.adminApplyCurrentStudentCheatV3) {
+      window.adminApplyCurrentStudentCheatV3(action);
+      return;
+    }
+    legacyAction();
+  };
+  $('testExpBtn').addEventListener('click', () => runTestCheat('exp20', () => { addExp(20); toast('테스트 EXP +20'); }));
+  if ($('testExp100Btn')) $('testExp100Btn').addEventListener('click', () => runTestCheat('exp100', () => { addExp(100); toast('테스트 EXP +100'); }));
+  $('testGoldBtn').addEventListener('click', () => runTestCheat('gold3000', () => { addGold(3000); appendChatMessage('system', '테스트', 'Gold +3000'); }));
+  if ($('testBuildingBtn')) $('testBuildingBtn').addEventListener('click', () => runTestCheat('building200', () => { addBuilding(200); appendChatMessage('system', '테스트', '빌딩 +200'); }));
   $('returnTownBtn').addEventListener('click', () => { if (game.currentMap === 'forest' || game.currentMap === 'desert' || game.currentMap === 'swamp') confirmStageReturn(); else if (game.currentMap === 'bossRoom') returnToStageFromBossRoom(); else returnTownWithLoading(); });
   if ($('chatInput')) $('chatInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); sendChatMessage(); } });
 
@@ -5521,7 +5535,7 @@ function updateQuestTracker() {
         if (canPlayerMoveTo(game.player.x, ny)) game.player.y = ny;
         savePlayerPositionThrottled();
       }
-      if (clickMovementArrivalLockV1 !== game.currentMap) checkAutoTransitions();
+      checkAutoTransitions();
       if (['forest','desert','swamp','bossRoom'].includes(game.currentMap)) { updateForestMonsters(dt); updateStagePortalInteractions(); }
       if (game.attackTimer > 0) game.attackTimer = Math.max(0, game.attackTimer - dt);
       if (game.danceTimer > 0) game.danceTimer = Math.max(0, game.danceTimer - dt);
@@ -7712,7 +7726,9 @@ function wireAuthoritativeEconomyV3() {
   hudUpdatePipeline.register({
     id:'hud-skill-points-v24',
     priority:240,
-    before:() => { if (game.player) syncV24SkillPoints(); },
+    before:() => {
+      if (game.player && !secureStudentAccess.authorityV3Enabled) syncV24SkillPoints();
+    },
   });
 
   // 전투 시작 시 사망/로딩 후 남은 키 상태도 초기화한다.
@@ -8195,6 +8211,10 @@ function wireAuthoritativeEconomyV3() {
       healBtn.dataset.boundV25 = '1';
       healBtn.addEventListener('click', () => {
         if (!game.player) return;
+        if (secureStudentAccess.authorityV3Enabled && window.adminApplyCurrentStudentCheatV3) {
+          window.adminApplyCurrentStudentCheatV3('heal');
+          return;
+        }
         ensurePlayerHp?.();
         game.player.hp = game.player.maxHp;
         game.combatShield = Math.max(0, game.combatShield || 0);

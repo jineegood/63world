@@ -151,6 +151,12 @@ export function createSupabasePvpStore(client) {
     }
     return { ok:true, decision:decision.type };
   }
+  async function findActiveMatchForUser(id) {
+    const row = check(await client.from('pvp_matches_v1').select('*')
+      .or(`player_a_id.eq.${id},player_b_id.eq.${id}`)
+      .is('finished_at', null).neq('phase', 'cancelled').limit(1).maybeSingle());
+    return rowMatch(row);
+  }
   return {
     getAuthoritativeProfile,
     async getPresence(id) {
@@ -178,10 +184,7 @@ export function createSupabasePvpStore(client) {
         losses:Number(record.pvp_losses) || 0,
       } : null;
     },
-    async findActiveMatchForUser(id) {
-      const row = check(await client.from('pvp_matches_v1').select('*').or(`player_a_id.eq.${id},player_b_id.eq.${id}`).is('finished_at', null).neq('phase', 'cancelled').limit(1).maybeSingle());
-      return rowMatch(row);
-    },
+    findActiveMatchForUser,
     async createInvite(value) {
       return check(await client.from('pvp_invites_v1').insert({
         challenger_id:value.challengerId, target_id:value.targetId, request_id:value.requestId,
@@ -266,13 +269,23 @@ export function createSupabasePvpStore(client) {
         check(await client.from('pvp_invites_v1').update({ status:'declined', responded_at:new Date(now).toISOString() }).eq('id', invite.id).eq('status', 'pending'));
         return { accepted:false };
       }
-      const presenceRows = check(await client.from('pvp_presence_v1').select('*').in('user_id', [invite.challenger_id, invite.target_id]));
-      if (presenceRows.length !== 2 || presenceRows.some((row) => row.map !== 'town' || row.busy)) throw Object.assign(new Error(), { code:'TOWN_ONLY' });
-      const [aProfile, bProfile] = await Promise.all([
+      const [presenceRows, aProfile, bProfile, aMatch, bMatch] = await Promise.all([
+        client.from('pvp_presence_v1').select('*')
+          .in('user_id', [invite.challenger_id, invite.target_id]).then(check),
         getAuthoritativeProfile(invite.challenger_id),
         getAuthoritativeProfile(invite.target_id),
+        findActiveMatchForUser(invite.challenger_id),
+        findActiveMatchForUser(invite.target_id),
       ]);
       if (!aProfile || !bProfile) throw Object.assign(new Error(), { code:'PROFILE_MISSING' });
+      if (presenceRows.length !== 2
+        || presenceRows.some((row) => now - new Date(row.last_seen_at).getTime() > 15000)) {
+        throw Object.assign(new Error(), { code:'OFFLINE' });
+      }
+      if (aProfile.map !== 'town' || bProfile.map !== 'town') {
+        throw Object.assign(new Error(), { code:'TOWN_ONLY' });
+      }
+      if (aMatch || bMatch) throw Object.assign(new Error(), { code:'BUSY' });
       const a = helpers.normalizeSnapshot({ ...aProfile, userId:invite.challenger_id });
       const b = helpers.normalizeSnapshot({ ...bProfile, userId:invite.target_id });
       a.hp = a.maxHp; a.shield = 0; b.hp = b.maxHp; b.shield = 0;

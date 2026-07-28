@@ -35,7 +35,7 @@
     INVALID_MAP:'이동할 수 없는 장소입니다.',
     INVALID_MAP_TRANSITION:'현재 장소에서는 그곳으로 이동할 수 없습니다.',
     LOCKED_MAP:'아직 입장할 수 없는 장소입니다.',
-    LEVEL_REQUIRED:'입장에 필요한 레벨이 부족합니다.',
+    LEVEL_REQUIRED:'레벨이 부족합니다.',
     REVISION_CONFLICT:'다른 기기에서 변경된 내용을 다시 불러왔습니다.',
     REQUEST_ID_REUSED:'중복 요청을 안전하게 차단했습니다. 다시 시도해 주세요.',
     INVALID_REQUEST:'요청 값이 올바르지 않습니다.',
@@ -358,6 +358,38 @@
       return call('load_student_game_v3');
     }
 
+    async function loadHallOfFame() {
+      let result;
+      try {
+        result = await client.rpc('list_hall_of_fame_v3');
+      } catch {
+        throw new PlayerAuthorityV3Error('RPC_FAILED');
+      }
+      const data = result?.data;
+      if (result?.error || !isPlainObject(data) || data.ok !== true || !Array.isArray(data.entries)) {
+        throw new PlayerAuthorityV3Error('RPC_FAILED');
+      }
+      return Object.freeze(data.entries.slice(0, 5).map((entry) => {
+        if (!isPlainObject(entry) || !isPlainObject(entry.appearance)
+          || !isPlainObject(entry.equipment) || !isPlainObject(entry.costume)) {
+          failSnapshot();
+        }
+        const className = safeString(entry.className, 1, 20);
+        if (!CLASSES.has(className)) failSnapshot();
+        return Object.freeze({
+          name:safeString(entry.name, 1, 20),
+          class:className,
+          spec:safeNullableString(entry.spec, 40),
+          level:safeInteger(entry.level, 1, 10),
+          exp:safeInteger(entry.exp, 0),
+          gold:safeInteger(entry.gold, 0),
+          appearance:clonePlainJson(entry.appearance, 2048),
+          equipment:clonePlainJson(entry.equipment, 2048),
+          costume:clonePlainJson(entry.costume, 2048),
+        });
+      }));
+    }
+
     async function savePreferences({
       preferences,
       expectedRevision:providedRevision,
@@ -495,6 +527,7 @@
     return Object.freeze({
       createCharacter,
       loadGame,
+      loadHallOfFame,
       savePreferences,
       transitionMap,
       purchaseItem,
