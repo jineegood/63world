@@ -34,6 +34,7 @@ function dependencies(overrides = {}) {
     async refreshWorkbooks() { calls.push(['refreshWorkbooks']); return { workbooks:[], source:'remote' }; },
     getServerOpen() { return true; },
     getWorkbooks() { return []; },
+    setLocalWorkbooks(items) { calls.push(['setLocalWorkbooks', items]); },
     startPolling(options) { calls.push(['startPolling', options]); },
     stopPolling() { calls.push(['stopPolling']); },
     ...overrides.sharedService,
@@ -63,6 +64,9 @@ function dependencies(overrides = {}) {
     async learnSkill(input) { calls.push(['authorityLearnSkill', input]); return { revision:15 }; },
     async summonPet(input) { calls.push(['authoritySummonPet', input]); return { revision:16 }; },
     async setActivePet(input) { calls.push(['authoritySetActivePet', input]); return { revision:17 }; },
+    async acceptQuest(input) { calls.push(['authorityAcceptQuest', input]); return { revision:18 }; },
+    async claimQuest(input) { calls.push(['authorityClaimQuest', input]); return { revision:19 }; },
+    async receiveQuestGift(input) { calls.push(['authorityReceiveQuestGift', input]); return { revision:20 }; },
     ...overrides.authorityService,
   };
   return {
@@ -366,4 +370,47 @@ test('v3 signout skips legacy profile flush and still signs out Auth', async () 
     .filter(([name]) => ['flush', 'signOut'].includes(name))
     .map(([name]) => name);
   assert.equal(JSON.stringify(important), JSON.stringify(['signOut']));
+});
+
+/* [v59] 게임이 부르는 함수가 실제로 존재하는지 대조한다.
+   퀘스트 수락이 "is not a function"으로 막혔던 사고를 다시 겪지 않기 위한 그물이다. */
+test('every secureStudentAccess call in the game exists on both controllers', () => {
+  const gameSource = fs.readFileSync(path.join(root, 'game.js'), 'utf8');
+  const used = new Set(
+    [...gameSource.matchAll(/secureStudentAccess\.([a-zA-Z_$][\w$]*)/g)].map((match) => match[1]),
+  );
+  // 속성으로만 읽는 값은 호출 대상이 아니다
+  for (const property of ['enabled', 'authorityV3Enabled', 'status']) used.delete(property);
+  assert.ok(used.size > 0, 'game.js에서 secureStudentAccess 사용을 찾지 못했습니다');
+
+  const api = loadApi();
+  const open = api.create({ config:validConfig({ serverAuthorityV3Enabled:true }), ...dependencies() });
+  const closed = api.create({});
+
+  const missingOpen = [...used].filter((name) => typeof open[name] !== 'function');
+  assert.deepEqual(missingOpen, [], `열린 상태에 없는 함수: ${missingOpen.join(', ')}`);
+
+  const missingClosed = [...used].filter((name) => typeof closed[name] !== 'function');
+  assert.deepEqual(missingClosed, [], `닫힌 상태에 없는 함수: ${missingClosed.join(', ')}`);
+});
+
+test('quest actions reach the authority layer instead of vanishing', async () => {
+  const api = loadApi();
+  const deps = dependencies();
+  const controller = api.create({ config:validConfig({ serverAuthorityV3Enabled:true }), ...deps });
+  await controller.enter('별빛', 'secret-123');
+
+  const expected = {
+    acceptQuest:'authorityAcceptQuest',
+    claimQuest:'authorityClaimQuest',
+    receiveQuestGift:'authorityReceiveQuestGift',
+  };
+  for (const [method, authorityCall] of Object.entries(expected)) {
+    assert.equal(typeof controller[method], 'function', `${method} 가 없습니다`);
+    await controller[method]({ questId:'mushroom_hunt', expectedRevision:1 });
+    assert.ok(
+      deps.calls.some(([name]) => name === authorityCall),
+      `${method} 호출이 서버 판정 계층까지 가지 않았습니다`,
+    );
+  }
 });

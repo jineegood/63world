@@ -152,7 +152,7 @@ const game = {
   dialogue: { page: 0, selected: 0, mode: 'base' },
   currentCombatAction: null,
   combatShield: 0,
-  settings: { bgmVolume: 0.10, sfxVolume: 1.0, bgmEnabled: true, sfxEnabled: true }, // [피드백] 기본 배경음 10%, 효과음 100%
+  settings: window.YuksamAudioDefaults.defaultSettings(), // 기본 배경음 15, 효과음 60 (src/audio-defaults.js)
   audio: { ctx: null, master: null, bgmGain: null, bgmTimer: null, started: false, file: null, fileGain: 0 },
   combatHpDisplay: null,
   combatIntroUntil: 0,
@@ -851,6 +851,8 @@ window.getLocalPvpProfileV1 = function getLocalPvpProfileV1() {
   };
 };
 
+// drawPlayerSprite가 머리 중심을 기준점 위 몇 배율에 그리는지 (아래 arc(0, -16 * scale) 와 짝을 이룬다)
+const PORTRAIT_HEAD_OFFSET_UNITS = 16;
 window.renderPlayerPortraitForPvpV1 = function renderPlayerPortraitForPvpV1(canvas, profile) {
   const ctx = canvas?.getContext?.('2d');
   if (!ctx || !profile) return;
@@ -861,14 +863,18 @@ window.renderPlayerPortraitForPvpV1 = function renderPlayerPortraitForPvpV1(canv
   ctx.clip();
   ctx.fillStyle = '#dbeafe';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // [v59] 얼굴이 동그라미 한가운데 오도록 맞춘다.
+  // drawPlayerSprite는 머리 중심을 기준점보다 (16 × 배율)만큼 위에 그리므로, 그만큼 아래에서 시작한다.
+  const portraitScale = 3.25;
+  const headOffset = PORTRAIT_HEAD_OFFSET_UNITS * portraitScale;
   drawPlayerSprite(
     ctx,
     canvas.width / 2,
-    canvas.height + 48,
+    canvas.height / 2 + headOffset,
     profile.appearance || {},
     profile.className || 'warrior',
     { attack:0, moving:false, equipment:profile.equipment || {}, costume:profile.costume || {} },
-    3.25,
+    portraitScale,
     profile.spec || null,
   );
   ctx.restore();
@@ -6487,9 +6493,8 @@ function wireAuthoritativeEconomyV3() {
   if (window.__YUKSAM_V21_PATCH__) return;
   window.__YUKSAM_V21_PATCH__ = true;
 
-  // 기본 음량 재조정: 배경음 20% 감소, 효과음 30% 증가
-  game.settings.bgmVolume = 0.21;
-  game.settings.sfxVolume = 0.94;
+  // [v59] 기본 음량은 src/audio-defaults.js 한 곳에서만 정한다(로그인 화면과 게임 안이 달라지지 않게)
+  Object.assign(game.settings, window.YuksamAudioDefaults.defaultSettings());
   try { updateAudioVolumes(); } catch {}
 
   // 인게임 환경설정 버튼 복구

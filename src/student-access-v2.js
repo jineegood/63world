@@ -35,6 +35,11 @@
       enhanceWeapon:reject,
       chooseSpecialization:reject,
       learnSkill:reject,
+      summonPet:reject,
+      setActivePet:reject,
+      acceptQuest:reject,
+      claimQuest:reject,
+      receiveQuestGift:reject,
       savePlayer:rejectSync,
       flush:reject,
       signOut:reject,
@@ -222,6 +227,10 @@
     const learnSkill = (input) => forwardAuthorityAction('learnSkill', input);
     const summonPet = (input) => forwardAuthorityAction('summonPet', input);
     const setActivePet = (input) => forwardAuthorityAction('setActivePet', input);
+    // [v59] 퀘스트 수락·보상·코스튬 선물이 서버까지 연결되지 않아 진행이 막혔던 것을 잇는다
+    const acceptQuest = (input) => forwardAuthorityAction('acceptQuest', input);
+    const claimQuest = (input) => forwardAuthorityAction('claimQuest', input);
+    const receiveQuestGift = (input) => forwardAuthorityAction('receiveQuestGift', input);
 
     async function signOut() {
       try {
@@ -248,6 +257,9 @@
       learnSkill,
       summonPet,
       setActivePet,
+      acceptQuest,
+      claimQuest,
+      receiveQuestGift,
       savePlayer,
       flush,
       signOut,

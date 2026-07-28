@@ -20,6 +20,8 @@
     "test:combat-entry-pipeline": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 combat-entry-pipeline",
     "test:combat-frame-pipeline": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 combat-frame-pipeline",
     "test:audio-volume-pipeline": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 audio-volume-pipeline",
+    "test:audio-defaults": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 audio-defaults",
+    "test:profile-portrait": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 profile-portrait",
     "test:combat-rules": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 combat-rules",
     "test:combat-sequence-controller": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 combat-sequence-controller",
     "test:combat-flow": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 combat-flow",
