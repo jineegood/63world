@@ -87,5 +87,6 @@ test('surrender and expired resume apply the authoritative hp snapshot before cl
 test('answer keys never enter authoritative browser state', () => {
   assert.doesNotMatch(patch, /\.answer\s*=/);
   assert.doesNotMatch(patch, /answerKey|answer_key/);
-  assert.match(patch, /response\.correctAnswer/);
+  // 정답은 저장하지 않고 서버 응답에서 그때그때 읽어야 한다 (response.x / response?.x 모두 허용)
+  assert.match(patch, /response\??\.correctAnswer/);
 });
