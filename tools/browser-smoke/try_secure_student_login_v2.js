@@ -91,6 +91,9 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   if ($('toast').textContent) console.log('LOGIN ERROR: ' + $('toast').textContent);
 
   if (mode === 'new') {
+    // 새 캐릭터는 "새 캐릭터를 등록합니다" 연출을 지나 생성창으로 간다 (연출 1.7초)
+    check('new account announces the new character', $('cinematicTitle').textContent.includes('새 캐릭터'));
+    await sleep(1800);
     check('new account opens character creator', $('creator').classList.contains('active'));
     click('createCharacterBtn');
     await sleep(1350);

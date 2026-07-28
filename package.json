@@ -27,6 +27,7 @@
     "test:combat-flow": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 combat-flow",
     "test:combat-fx": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 combat-fx",
     "test:combat-log-v3": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 combat-log-v3",
+    "test:server-combat-polish": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 server-combat-polish",
     "test:sfx-map": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 sfx-map",
     "test:audio-manifest": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 audio-manifest",
     "test:audio-dispatcher": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 audio-dispatcher",

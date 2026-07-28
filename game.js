@@ -1045,6 +1045,8 @@ function playSynthSfx(name) {
   if (name === 'transition') { [330, 440, 660, 880].forEach((f, i) => setTimeout(() => playTone(f, .12, 'sine', .10), i * 90)); return; }
   if (name === 'attack') { playTone(300, .08, 'square', .15); setTimeout(() => playTone(140, .08, 'square', .12), 60); return; }
   if (name === 'open') { playTone(620, .10, 'sine', .16); return; }
+  // [v59] 대화를 넘길 때 나는 아주 짧고 작은 소리 (여러 번 눌러도 거슬리지 않게 낮은 음량)
+  if (name === 'dialogue') { playTone(880, .045, 'sine', .07); return; }
 }
 
 const audioAdapters = {
@@ -4793,12 +4795,29 @@ async function handleStudentLogin() {
       return;
     }
   }
-  game.selectedClass = 'warrior';
-  game.currentAppearance = randomAppearance();
-  $('creatorNameLabel').textContent = name;
-  document.querySelectorAll('.classBtn').forEach((btn) => btn.classList.toggle('selected', btn.dataset.class === 'warrior'));
-  drawPreview();
-  showScreen('creator');
+  // [v59] 보안 로그인에서도 "새 캐릭터를 등록합니다" 연출을 그대로 보여준다
+  const showCreator = () => {
+    game.selectedClass = 'warrior';
+    game.currentAppearance = randomAppearance();
+    $('creatorNameLabel').textContent = name;
+    document.querySelectorAll('.classBtn').forEach((btn) => btn.classList.toggle('selected', btn.dataset.class === 'warrior'));
+    drawPreview();
+    showScreen('creator');
+  };
+  const overlay = $('cinematicOverlay');
+  if (!overlay) { showCreator(); return; }
+  $('cinematicTitle').textContent = '새 캐릭터를 등록합니다';
+  $('cinematicSub').textContent = '잠시 후 캐릭터 생성창으로 이동합니다.';
+  overlay.classList.remove('hidden', 'leaving');
+  overlay.classList.add('visible');
+  playSfx('world');
+  setTimeout(() => overlay.classList.add('leaving'), 1250);
+  setTimeout(() => {
+    overlay.classList.add('hidden');
+    overlay.classList.remove('visible', 'leaving');
+    showCreator();
+    syncAudioFileBgm?.();
+  }, 1700);
 }
 
 function hasAvailableQuest() {
@@ -5604,7 +5623,7 @@ function installAuthoritativeQuestFlowV3() {
       closeModal();
       if (id === 'tut_healing_well') {
         playSfx('enemyAttack');
-        try { triggerScreenShakeV19(); } catch { triggerScreenShake?.(); }
+        window.triggerScreenShakeV19?.();
         showCinematicMessage('회복 훈련!', '명진쌤의 안전한 훈련 공격! HP가 1이 되었어요. 치유의 우물로 가 보세요.', 2600);
       } else {
         playSfx('quest');
@@ -5695,8 +5714,7 @@ function installAuthoritativeQuestFlowV3() {
         : `<div class="answer-row"><input id="healingAnswer" maxlength="512" placeholder="정답 입력">
            <button class="primary" onclick="submitAuthorityHealingAnswerV3(document.getElementById('healingAnswer').value)">회복</button></div>`;
       openModal(`<h2>치유의 우물</h2><div class="panel-card">
-        <p>문제를 맞히면 HP가 모두 회복됩니다.</p><h3>${prompt}</h3>${answerUi}
-        <p class="muted">정답은 서버가 안전하게 확인합니다.</p></div>`,
+        <p>문제를 맞히면 HP가 모두 회복됩니다.</p><h3>${prompt}</h3>${answerUi}</div>`,
       { type:'healingWell', pause:true });
     } catch (error) {
       toast(error?.message || '치유 문제를 불러오지 못했습니다.');
@@ -6108,6 +6126,9 @@ function wireAuthoritativeEconomyV3() {
     el.classList.add('screen-shake');
     setTimeout(() => el.classList.remove('screen-shake'), 920);
   }
+  // [v59] 다른 패치 블록(v17의 서버 퀘스트 처리 등)에서도 부를 수 있게 전역으로 노출한다.
+  // 이전에는 스코프 밖이라 ReferenceError가 나면서 회복 훈련의 흔들림 연출이 뜨지 않았다.
+  window.triggerScreenShakeV19 = triggerScreenShakeV19;
 
   function rollPlayerCriticalV19() { return Math.random() < 0.15; }
   function rollMonsterCriticalV19() { return Math.random() < 0.15; }
@@ -6656,7 +6677,7 @@ function wireAuthoritativeEconomyV3() {
     });
     if (!result?.applied) return false;
     playSfx('enemyAttack');
-    try { triggerScreenShakeV19(); } catch { triggerScreenShake?.(); }
+    window.triggerScreenShakeV19?.();
     savePlayer();
     updateHud();
     showCinematicMessage('회복 훈련!', '명진쌤의 안전한 훈련 공격! HP가 1이 되었어요. 치유의 우물에서 문제를 풀어 회복해 보세요.', 2600);
@@ -6750,9 +6771,9 @@ function wireAuthoritativeEconomyV3() {
     }) || '';
     openModal(`<div class="dialogue-box${dialogueTheme}"><div class="dialogue-speaker"><h2>명진쌤 ${marker ? `<span class="badge quest-marker-badge">${marker}</span>` : ''}</h2><div class="badge">클릭 또는 E키로 진행</div></div><div class="dialogue-text">${YuksamQuestText.emphasize(text)}</div><div class="dialogue-options">${options.map((opt,i)=>`<button class="${i===game.dialogue.selected?'selected':''}" onclick="${opt.action}">${YuksamQuestText.emphasize(opt.label)}</button>`).join('')}</div></div>`, { type:'dialogue', pause:true });
   }
-  window.startQuestStory = function startQuestStoryV21() { game.dialogue = { page: 0, selected: 0, mode: 'quest' }; renderNpcDialogueV21(); };
-  window.nextDialoguePage = function nextDialoguePageV21() { const id = getCurrentQuestIdForNpcV21(); const def = QUEST_DEFS[id]; game.dialogue.page = Math.min((def?.pages?.length || 1) - 1, (game.dialogue.page || 0) + 1); renderNpcDialogueV21(); };
-  window.prevDialoguePage = function prevDialoguePageV21() { game.dialogue.page = Math.max(0, (game.dialogue.page || 0) - 1); renderNpcDialogueV21(); };
+  window.startQuestStory = function startQuestStoryV21() { playSfx('dialogue'); game.dialogue = { page: 0, selected: 0, mode: 'quest' }; renderNpcDialogueV21(); };
+  window.nextDialoguePage = function nextDialoguePageV21() { const id = getCurrentQuestIdForNpcV21(); const def = QUEST_DEFS[id]; const last = (def?.pages?.length || 1) - 1; const next = Math.min(last, (game.dialogue.page || 0) + 1); if (next !== game.dialogue.page) playSfx('dialogue'); game.dialogue.page = next; renderNpcDialogueV21(); };
+  window.prevDialoguePage = function prevDialoguePageV21() { const prev = Math.max(0, (game.dialogue.page || 0) - 1); if (prev !== game.dialogue.page) playSfx('dialogue'); game.dialogue.page = prev; renderNpcDialogueV21(); };
   openQuestNpc = function openQuestNpcV21() { game.dialogue = { page: 0, selected: 0, mode: 'base' }; renderNpcDialogueV21(); };
 
   acceptQuest = function acceptQuestV21(id = 'mushroom_hunt') {
@@ -13451,6 +13472,9 @@ function wireAuthoritativePveCombatV3() {
     const outcome = String(response?.outcome || 'continue');
     applyServerPlayer(response, response.outcome === 'defeat');
     if (response?.session) applySession(response.session, monster);
+    // [v59] 연출 재생기는 몬스터가 이미 죽어 있으면 큐를 통째로 버리고 완료 신호도 보내지 않는다.
+    // 그래서 쓰러뜨리는 처리는 로그가 끝난 뒤(finishVictory)에 하고, 그때까지는 살아 있는 것으로 둔다.
+    if (outcome === 'victory' && monster) monster.alive = true;
     // [v59] 서버 결과를 예전 로컬 전투와 같은 연출 지시서로 번역한다.
     // 예전에는 이름표(type)가 없어 연출 재생기가 로그를 전부 버렸다.
     const skillId = String(game.currentCombatAction || '').startsWith('active:')
@@ -13486,17 +13510,29 @@ function wireAuthoritativePveCombatV3() {
     if (!isActive()) return;
     const prompt = escapeHtml(game.currentQuestion?.q || '문제를 확인하세요.');
     const choices = game.currentQuestion?.choices || [];
-    const answerBox = choices.length
-      ? `<div class="combat-choices">${choices.map((choice, index) => (
-        `<button class="primary" onclick="submitAuthorityPveChoiceV3(${index})">${escapeHtml(String(choice))}</button>`
-      )).join('')}</div>`
-      : `<input id="combatAnswer" autocomplete="off" maxlength="512" placeholder="정답 입력">
-         <button class="primary" onclick="submitCombatAnswer()">정답 제출</button>`;
-    renderCombatFrame('서버가 안전하게 출제한 문제입니다.', `
-      <div class="panel-card"><b>${prompt}</b></div>
-      ${answerBox}
-      <p class="muted">정답과 피해량은 서버가 확인합니다.</p>
+    // [v59] 예전 로컬 전투와 같은 2×2 보기 배치로 되돌린다 (combat-choices는 스타일이 없어 버튼이 붙어 나왔다)
+    const label = game.currentCombatAction && game.currentCombatAction !== 'attack'
+      ? (SKILL_DEFS[String(game.currentCombatAction).replace(/^active:/, '')]?.active?.name || '스킬')
+      : '공격';
+    const answerBox = choices.length ? `
+      <div class="choice-grid">
+        ${choices.map((choice, index) => (
+          `<button onclick="submitAuthorityPveChoiceV3(${index})"><span class="objective-chip">${index + 1}</span>${escapeHtml(String(choice))}</button>`
+        )).join('')}
+      </div>` : `
+      <div class="answer-row">
+        <input id="combatAnswer" autocomplete="off" maxlength="512" placeholder="정답 입력" onkeydown="if(event.key==='Enter') submitCombatAnswer()" autofocus />
+        <button class="primary" onclick="submitCombatAnswer()">정답 제출</button>
+      </div>`;
+    renderCombatFrame(`${label}을 사용하려면 문제를 맞히세요.`, `
+      <div class="combat-question">
+        <div class="badge">${escapeHtml(label)}</div>
+        <h3>${prompt}</h3>
+        ${answerBox}
+        <div class="action-row"><button class="ghost" onclick="renderCombatMenu('다른 행동을 선택하세요.')">취소</button></div>
+      </div>
     `);
+    if (!choices.length) setTimeout(() => $('combatAnswer')?.focus(), 50);
   }
 
   function renderAuthorityMenuV3(message = '무엇을 할까?') {
@@ -13507,7 +13543,6 @@ function wireAuthoritativePveCombatV3() {
         <button class="primary" ${busy ? 'disabled' : ''} onclick="chooseCombatAction('skill')">스킬</button>
         <button class="ghost" ${busy ? 'disabled' : ''} onclick="escapeCombat()">전투 그만두기</button>
       </div>
-      <p class="muted">전투 결과는 서버가 계산하고 이 화면은 결과만 보여줍니다.</p>
     `);
   }
 
@@ -13529,7 +13564,7 @@ function wireAuthoritativePveCombatV3() {
     const actionId = game.currentCombatAction === 'attack' ? 'basic' : String(game.currentCombatAction || '');
     if (!actionId) return;
     busy = true;
-    renderCombatFrame('서버가 채점하고 있습니다...', '<p class="muted">잠시만 기다려 주세요.</p>');
+    renderCombatFrame('채점 중...', '<p class="muted">잠시만 기다려 주세요.</p>');
     try {
       const response = await getClient().submitTurn(
         session.question.questionToken,
