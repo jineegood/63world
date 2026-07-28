@@ -31,7 +31,8 @@
 
   function applyTrainingAccept({ questId, player, questState } = {}) {
     if (questId !== 'tut_healing_well' || !player || !questState
-      || questState.status !== 'accepted' || questState.trainingApplied) {
+      || questState.status !== 'accepted'
+      || (questState.trainingApplied && Number(player.hp) <= 1)) {
       return Object.freeze({ applied:false, hp:null });
     }
     questState.trainingApplied = true;

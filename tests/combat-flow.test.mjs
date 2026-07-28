@@ -123,7 +123,7 @@ test('active async combat flow prevents escape reentry and emits poison last', {
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   assert.match(result.stdout, /PASS: projectile monsters wind up on their action and launch at the landed damage notice/);
   assert.match(result.stdout, /PASS: missed monster hits play miss audio without a damaging projectile impact/);
-  assert.match(result.stdout, /PASS: wrong answer is the first event/);
+  assert.match(result.stdout, /PASS: wrong answer and its correction share the first event/);
   assert.match(result.stdout, /PASS: escape during an active sequence does not add damage/);
   assert.match(result.stdout, /PASS: poison is the final event/);
   assert.match(result.stdout, /PASS: elite Hardening emits only its technique and shield events/);

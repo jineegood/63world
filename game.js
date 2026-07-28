@@ -1668,18 +1668,32 @@ function drawFancyBuilding(ctx, x, y, w, h, roofColor, label, icon = 'none') {
 function drawPortalWorld(x, y, r) {
   const p = worldToScreen(x, y);
   drawPortalSprite(game.ctx, p.x, p.y, r * .44, performance.now() / 700);
-  drawPortalInteractionRingV60(p.x, p.y, isNearPoint({ x, y }, r + 54));
+  drawPortalInteractionRingV60(p.x, p.y, isNearPoint({ x, y }, r + 54), {
+    color:'250,204,21',
+    lineWidth:5,
+    radiusX:58,
+    radiusY:21,
+    offsetY:28,
+  });
 }
 
-function drawPortalInteractionRingV60(x, y, highlighted) {
+function drawPortalInteractionRingV60(x, y, highlighted, options = {}) {
   if (!highlighted) return;
   const ctx = game.ctx;
   ctx.save();
   const pulse = .6 + Math.sin(performance.now() / 180) * .22;
-  ctx.strokeStyle = `rgba(137,230,255,${pulse})`;
-  ctx.lineWidth = 4;
+  ctx.strokeStyle = `rgba(${options.color || '137,230,255'},${pulse})`;
+  ctx.lineWidth = Number(options.lineWidth) || 4;
   ctx.beginPath();
-  ctx.ellipse(x, y + 24, 34, 13, 0, 0, Math.PI * 2);
+  ctx.ellipse(
+    x,
+    y + (Number(options.offsetY) || 24),
+    Number(options.radiusX) || 34,
+    Number(options.radiusY) || 13,
+    0,
+    0,
+    Math.PI * 2
+  );
   ctx.stroke();
   ctx.restore();
 }
@@ -6086,18 +6100,24 @@ function updateQuestTracker() {
   };
 
   function applyHealingTrainingAcceptV3(id) {
+    if (id !== 'tut_healing_well') return false;
+    const questState = getQuestState(id);
     const result = window.YuksamQuestTutorialPolishV3?.applyTrainingAccept({
       questId:id,
       player:game.player,
-      questState:getQuestState(id),
+      questState,
     });
-    if (!result?.applied) return false;
+    if (!result?.applied) {
+      if (!questState || questState.status !== 'accepted' || Number(game.player?.hp) <= 1) return false;
+      questState.trainingApplied = true;
+      game.player.hp = 1;
+    }
+    game.player.hp = 1;
+    game.combatImpact = { target:'player', until:Date.now() + 900 };
     playSfx('enemyAttack');
     try { triggerScreenShakeV19(); } catch { triggerScreenShake?.(); }
     savePlayer();
     updateHud();
-    window.triggerScreenShakeV19?.();
-    game.combatImpact = { target:'player', until:Date.now() + 900 };
     playSfx('critical');
     showCinematicMessage('치명타!', '명진쌤의 안전한 훈련 공격! HP가 1이 되었어요. 치유의 우물에서 문제를 풀어 회복해 보세요.', 2600);
     appendChatMessage('system', '회복 훈련', '명진쌤의 훈련 공격으로 HP가 1이 되었습니다.');
@@ -6211,7 +6231,18 @@ function updateQuestTracker() {
     }
     savePlayer(); updateQuestTracker();
   };
-  window.acceptCurrentQuest = function acceptCurrentQuestV21(id) { if (getQuestState(id)) { toast('이미 받은 퀘스트입니다.'); return; } if (id !== 'tut_healing_well') playSfx('quest');
+  window.acceptCurrentQuest = function acceptCurrentQuestV21(id) {
+    const existingQuest = getQuestState(id);
+    if (existingQuest) {
+      if (id === 'tut_healing_well' && existingQuest.status === 'accepted' && Number(game.player?.hp) > 1) {
+        closeModal();
+        applyHealingTrainingAcceptV3(id);
+        return;
+      }
+      toast('이미 받은 퀘스트입니다.');
+      return;
+    }
+    if (id !== 'tut_healing_well') playSfx('quest');
     acceptQuest(id);
     closeModal();
     if (!applyHealingTrainingAcceptV3(id)) {
@@ -8675,8 +8706,13 @@ function updateQuestTracker() {
     const wrongHits = result.hitInfo;
     const effectBatchId = `${monster.id}:wrong:${game.combatEffectSerial = (Number(game.combatEffectSerial) || 0) + 1}`;
     const events = [
-      { type:'answer-wrong', text:'오답입니다!', tone:'enemy-action', duration:700 },
-      { type:'answer-wrong', text:`정답은 ${correctAnswer}`, tone:'correct-answer', duration:2200, preserveDuration:true },
+      {
+        type:'answer-wrong',
+        text:`오답입니다! 정답은 ${correctAnswer} (오답이라 데미지가 절반만 들어갑니다)`,
+        tone:'correct-answer',
+        duration:2200,
+        preserveDuration:true,
+      },
     ];
     wrongHits.forEach((hit, index) => {
       events.push({

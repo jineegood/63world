@@ -16,7 +16,8 @@ test('wrong answers show the answer in green, deal half damage, then allow the c
   assert.match(wrongBranch, /wrongHitDamage/);
   assert.match(wrongBranch, /Number\(active\.multiplier\) === 0/);
   assert.doesNotMatch(wrongBranch, /critRollV25|applyPlayerChillToActionV25|supportEffects/);
-  assert.match(wrongBranch, /정답은 \$\{correctAnswer\}/);
+  assert.match(wrongBranch, /오답입니다! 정답은 \$\{correctAnswer\} \(오답이라 데미지가 절반만 들어갑니다\)/);
+  assert.equal((wrongBranch.match(/type:'answer-wrong'/g) || []).length, 1);
   assert.match(wrongBranch, /tone:'correct-answer'/);
   assert.match(wrongBranch, /duration:2[0-9]{3}/);
   assert.match(wrongBranch, /preserveDuration:true/);

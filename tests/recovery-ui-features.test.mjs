@@ -22,6 +22,8 @@ test('healing wells and portals retain their visual guidance', () => {
   assert.match(game, /healing-well-quiz-image/);
   assert.match(game, /healing-well-choice-grid/);
   assert.match(game, /drawPortalInteractionRingV60/);
+  assert.match(game, /color:'250,204,21'/);
+  assert.match(game, /radiusX:58/);
   assert.match(game, /tryClickInteractOnArrivalV59/);
   assert.match(style, /\.healing-well-quiz-image/);
 });

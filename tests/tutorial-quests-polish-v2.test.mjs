@@ -41,7 +41,7 @@ test('successful learning remains wired while ordinary costume buying is not the
   assert.match(game, /tut_skill[\s\S]*Object\.values\(game\.player\.skills/);
 });
 
-test('healing-well training attack is safe and only applies once', () => {
+test('healing-well training attack is safe and can recover a stale accepted tutorial', () => {
   const api = loadTutorialApi();
   const player = { hp:37 };
   const quest = { status:'accepted', progress:0, target:1 };
@@ -52,6 +52,9 @@ test('healing-well training attack is safe and only applies once', () => {
   assert.equal(player.hp, 1);
   assert.equal(quest.trainingApplied, true);
   assert.equal(api.applyTrainingAccept({ questId:'tut_healing_well', player, questState:quest }).applied, false);
+  player.hp = 37;
+  assert.equal(api.applyTrainingAccept({ questId:'tut_healing_well', player, questState:quest }).applied, true);
+  assert.equal(player.hp, 1);
 });
 
 test('a correct healing-well answer completes the tutorial even when hp was already full', () => {
