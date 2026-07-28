@@ -18,6 +18,9 @@ test('secure teacher dashboard uses the separate shared-state service in product
   const config = fs.readFileSync(path.join(root, 'src/cloud-config.js'), 'utf8');
   assert.match(source, /secureAdminSharedV2\s*=\s*window\.YuksamSharedStateV2\.create/);
   assert.match(source, /await secureAdminSharedV2\.saveWorkbooks/);
+  assert.match(source, /await secureAdminSharedV2\.refreshWorkbooks/);
+  assert.match(source, /adminDeleteSelectedWorkbookQuestions/);
+  assert.match(source, /checkedWorkbookQuestionsV2/);
   assert.match(source, /await secureAdminSharedV2\.setServerOpen/);
   assert.match(config, /securityV2Enabled\s*:\s*true/);
 });

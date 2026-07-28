@@ -5727,10 +5727,7 @@ function installAuthoritativeQuestFlowV3() {
     pending = true;
     openModal(`<h2>치유의 우물</h2>
       <div class="panel-card healing-well-loading">
-        <img class="healing-well-quiz-image" src="assets/치유의 우물.png" alt="치유의 우물">
-        <h3>치유의 우물이다!</h3>
-        <p>문제를 맞히면 회복할 수 있다!</p>
-        <p class="muted">회복 문제를 불러오는 중...</p>
+        <p class="muted">회복 문제를 불러오는 중..</p>
       </div>`, { type:'healingWell', pause:true });
     try {
       const response = await getHealingClient().startHealing(game.player.serverRevision);
@@ -5744,7 +5741,7 @@ function installAuthoritativeQuestFlowV3() {
         : `<div class="answer-row"><input id="healingAnswer" maxlength="512" placeholder="정답 입력">
            <button class="primary" onclick="submitAuthorityHealingAnswerV3(document.getElementById('healingAnswer').value)">회복</button></div>`;
       openModal(`<h2>치유의 우물</h2><div class="panel-card">
-        <p>문제를 맞히면 HP가 모두 회복됩니다.</p>
+        <p class="healing-well-intro">치유의 우물이다!<br><strong>문제를 맞히면 HP가 모두 회복됩니다!</strong></p>
         <img class="healing-well-quiz-image" src="assets/치유의 우물.png" alt="치유의 우물">
         <h3>${prompt}</h3>${answerUi}</div>`,
       { type:'healingWell', pause:true });
@@ -6262,7 +6259,7 @@ function wireAuthoritativeEconomyV3() {
     openModal(`
       <h2>치유의 우물</h2>
       <div class="panel-card">
-        <p>우물의 빛이 반짝입니다. 문제를 맞히면 HP가 모두 회복됩니다.</p>
+        <p class="healing-well-intro">치유의 우물이다!<br><strong>문제를 맞히면 HP가 모두 회복됩니다!</strong></p>
         <img class="healing-well-quiz-image" src="assets/치유의 우물.png" alt="치유의 우물">
         <h3>${escapeHtml(q.q)}</h3>
         ${answerUi}
@@ -13055,9 +13052,20 @@ function wireAuthoritativeEconomyV3() {
       if (specLocked) laneCls.push('spec-locked');
       const note = specLocked ? 'Lv.5 전문화 선택 후'
         : (isMine ? '나의 길!' : '다른 길을 선택했습니다');
+      const levelGroups = [5, 7, 9].map((level) => ({
+        level,
+        skills:list.filter((skill) => (Number(skill.unlockLevel) || 1) === level),
+      }));
+      const progression = levelGroups.map((group, index) => {
+        const single = group.skills.length === 1 ? ' single' : '';
+        const cards = `<div class="skill-spec-level-v35${single}" data-level="${group.level}">${group.skills.map(skillNodeV35).join('')}</div>`;
+        if (index >= levelGroups.length - 1) return cards;
+        const nextLevel = levelGroups[index + 1].level;
+        return `${cards}<div class="skill-tier-link-v35" aria-hidden="true"><span></span><b>Lv.${nextLevel} 해금</b><i>▼</i></div>`;
+      }).join('');
       return `<section class="${laneCls.join(' ')}">
         <div class="lane-title-v35">${escapeHtml(sp)} 전문화 <small>${escapeHtml(note)}</small></div>
-        ${list.map(skillNodeV35).join(linkHtml)}
+        <div class="skill-spec-grid-v35">${progression}</div>
       </section>`;
     }).join('');
 

@@ -19,6 +19,9 @@ let editingWorkbookQuestionV2 = null;
 let workbookImportReportV2 = null;
 let workbookToolV2 = 'direct';
 let selectedWorkbookV2 = '';
+const checkedWorkbookQuestionsV2 = new Set();
+let secureAdminWorkbookRefreshV2 = false;
+let secureAdminWorkbookSyncedAtV2 = 0;
 const CHEAT_ENABLED_KEY_V2 = 'ysb_teacher_cheat_enabled_v2';
 try {
   window.__cheatEnabledV54 = sessionStorage.getItem(CHEAT_ENABLED_KEY_V2) === '1';
@@ -156,12 +159,14 @@ function teacherStudentsHtml(){
 }
 
 function teacherQuestionRowHtml(wb, q, qi){
+  const selectionKey = `${wb.id}:${q.id}`;
+  const checked = checkedWorkbookQuestionsV2.has(selectionKey);
   const editing = editingWorkbookQuestionV2
     && editingWorkbookQuestionV2.workbookId === wb.id
     && editingWorkbookQuestionV2.questionId === q.id;
   if (!editing) {
     return `<tr>
-      <td>${qi + 1}</td>
+      <td class="workbook-question-number"><input type="checkbox" ${checked ? 'checked' : ''} aria-label="${qi + 1}번 문제 선택" onchange="adminToggleWorkbookQuestion('${escapeJs(wb.id)}','${escapeJs(q.id)}',this.checked)"> <span>${qi + 1}</span></td>
       <td>${escapeHtml(q.q)}</td>
       <td class="good-text">${escapeHtml(q.answer)}</td>
       <td class="t-actions">
@@ -172,7 +177,7 @@ function teacherQuestionRowHtml(wb, q, qi){
   }
   const choiceText = Array.isArray(q.choices) ? q.choices.join(', ') : '';
   return `<tr>
-    <td>${qi + 1}</td>
+    <td class="workbook-question-number"><input type="checkbox" ${checked ? 'checked' : ''} aria-label="${qi + 1}번 문제 선택" onchange="adminToggleWorkbookQuestion('${escapeJs(wb.id)}','${escapeJs(q.id)}',this.checked)"> <span>${qi + 1}</span></td>
     <td colspan="2">
       <input id="editQuestionText" value="${escapeHtml(q.q)}" placeholder="문제" />
       <input id="editQuestionAnswer" value="${escapeHtml(q.answer)}" placeholder="정답" />
@@ -229,8 +234,13 @@ function teacherWorkbooksHtml(){
       <p class="muted" style="margin:6px 0 2px">요청: ${escapeHtml(wb.prompt || '직접 생성')}</p>
       <details ${openWorkbookDetailsV2.has(wb.id) ? 'open' : ''} ontoggle="adminTrackWorkbookDetails('${escapeJs(wb.id)}', this.open)">
         <summary>문제 보기 / 수정 / 삭제</summary>
+        <div class="workbook-bulk-actions">
+          <button class="ghost tiny" onclick="adminSelectAllWorkbookQuestions('${escapeJs(wb.id)}', true)">전체 선택</button>
+          <button class="ghost tiny" onclick="adminSelectAllWorkbookQuestions('${escapeJs(wb.id)}', false)">선택 해제</button>
+          <button class="ghost tiny danger-text" onclick="adminDeleteSelectedWorkbookQuestions('${escapeJs(wb.id)}')">선택한 문제 삭제 (${wb.questions.filter((q) => checkedWorkbookQuestionsV2.has(`${wb.id}:${q.id}`)).length})</button>
+        </div>
         <table class="teacher-table" style="margin-top:8px">
-          <tr><th>#</th><th>문제</th><th>정답</th><th></th></tr>
+          <tr><th>선택 · #</th><th>문제</th><th>정답</th><th></th></tr>
           ${wb.questions.length ? wb.questions.map((q, qi) => teacherQuestionRowHtml(wb, q, qi)).join('') : '<tr><td colspan="4" class="muted">문제가 없습니다.</td></tr>'}
         </table>
       </details>
@@ -285,6 +295,7 @@ function teacherWorkbooksHtml(){
 
   return `<div class="teacher-body">
     <h3>내 문제집</h3>
+    ${SECURE_ADMIN_MODE_V2 ? `<p class="workbook-sync-state">${secureAdminWorkbookSyncedAtV2 ? '🟢 서버 문제집과 동기화됨' : '🔄 서버 문제집 확인 중'}</p>` : ''}
     <div>${cards}</div>
     <div class="panel-card workbook-tools-wrap" style="margin-top:12px">
       <h3>문제 추가 도구</h3>
@@ -294,7 +305,7 @@ function teacherWorkbooksHtml(){
         ${toolButtons.map(([key, label]) => `<button class="${workbookToolV2 === key ? 'primary' : 'ghost'}" onclick="adminOpenWorkbookTool('${key}')">${label}</button>`).join('')}
       </div>
     </div>
-    ${tools[workbookToolV2] || tools.direct}
+    ${Object.entries(tools).map(([key, html]) => `<div class="${workbookToolV2 === key ? '' : 'hidden'}" data-workbook-tool="${key}">${html}</div>`).join('')}
     ${workbookImportReportHtml()}
   </div>`;
 }
@@ -308,6 +319,43 @@ window.adminOpenWorkbookTool = function adminOpenWorkbookTool(tool){
   selectedWorkbookV2 = $('adminWorkbook')?.value || selectedWorkbookV2;
   workbookToolV2 = tool;
   openAdminPanel('workbooks', { keepScroll:true });
+};
+
+window.adminToggleWorkbookQuestion = function adminToggleWorkbookQuestion(workbookId, questionId, checked){
+  const key = `${workbookId}:${questionId}`;
+  if (checked) checkedWorkbookQuestionsV2.add(key);
+  else checkedWorkbookQuestionsV2.delete(key);
+  openWorkbookDetailsV2.add(workbookId);
+  openAdminPanel('workbooks', { keepScroll:true, skipWorkbookRefresh:true });
+};
+
+window.adminSelectAllWorkbookQuestions = function adminSelectAllWorkbookQuestions(workbookId, checked){
+  const workbook = getAdminWorkbooksV2().find((book) => book.id === workbookId);
+  if (!workbook) return;
+  workbook.questions.forEach((question) => {
+    const key = `${workbookId}:${question.id}`;
+    if (checked) checkedWorkbookQuestionsV2.add(key);
+    else checkedWorkbookQuestionsV2.delete(key);
+  });
+  openWorkbookDetailsV2.add(workbookId);
+  openAdminPanel('workbooks', { keepScroll:true, skipWorkbookRefresh:true });
+};
+
+window.adminDeleteSelectedWorkbookQuestions = async function adminDeleteSelectedWorkbookQuestions(workbookId){
+  if (!requireTeacherAuth()) return;
+  const workbooks = getAdminWorkbooksV2().map((book) => ({ ...book, questions:[...book.questions] }));
+  const workbook = workbooks.find((book) => book.id === workbookId);
+  if (!workbook) return;
+  const selected = workbook.questions.filter((question) => checkedWorkbookQuestionsV2.has(`${workbookId}:${question.id}`));
+  if (!selected.length) { toast('삭제할 문제를 먼저 선택하세요.'); return; }
+  if (!confirm(`선택한 문제 ${selected.length}개를 한 번에 삭제할까요?`)) return;
+  const selectedIds = new Set(selected.map((question) => question.id));
+  workbook.questions = workbook.questions.filter((question) => !selectedIds.has(question.id));
+  if (!(await saveAdminWorkbooksV2(workbooks))) return;
+  selected.forEach((question) => checkedWorkbookQuestionsV2.delete(`${workbookId}:${question.id}`));
+  openWorkbookDetailsV2.add(workbookId);
+  openAdminPanel('workbooks', { keepScroll:true, skipWorkbookRefresh:true });
+  toast(`문제 ${selected.length}개를 삭제하고 서버 문제집에 반영했습니다.`);
 };
 
 function teacherCheatCardHtml(){
@@ -652,6 +700,17 @@ window.adminDeleteStudentV2 = async function adminDeleteStudentV2(userId){
 
 function openAdminPanel(tab, options) {
   if (!requireTeacherAuth()) return;
+  if (SECURE_ADMIN_MODE_V2 && tab === 'workbooks' && secureAdminSharedV2
+    && !(options && options.skipWorkbookRefresh) && !secureAdminWorkbookRefreshV2) {
+    secureAdminWorkbookRefreshV2 = true;
+    secureAdminSharedV2.refreshWorkbooks()
+      .then(() => {
+        secureAdminWorkbookSyncedAtV2 = Date.now();
+        openAdminPanel('workbooks', { ...(options || {}), keepScroll:true, skipWorkbookRefresh:true });
+      })
+      .catch((error) => toast(error?.message || '서버 문제집을 불러오지 못했어요.'))
+      .finally(() => { secureAdminWorkbookRefreshV2 = false; });
+  }
   // [v58] 문제집 관리에서 토글·삭제 시 스크롤이 맨 위로 튀지 않도록 위치 보존
   const keepScroll = options && options.keepScroll;
   const box = document.querySelector('#modal .modal-box');
@@ -683,6 +742,10 @@ async function saveAdminWorkbooksV2(workbooks){
     if (SECURE_ADMIN_MODE_V2) {
       if (!secureAdminSharedV2) throw new Error('클라우드 문제집 설정을 확인해 주세요.');
       await secureAdminSharedV2.saveWorkbooks(workbooks);
+      const verified = await secureAdminSharedV2.refreshWorkbooks();
+      const expected = JSON.stringify(window.YuksamSharedStateV2.validateWorkbooks(workbooks));
+      if (JSON.stringify(verified.workbooks) !== expected) throw new Error('서버 문제집 동기화를 확인하지 못했어요.');
+      secureAdminWorkbookSyncedAtV2 = Date.now();
       return true;
     }
     saveWorkbooks(workbooks);
