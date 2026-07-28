@@ -5637,12 +5637,17 @@ function installAuthoritativeQuestFlowV3() {
         questId:id,
         expectedRevision:game.player.serverRevision,
       });
-      applyAuthoritySnapshotV3(result);
+      const isHealingTraining = id === 'tut_healing_well';
+      if (!isHealingTraining) applyAuthoritySnapshotV3(result);
       closeModal();
-      if (id === 'tut_healing_well') {
+      if (isHealingTraining) {
         playSfx('enemyAttack');
-        window.triggerScreenShakeV19?.();
-        showCinematicMessage('회복 훈련!', '명진쌤의 안전한 훈련 공격! HP가 1이 되었어요. 치유의 우물로 가 보세요.', 2600);
+        game.combatImpact = { target:'player', until:Date.now() + 900 };
+        playSfx('critical');
+        showCinematicMessage('치명타!', '명진쌤의 안전한 훈련 공격! 잠시 후 HP가 1이 됩니다. 치유의 우물로 가 보세요.', 2600);
+        await new Promise((resolve) => setTimeout(resolve, 650));
+        applyAuthoritySnapshotV3(result);
+        game.combatImpact = null;
       } else {
         playSfx('quest');
         showCinematicMessage('퀘스트 수락!', `${QUEST_DEFS[id].title} 퀘스트를 시작합니다.`, 1600);
@@ -6574,7 +6579,6 @@ function wireAuthoritativeEconomyV3() {
     ensureBossAudioV21();
     if (!game.settings.bgmEnabled) return null;
     if (screens.game.classList.contains('active') && (game.currentMap === 'bossRoom' || game.currentMap === 'finalBossRoom')) return game.audio.bossFile || null;
-    if (screens.game.classList.contains('active') && game.currentCombatMonsterId) return game.audio.battleFile || null;
     return oldGetDesiredAudioFileV21();
   };
   const oldSyncAudioFileBgmV21 = syncAudioFileBgm;

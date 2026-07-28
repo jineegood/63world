@@ -44,6 +44,14 @@ test('every blow carries a sound', () => {
   assert.match(game, /classBasicSounds\?\.\[game\.player\?\.class \|\| 'warrior'\]/);
 });
 
+test('ordinary combat keeps the current map music while boss rooms keep boss music', () => {
+  const audio = game.slice(game.indexOf('getDesiredAudioFile = function getDesiredAudioFileV21'));
+  const body = audio.slice(0, audio.indexOf('\n  };') + 5);
+  assert.match(body, /game\.currentMap === 'bossRoom' \|\| game\.currentMap === 'finalBossRoom'/);
+  assert.doesNotMatch(body, /game\.currentCombatMonsterId/);
+  assert.doesNotMatch(body, /return game\.audio\.battleFile/);
+});
+
 test('running away is called 도망 again and gets its old send-off', () => {
   const menu = game.slice(game.indexOf('function renderAuthorityMenuV3'));
   const body = menu.slice(0, menu.indexOf('\n  function showSkillsV3'));
