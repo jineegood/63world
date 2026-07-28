@@ -57,9 +57,14 @@ test('common skills have no prerequisites while specialization skills keep their
   assert.match(migration, /where\s+spec_name\s+is\s+null/i);
 });
 
-test('the common lane alone uses a two-by-two grid inside the existing three-column skill tree', () => {
+test('common and specialization lanes use matching two-column cards with level-tier arrows', () => {
   assert.match(game, /class="skill-lane-v35 common-grid-v35"/);
   assert.match(game, /class="skill-common-grid-v35"/);
+  assert.match(game, /const levelGroups = \[5, 7, 9\]/);
+  assert.match(game, /class="skill-spec-grid-v35"/);
+  assert.match(game, /class="skill-tier-link-v35"/);
   assert.match(style, /\.skill-tree-v35\{[^}]*grid-template-columns:repeat\(3,/);
   assert.match(style, /\.skill-common-grid-v35\{[^}]*grid-template-columns:repeat\(2,/);
+  assert.match(style, /\.skill-spec-level-v35\{[^}]*grid-template-columns:repeat\(2,/);
+  assert.match(style, /\.skill-spec-level-v35\.single\{[^}]*justify-content:center/);
 });
