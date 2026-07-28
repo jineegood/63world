@@ -55,6 +55,28 @@ export function createSupabasePveCombatStore(client) {
         p_outcome:outcome,
       }));
     },
+    async prepareEscape({ userId, expectedSessionRevision, requestId }) {
+      return resultData(await client.rpc('private_prepare_student_combat_escape_v3', {
+        p_user_id:userId,
+        p_expected_session_revision:expectedSessionRevision,
+        p_request_id:requestId,
+      }));
+    },
+    async commitEscape({
+      userId,
+      expectedSessionRevision,
+      expectedPlayerRevision,
+      requestId,
+      outcome,
+    }) {
+      return resultData(await client.rpc('private_commit_student_combat_escape_v3', {
+        p_user_id:userId,
+        p_expected_session_revision:expectedSessionRevision,
+        p_expected_player_revision:expectedPlayerRevision,
+        p_request_id:requestId,
+        p_outcome:outcome,
+      }));
+    },
     async surrender({ userId, expectedSessionRevision, requestId }) {
       return resultData(await client.rpc('private_surrender_student_combat_v3', {
         p_user_id:userId,

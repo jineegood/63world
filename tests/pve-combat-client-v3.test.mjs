@@ -179,6 +179,8 @@ test('safe combat rejections explain what will happen instead of hiding every ca
     ['UNKNOWN_MONSTER', '몬스터 정보를 찾지 못했습니다.'],
     ['SESSION_REVISION_CONFLICT', '전투 상태가 바뀌었습니다. 최신 상태를 다시 불러옵니다.'],
     ['PLAYER_REVISION_CONFLICT', '캐릭터 상태가 바뀌었습니다. 최신 상태를 다시 불러옵니다.'],
+    ['ESCAPE_ALREADY_FAILED', '이번 전투에서는 더 이상 도망칠 수 없습니다.'],
+    ['ESCAPE_NOT_ALLOWED', '이 전투에서는 도망칠 수 없습니다.'],
   ];
 
   for (const [code, message] of expected) {

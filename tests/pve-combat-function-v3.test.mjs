@@ -36,6 +36,8 @@ test('endpoint returns stable sanitized errors and never logs or responds with a
   assert.match(source, /publicErrorCode/);
   assert.match(source, /SERVER_ERROR/);
   assert.match(source, /HEALING_NOT_ACTIVE/);
+  assert.match(source, /ESCAPE_ALREADY_FAILED/);
+  assert.match(source, /ESCAPE_NOT_ALLOWED/);
   assert.doesNotMatch(source, /console\.(?:log|error)\s*\([^)]*(?:answer|body|result)/i);
   assert.doesNotMatch(source, /JSON\.stringify\s*\([^)]*answerKey/i);
 });
@@ -59,6 +61,8 @@ test('store maps only bounded private RPC calls', () => {
     'private_start_student_combat_v3',
     'private_prepare_student_combat_turn_v3',
     'private_commit_student_combat_turn_v3',
+    'private_prepare_student_combat_escape_v3',
+    'private_commit_student_combat_escape_v3',
     'private_surrender_student_combat_v3',
     'private_resume_student_combat_v3',
     'private_start_student_healing_v3',
@@ -108,4 +112,41 @@ test('combat start binds the projected player revision inside the locked transac
     p_state:{ playerHp:22, playerMaxHp:22 },
     p_request_id:'33333333-3333-4333-8333-333333333333',
   }]);
+});
+
+test('escape store binds user, revisions, request id, and server outcome to private RPCs', async () => {
+  const calls = [];
+  const store = createSupabasePveCombatStore({
+    rpc:async (name, payload) => {
+      calls.push([name, payload]);
+      return { data:{ ok:true } };
+    },
+  });
+  await store.prepareEscape({
+    userId:'user-a',
+    expectedSessionRevision:3,
+    requestId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  });
+  await store.commitEscape({
+    userId:'user-a',
+    expectedSessionRevision:3,
+    expectedPlayerRevision:7,
+    requestId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    outcome:{ outcome:'continue', state:{ playerHp:10 } },
+  });
+
+  assert.deepEqual(calls, [
+    ['private_prepare_student_combat_escape_v3', {
+      p_user_id:'user-a',
+      p_expected_session_revision:3,
+      p_request_id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    }],
+    ['private_commit_student_combat_escape_v3', {
+      p_user_id:'user-a',
+      p_expected_session_revision:3,
+      p_expected_player_revision:7,
+      p_request_id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      p_outcome:{ outcome:'continue', state:{ playerHp:10 } },
+    }],
+  ]);
 });

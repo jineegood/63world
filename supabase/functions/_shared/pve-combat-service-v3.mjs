@@ -1,6 +1,7 @@
 import {
   buildCombatant,
   startEncounter,
+  resolveEscapeAttempt,
   resolveTurn,
 } from './pve-combat-rules-v3.mjs';
 import { MONSTER_COMBAT_V3 } from './generated-combat-catalog-v3.mjs';
@@ -44,6 +45,7 @@ function stateFromSession(session) {
     playerStatuses:session.playerStatuses || {},
     monsterStatuses:session.monsterStatuses || {},
     cooldowns:session.cooldowns || {},
+    escapeFailed:session.escapeFailed === true,
     turnNumber:session.turnNumber,
     status:session.status,
     monsterPatterns:monster.patterns,
@@ -120,6 +122,32 @@ export function createPveCombatService({ store, random = Math.random } = {}) {
     }));
   }
 
+  async function attemptEscape(userId, body) {
+    if (!validRevision(body.sessionRevision) || !validRequest(body.requestId)) {
+      fail('INVALID_REQUEST');
+    }
+    const prepared = await store.prepareEscape({
+      userId,
+      expectedSessionRevision:Number(body.sessionRevision),
+      requestId:String(body.requestId),
+    });
+    if (prepared?.replayed) return publicSafe(prepared.response);
+    if (!prepared?.session || !prepared?.player) fail('COMBAT_STATE_MISSING');
+    const player = buildCombatant(prepared.player);
+    const outcome = resolveEscapeAttempt({
+      state:stateFromSession(prepared.session),
+      player,
+      random,
+    });
+    return publicSafe(await store.commitEscape({
+      userId,
+      expectedSessionRevision:Number(body.sessionRevision),
+      expectedPlayerRevision:Number(prepared.session.playerRevision),
+      requestId:String(body.requestId),
+      outcome,
+    }));
+  }
+
   async function startHealing(userId, body) {
     if (!validRevision(body.expectedRevision) || !validRequest(body.requestId)) fail('INVALID_REQUEST');
     return publicSafe(await store.startHealing({
@@ -149,6 +177,7 @@ export function createPveCombatService({ store, random = Math.random } = {}) {
     switch (body.op) {
       case 'start': return start(userId, body);
       case 'submit_turn': return submitTurn(userId, body);
+      case 'attempt_escape': return attemptEscape(userId, body);
       case 'surrender': return surrender(userId, body);
       case 'resume': return publicSafe(await store.resume(userId));
       case 'start_healing': return startHealing(userId, body);

@@ -6,6 +6,7 @@ import {
   buildCombatant,
   startEncounter,
   resolveTurn,
+  resolveEscapeAttempt,
   resolveSurrender,
   sanitizeCombatResponse,
 } from '../supabase/functions/_shared/pve-combat-rules-v3.mjs';
@@ -145,6 +146,104 @@ test('wrong answers deal half damage and reveal the answer without skipping reta
   assert.equal(result.state.playerHp, player.maxHp - 2);
   assert.equal(result.events[0].type, 'answer-wrong');
   assert.equal(result.events[0].minimumDurationMs, 2000);
+});
+
+test('escape chance is 80 percent at equal level and 50 percent against a higher monster', () => {
+  const player = buildCombatant({ ...basicPlayer, inventory:[], activePet:null, skills:{} });
+  const equal = startEncounter({
+    player,
+    monsterKey:'forest_mushroom',
+    random:sequence(0.5, 0.5),
+  });
+  const higher = startEncounter({
+    player,
+    monsterKey:'forest_slime',
+    random:sequence(0.5, 0.5),
+  });
+
+  const equalResult = resolveEscapeAttempt({
+    state:equal,
+    player,
+    random:sequence(0.79),
+  });
+  const higherResult = resolveEscapeAttempt({
+    state:higher,
+    player,
+    random:sequence(0.49),
+  });
+
+  assert.equal(equalResult.escape.chance, 0.8);
+  assert.equal(equalResult.escape.success, true);
+  assert.equal(equalResult.outcome, 'escaped');
+  assert.equal(equalResult.state.status, 'resolved');
+  assert.equal(higherResult.escape.chance, 0.5);
+  assert.equal(higherResult.escape.success, true);
+});
+
+test('failed escape locks another attempt and uses the normal monster counterattack', () => {
+  const player = buildCombatant({ ...basicPlayer, inventory:[], activePet:null, skills:{} });
+  const state = {
+    ...startEncounter({
+      player,
+      monsterKey:'forest_mushroom',
+      random:sequence(0.5, 0.5),
+    }),
+    monsterAttack:3,
+    monsterPatterns:[],
+  };
+  const result = resolveEscapeAttempt({
+    state,
+    player,
+    random:sequence(
+      0.8, // equal-level 80% escape fails
+      0.9, // monster miss
+      0.9, // monster critical
+    ),
+  });
+
+  assert.equal(result.escape.success, false);
+  assert.equal(result.escape.locked, true);
+  assert.equal(result.outcome, 'continue');
+  assert.equal(result.state.escapeFailed, true);
+  assert.equal(result.state.playerHp, player.maxHp - 3);
+  assert.deepEqual(result.events.map((event) => event.type), [
+    'escape', 'monster-action', 'player-damage',
+  ]);
+  assert.throws(
+    () => resolveEscapeAttempt({ state:result.state, player, random:sequence(0) }),
+    /ESCAPE_ALREADY_FAILED/,
+  );
+});
+
+test('escape is forbidden in boss fights and a lethal failed counterattack defeats the player', () => {
+  const player = buildCombatant({ ...basicPlayer, inventory:[], activePet:null, skills:{} });
+  const boss = startEncounter({
+    player,
+    monsterKey:'final_teacher',
+    random:sequence(0.5, 0.5),
+  });
+  assert.throws(
+    () => resolveEscapeAttempt({ state:boss, player, random:sequence(0) }),
+    /ESCAPE_NOT_ALLOWED/,
+  );
+
+  const lethal = {
+    ...startEncounter({
+      player,
+      monsterKey:'forest_mushroom',
+      random:sequence(0.5, 0.5),
+    }),
+    playerHp:1,
+    monsterAttack:3,
+    monsterPatterns:[],
+  };
+  const result = resolveEscapeAttempt({
+    state:lethal,
+    player,
+    random:sequence(0.8, 0.9, 0.9),
+  });
+  assert.equal(result.outcome, 'defeat');
+  assert.equal(result.state.playerHp, 0);
 });
 
 test('teacher chill halves the next damaging player action and is then consumed', () => {

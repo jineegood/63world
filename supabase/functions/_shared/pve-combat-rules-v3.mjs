@@ -12,6 +12,7 @@ const STAT_KEYS = Object.freeze(['intelligence', 'spirit', 'strength', 'vitality
 const EVENT_TYPES = new Set([
   'answer-correct',
   'answer-wrong',
+  'escape',
   'monster-damage',
   'monster-dot',
   'monster-action',
@@ -158,6 +159,7 @@ export function startEncounter({ player, monsterKey, random = Math.random } = {}
     playerStatuses:{},
     monsterStatuses:{},
     cooldowns:{},
+    escapeFailed:false,
     turnNumber:0,
     status:'active',
     monsterPatterns:clone(monster.patterns),
@@ -186,6 +188,7 @@ function validateState(source, player) {
   state.monsterStatuses = state.monsterStatuses && typeof state.monsterStatuses === 'object'
     ? state.monsterStatuses : {};
   state.cooldowns = state.cooldowns && typeof state.cooldowns === 'object' ? state.cooldowns : {};
+  state.escapeFailed = state.escapeFailed === true;
   state.monsterPatterns = Array.isArray(state.monsterPatterns) ? state.monsterPatterns : [];
   return state;
 }
@@ -766,6 +769,78 @@ export function resolveSurrender(sourceState) {
     outcome:'surrender',
     rewards:{ exp:0, gold:0, building:0 },
     events:[{ type:'surrender' }],
+  });
+}
+
+export function resolveEscapeAttempt({
+  state:sourceState,
+  player,
+  random = Math.random,
+} = {}) {
+  const state = validateState(sourceState, player);
+  const monsterRule = MONSTER_COMBAT_V3[state.monsterKey];
+  if (monsterRule?.boss) throw new Error('ESCAPE_NOT_ALLOWED');
+  if (state.escapeFailed) throw new Error('ESCAPE_ALREADY_FAILED');
+
+  const chance = player.level >= monsterRule.level ? 0.8 : 0.5;
+  const success = checkedRandom(random) < chance;
+  const events = [];
+  pushEvent(events, { type:'escape', success, chance });
+
+  if (success) {
+    state.status = 'resolved';
+    return sanitizeCombatResponse({
+      state,
+      outcome:'escaped',
+      rewards:{ exp:0, gold:0, building:0 },
+      escape:{ success:true, chance, locked:false },
+      events,
+    });
+  }
+
+  state.escapeFailed = true;
+  performMonsterAction({ player, state, random, events });
+  performRoundDamageOverTime({ player, state, random, events });
+  state.cooldowns = tickCooldowns(state.cooldowns);
+  if (finiteInteger(state.playerStatuses.intBuffTurns) > 0) {
+    state.playerStatuses.intBuffTurns -= 1;
+  }
+  state.turnNumber += 1;
+
+  if (state.playerHp <= 0) {
+    state.status = 'resolved';
+    return sanitizeCombatResponse({
+      state,
+      outcome:'defeat',
+      rewards:{ exp:0, gold:0, building:0 },
+      death:{ expAfter:deathExperience(player) },
+      escape:{ success:false, chance, locked:true },
+      events,
+    });
+  }
+
+  if (state.monsterHp <= 0) {
+    state.status = 'resolved';
+    const rewards = {
+      exp:monsterRule.reward.exp,
+      gold:monsterRule.reward.gold,
+      building:checkedRandom(random) < COMBAT_BALANCE_V3.buildingDropChance ? 1 : 0,
+    };
+    pushEvent(events, { type:'rewards', ...rewards });
+    return sanitizeCombatResponse({
+      state,
+      outcome:'victory',
+      rewards,
+      escape:{ success:false, chance, locked:true },
+      events,
+    });
+  }
+
+  return sanitizeCombatResponse({
+    state,
+    outcome:'continue',
+    escape:{ success:false, chance, locked:true },
+    events,
   });
 }
 

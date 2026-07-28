@@ -52,6 +52,7 @@
     "test:pve-combat-rules-v3": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 pve-combat-rules-v3",
     "test:pve-combat-service-v3": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 pve-combat-service-v3",
     "test:pve-combat-function-v3": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 pve-combat-function-v3",
+    "test:authoritative-combat-escape-migration-v3": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 authoritative-combat-escape-migration-v3",
     "test:pve-combat-client-v3": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 pve-combat-client-v3",
     "test:pve-combat-game-wiring-v3": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 pve-combat-game-wiring-v3",
     "test:server-authority-v3-economy": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 server-authority-v3-economy",

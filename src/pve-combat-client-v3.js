@@ -26,6 +26,8 @@
     ACTION_NOT_LEARNED:'아직 배우지 않은 스킬입니다.',
     ACTION_ON_COOLDOWN:'아직 다시 사용할 수 없는 스킬입니다.',
     INVALID_ACTION:'사용할 수 없는 전투 행동입니다.',
+    ESCAPE_ALREADY_FAILED:'이번 전투에서는 더 이상 도망칠 수 없습니다.',
+    ESCAPE_NOT_ALLOWED:'이 전투에서는 도망칠 수 없습니다.',
     HEALING_NOT_ACTIVE:'치유 문제가 만료되었습니다. 다시 우물에 말을 걸어 주세요.',
     COMBAT_NETWORK_ERROR:'전투 서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.',
     COMBAT_SERVER_ERROR:'전투 서버에서 안전하게 처리하지 못했습니다.',
