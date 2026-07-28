@@ -11,6 +11,8 @@
   const COMBAT_EVENT_ORDER = [
     'answer-correct',
     'answer-wrong',
+    'escape-success',
+    'escape-failed',
     'player-support-before',
     'player-hit',
     'player-extra-hit',

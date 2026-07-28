@@ -14,13 +14,20 @@
     UNAUTHENTICATED:'로그인이 만료되었습니다. 다시 로그인해 주세요.',
     ORIGIN_NOT_ALLOWED:'허용되지 않은 주소에서 접속했습니다.',
     NO_QUESTIONS:'선생님이 활성화한 문제가 없습니다.',
+    PLAYER_NOT_FOUND:'캐릭터 정보를 찾지 못했습니다. 다시 로그인해 주세요.',
+    UNKNOWN_MONSTER:'몬스터 정보를 찾지 못했습니다.',
+    MONSTER_MAP_MISMATCH:'몬스터 위치 정보가 달라 전투를 다시 불러옵니다.',
     COMBAT_NOT_ACTIVE:'진행 중인 전투를 찾지 못했습니다.',
+    COMBAT_STATE_MISSING:'전투 기록을 찾지 못해 전투를 안전하게 종료합니다.',
     QUESTION_TOKEN_MISMATCH:'문제가 바뀌었습니다. 전투 화면을 다시 불러옵니다.',
-    SESSION_REVISION_CONFLICT:'전투 상태가 바뀌었습니다. 다시 불러온 뒤 시도해 주세요.',
-    PLAYER_REVISION_CONFLICT:'캐릭터 상태가 바뀌었습니다. 전투를 다시 불러와 주세요.',
+    SESSION_REVISION_CONFLICT:'전투 상태가 바뀌었습니다. 최신 상태를 다시 불러옵니다.',
+    PLAYER_REVISION_CONFLICT:'캐릭터 상태가 바뀌었습니다. 최신 상태를 다시 불러옵니다.',
+    REQUEST_ID_REUSED:'이미 처리된 전투 요청입니다. 최신 상태를 다시 불러옵니다.',
     ACTION_NOT_LEARNED:'아직 배우지 않은 스킬입니다.',
     ACTION_ON_COOLDOWN:'아직 다시 사용할 수 없는 스킬입니다.',
     INVALID_ACTION:'사용할 수 없는 전투 행동입니다.',
+    ESCAPE_ALREADY_FAILED:'이번 전투에서는 더 이상 도망칠 수 없습니다.',
+    ESCAPE_NOT_ALLOWED:'이 전투에서는 도망칠 수 없습니다.',
     HEALING_NOT_ACTIVE:'치유 문제가 만료되었습니다. 다시 우물에 말을 걸어 주세요.',
     COMBAT_NETWORK_ERROR:'전투 서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.',
     COMBAT_SERVER_ERROR:'전투 서버에서 안전하게 처리하지 못했습니다.',
@@ -139,6 +146,18 @@
           sessionRevision:revision,
           actionId:action,
           answer:given,
+          requestId:id,
+        });
+      },
+      attemptEscape(sessionRevision, explicitRequestId) {
+        const revision = Number(sessionRevision);
+        if (!Number.isSafeInteger(revision) || revision < 1) {
+          return Promise.reject(failure('COMBAT_SERVER_ERROR'));
+        }
+        const id = requestId(explicitRequestId);
+        return once(`escape:${revision}`, {
+          op:'attempt_escape',
+          sessionRevision:revision,
           requestId:id,
         });
       },

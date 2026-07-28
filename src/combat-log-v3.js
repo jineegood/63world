@@ -83,6 +83,18 @@
           });
           break;
 
+        case 'escape':
+          notices.push({
+            type:event?.success === true ? 'escape-success' : 'escape-failed',
+            text:event?.success === true
+              ? '도망 성공!'
+              : '도망 실패! 몬스터가 길을 막고 반격합니다!',
+            duration:event?.success === true ? DURATIONS.support : 1050,
+            tone:event?.success === true ? '' : 'enemy-action',
+            preserveDuration:true,
+          });
+          break;
+
         // 내가 몬스터를 때린 것 — 예전에는 player-hit / 추가타는 player-extra-hit 였다
         case 'monster-damage': {
           // 기도의 방벽·무기 숙련의 반사 피해는 내 공격이 아니라 '반격' 줄이다

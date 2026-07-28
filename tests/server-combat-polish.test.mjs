@@ -12,7 +12,9 @@ const style = fs.readFileSync(path.join(root, 'style.css'), 'utf8');
 test('a defeated monster is finished off only after its log has played', () => {
   // 연출 재생기는 몬스터가 이미 죽어 있으면 큐를 버리고 완료 신호도 보내지 않는다.
   // 그래서 승리 처리는 로그가 끝난 뒤에 해야 하고, 그때까지는 살아 있어야 한다.
-  assert.match(game, /if \(outcome === 'victory' && monster\) monster\.alive = true;/);
+  const presentation = game.slice(game.indexOf('function presentResponse'));
+  const presentationBody = presentation.slice(0, presentation.indexOf('\n  function renderAuthorityQuestionV3'));
+  assert.doesNotMatch(presentationBody, /applySession\(response\.session/);
   const victory = game.slice(game.indexOf('function finishVictory'));
   const body = victory.slice(0, victory.indexOf('\n  function finishDefeat'));
   assert.match(body, /monster\.hp = 0;/);
@@ -42,16 +44,24 @@ test('every blow carries a sound', () => {
   assert.match(game, /classBasicSounds\?\.\[game\.player\?\.class \|\| 'warrior'\]/);
 });
 
+test('ordinary combat keeps the current map music while boss rooms keep boss music', () => {
+  const audio = game.slice(game.indexOf('getDesiredAudioFile = function getDesiredAudioFileV21'));
+  const body = audio.slice(0, audio.indexOf('\n  };') + 5);
+  assert.match(body, /game\.currentMap === 'bossRoom' \|\| game\.currentMap === 'finalBossRoom'/);
+  assert.doesNotMatch(body, /game\.currentCombatMonsterId/);
+  assert.doesNotMatch(body, /return game\.audio\.battleFile/);
+});
+
 test('running away is called 도망 again and gets its old send-off', () => {
   const menu = game.slice(game.indexOf('function renderAuthorityMenuV3'));
   const body = menu.slice(0, menu.indexOf('\n  function showSkillsV3'));
-  assert.match(body, /'도망 불가' : '도망'/);
+  assert.match(body, /'도망 불가' : \(escapeLocked \? '도망 실패' : '도망'\)/);
   assert.doesNotMatch(body, /전투 그만두기/);
 
   const escape = game.slice(game.indexOf('window.escapeCombat = async function escapeCombatAuthorityV3'));
-  const escapeBody = escape.slice(0, 1400);
-  assert.match(escapeBody, /도망치는데 성공했다!/);
-  assert.match(escapeBody, /playSfx\('transition'\)/);
+  const escapeBody = escape.slice(0, 3200);
+  assert.match(escapeBody, /도망치는 데 성공했다!/);
+  assert.match(escapeBody, /playSfx\('step'\)/);
 });
 
 test('the four choices are shuffled so the answer is not always in the same slot', () => {

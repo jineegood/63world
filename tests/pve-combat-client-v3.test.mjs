@@ -47,6 +47,7 @@ test('combat client sends only bounded action identifiers to the secure endpoint
     'basic',
     '4',
   );
+  await api.attemptEscape(3);
   await api.surrender(3);
   await api.resume();
   await api.startHealing(7);
@@ -58,7 +59,7 @@ test('combat client sends only bounded action identifiers to the secure endpoint
 
   assert.equal(calls.every((call) => call.name === 'student-combat-v3'), true);
   assert.deepEqual(calls.map((call) => call.body.op), [
-    'start', 'submit_turn', 'surrender', 'resume', 'start_healing', 'submit_healing',
+    'start', 'submit_turn', 'attempt_escape', 'surrender', 'resume', 'start_healing', 'submit_healing',
   ]);
   for (const call of calls) {
     assert.equal('userId' in call.body, false);
@@ -70,8 +71,9 @@ test('combat client sends only bounded action identifiers to the secure endpoint
   assert.match(calls[0].body.requestId, /^[0-9a-f-]{36}$/i);
   assert.equal(calls[1].body.sessionRevision, 2);
   assert.equal(calls[1].body.answer, '4');
-  assert.equal(calls[4].body.expectedRevision, 7);
-  assert.equal(calls[5].body.answer, '4');
+  assert.equal(calls[2].body.sessionRevision, 3);
+  assert.equal(calls[5].body.expectedRevision, 7);
+  assert.equal(calls[6].body.answer, '4');
 });
 
 test('duplicate pending submissions share one network request', async () => {
@@ -104,6 +106,44 @@ test('duplicate pending submissions share one network request', async () => {
   release();
   assert.deepEqual(await first, await second);
   assert.equal(calls.length, 1);
+});
+
+test('duplicate pending escape clicks share one authoritative request', async () => {
+  let release;
+  const delayed = new Promise((resolve) => { release = resolve; });
+  const calls = [];
+  const client = {
+    functions:{
+      async invoke(name, options) {
+        calls.push({ name, body:options.body });
+        await delayed;
+        return { data:{ data:{ ok:true, outcome:'escaped' } }, error:null };
+      },
+    },
+  };
+  const window = {};
+  vm.runInNewContext(source, {
+    window,
+    crypto:{ randomUUID:() => '11111111-1111-4111-8111-111111111111' },
+    setTimeout,
+    clearTimeout,
+    Date,
+    Promise,
+    Object,
+    Error,
+  });
+  const api = window.YuksamPveCombatClientV3.create({ client, timeoutMs:1000 });
+  const first = api.attemptEscape(4);
+  const second = api.attemptEscape(4);
+  release();
+
+  assert.deepEqual(await first, await second);
+  assert.equal(calls.length, 1);
+  assert.deepEqual({ ...calls[0].body }, {
+    op:'attempt_escape',
+    sessionRevision:4,
+    requestId:'11111111-1111-4111-8111-111111111111',
+  });
 });
 
 test('safe server responses are validated, deeply frozen, and may reveal only correctAnswer', async () => {
@@ -169,6 +209,28 @@ test('network failures are sanitized and retrying can reuse an explicit request 
   await api.start('forest_mushroom', requestId);
   assert.equal(calls[0].body.requestId, requestId);
   assert.equal(calls[1].body.requestId, requestId);
+});
+
+test('safe combat rejections explain what will happen instead of hiding every cause', async () => {
+  const expected = [
+    ['MONSTER_MAP_MISMATCH', '몬스터 위치 정보가 달라 전투를 다시 불러옵니다.'],
+    ['COMBAT_STATE_MISSING', '전투 기록을 찾지 못해 전투를 안전하게 종료합니다.'],
+    ['PLAYER_NOT_FOUND', '캐릭터 정보를 찾지 못했습니다. 다시 로그인해 주세요.'],
+    ['UNKNOWN_MONSTER', '몬스터 정보를 찾지 못했습니다.'],
+    ['SESSION_REVISION_CONFLICT', '전투 상태가 바뀌었습니다. 최신 상태를 다시 불러옵니다.'],
+    ['PLAYER_REVISION_CONFLICT', '캐릭터 상태가 바뀌었습니다. 최신 상태를 다시 불러옵니다.'],
+    ['ESCAPE_ALREADY_FAILED', '이번 전투에서는 더 이상 도망칠 수 없습니다.'],
+    ['ESCAPE_NOT_ALLOWED', '이 전투에서는 도망칠 수 없습니다.'],
+  ];
+
+  for (const [code, message] of expected) {
+    const { api } = harness([{ data:{ error:code }, error:{ message:code } }]);
+    await assert.rejects(
+      api.resume(),
+      (error) => error.code === code && error.message === message,
+      code,
+    );
+  }
 });
 
 test('client bundle never contains a service-role credential and loads before game', () => {

@@ -24,6 +24,8 @@ const PUBLIC_ERRORS = new Set([
   'ACTION_NOT_LEARNED',
   'ACTION_ON_COOLDOWN',
   'INVALID_ACTION',
+  'ESCAPE_ALREADY_FAILED',
+  'ESCAPE_NOT_ALLOWED',
   'HEALING_NOT_ACTIVE',
 ]);
 
@@ -64,6 +66,10 @@ function jsonResponse(body: unknown, status: number, headers: Record<string, str
 
 Deno.serve(async (request) => {
   let cors:Record<string, string> = {};
+  let diagnosticOperation:string | null = null;
+  let diagnosticUserId:string | null = null;
+  let diagnosticSessionRevision:number | null = null;
+  let diagnosticRequestId:string | null = null;
   try {
     cors = originHeaders(request);
     if (request.method === 'OPTIONS') return new Response('ok', { headers:cors });
@@ -91,6 +97,15 @@ Deno.serve(async (request) => {
     } catch {
       return jsonResponse({ error:'INVALID_JSON' }, 400, cors);
     }
+    if (body && typeof body === 'object' && !Array.isArray(body)) {
+      const record = body as Record<string, unknown>;
+      const operation = String(record.op || '');
+      if (/^[a-z_]{1,40}$/.test(operation)) diagnosticOperation = operation;
+      const revision = Number(record.sessionRevision);
+      if (Number.isSafeInteger(revision) && revision >= 1) diagnosticSessionRevision = revision;
+      const requestId = String(record.requestId || '');
+      if (/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(requestId)) diagnosticRequestId = requestId;
+    }
 
     const url = Deno.env.get('SUPABASE_URL');
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
@@ -104,6 +119,7 @@ Deno.serve(async (request) => {
     if (error || !data.user) {
       return jsonResponse({ error:'UNAUTHENTICATED' }, 401, cors);
     }
+    diagnosticUserId = data.user.id;
     const serviceClient = createClient(url, serviceKey, { auth:{ persistSession:false } });
     const service = createPveCombatService({
       store:createSupabasePveCombatStore(serviceClient),
@@ -113,6 +129,14 @@ Deno.serve(async (request) => {
     return jsonResponse({ data:result }, 200, cors);
   } catch (error) {
     const code = publicErrorCode(error);
+    console.error({
+      event:'student_combat_v3_error',
+      operation:diagnosticOperation,
+      errorCode:code,
+      userId:diagnosticUserId,
+      sessionRevision:diagnosticSessionRevision,
+      requestId:diagnosticRequestId,
+    });
     const status = code === 'UNAUTHENTICATED' ? 401
       : code === 'ORIGIN_NOT_ALLOWED' ? 403
       : code === 'SERVER_ERROR' ? 500

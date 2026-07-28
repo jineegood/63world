@@ -38,6 +38,7 @@ const session = {
   playerStatuses:{},
   monsterStatuses:{},
   cooldowns:{},
+  escapeFailed:false,
   question:{
     questionToken:'22222222-2222-4222-8222-222222222222',
     questionId:'q1',
@@ -238,6 +239,61 @@ test('resume and surrender use only authenticated identity and bounded revisions
   assert.equal(surrendered.rewards.gold, 0);
 });
 
+test('escape is prepared and committed with server-owned chance and counterattack rules', async () => {
+  const calls = [];
+  const service = createPveCombatService({
+    random:sequence(0.79),
+    store:{
+      prepareEscape:async (value) => {
+        calls.push(['prepareEscape', value]);
+        return { replayed:false, session, player };
+      },
+      commitEscape:async (value) => {
+        calls.push(['commitEscape', value]);
+        return { ...value.outcome, ok:true };
+      },
+    },
+  });
+  const result = await service.handle('real-user', {
+    op:'attempt_escape',
+    sessionRevision:2,
+    requestId:'88888888-8888-4888-8888-888888888888',
+    chance:1,
+    success:true,
+  });
+
+  assert.equal(result.outcome, 'escaped');
+  assert.equal(result.escape.chance, 0.8);
+  assert.equal(calls[0][1].userId, 'real-user');
+  assert.equal(calls[0][1].expectedSessionRevision, 2);
+  assert.equal(calls[1][1].expectedPlayerRevision, 4);
+  assert.equal(calls[1][1].outcome.state.status, 'resolved');
+  assert.equal(Object.hasOwn(calls[1][1], 'chance'), false);
+});
+
+test('a replayed escape returns its receipt without rolling or committing again', async () => {
+  let commits = 0;
+  const stored = {
+    ok:true,
+    outcome:'escaped',
+    escape:{ success:true, chance:0.8, locked:false },
+  };
+  const service = createPveCombatService({
+    random:() => { throw new Error('must not roll'); },
+    store:{
+      prepareEscape:async () => ({ replayed:true, response:stored }),
+      commitEscape:async () => { commits += 1; },
+    },
+  });
+
+  assert.deepEqual(await service.handle('real-user', {
+    op:'attempt_escape',
+    sessionRevision:2,
+    requestId:'99999999-9999-4999-8999-999999999999',
+  }), stored);
+  assert.equal(commits, 0);
+});
+
 test('invalid identity, operations, IDs, answers, and revisions fail before store mutation', async () => {
   let calls = 0;
   const service = createPveCombatService({
@@ -255,6 +311,11 @@ test('invalid identity, operations, IDs, answers, and revisions fail before stor
       requestId:'bad',
       actionId:'basic',
       answer:'x'.repeat(513),
+    }, 'INVALID_REQUEST'],
+    ['u', {
+      op:'attempt_escape',
+      sessionRevision:0,
+      requestId:'bad',
     }, 'INVALID_REQUEST'],
   ];
   for (const [userId, body, code] of rejects) {

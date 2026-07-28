@@ -5637,12 +5637,17 @@ function installAuthoritativeQuestFlowV3() {
         questId:id,
         expectedRevision:game.player.serverRevision,
       });
-      applyAuthoritySnapshotV3(result);
+      const isHealingTraining = id === 'tut_healing_well';
+      if (!isHealingTraining) applyAuthoritySnapshotV3(result);
       closeModal();
-      if (id === 'tut_healing_well') {
+      if (isHealingTraining) {
         playSfx('enemyAttack');
-        window.triggerScreenShakeV19?.();
-        showCinematicMessage('회복 훈련!', '명진쌤의 안전한 훈련 공격! HP가 1이 되었어요. 치유의 우물로 가 보세요.', 2600);
+        game.combatImpact = { target:'player', until:Date.now() + 900 };
+        playSfx('critical');
+        showCinematicMessage('치명타!', '명진쌤의 안전한 훈련 공격! 잠시 후 HP가 1이 됩니다. 치유의 우물로 가 보세요.', 2600);
+        await new Promise((resolve) => setTimeout(resolve, 650));
+        applyAuthoritySnapshotV3(result);
+        game.combatImpact = null;
       } else {
         playSfx('quest');
         showCinematicMessage('퀘스트 수락!', `${QUEST_DEFS[id].title} 퀘스트를 시작합니다.`, 1600);
@@ -6574,7 +6579,6 @@ function wireAuthoritativeEconomyV3() {
     ensureBossAudioV21();
     if (!game.settings.bgmEnabled) return null;
     if (screens.game.classList.contains('active') && (game.currentMap === 'bossRoom' || game.currentMap === 'finalBossRoom')) return game.audio.bossFile || null;
-    if (screens.game.classList.contains('active') && game.currentCombatMonsterId) return game.audio.battleFile || null;
     return oldGetDesiredAudioFileV21();
   };
   const oldSyncAudioFileBgmV21 = syncAudioFileBgm;
@@ -13361,6 +13365,7 @@ function wireAuthoritativePveCombatV3() {
   let session = null;
   let activeMonster = null;
   let busy = false;
+  let hasAttemptedResume = false;
 
   function getClient() {
     const client = secureStudentAccess.getClient();
@@ -13389,6 +13394,7 @@ function wireAuthoritativePveCombatV3() {
     session = null;
     activeMonster = null;
     busy = false;
+    hasAttemptedResume = false;
     game.currentCombatMonsterId = null;
     game.currentQuestion = null;
     game.currentCombatAction = null;
@@ -13477,6 +13483,8 @@ function wireAuthoritativePveCombatV3() {
       monster.dying = false;
       resetLocalCombat();
       closeModal();
+      // 승리 보상과 레벨업은 공격/쓰러짐 연출이 모두 끝난 뒤 HUD에 반영한다.
+      applyServerPlayer(response);
       showRewardSequenceV2('몬스터를 처치했습니다!', monster.name, rewards, {
         monsterRandomBuilding:Number(rewards.building) > 0,
       });
@@ -13490,6 +13498,8 @@ function wireAuthoritativePveCombatV3() {
 
   function finishDefeat(response) {
     const goldLost = Number(response.death?.goldLost) || 0;
+    // 마지막 피격 연출에서 HP 0을 보여준 뒤 서버가 정한 마을 부활 상태로 맞춘다.
+    applyServerPlayer(response, true);
     resetLocalCombat();
     closeModal();
     playSfx('defeat');
@@ -13507,11 +13517,6 @@ function wireAuthoritativePveCombatV3() {
   function presentResponse(response) {
     const monster = activeMonster;
     const outcome = String(response?.outcome || 'continue');
-    applyServerPlayer(response, response.outcome === 'defeat');
-    if (response?.session) applySession(response.session, monster);
-    // [v59] 연출 재생기는 몬스터가 이미 죽어 있으면 큐를 통째로 버리고 완료 신호도 보내지 않는다.
-    // 그래서 쓰러뜨리는 처리는 로그가 끝난 뒤(finishVictory)에 하고, 그때까지는 살아 있는 것으로 둔다.
-    if (outcome === 'victory' && monster) monster.alive = true;
     // [v59] 서버 결과를 예전 로컬 전투와 같은 연출 지시서로 번역한다.
     // 예전에는 이름표(type)가 없어 연출 재생기가 로그를 전부 버렸다.
     const skillId = String(game.currentCombatAction || '').startsWith('active:')
@@ -13534,16 +13539,28 @@ function wireAuthoritativePveCombatV3() {
         ? window.YuksamAudioManifest?.skillSounds?.[skillId]
         : window.YuksamAudioManifest?.classBasicSounds?.[game.player?.class || 'warrior'],
     });
-    const finish = () => {
-      if (outcome === 'victory') finishVictory(response, monster);
-      else if (outcome === 'defeat') finishDefeat(response);
-      else {
-        busy = false;
-        renderAuthorityMenuV3('다음 행동을 선택하세요.');
-      }
-    };
-    if (notices.length) queueCombatSequence(notices, finish);
-    else finish();
+    const presenter = window.YuksamAuthoritativeCombatPresentationV3.create({
+      playNotices:(queuedNotices, done) => {
+        if (queuedNotices.length) queueCombatSequence(queuedNotices, done);
+        else done();
+      },
+      reconcile:(serverResponse) => {
+        // 계속되는 전투만 다음 문제와 최종 턴 체력을 여기서 맞춘다.
+        // 승리 보상은 쓰러짐 뒤, 패배 부활 상태는 마지막 피격 뒤 각 종료 함수가 적용한다.
+        if (outcome === 'continue' && serverResponse?.session) {
+          applySession(serverResponse.session, monster);
+        }
+      },
+      finish:() => {
+        if (outcome === 'victory') finishVictory(response, monster);
+        else if (outcome === 'defeat') finishDefeat(response);
+        else {
+          busy = false;
+          renderAuthorityMenuV3('다음 행동을 선택하세요.');
+        }
+      },
+    });
+    presenter.present({ response, notices });
   }
 
   function renderAuthorityQuestionV3() {
@@ -13579,13 +13596,14 @@ function wireAuthoritativePveCombatV3() {
     if (!isActive()) return;
     // [v59] 예전과 같은 메뉴 문구·툴팁으로 되돌린다 (보스는 도망 불가)
     const noEscape = Boolean(activeMonster?.noEscape);
+    const escapeLocked = Boolean(session?.escapeFailed);
     renderCombatFrame(message, `
       <div class="combat-menu">
         <button class="primary" data-tooltip="기본 공격&#10;문제를 맞히면 현재 공격력만큼 피해를 줍니다." ${busy ? 'disabled' : ''} onclick="chooseCombatAction('attack')">공격</button>
         <button class="primary" data-tooltip="스킬&#10;배운 액티브 스킬 목록을 엽니다." ${busy ? 'disabled' : ''} onclick="chooseCombatAction('skill')">스킬</button>
-        <button class="ghost" data-tooltip="도망&#10;전투에서 빠져나옵니다." ${(busy || noEscape) ? 'disabled' : ''} onclick="escapeCombat()">${noEscape ? '도망 불가' : '도망'}</button>
+        <button class="ghost" data-tooltip="도망&#10;실패하면 반격을 받고 이번 전투에서는 다시 도망칠 수 없습니다." ${(busy || noEscape || escapeLocked) ? 'disabled' : ''} onclick="escapeCombat()">${noEscape ? '도망 불가' : (escapeLocked ? '도망 실패' : '도망')}</button>
       </div>
-      <p class="muted">공격이나 스킬을 누르면 문제가 출제됩니다. 정답이면 행동 성공, 이후 몬스터가 반격합니다.</p>
+      <p class="muted">공격이나 스킬을 누르면 문제가 출제됩니다. 정답이면 행동 성공, 이후 몬스터가 반격합니다.${escapeLocked ? ' 이번 전투에서는 더 이상 도망칠 수 없습니다.' : ''}</p>
     `);
   }
 
@@ -13619,11 +13637,20 @@ function wireAuthoritativePveCombatV3() {
     } catch (error) {
       busy = false;
       toast(error?.message || '전투 서버와 통신하지 못했습니다.');
+      if (hasAttemptedResume) {
+        resetLocalCombat();
+        closeModal();
+        return;
+      }
+      hasAttemptedResume = true;
       try {
         const resumed = await getClient().resume();
         if (resumed?.session) {
           applySession(resumed.session, activeMonster);
           renderAuthorityMenuV3('전투 상태를 다시 불러왔습니다.');
+        } else {
+          resetLocalCombat();
+          closeModal();
         }
       } catch {
         resetLocalCombat();
@@ -13641,6 +13668,7 @@ function wireAuthoritativePveCombatV3() {
     const client = getClient();
     if (!client || busy) return false;
     busy = true;
+    hasAttemptedResume = false;
     activeMonster = monster;
     game.currentCombatMonsterId = monster.id;
     renderCombatFrame(monster?.noEscape ? '보스 몬스터가 나타났다!' : '야생의 적이 나타났다!', '<p class="muted">잠시만 기다려 주세요.</p>');
@@ -13704,26 +13732,63 @@ function wireAuthoritativePveCombatV3() {
   window.escapeCombat = async function escapeCombatAuthorityV3() {
     if (!isActive()) return legacyEscapeCombat();
     if (busy) return;
+    if (activeMonster?.noEscape) {
+      renderAuthorityMenuV3('보스 전투에서는 도망칠 수 없습니다!');
+      return;
+    }
+    if (session?.escapeFailed) {
+      renderAuthorityMenuV3('이미 도망에 실패했습니다. 이번 전투에서는 더 이상 도망칠 수 없습니다!');
+      return;
+    }
     busy = true;
     try {
-      const response = await getClient().surrender(session.sessionRevision);
-      applyServerPlayer(response);
+      const response = await getClient().attemptEscape(session.sessionRevision);
       const monster = activeMonster;
-      resetLocalCombat();
-      if (monster) monster.ignorePlayerUntil = Date.now() + 1800;
-      closeModal();
-      // [v59] 예전 도망 연출 복구: 몬스터 반대쪽으로 물러나고 안내와 소리를 낸다
-      if (monster && game.player) {
-        const vx = game.player.x - monster.x;
-        const vy = game.player.y - monster.y;
-        const len = Math.hypot(vx, vy) || 1;
-        const world = worldDefs[game.currentMap] || worldDefs.forest;
-        game.player.x = clamp(game.player.x + (vx / len) * 140, 40, world.width - 40);
-        game.player.y = clamp(game.player.y + (vy / len) * 140, 40, world.height - 40);
+      if (response?.escape?.success !== true) {
+        presentResponse(response);
+        return;
       }
-      playSfx('transition');
-      showCinematicMessage('도망치는데 성공했다!', `${monster?.name || '적'}에게서 거리를 벌렸습니다.`, 1500);
-      appendChatMessage('system', '도망', `${monster?.name || '적'}에게서 도망쳤습니다.`);
+
+      renderCombatFrame('도망을 시도합니다!', `<div class="flee-note-v21">${escapeHtml(game.player.name)}이(가) 몸을 돌려 조금씩 물러납니다…!</div>`);
+      playSfx('step');
+      const fleeStart = Date.now();
+      const FLEE_MS = 1120;
+      const fleeIv = setInterval(() => {
+        const progress = Math.min(1, (Date.now() - fleeStart) / FLEE_MS);
+        const element = document.querySelector('.combat-player');
+        if (element) {
+          let dist;
+          let alpha = 1;
+          if (progress < 0.35) dist = -46 * (progress / 0.35);
+          else if (progress < 0.55) dist = -46 - 6 * ((progress - 0.35) / 0.2);
+          else {
+            const exitProgress = (progress - 0.55) / 0.45;
+            dist = -52 - 188 * exitProgress;
+            alpha = 1 - exitProgress;
+          }
+          element.style.animation = 'none';
+          element.style.transform = `translateX(${dist}px)`;
+          element.style.opacity = String(Math.max(0, alpha));
+        }
+        if (progress >= 1) clearInterval(fleeIv);
+      }, 40);
+      setTimeout(() => {
+        applyServerPlayer(response);
+        resetLocalCombat();
+        if (monster && game.player) {
+          const vx = game.player.x - monster.x;
+          const vy = game.player.y - monster.y;
+          const len = Math.hypot(vx, vy) || 1;
+          const world = worldDefs[game.currentMap] || worldDefs.forest;
+          game.player.x = clamp(game.player.x + (vx / len) * 140, 40, world.width - 40);
+          game.player.y = clamp(game.player.y + (vy / len) * 140, 40, world.height - 40);
+          monster.ignorePlayerUntil = Date.now() + 1800;
+          monster.chasing = true;
+        }
+        closeModal();
+        showCinematicMessage('도망치는 데 성공했다!', `${monster?.name || '적'}에게서 거리를 벌렸습니다.`, 1500);
+        appendChatMessage('system', '도망', `${monster?.name || '적'}에게서 도망쳤습니다.`);
+      }, FLEE_MS);
     } catch (error) {
       busy = false;
       toast(error?.message || '전투를 끝내지 못했습니다.');
