@@ -120,12 +120,31 @@ Claude의 추천은 **보류**였고 사용자에게 물어본 상태에서 세�
 - `player-support` → `kind`('shield'|'heal'|...) 필수, shield/heal은 `amount > 0` 필수
 - `monster-status`/`player-status` → `status` 필수, `shadow`는 `stacks > 0` 필수
 
-### ⑥ 간헐적으로 실패하는 검사 (원래 있던 문제, 내 변경 아님)
-`tests/combat-flow.test.mjs` 의 *"jsdom combat state changes occur on their matching queued events"* 가 **약 5번에 1번 실패**한다.
-- 실패할 땐 **14.4초**, 통과할 땐 **30초** (조기 종료)
-- 실패 시 여러 검사가 한꺼번에 **빈 결과**(`[]`, `{}`)로 무너진다 → 준비 단계 타이밍 경합으로 추정
-- 17회 중 3회 실패 측정됨. `login-keys` 도입 **이전**에도 실패한 기록이 있어 이번 작업과 무관함이 확인됨
-- **전체 검사가 이것 하나로 실패하면 다시 돌려보면 된다.** 다른 게 실패하면 진짜 문제다.
+### ⑥ 간헐적으로 실패하는 검사 — **여기까지 좁혀 놨다. 이어서 파면 된다**
+
+`tests/combat-flow.test.mjs` 의 *"jsdom combat state changes occur on their matching queued events"* 가 **약 5~6번에 1번 실패**한다.
+(구동 파일: `tools/browser-smoke/try_combat_event_timing.js`)
+
+**확인된 사실**
+- 실패할 땐 **14.4~14.7초**, 통과할 땐 **30초**. 즉 **중간에 조기 종료**된다.
+- 실패 시 **`FAIL:` 가 한꺼번에 쏟아지고 결과가 전부 빈 값**(`[]`, `{}`)이다.
+- ⭐ **무너지기 시작하는 지점이 항상 같다: `Prayer Barrier twice plays its mapped sound...`**
+  그 앞 구간(투사체 비행, 몬스터 다단히트 등)은 매번 통과한다.
+- `login-keys` 도입 **이전**에도 실패한 기록이 있어 최근 작업과 무관하다.
+
+**이미 시도해서 고친 것 (효과 있었지만 완전 해결은 아님)**
+- 로그인 후 대기가 `1300ms`였는데 새 캐릭터 연출은 `1700ms`에 생성창을 준비한다.
+  준비 전에 `createCharacterBtn`을 눌러 외형·직업이 안 정해진 채 진행되던 경합 → **`1900ms`로 늘림**.
+  이후에도 6회 중 1회 실패하므로 **다른 원인이 더 있다.**
+
+**다음에 볼 곳 (추천 순서)**
+1. `try_combat_event_timing.js` 의 **Prayer Barrier 구간 바로 앞**에서 전투 상태가 어떻게 정리되는지 (`resetCombatState`).
+   앞 구간이 남긴 상태(보호막·상태이상·진행 중인 연출 큐)가 안 지워지면 이후가 전부 어긋난다.
+2. `window.setTimeout` 을 12ms로 캡하는 `fastSetTimeout` 스텁과 연출 큐 스케줄러의 경합.
+3. `useRandomSequence([...])` 가 **소진되면 0.99로 폴백**한다. 구간마다 소비량이 달라지면 다음 구간이 의도와 다른 난수를 받는다.
+4. 근본 대책: 각 구간 시작 전에 **"준비가 끝났는지" 단언**을 넣어, 실패 시 20개가 쏟아지는 대신 **어느 준비 단계가 안 끝났는지 한 줄로** 알려주게 만들 것.
+
+**그때까지는:** 전체 검사가 이 하나로만 실패하면 다시 돌리면 된다. 다른 게 실패하면 진짜 문제다.
 
 ### ⑦ 환경 제약
 - **Python 없음** (Windows 스토어 스텁만). openpyxl 등 사용 불가. 엑셀은 `jszip`으로 직접 생성했다(`시트/퀘스트_문구_검토용.xlsx`).
@@ -166,7 +185,8 @@ Claude의 추천은 **보류**였고 사용자에게 물어본 상태에서 세�
 1. **2번 Supabase 작업을 사용자에게 안내** (Edge Function 재배포 + 마이그레이션). 이게 안 되면 기술 이름이 안 나온다.
 2. **사용자 실플레이 확인** — 전투 연출이 예전 느낌인지 (속도/순서/빠진 연출). 사용자가 계속 피드백을 주고 있다.
 3. **도망 실패** — 3번 결정 후
-4. `tests/combat-flow.test.mjs` 간헐 실패 고치기 (급하지 않음)
+4. `tests/combat-flow.test.mjs` 간헐 실패 고치기 — **④번 함정에 조사 결과와 다음 단서를 자세히 적어 뒀다.**
+   무너지는 지점이 `Prayer Barrier` 구간으로 특정되어 있으니 거기부터 보면 된다. (급하지 않음)
 5. 실제 브라우저 다기기 검증 — `docs/server-authority-v3-cutover-checklist.md`의 미체크 항목들. **28명 동시 접속·보안 검증은 아직 한 번도 안 했다.**
 
 ---

@@ -14,7 +14,9 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   $('loginName').value = '전투상태시점검증';
   $('loginPassword').value = '1234';
   click('studentLoginBtn');
-  await sleep(1300);
+  // 새 캐릭터 연출이 1.7초 뒤에 생성창을 준비한다. 그전에 누르면 외형·직업이 안 정해진 채로 진행돼
+  // 이후 검사들이 빈 결과를 받는다(간헐 실패의 원인).
+  await sleep(1900);
   click('createCharacterBtn');
   await sleep(2600);
   try { window.__tutorialDoneV53?.(); } catch {}
