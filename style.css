@@ -734,6 +734,28 @@ body.defeated #app { filter: grayscale(1) brightness(.62); transition: filter .3
 .choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
 .choice-grid button { text-align: left; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.07); }
 .choice-grid button:hover { border-color: rgba(92,200,255,.55); background: rgba(92,200,255,.12); }
+.healing-well-quiz-image {
+  display: block;
+  width: min(210px, 58vw);
+  max-height: 190px;
+  object-fit: contain;
+  margin: 10px auto;
+  filter: drop-shadow(0 14px 18px rgba(14,165,233,.24));
+}
+.healing-well-loading { text-align: center; }
+.healing-well-choice-grid button {
+  min-height: 50px;
+  text-align: center;
+  font-size: 1.05rem;
+}
+.workbook-tool-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+.workbook-tool-tabs button { min-height: 44px; }
+.workbook-tool-panel { margin-top: 10px; }
 .objective-chip { display:inline-flex; align-items:center; justify-content:center; min-width: 28px; height: 28px; margin-right: 8px; border-radius: 9px; background: rgba(255,215,106,.18); color: #fff2b7; font-weight: 900; }
 .admin-floating:hover, .settings-floating:hover { background: rgba(12,24,42,.86); }
 .speech-hint { color:#d9f99d; }

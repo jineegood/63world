@@ -408,6 +408,36 @@ test('poison and shadow damage tick after the monster action and remain server-o
   );
 });
 
+test('a missed monster technique does not apply poison or other attached statuses', () => {
+  const player = buildCombatant({ ...basicPlayer, inventory:[], activePet:null, skills:{} });
+  const state = {
+    ...startEncounter({ player, monsterKey:'forest_mushroom', random:sequence(0, 0) }),
+    monsterHp:30,
+    monsterMaxHp:30,
+    monsterAttack:3,
+    monsterPatterns:[{ chance:1, kind:'poison', turns:2, name:'포자 뿌리기' }],
+  };
+  const result = resolveTurn({
+    state,
+    player,
+    actionId:'basic',
+    answer:'4',
+    answerKey:'4',
+    random:sequence(
+      0.5, // player attack power
+      0.9, // player attack lands
+      0.9, // player critical
+      0,   // choose poison technique
+      0,   // monster technique misses
+    ),
+  });
+
+  assert.equal(result.state.playerHp, player.maxHp);
+  assert.equal(result.state.playerStatuses.poisonTurns, undefined);
+  assert.ok(result.events.some((event) => event.type === 'monster-miss'));
+  assert.ok(!result.events.some((event) => event.type === 'player-status'));
+});
+
 test('warrior passive extra hits and Guardian Oath resolve inside the trusted turn', () => {
   const player = buildCombatant({
     className:'warrior',

@@ -5725,19 +5725,28 @@ function installAuthoritativeQuestFlowV3() {
     if (!enabled()) return legacyOpenHealingWell();
     if (pending) return;
     pending = true;
+    openModal(`<h2>치유의 우물</h2>
+      <div class="panel-card healing-well-loading">
+        <img class="healing-well-quiz-image" src="assets/치유의 우물.png" alt="치유의 우물">
+        <h3>치유의 우물이다!</h3>
+        <p>문제를 맞히면 회복할 수 있다!</p>
+        <p class="muted">회복 문제를 불러오는 중...</p>
+      </div>`, { type:'healingWell', pause:true });
     try {
       const response = await getHealingClient().startHealing(game.player.serverRevision);
       healingQuestion = response.question;
       const prompt = escapeHtml(healingQuestion?.prompt || '문제를 확인하세요.');
       const choices = Array.isArray(healingQuestion?.choices) ? healingQuestion.choices : [];
       const answerUi = choices.length
-        ? `<div class="choice-list">${choices.map((choice, index) => (
+        ? `<div class="choice-grid healing-well-choice-grid">${choices.map((choice, index) => (
           `<button class="primary" onclick="submitAuthorityHealingChoiceV3(${index})">${escapeHtml(String(choice))}</button>`
         )).join('')}</div>`
         : `<div class="answer-row"><input id="healingAnswer" maxlength="512" placeholder="정답 입력">
            <button class="primary" onclick="submitAuthorityHealingAnswerV3(document.getElementById('healingAnswer').value)">회복</button></div>`;
       openModal(`<h2>치유의 우물</h2><div class="panel-card">
-        <p>문제를 맞히면 HP가 모두 회복됩니다.</p><h3>${prompt}</h3>${answerUi}</div>`,
+        <p>문제를 맞히면 HP가 모두 회복됩니다.</p>
+        <img class="healing-well-quiz-image" src="assets/치유의 우물.png" alt="치유의 우물">
+        <h3>${prompt}</h3>${answerUi}</div>`,
       { type:'healingWell', pause:true });
     } catch (error) {
       toast(error?.message || '치유 문제를 불러오지 못했습니다.');
@@ -6208,6 +6217,12 @@ function wireAuthoritativeEconomyV3() {
     const t = performance.now() / 1000;
     ctx.save();
     ctx.translate(p.x, p.y);
+    if (distance(game.player, well) < 92) {
+      ctx.strokeStyle = 'rgba(134,239,172,.95)';
+      ctx.fillStyle = 'rgba(34,197,94,.12)';
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.ellipse(0, 30, 58, 22, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    }
     ctx.fillStyle = 'rgba(0,0,0,.22)';
     ctx.beginPath(); ctx.ellipse(0, 36, 48, 13, 0, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#64748b';
@@ -6242,12 +6257,13 @@ function wireAuthoritativeEconomyV3() {
     game.healingQuestion = getHealingQuestion();
     const q = game.healingQuestion;
     const choices = Array.isArray(q.choices) && q.choices.length === 4 ? q.choices : null;
-    const answerUi = choices ? `<div class="choice-list">${choices.map((c) => `<button class="primary" onclick="submitHealingAnswer('${escapeJs(c)}')">${escapeHtml(c)}</button>`).join('')}</div>` : `
+    const answerUi = choices ? `<div class="choice-grid healing-well-choice-grid">${choices.map((c) => `<button class="primary" onclick="submitHealingAnswer('${escapeJs(c)}')">${escapeHtml(c)}</button>`).join('')}</div>` : `
       <div class="answer-row"><input id="healingAnswer" placeholder="정답 입력" onkeydown="if(event.key==='Enter') submitHealingAnswer(this.value)" autofocus /><button class="primary" onclick="submitHealingAnswer(document.getElementById('healingAnswer').value)">회복</button></div>`;
     openModal(`
       <h2>치유의 우물</h2>
       <div class="panel-card">
         <p>우물의 빛이 반짝입니다. 문제를 맞히면 HP가 모두 회복됩니다.</p>
+        <img class="healing-well-quiz-image" src="assets/치유의 우물.png" alt="치유의 우물">
         <h3>${escapeHtml(q.q)}</h3>
         ${answerUi}
         <p class="muted">실패하면 다시 우물에 말을 걸어야 합니다.</p>
@@ -13279,6 +13295,12 @@ window.cheatUpgradeEquippedWeapon = function cheatUpgradeEquippedWeapon() {
     const pulse = Math.sin(performance.now() / 420) * 2;
     ctx.save();
     ctx.translate(p.x, p.y);
+    if (distance(game.player, well) < 92) {
+      ctx.strokeStyle = 'rgba(134,239,172,.95)';
+      ctx.fillStyle = 'rgba(34,197,94,.12)';
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.ellipse(0, 25, 51, 19, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    }
     ctx.fillStyle = 'rgba(0,0,0,.24)';
     ctx.beginPath(); ctx.ellipse(0, 29, 40, 11, 0, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#64748b';

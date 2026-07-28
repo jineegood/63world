@@ -17,6 +17,16 @@ let secureAdminMutationV2 = false;
 const openWorkbookDetailsV2 = new Set();
 let editingWorkbookQuestionV2 = null;
 let workbookImportReportV2 = null;
+let workbookToolV2 = 'direct';
+let selectedWorkbookV2 = '';
+const CHEAT_ENABLED_KEY_V2 = 'ysb_teacher_cheat_enabled_v2';
+try {
+  window.__cheatEnabledV54 = sessionStorage.getItem(CHEAT_ENABLED_KEY_V2) === '1';
+} catch {
+  window.__cheatEnabledV54 = false;
+}
+const initialCheatClusterV2 = document.getElementById('cheatCluster');
+if (initialCheatClusterV2 && window.__cheatEnabledV54) initialCheatClusterV2.style.display = 'flex';
 
 if (SECURE_ADMIN_MODE_V2) {
   const secureAdminUrlV2 = String(window.YUKSAM_CLOUD?.url || '')
@@ -196,7 +206,10 @@ function teacherWorkbooksHtml(){
   const workbooks = SECURE_ADMIN_MODE_V2 && secureAdminSharedV2
     ? secureAdminSharedV2.getWorkbooks()
     : getWorkbooks();
-  const workbookOptions = workbooks.map((wb) => `<option value="${wb.id}">${escapeHtml(wb.name)} (${wb.questions.length}문제)</option>`).join('');
+  if (!workbooks.some((wb) => wb.id === selectedWorkbookV2)) selectedWorkbookV2 = workbooks[0]?.id || '';
+  const workbookOptions = workbooks.map((wb) => (
+    `<option value="${wb.id}" ${wb.id === selectedWorkbookV2 ? 'selected' : ''}>${escapeHtml(wb.name)} (${wb.questions.length}문제)</option>`
+  )).join('');
   const cards = workbooks.length ? workbooks.map((wb, i) => `
     <div class="workbook-card${wb.enabled === false ? ' wb-disabled' : ''}">
       <div class="wb-head">
@@ -224,11 +237,9 @@ function teacherWorkbooksHtml(){
     </div>
   `).join('') : '<div class="empty-state">등록된 문제집이 없습니다.</div>';
 
-  return `<div class="teacher-body">
-    <div class="panel-card">
+  const tools = {
+    direct:`<div class="panel-card workbook-tool-panel">
       <h3>문제 직접 추가</h3>
-      <label>추가할 문제집</label>
-      <select id="adminWorkbook">${workbookOptions || '<option value="">문제집 없음</option>'}</select>
       <div class="wb-new-row">
         <input id="adminQuestion" placeholder="예: 24 ÷ 6 = ?" />
         <input id="adminAnswer" placeholder="정답" style="max-width:140px" />
@@ -236,12 +247,14 @@ function teacherWorkbooksHtml(){
       </div>
       <label>객관식 보기 4개 (선택사항)</label>
       <input id="adminChoices" placeholder="예: 2, 3, 4, 5" />
-      <h3 style="margin-top:16px">여러 문제 한 번에 등록</h3>
+    </div>`,
+    bulk:`<div class="panel-card workbook-tool-panel">
+      <h3>여러 문제 한 번에 등록</h3>
       <textarea id="adminBulk" rows="4" placeholder="한 줄에 하나씩:  문제 = 정답&#10;예)&#10;7 × 8 = ? = 56&#10;대한민국의 수도는? = 서울"></textarea>
       <button class="ghost wide" onclick="adminBulkImport()">붙여넣은 문제 모두 추가</button>
       <p class="muted">마지막 "=" 뒤가 정답으로 인식됩니다.</p>
-    </div>
-    <div class="panel-card" style="margin-top:12px">
+    </div>`,
+    table:`<div class="panel-card workbook-tool-panel">
       <h3>엑셀 · CSV로 문제 추가</h3>
       <p class="muted">위에서 고른 문제집에 들어갑니다.</p>
       <label>① 엑셀에서 칸을 드래그해 복사(Ctrl+C)한 뒤, 아래에 붙여넣기(Ctrl+V)</label>
@@ -251,8 +264,8 @@ function teacherWorkbooksHtml(){
       <button class="primary wide" onclick="adminImportTable()" style="margin-top:8px">표에서 문제 추가</button>
       <p class="muted">두 칸(문제·정답)이면 보기는 게임이 자동으로 만들어 줍니다.
         여섯 칸(문제·정답·보기4개)이면 적어주신 보기를 그대로 씁니다. 첫 줄이 제목줄이면 알아서 건너뜁니다.</p>
-    </div>
-    <div class="panel-card" style="margin-top:12px">
+    </div>`,
+    ai:`<div class="panel-card workbook-tool-panel">
       <h3>ChatGPT로 문제 만들기</h3>
       <p class="muted">아래 버튼으로 문장을 복사해 ChatGPT에 붙여넣고, 나온 결과를 위 "엑셀 · CSV로 문제 추가" 칸에 붙여넣으면 됩니다.</p>
       <label>주제</label>
@@ -261,9 +274,51 @@ function teacherWorkbooksHtml(){
       <input id="chatGptCount" type="number" min="1" max="20" value="20" style="max-width:140px" />
       <button class="primary wide" onclick="copyChatGptPrompt()" style="margin-top:8px">ChatGPT에 넣을 문장 복사</button>
       <textarea id="chatGptPromptBox" rows="4" readonly class="hidden" style="margin-top:8px"></textarea>
+    </div>`,
+  };
+  const toolButtons = [
+    ['direct', '문제 직접 추가'],
+    ['bulk', '여러 문제 등록'],
+    ['table', '엑셀 · CSV'],
+    ['ai', 'ChatGPT로 만들기'],
+  ];
+
+  return `<div class="teacher-body">
+    <h3>내 문제집</h3>
+    <div>${cards}</div>
+    <div class="panel-card workbook-tools-wrap" style="margin-top:12px">
+      <h3>문제 추가 도구</h3>
+      <label>추가할 문제집</label>
+      <select id="adminWorkbook" onchange="adminRememberWorkbook(this.value)">${workbookOptions || '<option value="">문제집 없음</option>'}</select>
+      <div class="workbook-tool-tabs">
+        ${toolButtons.map(([key, label]) => `<button class="${workbookToolV2 === key ? 'primary' : 'ghost'}" onclick="adminOpenWorkbookTool('${key}')">${label}</button>`).join('')}
+      </div>
     </div>
+    ${tools[workbookToolV2] || tools.direct}
     ${workbookImportReportHtml()}
-    <div style="margin-top:12px">${cards}</div>
+  </div>`;
+}
+
+window.adminRememberWorkbook = function adminRememberWorkbook(workbookId){
+  selectedWorkbookV2 = String(workbookId || '');
+};
+
+window.adminOpenWorkbookTool = function adminOpenWorkbookTool(tool){
+  if (!['direct', 'bulk', 'table', 'ai'].includes(tool)) return;
+  selectedWorkbookV2 = $('adminWorkbook')?.value || selectedWorkbookV2;
+  workbookToolV2 = tool;
+  openAdminPanel('workbooks', { keepScroll:true });
+};
+
+function teacherCheatCardHtml(){
+  return `<div class="panel-card" style="margin-top:12px">
+    <h3>🧪 치트(테스트) 도구</h3>
+    <div style="text-align:center;margin:10px 0">현재: ${window.__cheatEnabledV54 ? '<span class="good-text" style="font-weight:800">🟢 활성화됨</span>' : '<span class="muted" style="font-weight:800">⚪ 비활성</span>'}</div>
+    <div class="action-row">
+      <button class="primary" onclick="adminSetCheatEnabled(true)" ${window.__cheatEnabledV54 ? 'disabled' : ''}>치트 활성화</button>
+      <button class="ghost danger-text" onclick="adminSetCheatEnabled(false)" ${window.__cheatEnabledV54 ? '' : 'disabled'}>치트 비활성</button>
+    </div>
+    <p class="muted">활성화하면 화면 왼쪽에 치트 꾸러미(EXP·Gold·빌딩·즉시처치 등)가 나타납니다. 이 브라우저에서 관리자 테스트를 할 때만 사용하세요.</p>
   </div>`;
 }
 
@@ -285,6 +340,7 @@ function teacherSettingsHtml(){
         </div>
         <p class="muted">변경 내용은 학생 화면에 약 15초 안에 반영됩니다.</p>
       </div>
+      ${teacherCheatCardHtml()}
       <button class="ghost wide" onclick="adminTeacherLogout()" style="margin-top:12px">관리자 로그아웃</button>
     </div>`;
   }
@@ -310,20 +366,13 @@ function teacherSettingsHtml(){
       </div>
       <p class="muted">서버를 닫으면 학생들이 접속하거나 계속 플레이할 수 없습니다. 수업이 아닌 시간에 닫아 두세요.</p>
     </div>
-    <div class="panel-card" style="margin-top:12px">
-      <h3>🧪 치트(테스트) 도구</h3>
-      <div style="text-align:center;margin:10px 0">현재: ${window.__cheatEnabledV54 ? '<span class="good-text" style="font-weight:800">🟢 활성화됨</span>' : '<span class="muted" style="font-weight:800">⚪ 비활성</span>'}</div>
-      <div class="action-row">
-        <button class="primary" onclick="adminSetCheatEnabled(true)" ${window.__cheatEnabledV54 ? 'disabled' : ''}>치트 활성화</button>
-        <button class="ghost danger-text" onclick="adminSetCheatEnabled(false)" ${window.__cheatEnabledV54 ? '' : 'disabled'}>치트 비활성</button>
-      </div>
-      <p class="muted">활성화하면 화면 왼쪽에 치트 꾸러미(EXP·Gold·빌딩·즉시처치 등)가 나타납니다. 테스트·시연용이며, 수업 중에는 꺼 두세요.</p>
-    </div>
+    ${teacherCheatCardHtml()}
   </div>`;
 }
 
 window.adminSetCheatEnabled = function adminSetCheatEnabled(on){
   window.__cheatEnabledV54 = !!on;
+  try { sessionStorage.setItem(CHEAT_ENABLED_KEY_V2, on ? '1' : '0'); } catch {}
   const cluster = document.getElementById('cheatCluster');
   if (cluster) cluster.style.display = on ? 'flex' : 'none';
   if (!on) { const panel = document.getElementById('cheatPanel'); if (panel) panel.classList.add('hidden'); }
