@@ -47,6 +47,7 @@ test('combat client sends only bounded action identifiers to the secure endpoint
     'basic',
     '4',
   );
+  await api.attemptEscape(3);
   await api.surrender(3);
   await api.resume();
   await api.startHealing(7);
@@ -58,7 +59,7 @@ test('combat client sends only bounded action identifiers to the secure endpoint
 
   assert.equal(calls.every((call) => call.name === 'student-combat-v3'), true);
   assert.deepEqual(calls.map((call) => call.body.op), [
-    'start', 'submit_turn', 'surrender', 'resume', 'start_healing', 'submit_healing',
+    'start', 'submit_turn', 'attempt_escape', 'surrender', 'resume', 'start_healing', 'submit_healing',
   ]);
   for (const call of calls) {
     assert.equal('userId' in call.body, false);
@@ -70,8 +71,9 @@ test('combat client sends only bounded action identifiers to the secure endpoint
   assert.match(calls[0].body.requestId, /^[0-9a-f-]{36}$/i);
   assert.equal(calls[1].body.sessionRevision, 2);
   assert.equal(calls[1].body.answer, '4');
-  assert.equal(calls[4].body.expectedRevision, 7);
-  assert.equal(calls[5].body.answer, '4');
+  assert.equal(calls[2].body.sessionRevision, 3);
+  assert.equal(calls[5].body.expectedRevision, 7);
+  assert.equal(calls[6].body.answer, '4');
 });
 
 test('duplicate pending submissions share one network request', async () => {
@@ -104,6 +106,44 @@ test('duplicate pending submissions share one network request', async () => {
   release();
   assert.deepEqual(await first, await second);
   assert.equal(calls.length, 1);
+});
+
+test('duplicate pending escape clicks share one authoritative request', async () => {
+  let release;
+  const delayed = new Promise((resolve) => { release = resolve; });
+  const calls = [];
+  const client = {
+    functions:{
+      async invoke(name, options) {
+        calls.push({ name, body:options.body });
+        await delayed;
+        return { data:{ data:{ ok:true, outcome:'escaped' } }, error:null };
+      },
+    },
+  };
+  const window = {};
+  vm.runInNewContext(source, {
+    window,
+    crypto:{ randomUUID:() => '11111111-1111-4111-8111-111111111111' },
+    setTimeout,
+    clearTimeout,
+    Date,
+    Promise,
+    Object,
+    Error,
+  });
+  const api = window.YuksamPveCombatClientV3.create({ client, timeoutMs:1000 });
+  const first = api.attemptEscape(4);
+  const second = api.attemptEscape(4);
+  release();
+
+  assert.deepEqual(await first, await second);
+  assert.equal(calls.length, 1);
+  assert.deepEqual({ ...calls[0].body }, {
+    op:'attempt_escape',
+    sessionRevision:4,
+    requestId:'11111111-1111-4111-8111-111111111111',
+  });
 });
 
 test('safe server responses are validated, deeply frozen, and may reveal only correctAnswer', async () => {

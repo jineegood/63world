@@ -55,3 +55,18 @@ test('a combat error resumes once without silently submitting the attack again',
   assert.equal((body.match(/\.submitTurn\(/g) || []).length, 1);
   assert.doesNotMatch(body, /catch[\s\S]*\.submitTurn\(/);
 });
+
+test('authority escape uses the server result, restores the old animation, and locks after failure', () => {
+  const menu = functionBody('renderAuthorityMenuV3', 'showSkillsV3');
+  const start = game.indexOf('window.escapeCombat = async function escapeCombatAuthorityV3');
+  const end = game.indexOf('\n\n  combatEntryPipeline.register', start);
+  const escape = game.slice(start, end);
+
+  assert.match(menu, /session\?\.escapeFailed/);
+  assert.match(escape, /\.attemptEscape\(session\.sessionRevision\)/);
+  assert.doesNotMatch(escape, /\.surrender\(/);
+  assert.match(escape, /const FLEE_MS = 1120/);
+  assert.match(escape, /playSfx\('step'\)/);
+  assert.match(escape, /translateX\(\$\{dist\}px\)/);
+  assert.match(escape, /presentResponse\(response\)/);
+});

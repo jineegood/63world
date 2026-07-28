@@ -149,6 +149,18 @@
           requestId:id,
         });
       },
+      attemptEscape(sessionRevision, explicitRequestId) {
+        const revision = Number(sessionRevision);
+        if (!Number.isSafeInteger(revision) || revision < 1) {
+          return Promise.reject(failure('COMBAT_SERVER_ERROR'));
+        }
+        const id = requestId(explicitRequestId);
+        return once(`escape:${revision}`, {
+          op:'attempt_escape',
+          sessionRevision:revision,
+          requestId:id,
+        });
+      },
       surrender(sessionRevision, explicitRequestId) {
         const revision = Number(sessionRevision);
         if (!Number.isSafeInteger(revision) || revision < 1) {

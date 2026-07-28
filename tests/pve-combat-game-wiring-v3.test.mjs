@@ -61,22 +61,22 @@ test('authoritative turns send only action and answer identifiers and never calc
   assert.doesNotMatch(patch, /\b(?:addExp|addGold|addBuilding)\s*\(/);
 });
 
-test('server snapshots drive hp, rewards, resume, defeat, and surrender presentation', () => {
+test('server snapshots drive hp, rewards, resume, defeat, and escape presentation', () => {
   assert.match(patch, /snapshotToLegacyPlayer\(response\.player\)/);
   assert.match(patch, /session\.playerHp/);
   assert.match(patch, /session\.monsterHp/);
   assert.match(patch, /showRewardSequenceV2\(/);
   assert.match(patch, /\.resume\(\)/);
-  assert.match(patch, /\.surrender\(session\.sessionRevision\)/);
+  assert.match(patch, /\.attemptEscape\(session\.sessionRevision\)/);
   assert.match(patch, /outcome\s*===\s*'defeat'/);
   assert.doesNotMatch(patch, /startMonsterDefeatSequence|handlePlayerDefeat\(/);
   assert.match(patch, /game\.finalBossPortalUnlocked\s*=\s*Boolean\(game\.player\.finalBossPortalUnlocked\)/);
 });
 
-test('surrender and expired resume apply the authoritative hp snapshot before closing', () => {
+test('successful escape and expired resume apply the authoritative hp snapshot before closing', () => {
   assert.match(
     patch,
-    /const\s+response\s*=\s*await\s+getClient\(\)\.surrender\([^)]*\);\s*applyServerPlayer\(response\)/,
+    /\.attemptEscape\([^)]*\)[\s\S]*?setTimeout\(\(\)\s*=>\s*\{[\s\S]*?applyServerPlayer\(response\)[\s\S]*?resetLocalCombat\(\)/,
   );
   assert.match(
     patch,

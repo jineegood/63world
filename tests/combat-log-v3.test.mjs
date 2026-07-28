@@ -28,7 +28,7 @@ const context = {
 
 /* 서버가 실제로 보낼 수 있는 모든 이벤트 종류 (pve-combat-rules-v3.mjs의 EVENT_TYPES) */
 const SERVER_EVENT_TYPES = [
-  'answer-correct', 'answer-wrong', 'monster-damage', 'monster-dot', 'monster-action',
+  'answer-correct', 'answer-wrong', 'escape', 'monster-damage', 'monster-dot', 'monster-action',
   'monster-miss', 'monster-status', 'monster-shield', 'player-action', 'player-damage',
   'player-dot', 'player-heal', 'player-miss', 'player-shield', 'player-status',
 ];
@@ -54,6 +54,19 @@ test('every server event type produces a log line', () => {
     assert.equal(notices.length, 1, `${type} 가 로그를 만들지 못했습니다`);
     assert.ok(String(notices[0].text || '').trim(), `${type} 의 글자가 비어 있습니다`);
   }
+});
+
+test('a failed escape is shown before the server-owned monster counterattack', () => {
+  const result = loadLog().translate([
+    { type:'escape', success:false, chance:0.8 },
+    { type:'monster-action', name:'포자 뿌리기' },
+    { type:'player-damage', amount:3, hpDamage:3, shieldDamage:0 },
+  ], context);
+
+  assert.equal(result.notices[0].type, 'escape-failed');
+  assert.match(result.notices[0].text, /도망 실패/);
+  assert.equal(result.notices[1].type, 'monster-action');
+  assert.equal(result.notices[2].type, 'player-damage');
 });
 
 test('the log keeps the order the old battle used', () => {

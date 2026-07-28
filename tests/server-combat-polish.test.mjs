@@ -47,13 +47,13 @@ test('every blow carries a sound', () => {
 test('running away is called 도망 again and gets its old send-off', () => {
   const menu = game.slice(game.indexOf('function renderAuthorityMenuV3'));
   const body = menu.slice(0, menu.indexOf('\n  function showSkillsV3'));
-  assert.match(body, /'도망 불가' : '도망'/);
+  assert.match(body, /'도망 불가' : \(escapeLocked \? '도망 실패' : '도망'\)/);
   assert.doesNotMatch(body, /전투 그만두기/);
 
   const escape = game.slice(game.indexOf('window.escapeCombat = async function escapeCombatAuthorityV3'));
-  const escapeBody = escape.slice(0, 1400);
-  assert.match(escapeBody, /도망치는데 성공했다!/);
-  assert.match(escapeBody, /playSfx\('transition'\)/);
+  const escapeBody = escape.slice(0, 3200);
+  assert.match(escapeBody, /도망치는 데 성공했다!/);
+  assert.match(escapeBody, /playSfx\('step'\)/);
 });
 
 test('the four choices are shuffled so the answer is not always in the same slot', () => {
