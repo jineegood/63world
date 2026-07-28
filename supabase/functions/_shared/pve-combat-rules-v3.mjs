@@ -480,11 +480,13 @@ function performMonsterAction({ player, state, random, events }) {
   const faithMiss = skillScheduleValue(player, 'priest_basic_life', 'monsterMissChance');
   const monsterMissChance = Math.min(1, COMBAT_BALANCE_V3.monsterMissChance + faithMiss);
   const chilled = finiteInteger(state.monsterStatuses.chillTurns) > 0;
+  let landedHits = 0;
   for (let index = 0; index < hitCount && state.playerHp > 0; index += 1) {
     if (checkedRandom(random) < monsterMissChance) {
       pushEvent(events, { type:'monster-miss', hit:index });
       continue;
     }
+    landedHits += 1;
     let damage = Math.max(1, Math.ceil(state.monsterAttack * multiplier));
     const critical = pattern?.kind === 'critical'
       || checkedRandom(random) < (player.spec === '방어' ? 0.10 : 0.15);
@@ -538,7 +540,7 @@ function performMonsterAction({ player, state, random, events }) {
     }
   }
   if (chilled) state.monsterStatuses.chillTurns -= 1;
-  if (pattern?.kind === 'poison' && state.playerHp > 0) {
+  if (landedHits > 0 && pattern?.kind === 'poison' && state.playerHp > 0) {
     state.playerStatuses.poisonTurns = finiteInteger(pattern.turns, 2);
     state.playerStatuses.poisonDamage = Math.max(1, Math.ceil(state.monsterAttack * 0.3));
     pushEvent(events, {
@@ -548,11 +550,11 @@ function performMonsterAction({ player, state, random, events }) {
       damage:state.playerStatuses.poisonDamage,
     });
   }
-  if (finiteInteger(pattern?.stunTurns) > 0 && state.playerHp > 0) {
+  if (landedHits > 0 && finiteInteger(pattern?.stunTurns) > 0 && state.playerHp > 0) {
     state.playerStatuses.stunTurns = finiteInteger(pattern.stunTurns);
     pushEvent(events, { type:'player-status', status:'stun', turns:state.playerStatuses.stunTurns });
   }
-  if (pattern?.kind === 'chillPlayer' && state.playerHp > 0) {
+  if (landedHits > 0 && pattern?.kind === 'chillPlayer' && state.playerHp > 0) {
     state.playerStatuses.chillTurns = Math.max(
       finiteInteger(state.playerStatuses.chillTurns),
       finiteInteger(pattern.turns, 1),
