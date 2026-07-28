@@ -25,6 +25,7 @@
       enabled:false,
       status,
       enter:reject,
+      loadHallOfFame:reject,
       savePlayer:rejectSync,
       flush:reject,
       signOut:reject,
@@ -113,6 +114,12 @@
       cloud.queueSave(currentIdentity.userId, player);
     }
 
+    async function loadHallOfFame() {
+      const { data, error } = await client.rpc('load_hall_of_fame_v2');
+      if (error) throw new Error('명예의 전당 기록을 불러오지 못했어요.');
+      return Array.isArray(data) ? data : [];
+    }
+
     async function flush() {
       await cloud.flush();
     }
@@ -130,6 +137,7 @@
       enabled:true,
       status:'ready',
       enter,
+      loadHallOfFame,
       savePlayer,
       flush,
       signOut,

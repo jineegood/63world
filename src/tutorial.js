@@ -54,13 +54,17 @@
         <div>${dots}</div>
         <div style="display:flex;gap:8px">
           ${idx > 0 ? `<button class="ghost small" onclick="__tutorialStepV53(${idx - 1})">이전</button>` : ''}
-          <button class="primary" onclick="${isLast ? '__tutorialDoneV53()' : `__tutorialStepV53(${idx + 1})`}">${isLast ? '시작하기!' : '다음'}</button>
+          <button class="primary" data-default-action="true" onclick="${isLast ? '__tutorialDoneV53()' : `__tutorialStepV53(${idx + 1})`}">${isLast ? '시작하기!' : '다음'}</button>
         </div>
       </div>
     `, { type: 'tutorial', pause: true });
   }
 
-  window.__tutorialStepV53 = render;
+  // [v59] 튜토리얼도 퀘스트 대화와 같은 소리로 넘어가게 한다
+  window.__tutorialStepV53 = function tutorialStepWithSound(idx) {
+    try { window.playSfx?.('dialogue'); } catch {}
+    render(idx);
+  };
   window.__tutorialDoneV53 = function () {
     try { window.closeModal?.(); } catch {}
     try {
@@ -68,7 +72,7 @@
       window.appendChatMessage?.('system', '안내', '명진쌤에게 가서 첫 퀘스트를 받아보세요. (가까이 가서 E)');
     } catch {}
   };
-  window.startTutorialV53 = function () { render(0); };
+  window.startTutorialV53 = function () { try { window.playSfx?.('dialogue'); } catch {} render(0); };
 
   const PVP_STEPS = [
     {
@@ -98,7 +102,7 @@
       <div class="panel-card" style="line-height:1.7">${step.body}</div>
       <div class="action-row" style="justify-content:flex-end;margin-top:12px">
         ${idx > 0 ? `<button class="ghost" onclick="__pvpTutorialStepV1(${idx - 1})">이전</button>` : ''}
-        <button class="primary" onclick="${isLast ? '__pvpTutorialDoneV1()' : `__pvpTutorialStepV1(${idx + 1})`}">${isLast ? '확인' : '다음'}</button>
+        <button class="primary" data-default-action="true" onclick="${isLast ? '__pvpTutorialDoneV1()' : `__pvpTutorialStepV1(${idx + 1})`}">${isLast ? '확인' : '다음'}</button>
       </div>
     `, { type:'pvpTutorial', pause:true });
   }

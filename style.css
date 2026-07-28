@@ -749,6 +749,40 @@ body.defeated #app { filter: grayscale(1) brightness(.62); transition: filter .3
   font-weight: 800;
   text-align: center;
 }
+.healing-well-quiz-image {
+  display: block;
+  width: min(240px, 55vw);
+  max-height: 190px;
+  object-fit: contain;
+  margin: 8px auto 12px;
+  filter: drop-shadow(0 12px 18px rgba(14,165,233,.22));
+}
+.healing-well-intro { text-align: center; line-height: 1.55; }
+.healing-well-intro strong { color: #4ade80; font-weight: 900; }
+.healing-well-choice-grid button {
+  min-height: 50px;
+  text-align: center;
+  font-size: 1.05rem;
+}
+.answer-row > button { flex: 0 0 auto; min-width: 88px; }
+.workbook-tool-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+.workbook-tool-tabs button { min-height: 44px; }
+.workbook-tool-panel { margin-top: 10px; }
+.workbook-sync-state { margin: -4px 0 10px; color: #86efac; font-weight: 800; font-size: 12px; }
+.workbook-bulk-actions { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 10px; }
+.workbook-question-number { white-space: nowrap; }
+.workbook-question-number input {
+  width: 17px;
+  height: 17px;
+  margin: 0 5px 0 0;
+  vertical-align: middle;
+  accent-color: #38bdf8;
+}
 .objective-chip { display:inline-flex; align-items:center; justify-content:center; min-width: 28px; height: 28px; margin-right: 8px; border-radius: 9px; background: rgba(255,215,106,.18); color: #fff2b7; font-weight: 900; }
 .admin-floating:hover, .settings-floating:hover { background: rgba(12,24,42,.86); }
 .speech-hint { color:#d9f99d; }
@@ -1952,6 +1986,16 @@ body.defeated #app { filter: grayscale(1) brightness(.62); transition: filter .3
 
 .skill-tree-v35{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;overflow:auto;max-height:66vh;padding:2px 4px 4px;align-items:start;}
 .skill-lane-v35{display:grid;gap:0;padding:14px;border-radius:20px;border:1px solid rgba(255,255,255,.1);background:linear-gradient(180deg,rgba(3,18,54,.55),rgba(2,12,34,.42));box-shadow:inset 0 1px 0 rgba(255,255,255,.05);}
+.skill-common-grid-v35{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-content:start;}
+.skill-common-grid-v35 .skill-node-v35{grid-template-columns:38px minmax(0,1fr) 22px;padding-left:8px;padding-right:8px;}
+.skill-spec-grid-v35{display:grid;gap:0;align-content:start;}
+.skill-spec-level-v35{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+.skill-spec-level-v35.single{grid-template-columns:minmax(0,calc(50% - 4px));justify-content:center;}
+.skill-spec-level-v35 .skill-node-v35{grid-template-columns:38px minmax(0,1fr) 22px;padding-left:8px;padding-right:8px;}
+.skill-tier-link-v35{height:52px;display:grid;grid-template-rows:1fr auto auto;justify-items:center;align-items:center;color:#7dd3fc;}
+.skill-tier-link-v35 span{width:3px;height:100%;min-height:16px;border-radius:999px;background:linear-gradient(180deg,rgba(148,163,184,.25),rgba(56,189,248,.78));}
+.skill-tier-link-v35 b{font-size:10px;line-height:1;color:#bae6fd;background:rgba(2,12,34,.9);padding:2px 7px;border-radius:999px;border:1px solid rgba(125,211,252,.2);}
+.skill-tier-link-v35 i{font-size:13px;line-height:1;font-style:normal;margin-top:-1px;}
 .skill-lane-v35.dimmed{opacity:.45;}
 .skill-lane-v35.spec-locked{opacity:.75;}
 .lane-title-v35{font-weight:900;font-size:15px;color:#f1f5f9;margin-bottom:12px;display:flex;flex-direction:column;gap:2px;}
@@ -1999,6 +2043,7 @@ body.defeated #app { filter: grayscale(1) brightness(.62); transition: filter .3
 
 @media (max-width: 860px){
   .skill-tree-v35{grid-template-columns:1fr;max-height:60vh;}
+  .skill-common-grid-v35{grid-template-columns:repeat(2,minmax(0,1fr));}
 }
 
 /* ---------- 교사 대시보드 (탭 기반) ---------- */
@@ -2220,7 +2265,13 @@ body.defeated #app { filter: grayscale(1) brightness(.62); transition: filter .3
 .skill-window-v35 .skill-desc-v35{font-size:10px;line-height:1.32;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
 .skill-window-v35 .skill-tag-v35{font-size:10px;margin-top:1px;}
 .skill-window-v35 .skill-active-section-v35 h3{font-size:13px;margin:0 0 6px;}
-.skill-window-v35 .skill-active-strip-v35{padding:8px;gap:8px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));}
+.skill-window-v35 .skill-active-strip-v35{padding:8px;gap:8px;grid-template-columns:repeat(2,minmax(0,1fr));}
+.skill-node-v35.tone-defense{background:linear-gradient(135deg,rgba(120,85,40,.24),rgba(60,42,24,.38));}
+.skill-node-v35.tone-weapon{background:linear-gradient(135deg,rgba(160,80,30,.22),rgba(80,40,24,.38));}
+.skill-node-v35.tone-frost{background:linear-gradient(135deg,rgba(40,120,180,.22),rgba(28,60,120,.38));}
+.skill-node-v35.tone-fire{background:linear-gradient(135deg,rgba(180,50,50,.22),rgba(100,20,20,.38));}
+.skill-node-v35.tone-holy{background:linear-gradient(135deg,rgba(180,140,40,.22),rgba(100,70,16,.38));}
+.skill-node-v35.tone-shadow{background:linear-gradient(135deg,rgba(130,60,190,.22),rgba(66,24,120,.38));}
 .skill-window-v35 .skill-active-card-v35{padding:7px;}
 @media (max-height: 820px){
   .modal-box:has(.skill-window-v35){max-height:94vh;}
@@ -2590,4 +2641,36 @@ body.defeated #app { filter: grayscale(1) brightness(.62); transition: filter .3
   grid-row: 1;
   justify-self: center;
   align-self: center;
+}
+
+/* 퀘스트 수락 대화는 호박색, 완료·보상 대화는 초록색으로 구분한다. */
+.modal-box:has(.quest-dialogue) {
+  background: linear-gradient(180deg, rgba(58,42,18,.98), rgba(30,20,8,.98));
+  border-color: rgba(245,196,86,.42);
+}
+.quest-dialogue .dialogue-text {
+  background: rgba(245,196,86,.12);
+  border-color: rgba(245,196,86,.30);
+  color: #fdf3dd;
+  text-shadow: 0 0 14px rgba(245,196,86,.20);
+}
+.quest-dialogue .dialogue-options button.selected,
+.quest-dialogue .dialogue-options button:hover {
+  border-color: rgba(245,196,86,.55);
+  background: rgba(245,196,86,.16);
+}
+.modal-box:has(.quest-complete-dialogue) {
+  background: linear-gradient(180deg, rgba(16,52,34,.98), rgba(6,26,16,.98));
+  border-color: rgba(94,222,150,.42);
+}
+.quest-complete-dialogue .dialogue-text {
+  background: rgba(94,222,150,.12);
+  border-color: rgba(94,222,150,.30);
+  color: #e6fff1;
+  text-shadow: 0 0 14px rgba(94,222,150,.20);
+}
+.quest-complete-dialogue .dialogue-options button.selected,
+.quest-complete-dialogue .dialogue-options button:hover {
+  border-color: rgba(94,222,150,.55);
+  background: rgba(94,222,150,.16);
 }

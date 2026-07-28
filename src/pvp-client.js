@@ -54,6 +54,7 @@
 
     function subscribe(matchId, listener) {
       identity();
+      if (typeof client.channel !== 'function') return () => {};
       let lastSequence = -1;
       const channel = client.channel(`pvp-match-${matchId}`)
         .on('postgres_changes', {
@@ -77,6 +78,7 @@
 
     function onInvite(listener) {
       const me = identity();
+      if (typeof client.channel !== 'function') return () => {};
       const channel = client.channel(`pvp-invites-${me.userId}`)
         .on('postgres_changes', {
           event:'*', schema:'public', table:'pvp_invites_v1',

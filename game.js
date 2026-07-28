@@ -147,7 +147,7 @@ const game = {
   dialogue: { page: 0, selected: 0, mode: 'base' },
   currentCombatAction: null,
   combatShield: 0,
-  settings: { bgmVolume: 0.10, sfxVolume: 1.0, bgmEnabled: true, sfxEnabled: true }, // [피드백] 기본 배경음 10%, 효과음 100%
+  settings: window.YuksamAudioDefaults.defaultSettings(),
   audio: { ctx: null, master: null, bgmGain: null, bgmTimer: null, started: false, file: null, fileGain: 0 },
   combatHpDisplay: null,
   combatIntroUntil: 0,
@@ -190,6 +190,7 @@ function showScreen(name) {
   screens[name].classList.add('active');
   const settingsBtn = $('settingsBtn');
   if (settingsBtn) settingsBtn.classList.toggle('hidden', name === 'game');
+  syncAudioFileBgm?.();
 }
 
 function showLoadingTransition(message, callback) {
@@ -422,7 +423,7 @@ function getWorkbookById(id) {
 
 function getAllPlayers() {
   const list = playerStore.list();
-  list.sort((a, b) => b.level - a.level || b.exp - a.exp || b.gold - a.gold || b.building - a.building || a.name.localeCompare(b.name, 'ko'));
+  list.sort((a, b) => b.exp - a.exp || b.level - a.level || b.gold - a.gold || b.building - a.building || a.name.localeCompare(b.name, 'ko'));
   return list;
 }
 
@@ -695,6 +696,7 @@ window.getLocalPvpProfileV1 = function getLocalPvpProfileV1() {
   };
 };
 
+const PORTRAIT_HEAD_OFFSET_UNITS = 16;
 window.renderPlayerPortraitForPvpV1 = function renderPlayerPortraitForPvpV1(canvas, profile) {
   const ctx = canvas?.getContext?.('2d');
   if (!ctx || !profile) return;
@@ -705,14 +707,16 @@ window.renderPlayerPortraitForPvpV1 = function renderPlayerPortraitForPvpV1(canv
   ctx.clip();
   ctx.fillStyle = '#dbeafe';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const portraitScale = 3.25;
+  const headOffset = PORTRAIT_HEAD_OFFSET_UNITS * portraitScale;
   drawPlayerSprite(
     ctx,
     canvas.width / 2,
-    canvas.height + 48,
+    canvas.height / 2 + headOffset,
     profile.appearance || {},
     profile.className || 'warrior',
     { attack:0, moving:false, equipment:profile.equipment || {}, costume:profile.costume || {} },
-    3.25,
+    portraitScale,
     profile.spec || null,
   );
   ctx.restore();
@@ -742,6 +746,12 @@ function initAudio() {
   game.audio.ctx = ctx;
   game.audio.master = master;
   game.audio.bgmGain = bgmGain;
+  if (!game.audio.loginFile) {
+    game.audio.loginFile = new Audio(window.getAudioAsset?.('loginBgm')?.src || '');
+    game.audio.loginFile.loop = true;
+    game.audio.loginFile.preload = 'auto';
+    game.audio.loginFile.volume = game.settings.bgmEnabled ? Math.min(1, Math.max(0, game.settings.bgmVolume)) : 0;
+  }
   if (!game.audio.file) {
     game.audio.file = new Audio(window.getAudioAsset?.('townBgm')?.src || '');
     game.audio.file.loop = true;
@@ -773,6 +783,7 @@ function resumeAudio() {
 function updateBaseAudioVolumes() {
   if (!game.audio.bgmGain) return;
   game.audio.bgmGain.gain.setTargetAtTime(game.settings.bgmEnabled ? game.settings.bgmVolume : 0, game.audio.ctx.currentTime, 0.04);
+  if (game.audio.loginFile) game.audio.loginFile.volume = game.settings.bgmEnabled ? Math.min(1, Math.max(0, game.settings.bgmVolume)) : 0;
   if (game.audio.file) game.audio.file.volume = game.settings.bgmEnabled ? Math.min(1, Math.max(0, game.settings.bgmVolume)) : 0;
   if (game.audio.forestFile) game.audio.forestFile.volume = game.settings.bgmEnabled ? Math.min(1, Math.max(0, game.settings.bgmVolume)) : 0;
   if (game.audio.desertFile) game.audio.desertFile.volume = game.settings.bgmEnabled ? Math.min(1, Math.max(0, game.settings.bgmVolume)) : 0;
@@ -805,6 +816,7 @@ function playTone(freq, duration = 0.14, type = 'sine', volume = 0.35, destinati
 
 function getDesiredAudioFile() {
   if (!game.settings.bgmEnabled) return null;
+  if (screens.landing?.classList.contains('active')) return game.audio.loginFile || null;
   if (screens.game.classList.contains('active') && game.currentMap === 'forest') return game.audio.forestFile || null;
   if (screens.game.classList.contains('active') && game.currentMap === 'desert') return game.audio.desertFile || null;
   if (!screens.game.classList.contains('active')) return game.audio.file || null;
@@ -1555,9 +1567,11 @@ function drawStagePortals(mapKey) {
   if (!portals) return;
   const rp = worldToScreen(portals.returnPortal.x, portals.returnPortal.y);
   drawPortalSprite(game.ctx, rp.x, rp.y, portals.returnPortal.r * .42, performance.now()/760, '#22c55e');
+  drawPortalInteractionRingV60(rp.x, rp.y, isNearPoint(portals.returnPortal, portals.returnPortal.r + 54));
   drawFloatingLabel(game.ctx, rp.x, rp.y - 55, '63마을 귀환');
   const bp = worldToScreen(portals.bossPortal.x, portals.bossPortal.y);
   drawPortalSprite(game.ctx, bp.x, bp.y, portals.bossPortal.r * .46, performance.now()/640, '#ef4444');
+  drawPortalInteractionRingV60(bp.x, bp.y, isNearPoint(portals.bossPortal, portals.bossPortal.r + 54));
   drawFloatingLabel(game.ctx, bp.x, bp.y - 60, '보스 방');
 }
 
@@ -1654,6 +1668,20 @@ function drawFancyBuilding(ctx, x, y, w, h, roofColor, label, icon = 'none') {
 function drawPortalWorld(x, y, r) {
   const p = worldToScreen(x, y);
   drawPortalSprite(game.ctx, p.x, p.y, r * .44, performance.now() / 700);
+  drawPortalInteractionRingV60(p.x, p.y, isNearPoint({ x, y }, r + 54));
+}
+
+function drawPortalInteractionRingV60(x, y, highlighted) {
+  if (!highlighted) return;
+  const ctx = game.ctx;
+  ctx.save();
+  const pulse = .6 + Math.sin(performance.now() / 180) * .22;
+  ctx.strokeStyle = `rgba(137,230,255,${pulse})`;
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.ellipse(x, y + 24, 34, 13, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawPortalSprite(ctx, x, y, r, t, tint = '#60d8ff') {
@@ -3257,6 +3285,19 @@ function savePlayerPositionThrottled() {
 }
 
 let clickMovementArrivalLockV1 = null;
+let clickInteractHandledV59 = '';
+function tryClickInteractOnArrivalV59(state) {
+  const target = state?.target;
+  if (!target || !game.player) return false;
+  const token = `${state.map}:${Math.round(target.x)}:${Math.round(target.y)}`;
+  if (clickInteractHandledV59 === token) return false;
+  clickInteractHandledV59 = token;
+  if (isPaused?.() || game.modalState?.type || game.currentCombatMonsterId) return false;
+  const found = worldInteractionRegistry.find?.();
+  if (!found?.type) return false;
+  try { interact(); } catch { return false; }
+  return true;
+}
 const clickMovementControllerV1 = YuksamClickMovement.createController({
   canvas:game.canvas,
   isActive:() => !!game.player && screens.game.classList.contains('active'),
@@ -3276,6 +3317,7 @@ const clickMovementControllerV1 = YuksamClickMovement.createController({
   onStateChange:(state) => {
     game.clickMovement = state;
     if (state) clickMovementArrivalLockV1 = state.map;
+    if (state && state.moving === false) tryClickInteractOnArrivalV59(state);
   },
   radius:30,
   cellSize:32,
@@ -5313,6 +5355,7 @@ function updateQuestTracker() {
 
   const QUEST_ORDER_V17 = QUEST_ORDER;
   QUEST_DEFS.mushroom_hunt.targetTypes = ['mushroom'];
+  QUEST_DEFS.mushroom_hunt.pages[2] = '고요한 숲으로 가서 버섯돌이 4마리를 막아주겠니? 사냥터에 가려면 마을 가운데에 있는 포탈로 가렴. 마을 친구들이 네 도움을 기다리고 있어. 무리하지 말고 차근차근 하렴.';
   function getCurrentQuestIdForNpc() {
     for (let i = 0; i < QUEST_ORDER_V17.length; i += 1) {
       const id = QUEST_ORDER_V17[i];
@@ -5553,6 +5596,12 @@ function updateQuestTracker() {
     const t = performance.now() / 1000;
     ctx.save();
     ctx.translate(p.x, p.y);
+    if (game.player && distance(game.player, well) < 92) {
+      const glow = .55 + Math.sin(t * 5) * .2;
+      ctx.strokeStyle = `rgba(74,222,128,${glow})`;
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.ellipse(0, 36, 50, 15, 0, 0, Math.PI * 2); ctx.stroke();
+    }
     ctx.fillStyle = 'rgba(0,0,0,.22)';
     ctx.beginPath(); ctx.ellipse(0, 36, 48, 13, 0, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#64748b';
@@ -5587,12 +5636,13 @@ function updateQuestTracker() {
     game.healingQuestion = getHealingQuestion();
     const q = game.healingQuestion;
     const choices = Array.isArray(q.choices) && q.choices.length === 4 ? q.choices : null;
-    const answerUi = choices ? `<div class="choice-list">${choices.map((c) => `<button class="primary" onclick="submitHealingAnswer('${escapeJs(c)}')">${escapeHtml(c)}</button>`).join('')}</div>` : `
+    const answerUi = choices ? `<div class="choice-grid healing-well-choice-grid">${choices.map((c) => `<button class="primary" onclick="submitHealingAnswer('${escapeJs(c)}')">${escapeHtml(c)}</button>`).join('')}</div>` : `
       <div class="answer-row"><input id="healingAnswer" placeholder="정답 입력" onkeydown="if(event.key==='Enter') submitHealingAnswer(this.value)" autofocus /><button class="primary" onclick="submitHealingAnswer(document.getElementById('healingAnswer').value)">회복</button></div>`;
     openModal(`
       <h2>치유의 우물</h2>
       <div class="panel-card">
-        <p>우물의 빛이 반짝입니다. 문제를 맞히면 HP가 모두 회복됩니다.</p>
+        <p class="healing-well-intro">치유의 우물이다!<br><strong>문제를 맞히면 HP가 모두 회복됩니다!</strong></p>
+        <img class="healing-well-quiz-image" src="assets/치유의 우물.png" alt="치유의 우물">
         <h3>${escapeHtml(q.q)}</h3>
         ${answerUi}
         <p class="muted">실패하면 다시 우물에 말을 걸어야 합니다.</p>
@@ -5882,9 +5932,7 @@ function updateQuestTracker() {
   if (window.__YUKSAM_V21_PATCH__) return;
   window.__YUKSAM_V21_PATCH__ = true;
 
-  // 기본 음량 재조정: 배경음 20% 감소, 효과음 30% 증가
-  game.settings.bgmVolume = 0.21;
-  game.settings.sfxVolume = 0.94;
+  Object.assign(game.settings, window.YuksamAudioDefaults.defaultSettings());
   try { updateAudioVolumes(); } catch {}
 
   // 인게임 환경설정 버튼 복구
@@ -5925,14 +5973,13 @@ function updateQuestTracker() {
     ensureBossAudioV21();
     if (!game.settings.bgmEnabled) return null;
     if (screens.game.classList.contains('active') && (game.currentMap === 'bossRoom' || game.currentMap === 'finalBossRoom')) return game.audio.bossFile || null;
-    if (screens.game.classList.contains('active') && game.currentCombatMonsterId) return game.audio.battleFile || null;
     return oldGetDesiredAudioFileV21();
   };
   const oldSyncAudioFileBgmV21 = syncAudioFileBgm;
   syncAudioFileBgm = function syncAudioFileBgmV21() {
     initAudio();
     ensureBossAudioV21();
-    const files = [game.audio.file, game.audio.forestFile, game.audio.desertFile, game.audio.swampFile, game.audio.bossFile, game.audio.battleFile].filter(Boolean);
+    const files = [game.audio.loginFile, game.audio.file, game.audio.forestFile, game.audio.desertFile, game.audio.swampFile, game.audio.bossFile, game.audio.battleFile].filter(Boolean);
     const desired = getDesiredAudioFile();
     files.forEach((file) => {
       file.volume = game.settings.bgmEnabled ? Math.min(1, Math.max(0, game.settings.bgmVolume)) : 0;
@@ -6049,7 +6096,10 @@ function updateQuestTracker() {
     try { triggerScreenShakeV19(); } catch { triggerScreenShake?.(); }
     savePlayer();
     updateHud();
-    showCinematicMessage('회복 훈련!', '명진쌤의 안전한 훈련 공격! HP가 1이 되었어요. 치유의 우물에서 문제를 풀어 회복해 보세요.', 2600);
+    window.triggerScreenShakeV19?.();
+    game.combatImpact = { target:'player', until:Date.now() + 900 };
+    playSfx('critical');
+    showCinematicMessage('치명타!', '명진쌤의 안전한 훈련 공격! HP가 1이 되었어요. 치유의 우물에서 문제를 풀어 회복해 보세요.', 2600);
     appendChatMessage('system', '회복 훈련', '명진쌤의 훈련 공격으로 HP가 1이 되었습니다.');
     return true;
   }
@@ -6132,7 +6182,12 @@ function updateQuestTracker() {
       options.push({ label: '대화 종료', action: 'closeModal()' });
     }
     game.dialogue.selected = Math.min(selected, Math.max(0, options.length - 1));
-    openModal(`<div class="dialogue-box"><div class="dialogue-speaker"><h2>명진쌤 ${marker ? `<span class="badge quest-marker-badge">${marker}</span>` : ''}</h2><div class="badge">클릭 또는 E키로 진행</div></div><div class="dialogue-text">${YuksamQuestText.emphasize(text)}</div><div class="dialogue-options">${options.map((opt,i)=>`<button class="${i===game.dialogue.selected?'selected':''}" onclick="${opt.action}">${YuksamQuestText.emphasize(opt.label)}</button>`).join('')}</div></div>`, { type:'dialogue', pause:true });
+    const dialogueTheme = window.YuksamQuestDialogueTheme?.classSuffix({
+      mode:game.dialogue.mode,
+      questStatus:q?.status,
+      hasQuest:!!def,
+    }) || '';
+    openModal(`<div class="dialogue-box${dialogueTheme}"><div class="dialogue-speaker"><h2>명진쌤 ${marker ? `<span class="badge quest-marker-badge">${marker}</span>` : ''}</h2><div class="badge">클릭 또는 E키로 진행</div></div><div class="dialogue-text">${YuksamQuestText.emphasize(text)}</div><div class="dialogue-options">${options.map((opt,i)=>`<button class="${i===game.dialogue.selected?'selected':''}" onclick="${opt.action}">${YuksamQuestText.emphasize(opt.label)}</button>`).join('')}</div></div>`, { type:'dialogue', pause:true });
   }
   window.startQuestStory = function startQuestStoryV21() { game.dialogue = { page: 0, selected: 0, mode: 'quest' }; renderNpcDialogueV21(); };
   window.nextDialoguePage = function nextDialoguePageV21() { const id = getCurrentQuestIdForNpcV21(); const def = QUEST_DEFS[id]; game.dialogue.page = Math.min((def?.pages?.length || 1) - 1, (game.dialogue.page || 0) + 1); renderNpcDialogueV21(); };
@@ -6985,6 +7040,8 @@ function updateQuestTracker() {
     if (skill.specOnly && currentSpecV24() !== skill.specOnly) {
       return game.player.spec ? '이 능력은 배울 수 없습니다.(전문화 확인)' : 'Lv.5에서 전문화를 선택해야 배울 수 있습니다.';
     }
+    if ((skill.prereq || []).some((id) => !isSkillLearned(id))) return '아래 레벨 줄의 스킬을 먼저 배워야 합니다.';
+    if ((skill.prereqAny || []).length && !skill.prereqAny.some(isSkillLearned)) return '아래 레벨 줄의 스킬 중 하나를 먼저 배워야 합니다.';
     if ((game.player.skillPoints || 0) < (skill.cost || 1)) return '스킬 포인트가 부족합니다.';
     return '';
   }
@@ -8877,7 +8934,10 @@ function updateQuestTracker() {
     oldOpenModalV26(html, state);
     setTimeout(() => {
       const buttons = modalChoiceButtonsV26();
-      if (buttons.length) setChoiceIndexV26(buttons, 0);
+      if (buttons.length) {
+        const preferred = buttons.findIndex((button) => button.dataset.defaultAction === 'true');
+        setChoiceIndexV26(buttons, preferred >= 0 ? preferred : 0);
+      }
     }, 30);
   };
 
@@ -12317,6 +12377,32 @@ function updateQuestTracker() {
     if (s === '암흑') return 'shadow';
     return 'common';
   }
+
+  // 공용은 자유롭게, 전문화는 같은 레벨의 두 스킬 중 어느 쪽이든 선택할 수 있다.
+  // 다음 레벨 줄은 바로 아래 줄에서 하나 이상 배운 뒤 열린다.
+  (function prepareSkillRowsV60() {
+    const all = Object.values(SKILL_DEFS).filter((skill) => skill?.v24);
+    all.filter((skill) => !skill.specOnly).forEach((skill) => {
+      skill.prereq = [];
+      skill.prereqAny = [];
+    });
+    const groups = new Map();
+    all.filter((skill) => skill.specOnly).forEach((skill) => {
+      const key = `${skill.classOnly}:${normalizeSpecV26(skill.specOnly)}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(skill);
+    });
+    groups.forEach((group) => {
+      const level5 = group.filter((skill) => (Number(skill.unlockLevel) || 1) === 5).map((skill) => skill.id);
+      const level7 = group.filter((skill) => (Number(skill.unlockLevel) || 1) === 7).map((skill) => skill.id);
+      group.forEach((skill) => {
+        const level = Number(skill.unlockLevel) || 1;
+        skill.prereq = [];
+        skill.prereqAny = level <= 5 ? [] : level <= 7 ? [...level5] : [...level7];
+      });
+    });
+  })();
+
   openSkillTreeModal = function openSkillTreeModalV35() {
     if (!game.player) return;
     try { if (typeof updateHud === 'function') updateHud(); } catch {}
@@ -12375,9 +12461,9 @@ function updateQuestTracker() {
     }
 
     const linkHtml = ''; // [재구조] 선행 조건 폐지 — 연결선 제거
-    const commonLane = `<section class="skill-lane-v35">
+    const commonLane = `<section class="skill-lane-v35 common-grid-v35">
       <div class="lane-title-v35">◆ 기본기 <small>전문화와 관계없이 배울 수 있어요</small></div>
-      ${common.map(skillNodeV35).join(linkHtml)}
+      <div class="skill-common-grid-v35">${common.map(skillNodeV35).join(linkHtml)}</div>
     </section>`;
 
     const specLanes = specs.map((sp) => {
@@ -12389,9 +12475,20 @@ function updateQuestTracker() {
       if (specLocked) laneCls.push('spec-locked');
       const note = specLocked ? 'Lv.5 전문화 선택 후'
         : (isMine ? '나의 길!' : '다른 길을 선택했습니다');
+      const levelGroups = [5, 7, 9].map((level) => ({
+        level,
+        skills:list.filter((skill) => (Number(skill.unlockLevel) || 1) === level),
+      }));
+      const progression = levelGroups.map((group, index) => {
+        const single = group.skills.length === 1 ? ' single' : '';
+        const cards = `<div class="skill-spec-level-v35${single}" data-level="${group.level}">${group.skills.map(skillNodeV35).join('')}</div>`;
+        if (index >= levelGroups.length - 1) return cards;
+        const nextLevel = levelGroups[index + 1].level;
+        return `${cards}<div class="skill-tier-link-v35" aria-hidden="true"><span></span><b>Lv.${nextLevel} 해금</b><i>▼</i></div>`;
+      }).join('');
       return `<section class="${laneCls.join(' ')}">
         <div class="lane-title-v35">${escapeHtml(sp)} 전문화 <small>${escapeHtml(note)}</small></div>
-        ${list.map(skillNodeV35).join(linkHtml)}
+        <div class="skill-spec-grid-v35">${progression}</div>
       </section>`;
     }).join('');
 
@@ -12617,6 +12714,12 @@ window.cheatUpgradeEquippedWeapon = function cheatUpgradeEquippedWeapon() {
     const pulse = Math.sin(performance.now() / 420) * 2;
     ctx.save();
     ctx.translate(p.x, p.y);
+    if (game.player && distance(game.player, well) < 92) {
+      const glow = .55 + Math.sin(performance.now() / 180) * .2;
+      ctx.strokeStyle = `rgba(74,222,128,${glow})`;
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.ellipse(0, 29, 43, 13, 0, 0, Math.PI * 2); ctx.stroke();
+    }
     ctx.fillStyle = 'rgba(0,0,0,.24)';
     ctx.beginPath(); ctx.ellipse(0, 29, 40, 11, 0, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#64748b';

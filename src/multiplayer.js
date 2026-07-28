@@ -13,7 +13,25 @@
   const SEND_MS = 220;       // 내 위치 전송 주기
   const STALE_MS = 6000;     // 이 시간 동안 소식 없으면 화면에서 제거
   const remotes = new Map(); // name -> { x, y, map, class, spec, level, equipment, appearance, moving, bubble, at }
+  const motions = new Map(); // name -> 도착한 위치 사이를 부드럽게 이어주는 계산기
+  const IDLE_KEEPALIVE_MS = 2000; // 가만히 서 있으면 이 주기로만 알린다(무료 한도 절약)
   let remoteBounds = [];
+  let lastPayloadKey = '';
+  let lastKeepaliveAt = 0;
+
+  // 위치가 띄엄띄엄 도착해도 화면에서는 이어 보이게 한다. 모듈이 없으면 예전처럼 그대로 그린다.
+  function trackRemoteMotion(name, x, y, snap) {
+    const api = window.YuksamRemoteMotion;
+    if (!api || typeof x !== 'number' || typeof y !== 'number') return;
+    let motion = motions.get(name);
+    if (!motion) { motion = api.create(); motions.set(name, motion); }
+    motion.push(x, y, Date.now(), { snap });
+  }
+
+  function forgetRemote(name) {
+    remotes.delete(name);
+    motions.delete(name);
+  }
 
   window.__remotePlayersV53 = remotes;
   window.__multiplayerStatusV53 = enabled ? 'connecting' : 'off';
@@ -39,14 +57,19 @@
       if (!p || !p.name) return;
       const me = g()?.player?.name;
       if (p.name === me) return;
-      if (p.type === 'leave') { remotes.delete(p.name); return; }
+      if (p.type === 'leave') { forgetRemote(p.name); return; }
       if (p.type === 'chat') {
         const prev = remotes.get(p.name) || {};
         remotes.set(p.name, { ...prev, name: p.name, bubble: { text: p.text, until: Date.now() + 4200 }, at: Date.now() });
         try { window.appendChatMessage?.('user', p.name, p.text); } catch {}
         return;
       }
-      remotes.set(p.name, { ...(remotes.get(p.name) || {}), ...p, at: Date.now() });
+      const previous = remotes.get(p.name);
+      // 새로 들어온 학생은 내가 가만히 서 있어도 나를 바로 볼 수 있어야 한다
+      if (!previous) lastPayloadKey = '';
+      remotes.set(p.name, { ...(previous || {}), ...p, at: Date.now() });
+      // 처음 보이거나 맵을 옮겼으면 미끄러지지 않고 즉시 그 자리에 그린다
+      trackRemoteMotion(p.name, p.x, p.y, !previous || previous.map !== p.map);
     };
     socket.onclose = () => {
       window.__multiplayerStatusV53 = 'offline'; joined = false;
@@ -72,10 +95,10 @@
   function tick() {
     const G = g();
     const now = Date.now();
-    remotes.forEach((v, k) => { if (now - (v.at || 0) > STALE_MS) remotes.delete(k); });
+    remotes.forEach((v, k) => { if (now - (v.at || 0) > STALE_MS) forgetRemote(k); });
     if (G?.player && now - lastSent >= SEND_MS && document.querySelector('#game.active')) {
       lastSent = now;
-      broadcast({
+      const payload = {
         type: 'pos',
         userId:window.getPvpIdentityV1?.()?.userId || null,
         name: G.player.name,
@@ -86,7 +109,14 @@
         costume: G.player.costume || {},
         pvpAvailable:G.currentMap === 'town' && !G.modalState?.pause && !G.currentCombatMonsterId,
         moving: !!G.isMoving,
-      });
+      };
+      // 달라진 게 없으면 굳이 보내지 않는다. 대신 사라지지 않도록 가끔은 알린다.
+      const key = `${payload.map}|${payload.x}|${payload.y}|${payload.moving}|${payload.pvpAvailable}|${payload.level}`;
+      if (key !== lastPayloadKey || now - lastKeepaliveAt >= IDLE_KEEPALIVE_MS) {
+        lastPayloadKey = key;
+        lastKeepaliveAt = now;
+        broadcast(payload);
+      }
     }
   }
   setInterval(tick, SEND_MS);
@@ -105,15 +135,18 @@
     if (!draw || !toScreen) return;
     const ctx = G.ctx;
     remoteBounds = [];
-    remotes.forEach((p) => {
+    const now = Date.now();
+    remotes.forEach((p, name) => {
       if (!p || p.map !== G.currentMap || typeof p.x !== 'number') return;
-      const s = toScreen(p.x, p.y);
+      // 마지막으로 받은 좌표로 튀지 않고, 두 지점 사이를 채운 위치에 그린다
+      const eased = motions.get(name)?.sample(now) || null;
+      const s = toScreen(eased ? eased.x : p.x, eased ? eased.y : p.y);
       if (s.x < -120 || s.y < -120 || s.x > G.width + 120 || s.y > G.height + 120) return;
       ctx.save();
       ctx.globalAlpha = 0.96;
       try {
         draw(ctx, s.x, s.y, p.appearance || {}, p.class || 'warrior',
-          { attack: 0, moving: !!p.moving, dance: 0, equipment: p.equipment || {}, costume:p.costume || {} },
+          { attack: 0, moving: !!p.moving || !!eased?.moving, dance: 0, equipment: p.equipment || {}, costume:p.costume || {} },
           (typeof PLAYER_WORLD_SCALE !== 'undefined' ? PLAYER_WORLD_SCALE : 1.26), p.spec || null);
       } catch {}
       ctx.restore();
