@@ -734,6 +734,21 @@ body.defeated #app { filter: grayscale(1) brightness(.62); transition: filter .3
 .choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
 .choice-grid button { text-align: left; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.07); }
 .choice-grid button:hover { border-color: rgba(92,200,255,.55); background: rgba(92,200,255,.12); }
+.choice-grid button.correct-answer-review,
+.choice-grid button.correct-answer-review:disabled {
+  color: #ecfdf5;
+  border-color: #22c55e;
+  background: rgba(34,197,94,.42);
+  box-shadow: 0 0 0 2px rgba(74,222,128,.2), 0 0 18px rgba(34,197,94,.28);
+  opacity: 1;
+}
+.answer-row input.correct-answer-review {
+  color: #4ade80;
+  border-color: #22c55e;
+  background: rgba(20,83,45,.48);
+  font-weight: 800;
+  text-align: center;
+}
 .objective-chip { display:inline-flex; align-items:center; justify-content:center; min-width: 28px; height: 28px; margin-right: 8px; border-radius: 9px; background: rgba(255,215,106,.18); color: #fff2b7; font-weight: 900; }
 .admin-floating:hover, .settings-floating:hover { background: rgba(12,24,42,.86); }
 .speech-hint { color:#d9f99d; }

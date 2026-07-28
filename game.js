@@ -3102,7 +3102,7 @@ function renderQuestionForCombat(label) {
   const choices = Array.isArray(q.choices) && q.choices.length >= 2 ? q.choices.slice(0, 4) : null;
   const answerHtml = choices ? `
       <div class="choice-grid">
-        ${choices.map((choice, i) => `<button onclick="submitObjectiveAnswer('${escapeJs(choice)}')"><span class="objective-chip">${i + 1}</span>${escapeHtml(choice)}</button>`).join('')}
+        ${choices.map((choice, i) => `<button data-answer-key="${encodeURIComponent(String(choice))}" onclick="submitObjectiveAnswer('${escapeJs(choice)}')"><span class="objective-chip">${i + 1}</span>${escapeHtml(choice)}</button>`).join('')}
       </div>` : `
       <div class="answer-row">
         <input id="combatAnswer" placeholder="정답 입력" onkeydown="if(event.key==='Enter') submitCombatAnswer()" autofocus />
@@ -8441,7 +8441,7 @@ function updateQuestTracker() {
   };
   window.submitCombatAnswer = function submitCombatAnswerV25() {
     const monster = currentCombatMonster();
-    if (!monster || !game.currentQuestion || monster.dying) return;
+    if (!monster || !game.currentQuestion || monster.dying || game.wrongAnswerReviewing) return;
     const answer = normalize(game.currentQuestion.answer);
     const given = normalize($('combatAnswer')?.value || '');
     if (!given) { toast('정답을 입력하세요.'); return; }
@@ -8454,8 +8454,17 @@ function updateQuestTracker() {
         if (game.player.records.wrongLog.length > 30) game.player.records.wrongLog.splice(0, game.player.records.wrongLog.length - 30);
         savePlayer();
       }
-      if ($('combatAnswer')) $('combatAnswer').value = '';
-      resolveWrongAnswerV2(monster);
+      game.wrongAnswerReviewing = true;
+      YuksamWrongAnswerReview.reveal({
+        root:$('modalContent'),
+        correctAnswer:game.currentQuestion.answer,
+        onComplete:() => {
+          game.wrongAnswerReviewing = false;
+          const fresh = currentCombatMonster();
+          if (!fresh || fresh.id !== monster.id || fresh.dying || !game.currentQuestion) return;
+          resolveWrongAnswerV2(fresh);
+        },
+      });
       return;
     }
     if (game.player) {
