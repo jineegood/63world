@@ -65,6 +65,7 @@ export function createPveCombatService({ store, random = Math.random } = {}) {
     const state = startEncounter({
       player,
       monsterKey:String(body.monsterKey),
+      initialCooldowns:projection.combatCooldowns || projection.cooldowns || {},
       random,
     });
     return publicSafe(await store.start({
@@ -110,6 +111,9 @@ export function createPveCombatService({ store, random = Math.random } = {}) {
       requestId:String(body.requestId),
       outcome:{ ...outcome, submittedAnswer:String(body.answer ?? '') },
     });
+    if (typeof store.persistCooldowns === 'function') {
+      await store.persistCooldowns({ userId, cooldowns:outcome.state?.cooldowns || {} });
+    }
     return publicSafe(committed);
   }
 

@@ -55,6 +55,12 @@ export function createSupabasePveCombatStore(client) {
         p_outcome:outcome,
       }));
     },
+    async persistCooldowns({ userId, cooldowns }) {
+      return resultData(await client.rpc('private_store_combat_cooldowns_v3', {
+        p_user_id:userId,
+        p_cooldowns:cooldowns || {},
+      }));
+    },
     async prepareEscape({ userId, expectedSessionRevision, requestId }) {
       return resultData(await client.rpc('private_prepare_student_combat_escape_v3', {
         p_user_id:userId,

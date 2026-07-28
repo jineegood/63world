@@ -3,6 +3,7 @@
   'use strict';
 
   const assets = Object.freeze({
+    loginBgm: { src:'assets/1. 로그인화면 음악.mp3', volume:1, channel:'bgm' },
     townBgm: { src:'assets/1. 마을 음악.mp3', volume:1, channel:'bgm' },
     forestBgm: { src:'assets/1. 숲 음악.mp3', volume:1, channel:'bgm' },
     desertBgm: { src:'assets/1. 사막 음악.mp3', volume:1, channel:'bgm' },

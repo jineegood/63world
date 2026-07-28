@@ -54,7 +54,7 @@
         <div>${dots}</div>
         <div style="display:flex;gap:8px">
           ${idx > 0 ? `<button class="ghost small" onclick="__tutorialStepV53(${idx - 1})">이전</button>` : ''}
-          <button class="primary" onclick="${isLast ? '__tutorialDoneV53()' : `__tutorialStepV53(${idx + 1})`}">${isLast ? '시작하기!' : '다음'}</button>
+          <button class="primary" data-default-action="true" onclick="${isLast ? '__tutorialDoneV53()' : `__tutorialStepV53(${idx + 1})`}">${isLast ? '시작하기!' : '다음'}</button>
         </div>
       </div>
     `, { type: 'tutorial', pause: true });
@@ -102,7 +102,7 @@
       <div class="panel-card" style="line-height:1.7">${step.body}</div>
       <div class="action-row" style="justify-content:flex-end;margin-top:12px">
         ${idx > 0 ? `<button class="ghost" onclick="__pvpTutorialStepV1(${idx - 1})">이전</button>` : ''}
-        <button class="primary" onclick="${isLast ? '__pvpTutorialDoneV1()' : `__pvpTutorialStepV1(${idx + 1})`}">${isLast ? '확인' : '다음'}</button>
+        <button class="primary" data-default-action="true" onclick="${isLast ? '__pvpTutorialDoneV1()' : `__pvpTutorialStepV1(${idx + 1})`}">${isLast ? '확인' : '다음'}</button>
       </div>
     `, { type:'pvpTutorial', pause:true });
   }

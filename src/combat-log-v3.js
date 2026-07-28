@@ -76,7 +76,7 @@
         case 'answer-wrong':
           notices.push({
             type:'answer-wrong',
-            text:`오답입니다. 정답은 ${String(ctx.correctAnswer || '')}`,
+            text:`오답입니다! 정답은 ${String(ctx.correctAnswer || '')} (데미지는 절반만 들어갑니다)`,
             duration:Math.max(DURATIONS.wrongAnswer, int(event?.minimumDurationMs)),
             tone:'correct-answer',
             preserveDuration:true,
@@ -99,14 +99,15 @@
         case 'monster-damage': {
           // 기도의 방벽·무기 숙련의 반사 피해는 내 공격이 아니라 '반격' 줄이다
           if (event?.reflected === true) {
-            const healAmount = prayerHeal && !prayerHealUsed ? int(prayerHeal.amount) : 0;
+            const isPrayer = event?.source == null || String(event.source).includes('prayer');
+            const healAmount = isPrayer && prayerHeal && !prayerHealUsed ? int(prayerHeal.amount) : 0;
             if (healAmount > 0) prayerHealUsed = true;
             notices.push({
               type:'retaliation',
-              text:`기도의 방벽이 발동했다! ${monsterName}에게 반사 피해 ${amount}!`
+              text:`${isPrayer ? '기도의 방벽' : '무기 숙련'}이 발동했다! ${monsterName}에게 반사 피해 ${amount}!`
                 + (healAmount > 0 ? ` 실제 회복 ${healAmount}!` : ''),
               duration:DURATIONS.support,
-              audioId:'prayerBarrier',
+              ...(isPrayer ? { audioId:'prayerBarrier' } : {}),
               effect:{ id:effectId(), type:'retaliation', combatId, amount },
             });
             break;
@@ -130,8 +131,11 @@
           if (playerFx) notice.fx = { ...playerFx, hitIndex:damagingHits - 1, hitStage:first ? 'primary' : 'extra' };
           // 첫 타격에만 소리를 실어 추가타에서 겹치지 않게 한다
           if (first) {
-            if (event?.critical) { notice.audioId = 'critical'; notice.fallbackSfx = 'critical'; }
-            else if (ctx.audioId) { notice.audioId = String(ctx.audioId); notice.fallbackSfx = 'hit'; }
+            if (ctx.audioId) {
+              notice.audioId = String(ctx.audioId);
+              notice.fallbackSfx = 'hit';
+              if (event?.critical) notice.secondaryAudioId = 'critical';
+            } else if (event?.critical) { notice.audioId = 'critical'; notice.fallbackSfx = 'critical'; }
             else { notice.fallbackSfx = 'hit'; }
           }
           notices.push(notice);
@@ -161,6 +165,23 @@
 
         case 'monster-status': {
           const status = String(event?.status || '').trim();
+          if (status === 'stun-skipped-action') {
+            notices.push({
+              type:'enemy-status',
+              text:`${monsterName}은(는) 기절해 공격하지 못했다!`,
+              duration:DURATIONS.support,
+              audioId:'stunned',
+              effect:{
+                id:effectId(),
+                type:'monster-status',
+                combatId,
+                status:'stun',
+                turns:int(event?.turns),
+                mode:'replace',
+              },
+            });
+            break;
+          }
           const effect = {
             id:effectId(),
             type:'monster-status',
@@ -199,6 +220,7 @@
             type:'player-support',
             text:`보호막 +${amount}`,
             duration:DURATIONS.support,
+            audioId:'blockShield',
             effect:{ id:effectId(), type:'player-support', combatId, kind:'shield', amount },
           });
           break;

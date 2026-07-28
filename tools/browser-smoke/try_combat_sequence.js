@@ -66,8 +66,12 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   const damageEvents = trace.filter((event) => event.type === 'player-damage');
   const loggedDamage = Number(damageEvents[0]?.text.match(/\d+/)?.[0] || 0);
   const actualDamage = firstHp - G().player.hp;
-  ok('wrong answer is the first event', trace[0]?.type === 'answer-wrong' && trace[0]?.text === '오답입니다!', JSON.stringify(trace));
-  ok('the correct answer stays immediately after the wrong notice', trace[1]?.type === 'answer-wrong' && trace[1]?.text === '정답은 right', JSON.stringify(trace));
+  ok(
+    'wrong answer is the first event',
+    trace[0]?.type === 'answer-wrong'
+      && trace[0]?.text === '오답입니다! 정답은 right (데미지는 절반만 들어갑니다)',
+    JSON.stringify(trace),
+  );
   ok('a wrong answer still damages the monster before its counterattack', trace.findIndex((event) => event.type === 'player-hit') > 0 && trace.findIndex((event) => event.type === 'player-hit') < trace.findIndex((event) => event.type === 'monster-action'), JSON.stringify(trace));
   ok('escape during an active sequence does not add damage', damageEvents.length === 1 && actualDamage === loggedDamage && G().escapeFailedThisCombat !== true && G().escapeResolving !== true, `damageEvents=${damageEvents.length}, actual=${actualDamage}, logged=${loggedDamage}, trace=${JSON.stringify(trace)}`);
   const windAction = trace.find((e) => e.type === 'monster-action');

@@ -65,13 +65,13 @@ export function selectQuestion(workbooks, randomInt) {
   const questions = (Array.isArray(workbooks) ? workbooks : [])
     .filter((workbook) => workbook?.enabled === true)
     .flatMap((workbook) => Array.isArray(workbook.questions) ? workbook.questions : [])
-    .filter((question) => boundedText(question?.prompt || question?.question, 500));
+    .filter((question) => boundedText(question?.prompt || question?.question || question?.q, 500));
   if (!questions.length) return null;
   const index = randomInt(0, questions.length - 1);
   const selected = questions[Math.max(0, Math.min(questions.length - 1, index))];
   return Object.freeze({
     id:boundedText(selected.id || `question-${index}`, 100),
-    prompt:boundedText(selected.prompt || selected.question, 500),
+    prompt:boundedText(selected.prompt || selected.question || selected.q, 500),
     choices:Array.isArray(selected.choices) ? selected.choices.slice(0, 8).map((choice) => boundedText(choice, 120)) : [],
     answer:boundedText(selected.answer, 120),
   });

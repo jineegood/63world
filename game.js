@@ -196,6 +196,7 @@ function showScreen(name) {
   screens[name].classList.add('active');
   const settingsBtn = $('settingsBtn');
   if (settingsBtn) settingsBtn.classList.toggle('hidden', name === 'game');
+  syncAudioFileBgm?.();
 }
 
 function showLoadingTransition(message, callback) {
@@ -217,7 +218,12 @@ function showLoadingTransition(message, callback) {
     setTimeout(() => {
       overlay.classList.add('hidden');
       overlay.classList.remove('visible', 'leaving');
-      if (game.modalState.type === 'loading') game.modalState = previousModalState.pause ? previousModalState : { type: null, pause: false };
+      if (game.modalState.type === 'loading') {
+        game.modalState = { type:null, pause:false };
+        game.keys = {};
+        game.isMoving = false;
+        window.cancelClickMovementV1?.({ clearArrivalLock:true });
+      }
     }, 720);
   }, 1200);
 }
@@ -605,6 +611,7 @@ function normalizePlayer(p) {
 
 function applyAuthoritySnapshotV3(result) {
   if (!game.player || !result?.player) return;
+  const oldLevel = Number(game.player.level) || 1;
   const { x, y } = game.player;
   const currentMap = game.currentMap;
   game.player = normalizePlayer(result.player);
@@ -613,6 +620,9 @@ function applyAuthoritySnapshotV3(result) {
   game.player.map = currentMap;
   game.currentMap = currentMap;
   updateHud();
+  if (Number(game.player.level) > oldLevel) {
+    triggerLevelUpEffect(Number(game.player.level) - oldLevel);
+  }
 }
 window.applyAuthoritySnapshotFromServerV3 = function applyAuthoritySnapshotFromServerV3(snapshot) {
   const player = window.YuksamPlayerAuthorityV3?.snapshotToLegacyPlayer?.(snapshot);
@@ -911,6 +921,12 @@ function initAudio() {
   game.audio.ctx = ctx;
   game.audio.master = master;
   game.audio.bgmGain = bgmGain;
+  if (!game.audio.loginFile) {
+    game.audio.loginFile = new Audio(window.getAudioAsset?.('loginBgm')?.src || '');
+    game.audio.loginFile.loop = true;
+    game.audio.loginFile.preload = 'auto';
+    game.audio.loginFile.volume = game.settings.bgmEnabled ? Math.min(1, Math.max(0, game.settings.bgmVolume)) : 0;
+  }
   if (!game.audio.file) {
     game.audio.file = new Audio(window.getAudioAsset?.('townBgm')?.src || '');
     game.audio.file.loop = true;
@@ -943,6 +959,7 @@ function updateBaseAudioVolumes() {
   if (!game.audio.bgmGain) return;
   game.audio.bgmGain.gain.setTargetAtTime(game.settings.bgmEnabled ? game.settings.bgmVolume : 0, game.audio.ctx.currentTime, 0.04);
   if (game.audio.file) game.audio.file.volume = game.settings.bgmEnabled ? Math.min(1, Math.max(0, game.settings.bgmVolume)) : 0;
+  if (game.audio.loginFile) game.audio.loginFile.volume = game.settings.bgmEnabled ? Math.min(1, Math.max(0, game.settings.bgmVolume)) : 0;
   if (game.audio.forestFile) game.audio.forestFile.volume = game.settings.bgmEnabled ? Math.min(1, Math.max(0, game.settings.bgmVolume)) : 0;
   if (game.audio.desertFile) game.audio.desertFile.volume = game.settings.bgmEnabled ? Math.min(1, Math.max(0, game.settings.bgmVolume)) : 0;
 }
@@ -974,6 +991,7 @@ function playTone(freq, duration = 0.14, type = 'sine', volume = 0.35, destinati
 
 function getDesiredAudioFile() {
   if (!game.settings.bgmEnabled) return null;
+  if (screens.landing?.classList.contains('active')) return game.audio.loginFile || null;
   if (screens.game.classList.contains('active') && game.currentMap === 'forest') return game.audio.forestFile || null;
   if (screens.game.classList.contains('active') && game.currentMap === 'desert') return game.audio.desertFile || null;
   if (!screens.game.classList.contains('active')) return game.audio.file || null;
@@ -1725,9 +1743,11 @@ function drawStagePortals(mapKey) {
   const portals = ensureStagePortals(mapKey);
   if (!portals) return;
   const rp = worldToScreen(portals.returnPortal.x, portals.returnPortal.y);
+  drawPortalInteractionRingV60(rp.x, rp.y, isNearPoint(portals.returnPortal, portals.returnPortal.r + 54));
   drawPortalSprite(game.ctx, rp.x, rp.y, portals.returnPortal.r * .42, performance.now()/760, '#22c55e');
   drawFloatingLabel(game.ctx, rp.x, rp.y - 55, '63마을 귀환');
   const bp = worldToScreen(portals.bossPortal.x, portals.bossPortal.y);
+  drawPortalInteractionRingV60(bp.x, bp.y, isNearPoint(portals.bossPortal, portals.bossPortal.r + 54));
   drawPortalSprite(game.ctx, bp.x, bp.y, portals.bossPortal.r * .46, performance.now()/640, '#ef4444');
   drawFloatingLabel(game.ctx, bp.x, bp.y - 60, '보스 방');
 }
@@ -1824,7 +1844,21 @@ function drawFancyBuilding(ctx, x, y, w, h, roofColor, label, icon = 'none') {
 
 function drawPortalWorld(x, y, r) {
   const p = worldToScreen(x, y);
+  drawPortalInteractionRingV60(p.x, p.y, isNearPoint({ x, y }, r + 54));
   drawPortalSprite(game.ctx, p.x, p.y, r * .44, performance.now() / 700);
+}
+
+function drawPortalInteractionRingV60(x, y, highlighted) {
+  if (!highlighted) return;
+  const ctx = game.ctx;
+  ctx.save();
+  const pulse = .6 + Math.sin(performance.now() / 180) * .22;
+  ctx.strokeStyle = `rgba(137,230,255,${pulse})`;
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.ellipse(x, y + 24, 34, 13, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawPortalSprite(ctx, x, y, r, t, tint = '#60d8ff') {
@@ -4286,6 +4320,7 @@ function drawBossRoom() {
   ctx.beginPath(); ctx.ellipse(cx, cy, 330, 180, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
   ctx.restore();
   const exit = worldToScreen(worldDefs.bossRoom.exit.x, worldDefs.bossRoom.exit.y);
+  drawPortalInteractionRingV60(exit.x, exit.y, isNearPoint(worldDefs.bossRoom.exit, 92));
   drawPortalSprite(ctx, exit.x, exit.y, 24, performance.now()/760, '#22c55e');
   drawFloatingLabel(ctx, exit.x, exit.y - 48, '퇴장 포탈');
   game.forestMonsters.forEach((m) => { if (m.alive) drawMushroomWorld(m); });
@@ -5444,6 +5479,7 @@ function updateQuestTracker() {
     ctx.fillStyle = mapKey === 'desert' ? 'rgba(120,65,28,.18)' : mapKey === 'swamp' ? 'rgba(13,148,136,.15)' : 'rgba(22,101,52,.18)';
     ctx.lineWidth = 9; ctx.beginPath(); ctx.ellipse(cx, cy, 330, 180, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke(); ctx.restore();
     const exit = worldToScreen(worldDefs.bossRoom.exit.x, worldDefs.bossRoom.exit.y);
+    drawPortalInteractionRingV60(exit.x, exit.y, isNearPoint(worldDefs.bossRoom.exit, 92));
     drawPortalSprite(ctx, exit.x, exit.y, 24, performance.now()/760, '#22c55e');
     drawFloatingLabel(ctx, exit.x, exit.y - 48, '퇴장 포탈');
     game.forestMonsters.forEach((m) => { if (m.alive) drawMushroomWorld(m); });
@@ -5558,6 +5594,7 @@ function updateQuestTracker() {
 
   const QUEST_ORDER_V17 = QUEST_ORDER;
   QUEST_DEFS.mushroom_hunt.targetTypes = ['mushroom'];
+  QUEST_DEFS.mushroom_hunt.pages[2] = '고요한 숲으로 가서 버섯돌이 4마리를 막아주겠니? 사냥터에 가려면 마을 가운데에 있는 포탈로 가렴. 마을 친구들이 네 도움을 기다리고 있어. 무리하지 말고 차근차근 하렴.';
   function getCurrentQuestIdForNpc() {
     for (let i = 0; i < QUEST_ORDER_V17.length; i += 1) {
       const id = QUEST_ORDER_V17[i];
@@ -5656,6 +5693,7 @@ function installAuthoritativeQuestFlowV3() {
       closeModal();
       if (isHealingTraining) {
         playSfx('enemyAttack');
+        window.triggerScreenShakeV19?.();
         game.combatImpact = { target:'player', until:Date.now() + 900 };
         playSfx('critical');
         showCinematicMessage('치명타!', '명진쌤의 안전한 훈련 공격! 잠시 후 HP가 1이 됩니다. 치유의 우물로 가 보세요.', 2600);
@@ -5750,15 +5788,16 @@ function installAuthoritativeQuestFlowV3() {
       const choices = Array.isArray(healingQuestion?.choices) ? healingQuestion.choices : [];
       const answerUi = choices.length
         ? `<div class="choice-grid healing-well-choice-grid">${choices.map((choice, index) => (
-          `<button class="primary" onclick="submitAuthorityHealingChoiceV3(${index})">${escapeHtml(String(choice))}</button>`
+          `<button class="primary" ${index === 0 ? 'data-default-action="true"' : ''} onclick="submitAuthorityHealingChoiceV3(${index})">${escapeHtml(String(choice))}</button>`
         )).join('')}</div>`
-        : `<div class="answer-row"><input id="healingAnswer" maxlength="512" placeholder="정답 입력">
+        : `<div class="answer-row"><input id="healingAnswer" maxlength="512" placeholder="정답 입력" onkeydown="if(event.key==='Enter') submitAuthorityHealingAnswerV3(this.value)" autofocus>
            <button class="primary" onclick="submitAuthorityHealingAnswerV3(document.getElementById('healingAnswer').value)">회복</button></div>`;
       openModal(`<h2>치유의 우물</h2><div class="panel-card">
         <p class="healing-well-intro">치유의 우물이다!<br><strong>문제를 맞히면 HP가 모두 회복됩니다!</strong></p>
         <img class="healing-well-quiz-image" src="assets/치유의 우물.png" alt="치유의 우물">
         <h3>${prompt}</h3>${answerUi}</div>`,
       { type:'healingWell', pause:true });
+      setTimeout(() => $('healingAnswer')?.focus(), 50);
     } catch (error) {
       toast(error?.message || '치유 문제를 불러오지 못했습니다.');
     } finally {
@@ -5911,6 +5950,14 @@ function wireAuthoritativeEconomyV3() {
     const item = weaponId ? getItemDefinition(weaponId, game.player.class) : null;
     if (!item) { toast('강화할 무기를 장착해 주세요.'); return; }
     game.upgradeInProgress = true;
+    const startedAt = Date.now();
+    openModal(`
+      <h2>🔨 강화하는 중...</h2>
+      <div class="panel-card upgrade-progress-v60">
+        <p><b>${escapeHtml(item.name)}</b>에 힘을 불어넣고 있습니다.</p>
+        <div class="pet-loading-bar-v31"><b></b></div>
+      </div>
+    `, { type:'upgradeProgress', pause:true });
     playSfx?.('upgradeCharge');
     try {
       const handled = await authorityActionRunnerV3.run(
@@ -5918,20 +5965,25 @@ function wireAuthoritativeEconomyV3() {
         {},
         { pendingKey:'enhancement' },
       );
-      if (handled.pending) return;
+      if (handled.pending) { closeModal(); return; }
+      const remaining = Math.max(0, 3800 - (Date.now() - startedAt));
+      if (remaining) await new Promise((resolve) => setTimeout(resolve, remaining));
       const outcome = handled.result?.outcome;
       playSfx?.(outcome?.success ? 'upgradeSuccess' : 'upgradeFail');
       const tierName = (window.TIER_INFO_V27 || [])[outcome?.newTier]?.name || '';
       const message = outcome?.success
         ? `${item.name} 강화 성공! ${tierName} 등급이 되었습니다.`
         : `${item.name} 강화 실패... ${tierName} 등급이 되었습니다.`;
-      if (outcome?.success) {
-        showCinematicMessage?.('강화 성공!', `${item.name} · ${tierName} 등급`, 1600);
-      }
+      closeModal();
+      showCinematicMessage?.(
+        outcome?.success ? '강화 성공!' : '강화 실패...',
+        `${item.name} · ${tierName} 등급`,
+        1700,
+      );
       appendChatMessage?.('system', '강화', message);
       toast(message);
       window.recordQuestActionV38?.('enhance');
-      openUpgradeShopModalV33();
+      setTimeout(() => openUpgradeShopModalV33(), 1750);
     } catch (error) {
       reportError(error);
     } finally {
@@ -5983,6 +6035,7 @@ function wireAuthoritativeEconomyV3() {
   window.rollPetV34 = async function rollPetAuthoritativeV3() {
     if (!enabled()) return legacyRollPet();
     const startedAt = Date.now();
+    const previouslyActivePet = game.player?.activePet || null;
     closeModal();
     window.playPetSummonSfxV35?.();
     const overlay = document.createElement('div');
@@ -5999,8 +6052,11 @@ function wireAuthoritativeEconomyV3() {
       const petId = handled.result?.outcome?.petId;
       const pet = window.PET_DEFS_V27?.[petId];
       if (!pet) throw new Error('서버의 펫 정보를 확인하지 못했습니다.');
+      // 서버 저장은 즉시 끝나도 화면에는 소환 공개가 끝난 뒤부터 새 펫을 보여준다.
+      game.player.activePet = previouslyActivePet;
       const remaining = Math.max(0, 5000 - (Date.now() - startedAt));
       setTimeout(() => {
+        game.player.activePet = petId;
         window.recordQuestActionV38?.('pet');
         updateHud?.();
         const icon = escapeHtml(pet.icon || '＋');
@@ -6612,7 +6668,7 @@ function wireAuthoritativeEconomyV3() {
   syncAudioFileBgm = function syncAudioFileBgmV21() {
     initAudio();
     ensureBossAudioV21();
-    const files = [game.audio.file, game.audio.forestFile, game.audio.desertFile, game.audio.swampFile, game.audio.bossFile, game.audio.battleFile].filter(Boolean);
+    const files = [game.audio.loginFile, game.audio.file, game.audio.forestFile, game.audio.desertFile, game.audio.swampFile, game.audio.bossFile, game.audio.battleFile].filter(Boolean);
     const desired = getDesiredAudioFile();
     files.forEach((file) => {
       file.volume = game.settings.bgmEnabled ? Math.min(1, Math.max(0, game.settings.bgmVolume)) : 0;
@@ -6909,6 +6965,7 @@ function wireAuthoritativeEconomyV3() {
   function drawFinalBossPortalV21(ctx) {
     if (!(game.finalBossPortalUnlocked && game.bossReturnMap === 'swamp')) return; // [피드백] 늪 보스방 한정·일시적
     const p = worldToScreen(910, 500);
+    drawPortalInteractionRingV60(p.x, p.y, isNearPoint({ x:910, y:500 }, 92));
     drawPortalSprite(ctx, p.x, p.y, 34, performance.now()/500, '#7f1d1d');
     ctx.save(); ctx.textAlign='center'; ctx.font='900 20px Jua, Noto Sans KR'; ctx.fillStyle='#fee2e2'; ctx.strokeStyle='rgba(0,0,0,.65)'; ctx.lineWidth=4; ctx.strokeText('???', p.x, p.y - 50); ctx.fillText('???', p.x, p.y - 50); ctx.restore();
   }
@@ -7671,6 +7728,12 @@ function wireAuthoritativeEconomyV3() {
     if (skill.specOnly && currentSpecV24() !== skill.specOnly) {
       return game.player.spec ? '이 능력은 배울 수 없습니다.(전문화 확인)' : 'Lv.5에서 전문화를 선택해야 배울 수 있습니다.';
     }
+    if ((skill.prereq || []).some((id) => !isSkillLearned(id))) {
+      return '아래 레벨 줄의 스킬을 먼저 배워야 합니다.';
+    }
+    if ((skill.prereqAny || []).length && !skill.prereqAny.some(isSkillLearned)) {
+      return '아래 레벨 줄의 스킬 중 하나를 먼저 배워야 합니다.';
+    }
     if ((game.player.skillPoints || 0) < (skill.cost || 1)) return '스킬 포인트가 부족합니다.';
     return '';
   }
@@ -8116,6 +8179,22 @@ function wireAuthoritativeEconomyV3() {
         flushCombatEffectFeedbackV46(notice.effect?.id);
         return true;
       };
+      const playNoticeAudioEarly = () => {
+        if (noticeAudioPlayed) return;
+        if (!notice.audioId && !notice.fallbackSfx) return;
+        noticeAudioPlayed = true;
+        const fallback = notice.fallbackSfx ? () => playSfx(notice.fallbackSfx) : null;
+        if (notice.audioId) {
+          if (!window.playMappedAudio?.(notice.audioId, { onFallback:fallback })) fallback?.();
+        } else {
+          fallback?.();
+        }
+        if (notice.secondaryAudioId) {
+          combatSequenceControllerV47.schedule(sequenceToken, () => {
+            window.playMappedAudio?.(notice.secondaryAudioId);
+          }, 70);
+        }
+      };
       const completeNotice = () => {
         if (noticeCompleted || !combatSequenceControllerV47.isCurrent(sequenceToken)) return;
         noticeCompleted = true;
@@ -8155,6 +8234,7 @@ function wireAuthoritativeEconomyV3() {
         }).then(showNotice, showNotice);
       } else if (notice.fx?.source === 'player' && notice.fx.motion) {
         let playerImpactShown = false;
+        playNoticeAudioEarly();
         Promise.resolve().then(() => {
           if (!combatSequenceControllerV47.isCurrent(sequenceToken)) return false;
           return YuksamCombatFx.playPlayerActionFx(notice.fx, () => {
@@ -9301,8 +9381,13 @@ function wireAuthoritativeEconomyV3() {
     const wrongHits = result.hitInfo;
     const effectBatchId = `${monster.id}:wrong:${game.combatEffectSerial = (Number(game.combatEffectSerial) || 0) + 1}`;
     const events = [
-      { type:'answer-wrong', text:'오답입니다!', tone:'enemy-action', duration:700 },
-      { type:'answer-wrong', text:`정답은 ${correctAnswer}`, tone:'correct-answer', duration:2200, preserveDuration:true },
+      {
+        type:'answer-wrong',
+        text:`오답입니다! 정답은 ${correctAnswer} (데미지는 절반만 들어갑니다)`,
+        tone:'correct-answer',
+        duration:2200,
+        preserveDuration:true,
+      },
     ];
     wrongHits.forEach((hit, index) => {
       events.push({
@@ -9495,6 +9580,9 @@ function wireAuthoritativeEconomyV3() {
     if (skill.specOnly && currentSpecV26() !== normalizeSpecV26(skill.specOnly)) return game.player.spec ? '이 능력은 배울 수 없습니다.(전문화 확인)' : 'Lv.5에서 전문화를 선택해야 배울 수 있습니다.';
     const prereq = skill.prereq || [];
     if (skill.specOnly && prereq.length && !prereq.every(isSkillLearned)) return '선행 능력을 먼저 배워야 합니다.';
+    if (skill.specOnly && (skill.prereqAny || []).length && !skill.prereqAny.some(isSkillLearned)) {
+      return '아래 레벨 줄의 스킬 중 하나를 먼저 배워야 합니다.';
+    }
     if ((game.player.skillPoints || 0) < (skill.cost || 1)) return '스킬 포인트가 부족합니다.';
     return '';
   }
@@ -9560,7 +9648,10 @@ function wireAuthoritativeEconomyV3() {
     oldOpenModalV26(html, state);
     setTimeout(() => {
       const buttons = modalChoiceButtonsV26();
-      if (buttons.length) setChoiceIndexV26(buttons, 0);
+      if (buttons.length) {
+        const preferred = buttons.findIndex((button) => button.dataset.defaultAction === 'true');
+        setChoiceIndexV26(buttons, preferred >= 0 ? preferred : 0);
+      }
     }, 30);
   };
 
@@ -12716,6 +12807,7 @@ function wireAuthoritativeEconomyV3() {
 
     // 출구 포탈
     const ex = worldToScreen(world.exit.x, world.exit.y);
+    drawPortalInteractionRingV60(ex.x, ex.y, isNearPoint(world.exit, 92));
     drawPortalSprite(ctx, ex.x, ex.y, 32, performance.now()/650, '#64748b');
     ctx.save();
     ctx.textAlign='center';
@@ -13156,6 +13248,7 @@ function wireAuthoritativeEconomyV3() {
     ctx.restore();
 
     const ex = worldToScreen(world.exit.x, world.exit.y);
+    drawPortalInteractionRingV60(ex.x, ex.y, isNearPoint(world.exit, 92));
     drawPortalSprite(ctx, ex.x, ex.y, 28, performance.now()/760, '#6b7280');
     ctx.save(); ctx.textAlign='center'; ctx.font='900 14px Jua, Noto Sans KR, system-ui'; ctx.fillStyle='#e2e8f0'; ctx.fillText('나가기', ex.x, ex.y - 42); ctx.restore();
 
@@ -13392,6 +13485,33 @@ window.cheatUpgradeEquippedWeapon = function cheatUpgradeEquippedWeapon() {
 
 wireAuthoritativeEconomyV3();
 
+// 전문화 스킬은 같은 레벨 줄의 왼쪽·오른쪽을 자유롭게 고를 수 있다.
+// 다음 레벨 줄로 올라갈 때만 바로 아래 줄에서 하나 이상 배웠는지 확인한다.
+(function relaxSpecializationRowsV60() {
+  const allCurrentSkills = Object.values(SKILL_DEFS).filter((skill) => skill?.v24);
+  allCurrentSkills.filter((skill) => !skill.specOnly).forEach((skill) => {
+    skill.prereq = [];
+    skill.prereqAny = [];
+  });
+  const skills = allCurrentSkills.filter((skill) => skill.specOnly);
+  const groups = new Map();
+  skills.forEach((skill) => {
+    const key = `${skill.classOnly}:${skill.specOnly}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(skill);
+  });
+  groups.forEach((group) => {
+    const level5 = group.filter((skill) => Number(skill.line) <= 6).map((skill) => skill.id);
+    const level7 = group.filter((skill) => Number(skill.line) >= 7 && Number(skill.line) <= 8).map((skill) => skill.id);
+    group.forEach((skill) => {
+      skill.prereq = [];
+      if (Number(skill.line) <= 6) skill.prereqAny = [];
+      else if (Number(skill.line) <= 8) skill.prereqAny = [...level5];
+      else skill.prereqAny = [...level7];
+    });
+  });
+})();
+
 /* Server-authoritative PvE combat v3 browser wiring.
    The browser presents server results; it never grades or calculates rewards here. */
 function wireAuthoritativePveCombatV3() {
@@ -13416,6 +13536,7 @@ function wireAuthoritativePveCombatV3() {
   let activeMonster = null;
   let busy = false;
   let hasAttemptedResume = false;
+  let lastPresentationFingerprint = '';
 
   function getClient() {
     const client = secureStudentAccess.getClient();
@@ -13441,6 +13562,14 @@ function wireAuthoritativePveCombatV3() {
   window.isAuthorityPveCombatV3Active = isActive;
 
   function resetLocalCombat() {
+    if (activeMonster) {
+      activeMonster.stunTurns = 0;
+      activeMonster.chillTurns = 0;
+      activeMonster.shadowStacks = 0;
+      activeMonster.shield = 0;
+    }
+    game.playerAilments = {};
+    game.playerChillTurns = 0;
     session = null;
     activeMonster = null;
     busy = false;
@@ -13450,10 +13579,12 @@ function wireAuthoritativePveCombatV3() {
     game.currentCombatAction = null;
     game.combatShield = 0;
     game.combatHpDisplay = null;
+    lastPresentationFingerprint = '';
   }
 
   function applyServerPlayer(response, followServerMap = false) {
     if (!response?.player) return;
+    const oldLevel = Number(game.player?.level) || 1;
     const converted = window.YuksamPlayerAuthorityV3.snapshotToLegacyPlayer(response.player);
     const x = game.player?.x;
     const y = game.player?.y;
@@ -13473,6 +13604,9 @@ function wireAuthoritativePveCombatV3() {
     game.bossReturnMap = game.player.bossReturnMap || null;
     game.finalBossPortalUnlocked = Boolean(game.player.finalBossPortalUnlocked);
     updateHud();
+    if (Number(game.player.level) > oldLevel) {
+      triggerLevelUpEffect(Number(game.player.level) - oldLevel);
+    }
   }
 
   function applySession(nextSession, monster = activeMonster) {
@@ -13496,6 +13630,19 @@ function wireAuthoritativePveCombatV3() {
     monster.maxHp = Number(session.monsterMaxHp) || monster.maxHp;
     monster.attack = Number(session.monsterAttack) || monster.attack;
     monster.shield = Number(session.monsterShield) || 0;
+    monster.stunTurns = Math.max(0, Number(session.monsterStatuses?.stunTurns) || 0);
+    monster.chillTurns = Math.max(0, Number(session.monsterStatuses?.chillTurns) || 0);
+    monster.shadowStacks = Math.max(0, Number(session.monsterStatuses?.shadowStacks) || 0);
+    game.playerAilments = {
+      ...(Number(session.playerStatuses?.poisonTurns) > 0 ? {
+        poisonTurns:Number(session.playerStatuses.poisonTurns),
+        poisonDmg:Math.max(1, Number(session.playerStatuses.poisonDamage) || 1),
+      } : {}),
+      ...(Number(session.playerStatuses?.stunTurns) > 0 ? {
+        stunTurns:Number(session.playerStatuses.stunTurns),
+      } : {}),
+    };
+    game.playerChillTurns = Math.max(0, Number(session.playerStatuses?.chillTurns) || 0);
     monster.alive = monster.hp > 0;
     monster.chasing = true;
     game.combatHpDisplay = {
@@ -13567,6 +13714,9 @@ function wireAuthoritativePveCombatV3() {
   function presentResponse(response) {
     const monster = activeMonster;
     const outcome = String(response?.outcome || 'continue');
+    const fingerprint = `${monster?.id || ''}:${outcome}:${response?.session?.sessionRevision || ''}:${JSON.stringify(response?.events || [])}`;
+    if (fingerprint === lastPresentationFingerprint) return;
+    lastPresentationFingerprint = fingerprint;
     // [v59] 서버 결과를 예전 로컬 전투와 같은 연출 지시서로 번역한다.
     // 예전에는 이름표(type)가 없어 연출 재생기가 로그를 전부 버렸다.
     const skillId = String(game.currentCombatAction || '').startsWith('active:')
@@ -13719,6 +13869,7 @@ function wireAuthoritativePveCombatV3() {
     if (!client || busy) return false;
     busy = true;
     hasAttemptedResume = false;
+    lastPresentationFingerprint = '';
     activeMonster = monster;
     game.currentCombatMonsterId = monster.id;
     renderCombatFrame(monster?.noEscape ? '보스 몬스터가 나타났다!' : '야생의 적이 나타났다!', '<p class="muted">잠시만 기다려 주세요.</p>');

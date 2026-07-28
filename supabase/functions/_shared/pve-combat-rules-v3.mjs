@@ -141,7 +141,7 @@ export function buildCombatant(source = {}) {
   });
 }
 
-export function startEncounter({ player, monsterKey, random = Math.random } = {}) {
+export function startEncounter({ player, monsterKey, initialCooldowns = {}, random = Math.random } = {}) {
   if (!player || !CLASS_COMBAT_V3[player.className]) throw new Error('INVALID_PLAYER');
   const monster = MONSTER_COMBAT_V3[String(monsterKey || '')];
   if (!monster) throw new Error('UNKNOWN_MONSTER');
@@ -158,7 +158,15 @@ export function startEncounter({ player, monsterKey, random = Math.random } = {}
     monsterAttack,
     playerStatuses:{},
     monsterStatuses:{},
-    cooldowns:{},
+    cooldowns:Object.fromEntries(
+      Object.entries(initialCooldowns || {})
+        .filter(([skillId, turns]) => (
+          SKILL_COMBAT_V3[skillId]
+          && player.skills[skillId] > 0
+          && finiteInteger(turns) > 0
+        ))
+        .map(([skillId, turns]) => [skillId, Math.min(99, finiteInteger(turns))]),
+    ),
     escapeFailed:false,
     turnNumber:0,
     status:'active',
@@ -454,9 +462,12 @@ function performMonsterAction({ player, state, random, events }) {
     }
   }
   if (finiteInteger(state.monsterStatuses.stunTurns) > 0) {
-    pushEvent(events, { type:'monster-action' });
     state.monsterStatuses.stunTurns -= 1;
-    pushEvent(events, { type:'monster-status', status:'stun', turns:state.monsterStatuses.stunTurns });
+    pushEvent(events, {
+      type:'monster-status',
+      status:'stun-skipped-action',
+      turns:state.monsterStatuses.stunTurns,
+    });
     return;
   }
   // 어떤 기술을 쓰는지 정한 뒤에 알려야 전투 로그에 기술 이름을 보여줄 수 있다
@@ -519,6 +530,9 @@ function performMonsterAction({ player, state, random, events }) {
           hpDamage:reflectedHit.hpDamage,
           shieldDamage:reflectedHit.shieldDamage,
           reflected:true,
+          source:prayerDamage > 0
+            ? (masteryDamage > 0 ? 'prayer-and-mastery' : 'prayer-barrier')
+            : 'weapon-mastery',
         });
       }
       if (prayerDamage > 0) {

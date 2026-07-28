@@ -13,6 +13,7 @@ let secureAdminStudentsV2 = [];
 let secureAdminStudentsStatusV2 = 'idle';
 let secureAdminStudentsErrorV2 = '';
 let secureAdminMutationV2 = false;
+const checkedAdminStudentsV2 = new Set();
 // [v59] 문제집 화면을 다시 그려도 펼친 목록·수정 중인 문제·직전 등록 결과를 잃지 않게 보존
 const openWorkbookDetailsV2 = new Set();
 let editingWorkbookQuestionV2 = null;
@@ -135,6 +136,9 @@ function teacherStudentsHtml(){
         const classMeta = CLASS_META[student.className] || { name:student.className || '미정' };
         const spec = student.spec ? ` <small class="muted">${escapeHtml(student.spec)}</small>` : '';
         return `<tr data-user-id="${escapeHtml(student.userId)}">
+          <td><input type="checkbox" aria-label="${escapeHtml(student.displayName)} 계정 선택"
+            ${checkedAdminStudentsV2.has(student.userId) ? 'checked' : ''}
+            onchange="adminToggleStudentSelectionV2('${student.userId}',this.checked)"></td>
           <td><b>${escapeHtml(student.displayName)}</b></td>
           <td>${escapeHtml(classMeta.name || '')}${spec}</td>
           <td>Lv.${student.level}</td>
@@ -151,7 +155,13 @@ function teacherStudentsHtml(){
         </tr>`;
       }).join('');
       studentContent = `<div class="teacher-body">
-        <table class="teacher-table"><thead><tr><th>이름</th><th>직업</th><th>레벨</th><th>정답률</th><th>골드</th><th>빌딩</th><th>최근 저장</th><th>관리</th></tr></thead>
+        <div class="workbook-bulk-actions">
+          <button class="ghost tiny" onclick="adminSelectAllStudentsV2(true)">전체 선택</button>
+          <button class="ghost tiny" onclick="adminSelectAllStudentsV2(false)">선택 해제</button>
+          <button class="ghost tiny danger-text" ${checkedAdminStudentsV2.size ? '' : 'disabled'}
+            onclick="adminConfirmDeleteSelectedStudentsV2()">선택 계정 삭제 (${checkedAdminStudentsV2.size})</button>
+        </div>
+        <table class="teacher-table"><thead><tr><th>선택</th><th>이름</th><th>직업</th><th>레벨</th><th>정답률</th><th>골드</th><th>빌딩</th><th>최근 저장</th><th>관리</th></tr></thead>
         <tbody id="secureAdminStudentRows">${rows}</tbody></table>
       </div>`;
     }
@@ -724,6 +734,61 @@ window.adminDeleteStudentV2 = async function adminDeleteStudentV2(userId){
   } catch (error) {
     toast(error?.message || '학생 계정을 삭제하지 못했어요.');
     if (button) { button.disabled = false; button.textContent = '완전히 삭제'; }
+  } finally {
+    secureAdminMutationV2 = false;
+  }
+};
+
+window.adminToggleStudentSelectionV2 = function adminToggleStudentSelectionV2(userId, checked) {
+  if (checked) checkedAdminStudentsV2.add(userId);
+  else checkedAdminStudentsV2.delete(userId);
+  openAdminPanel('students', { keepScroll:true });
+};
+
+window.adminSelectAllStudentsV2 = function adminSelectAllStudentsV2(checked) {
+  checkedAdminStudentsV2.clear();
+  if (checked) secureAdminStudentsV2.forEach((student) => checkedAdminStudentsV2.add(student.userId));
+  openAdminPanel('students', { keepScroll:true });
+};
+
+window.adminConfirmDeleteSelectedStudentsV2 = function adminConfirmDeleteSelectedStudentsV2() {
+  if (!SECURE_ADMIN_MODE_V2 || !requireTeacherAuth()) return;
+  const selected = secureAdminStudentsV2.filter((student) => checkedAdminStudentsV2.has(student.userId));
+  if (!selected.length) { toast('삭제할 학생 계정을 선택해 주세요.'); return; }
+  openModal(`
+    <h2>⚠️ 선택 계정 ${selected.length}개 완전 삭제</h2>
+    <div class="panel-card">
+      <p><b>${selected.map((student) => escapeHtml(student.displayName)).join(', ')}</b></p>
+      <p>선택한 로그인 계정과 게임 데이터를 모두 삭제합니다. 되돌릴 수 없습니다.</p>
+    </div>
+    <div class="action-row">
+      <button class="ghost danger-text" id="confirmBulkDeleteStudentsV2Btn" onclick="adminDeleteSelectedStudentsV2()">선택 계정 완전히 삭제</button>
+      <button class="ghost" onclick="openAdminPanel('students')">취소</button>
+    </div>
+  `, { type:'admin', pause:false });
+};
+
+window.adminDeleteSelectedStudentsV2 = async function adminDeleteSelectedStudentsV2() {
+  if (!SECURE_ADMIN_MODE_V2 || !requireTeacherAuth() || !secureAdminDataV2 || secureAdminMutationV2) return;
+  const selected = secureAdminStudentsV2.filter((student) => checkedAdminStudentsV2.has(student.userId));
+  if (!selected.length) return;
+  const button = $('confirmBulkDeleteStudentsV2Btn');
+  secureAdminMutationV2 = true;
+  try {
+    for (let index = 0; index < selected.length; index += 1) {
+      if (button) {
+        button.disabled = true;
+        button.textContent = `삭제 중... (${index + 1}/${selected.length})`;
+      }
+      await secureAdminDataV2.deleteStudent(selected[index].userId);
+      checkedAdminStudentsV2.delete(selected[index].userId);
+    }
+    secureAdminStudentsStatusV2 = 'idle';
+    await loadSecureAdminStudentsV2();
+    toast(`학생 계정 ${selected.length}개를 삭제했어요.`);
+  } catch (error) {
+    toast(error?.message || '선택 계정을 삭제하는 중 문제가 생겼어요.');
+    openAdminPanel('students');
   } finally {
     secureAdminMutationV2 = false;
   }
