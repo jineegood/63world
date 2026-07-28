@@ -13361,6 +13361,7 @@ function wireAuthoritativePveCombatV3() {
   let session = null;
   let activeMonster = null;
   let busy = false;
+  let hasAttemptedResume = false;
 
   function getClient() {
     const client = secureStudentAccess.getClient();
@@ -13389,6 +13390,7 @@ function wireAuthoritativePveCombatV3() {
     session = null;
     activeMonster = null;
     busy = false;
+    hasAttemptedResume = false;
     game.currentCombatMonsterId = null;
     game.currentQuestion = null;
     game.currentCombatAction = null;
@@ -13630,11 +13632,20 @@ function wireAuthoritativePveCombatV3() {
     } catch (error) {
       busy = false;
       toast(error?.message || '전투 서버와 통신하지 못했습니다.');
+      if (hasAttemptedResume) {
+        resetLocalCombat();
+        closeModal();
+        return;
+      }
+      hasAttemptedResume = true;
       try {
         const resumed = await getClient().resume();
         if (resumed?.session) {
           applySession(resumed.session, activeMonster);
           renderAuthorityMenuV3('전투 상태를 다시 불러왔습니다.');
+        } else {
+          resetLocalCombat();
+          closeModal();
         }
       } catch {
         resetLocalCombat();
@@ -13652,6 +13663,7 @@ function wireAuthoritativePveCombatV3() {
     const client = getClient();
     if (!client || busy) return false;
     busy = true;
+    hasAttemptedResume = false;
     activeMonster = monster;
     game.currentCombatMonsterId = monster.id;
     renderCombatFrame(monster?.noEscape ? '보스 몬스터가 나타났다!' : '야생의 적이 나타났다!', '<p class="muted">잠시만 기다려 주세요.</p>');

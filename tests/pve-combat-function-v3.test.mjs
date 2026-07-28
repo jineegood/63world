@@ -40,6 +40,15 @@ test('endpoint returns stable sanitized errors and never logs or responds with a
   assert.doesNotMatch(source, /JSON\.stringify\s*\([^)]*answerKey/i);
 });
 
+test('endpoint logs bounded combat diagnostics without logging answers or request bodies', () => {
+  const source = fs.readFileSync(entryPath, 'utf8');
+  assert.match(source, /event:\s*'student_combat_v3_error'/);
+  for (const field of ['operation', 'errorCode', 'userId', 'sessionRevision', 'requestId']) {
+    assert.match(source, new RegExp(`${field}\\s*:`));
+  }
+  assert.doesNotMatch(source, /console\.error\s*\([^)]*(?:authorization|answer|questionToken|serviceKey|body)/i);
+});
+
 test('store maps only bounded private RPC calls', () => {
   const source = fs.readFileSync(
     path.join(root, 'supabase/functions/_shared/pve-combat-store-v3.mjs'),

@@ -44,3 +44,14 @@ test('server outcome, not visually mutated hp, chooses the end of battle', () =>
   assert.match(body, /else if \(outcome === 'defeat'\) finishDefeat\(response\)/);
   assert.doesNotMatch(body, /(?:monster|player)\.hp\s*<=\s*0[\s\S]*finish(?:Victory|Defeat)/);
 });
+
+test('a combat error resumes once without silently submitting the attack again', () => {
+  const start = game.indexOf('async function submitTurnV3');
+  const end = game.indexOf('\n  async function startV3', start);
+  const body = game.slice(start, end);
+
+  assert.match(body, /hasAttemptedResume/);
+  assert.equal((body.match(/\.resume\(\)/g) || []).length, 1);
+  assert.equal((body.match(/\.submitTurn\(/g) || []).length, 1);
+  assert.doesNotMatch(body, /catch[\s\S]*\.submitTurn\(/);
+});

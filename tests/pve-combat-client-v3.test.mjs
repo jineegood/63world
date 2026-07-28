@@ -171,6 +171,26 @@ test('network failures are sanitized and retrying can reuse an explicit request 
   assert.equal(calls[1].body.requestId, requestId);
 });
 
+test('safe combat rejections explain what will happen instead of hiding every cause', async () => {
+  const expected = [
+    ['MONSTER_MAP_MISMATCH', '몬스터 위치 정보가 달라 전투를 다시 불러옵니다.'],
+    ['COMBAT_STATE_MISSING', '전투 기록을 찾지 못해 전투를 안전하게 종료합니다.'],
+    ['PLAYER_NOT_FOUND', '캐릭터 정보를 찾지 못했습니다. 다시 로그인해 주세요.'],
+    ['UNKNOWN_MONSTER', '몬스터 정보를 찾지 못했습니다.'],
+    ['SESSION_REVISION_CONFLICT', '전투 상태가 바뀌었습니다. 최신 상태를 다시 불러옵니다.'],
+    ['PLAYER_REVISION_CONFLICT', '캐릭터 상태가 바뀌었습니다. 최신 상태를 다시 불러옵니다.'],
+  ];
+
+  for (const [code, message] of expected) {
+    const { api } = harness([{ data:{ error:code }, error:{ message:code } }]);
+    await assert.rejects(
+      api.resume(),
+      (error) => error.code === code && error.message === message,
+      code,
+    );
+  }
+});
+
 test('client bundle never contains a service-role credential and loads before game', () => {
   assert.doesNotMatch(source, /SUPABASE_SERVICE_ROLE_KEY|service_role\s*[:=]/i);
   const clientIndex = html.indexOf('src/pve-combat-client-v3.js');
