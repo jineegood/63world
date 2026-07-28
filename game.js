@@ -9461,7 +9461,7 @@ function wireAuthoritativeEconomyV3() {
     if (getSkillRank(skill.id) >= 1) return '이미 배운 능력입니다.';
     if (skill.specOnly && currentSpecV26() !== normalizeSpecV26(skill.specOnly)) return game.player.spec ? '이 능력은 배울 수 없습니다.(전문화 확인)' : 'Lv.5에서 전문화를 선택해야 배울 수 있습니다.';
     const prereq = skill.prereq || [];
-    if (prereq.length && !prereq.every(isSkillLearned)) return '선행 능력을 먼저 배워야 합니다.';
+    if (skill.specOnly && prereq.length && !prereq.every(isSkillLearned)) return '선행 능력을 먼저 배워야 합니다.';
     if ((game.player.skillPoints || 0) < (skill.cost || 1)) return '스킬 포인트가 부족합니다.';
     return '';
   }
@@ -13025,9 +13025,9 @@ function wireAuthoritativeEconomyV3() {
     }
 
     const linkHtml = ''; // [재구조] 선행 조건 폐지 — 연결선 제거
-    const commonLane = `<section class="skill-lane-v35">
+    const commonLane = `<section class="skill-lane-v35 common-grid-v35">
       <div class="lane-title-v35">◆ 기본기 <small>전문화와 관계없이 배울 수 있어요</small></div>
-      ${common.map(skillNodeV35).join(linkHtml)}
+      <div class="skill-common-grid-v35">${common.map(skillNodeV35).join(linkHtml)}</div>
     </section>`;
 
     const specLanes = specs.map((sp) => {

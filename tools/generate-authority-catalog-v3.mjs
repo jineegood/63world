@@ -53,11 +53,16 @@ const unlockLevel = (skill) => {
   const line = integer(skill.line, 1) || 1;
   return line <= 4 ? 1 : line <= 6 ? 5 : line <= 8 ? 7 : 9;
 };
-const prerequisites = (skill) => ({
+const prerequisites = (skill) => skill.specOnly ? ({
   all:Array.isArray(skill.prereq) ? skill.prereq : [],
   ranks:skill.prereqPoints || {},
   any:Array.isArray(skill.prereqAny) ? skill.prereqAny : [],
   total:skill.prereqTotal || null,
+}) : ({
+  all:[],
+  ranks:{},
+  any:[],
+  total:null,
 });
 const jsonSql = (value) => `${quote(JSON.stringify(value))}::jsonb`;
 const skillRow = (skill) => `(${[
