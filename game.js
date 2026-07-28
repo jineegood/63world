@@ -13477,6 +13477,8 @@ function wireAuthoritativePveCombatV3() {
       monster.dying = false;
       resetLocalCombat();
       closeModal();
+      // 승리 보상과 레벨업은 공격/쓰러짐 연출이 모두 끝난 뒤 HUD에 반영한다.
+      applyServerPlayer(response);
       showRewardSequenceV2('몬스터를 처치했습니다!', monster.name, rewards, {
         monsterRandomBuilding:Number(rewards.building) > 0,
       });
@@ -13490,6 +13492,8 @@ function wireAuthoritativePveCombatV3() {
 
   function finishDefeat(response) {
     const goldLost = Number(response.death?.goldLost) || 0;
+    // 마지막 피격 연출에서 HP 0을 보여준 뒤 서버가 정한 마을 부활 상태로 맞춘다.
+    applyServerPlayer(response, true);
     resetLocalCombat();
     closeModal();
     playSfx('defeat');
@@ -13507,11 +13511,6 @@ function wireAuthoritativePveCombatV3() {
   function presentResponse(response) {
     const monster = activeMonster;
     const outcome = String(response?.outcome || 'continue');
-    applyServerPlayer(response, response.outcome === 'defeat');
-    if (response?.session) applySession(response.session, monster);
-    // [v59] 연출 재생기는 몬스터가 이미 죽어 있으면 큐를 통째로 버리고 완료 신호도 보내지 않는다.
-    // 그래서 쓰러뜨리는 처리는 로그가 끝난 뒤(finishVictory)에 하고, 그때까지는 살아 있는 것으로 둔다.
-    if (outcome === 'victory' && monster) monster.alive = true;
     // [v59] 서버 결과를 예전 로컬 전투와 같은 연출 지시서로 번역한다.
     // 예전에는 이름표(type)가 없어 연출 재생기가 로그를 전부 버렸다.
     const skillId = String(game.currentCombatAction || '').startsWith('active:')
@@ -13534,16 +13533,28 @@ function wireAuthoritativePveCombatV3() {
         ? window.YuksamAudioManifest?.skillSounds?.[skillId]
         : window.YuksamAudioManifest?.classBasicSounds?.[game.player?.class || 'warrior'],
     });
-    const finish = () => {
-      if (outcome === 'victory') finishVictory(response, monster);
-      else if (outcome === 'defeat') finishDefeat(response);
-      else {
-        busy = false;
-        renderAuthorityMenuV3('다음 행동을 선택하세요.');
-      }
-    };
-    if (notices.length) queueCombatSequence(notices, finish);
-    else finish();
+    const presenter = window.YuksamAuthoritativeCombatPresentationV3.create({
+      playNotices:(queuedNotices, done) => {
+        if (queuedNotices.length) queueCombatSequence(queuedNotices, done);
+        else done();
+      },
+      reconcile:(serverResponse) => {
+        // 계속되는 전투만 다음 문제와 최종 턴 체력을 여기서 맞춘다.
+        // 승리 보상은 쓰러짐 뒤, 패배 부활 상태는 마지막 피격 뒤 각 종료 함수가 적용한다.
+        if (outcome === 'continue' && serverResponse?.session) {
+          applySession(serverResponse.session, monster);
+        }
+      },
+      finish:() => {
+        if (outcome === 'victory') finishVictory(response, monster);
+        else if (outcome === 'defeat') finishDefeat(response);
+        else {
+          busy = false;
+          renderAuthorityMenuV3('다음 행동을 선택하세요.');
+        }
+      },
+    });
+    presenter.present({ response, notices });
   }
 
   function renderAuthorityQuestionV3() {

@@ -12,7 +12,9 @@ const style = fs.readFileSync(path.join(root, 'style.css'), 'utf8');
 test('a defeated monster is finished off only after its log has played', () => {
   // 연출 재생기는 몬스터가 이미 죽어 있으면 큐를 버리고 완료 신호도 보내지 않는다.
   // 그래서 승리 처리는 로그가 끝난 뒤에 해야 하고, 그때까지는 살아 있어야 한다.
-  assert.match(game, /if \(outcome === 'victory' && monster\) monster\.alive = true;/);
+  const presentation = game.slice(game.indexOf('function presentResponse'));
+  const presentationBody = presentation.slice(0, presentation.indexOf('\n  function renderAuthorityQuestionV3'));
+  assert.doesNotMatch(presentationBody, /applySession\(response\.session/);
   const victory = game.slice(game.indexOf('function finishVictory'));
   const body = victory.slice(0, victory.indexOf('\n  function finishDefeat'));
   assert.match(body, /monster\.hp = 0;/);

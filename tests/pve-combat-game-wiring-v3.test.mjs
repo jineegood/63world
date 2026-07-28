@@ -68,7 +68,7 @@ test('server snapshots drive hp, rewards, resume, defeat, and surrender presenta
   assert.match(patch, /showRewardSequenceV2\(/);
   assert.match(patch, /\.resume\(\)/);
   assert.match(patch, /\.surrender\(session\.sessionRevision\)/);
-  assert.match(patch, /response\.outcome\s*===\s*'defeat'/);
+  assert.match(patch, /outcome\s*===\s*'defeat'/);
   assert.doesNotMatch(patch, /startMonsterDefeatSequence|handlePlayerDefeat\(/);
   assert.match(patch, /game\.finalBossPortalUnlocked\s*=\s*Boolean\(game\.player\.finalBossPortalUnlocked\)/);
 });
