@@ -60,7 +60,11 @@
     `, { type: 'tutorial', pause: true });
   }
 
-  window.__tutorialStepV53 = render;
+  // [v59] 튜토리얼도 퀘스트 대화와 같은 소리로 넘어가게 한다
+  window.__tutorialStepV53 = function tutorialStepWithSound(idx) {
+    try { window.playSfx?.('dialogue'); } catch {}
+    render(idx);
+  };
   window.__tutorialDoneV53 = function () {
     try { window.closeModal?.(); } catch {}
     try {
@@ -68,7 +72,7 @@
       window.appendChatMessage?.('system', '안내', '명진쌤에게 가서 첫 퀘스트를 받아보세요. (가까이 가서 E)');
     } catch {}
   };
-  window.startTutorialV53 = function () { render(0); };
+  window.startTutorialV53 = function () { try { window.playSfx?.('dialogue'); } catch {} render(0); };
 
   const PVP_STEPS = [
     {

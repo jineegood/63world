@@ -97,7 +97,12 @@
             },
           };
           if (playerFx) notice.fx = { ...playerFx, hitIndex:damagingHits - 1, hitStage:first ? 'primary' : 'extra' };
-          if (first && ctx.audioId) notice.audioId = String(ctx.audioId);
+          // 첫 타격에만 소리를 실어 추가타에서 겹치지 않게 한다
+          if (first) {
+            if (event?.critical) { notice.audioId = 'critical'; notice.fallbackSfx = 'critical'; }
+            else if (ctx.audioId) { notice.audioId = String(ctx.audioId); notice.fallbackSfx = 'hit'; }
+            else { notice.fallbackSfx = 'hit'; }
+          }
           notices.push(notice);
           break;
         }
@@ -107,6 +112,8 @@
             type:damagingHits === 0 ? 'player-hit' : 'player-extra-hit',
             text:'공격이 빗나갔다!',
             duration:DURATIONS.playerAttack,
+            audioId:'miss',
+            fallbackSfx:'hit',
             ...(playerFx ? { fx:{ ...playerFx, hitStage:'primary' } } : {}),
           });
           break;
@@ -116,6 +123,7 @@
             type:'player-extra-hit',
             text:`암흑 중첩이 ${monsterName}에게 ${amount}의 피해!`,
             duration:DURATIONS.playerAttack,
+            audioId:'shadowStackHit',
             effect:{ id:effectId(), type:'monster-dot', combatId, amount },
           });
           break;
@@ -150,6 +158,7 @@
             type:'enemy-status',
             text:`${monsterName}이(가) 보호막을 펼쳤다!`,
             duration:DURATIONS.support,
+            audioId:'defensiveStance',
             effect:{ id:effectId(), type:'monster-shield', combatId, amount },
           });
           break;
@@ -187,6 +196,7 @@
             type:'monster-action',
             text:`${monsterName}의 공격!`,
             duration:DURATIONS.notice,
+            audioId:'synthWindupCue',
             ...(monsterFx ? { fx:{ ...monsterFx, phase:'wind-up', mode:'wind-up' } } : {}),
           });
           break;
@@ -197,6 +207,7 @@
             text:`${monsterName}의 공격이 빗나갔다!`,
             duration:DURATIONS.playerAttack,
             tone:'enemy-action',
+            audioId:'miss',
           });
           break;
 
@@ -206,6 +217,8 @@
             text:`${amount}의 피해를 받았다!`,
             duration:DURATIONS.notice,
             tone:'enemy-action',
+            audioId:'enemyAttack',
+            fallbackSfx:'hit',
             effect:{ id:effectId(), type:'player-damage', combatId, amount },
           };
           if (monsterFx) notice.fx = { ...monsterFx, phase:'impact', mode:'projectile' };
