@@ -78,26 +78,27 @@ const pets = sortObject(Object.fromEntries(
   }]),
 ));
 
+// name은 전투 로그에 그대로 보이는 기술 이름이다 (예전 game.js의 PATTERNS_V40과 같은 이름)
 const patterns = Object.freeze({
-  mushroom:[{ chance:0.22, kind:'poison', turns:2 }],
-  slime:[{ chance:0.25, kind:'selfShield', percent:0.35 }],
+  mushroom:[{ chance:0.22, kind:'poison', turns:2, name:'포자 뿌리기' }],
+  slime:[{ chance:0.25, kind:'selfShield', percent:0.35, name:'점액 방패' }],
   stomp:[
-    { chance:0.25, kind:'heavy', multiplier:1.5, stunTurns:1 },
-    { chance:0.20, kind:'selfShield', percent:0.30 },
+    { chance:0.25, kind:'heavy', multiplier:1.5, stunTurns:1, name:'대지 찍기' },
+    { chance:0.20, kind:'selfShield', percent:0.30, name:'대지 방패' },
   ],
   snake:[
-    { chance:0.25, kind:'poison', turns:3 },
-    { chance:0.15, kind:'critical' },
+    { chance:0.25, kind:'poison', turns:3, name:'맹독니' },
+    { chance:0.15, kind:'critical', name:'급소 노리기' },
   ],
   tarantula:[
-    { chance:0.30, kind:'multi', hits:2, multiplier:0.62 },
-    { chance:0.20, kind:'heavy', multiplier:1.3, stunTurns:1 },
+    { chance:0.30, kind:'multi', hits:2, multiplier:0.62, name:'연속 물기' },
+    { chance:0.20, kind:'heavy', multiplier:1.3, stunTurns:1, name:'마비 독니' },
   ],
-  zombie:[{ chance:0.25, kind:'lifesteal', percent:1 }],
+  zombie:[{ chance:0.25, kind:'lifesteal', percent:1, name:'물어뜯기' }],
   teacherBoss:[
-    { chance:0.25, kind:'heavy', multiplier:1.6 },
-    { chance:0.20, kind:'multi', hits:2, multiplier:0.72 },
-    { chance:0.15, kind:'chillPlayer', turns:1 },
+    { chance:0.25, kind:'heavy', multiplier:1.6, name:'사랑의 매' },
+    { chance:0.20, kind:'multi', hits:2, multiplier:0.72, name:'숙제 폭탄' },
+    { chance:0.15, kind:'chillPlayer', turns:1, name:'따끔한 꾸중' },
   ],
 });
 
@@ -106,8 +107,8 @@ const elitePatterns = (type) => [
     ...clone(pattern),
     chance:Math.min(0.5, pattern.chance + 0.12),
   })),
-  { chance:0.18, kind:'heavy', multiplier:1.5 },
-  { chance:0.15, kind:'selfShield', percent:0.225 },
+  { chance:0.18, kind:'heavy', multiplier:1.5, name:'분노의 일격' },
+  { chance:0.15, kind:'selfShield', percent:0.225, name:'단단해지기' },
 ];
 const monster = (map, type, level, hp, attack, exp, gold, extra = {}) => ({
   map,

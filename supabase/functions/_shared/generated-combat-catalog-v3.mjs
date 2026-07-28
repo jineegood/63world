@@ -1203,21 +1203,25 @@ export const MONSTER_COMBAT_V3 = Object.freeze({
       {
         "chance": 0.37,
         "kind": "poison",
-        "turns": 3
+        "turns": 3,
+        "name": "맹독니"
       },
       {
         "chance": 0.27,
-        "kind": "critical"
+        "kind": "critical",
+        "name": "급소 노리기"
       },
       {
         "chance": 0.18,
         "kind": "heavy",
-        "multiplier": 1.5
+        "multiplier": 1.5,
+        "name": "분노의 일격"
       },
       {
         "chance": 0.15,
         "kind": "selfShield",
-        "percent": 0.225
+        "percent": 0.225,
+        "name": "단단해지기"
       }
     ]
   },
@@ -1244,11 +1248,13 @@ export const MONSTER_COMBAT_V3 = Object.freeze({
       {
         "chance": 0.25,
         "kind": "poison",
-        "turns": 3
+        "turns": 3,
+        "name": "맹독니"
       },
       {
         "chance": 0.15,
-        "kind": "critical"
+        "kind": "critical",
+        "name": "급소 노리기"
       }
     ]
   },
@@ -1276,12 +1282,14 @@ export const MONSTER_COMBAT_V3 = Object.freeze({
         "chance": 0.25,
         "kind": "heavy",
         "multiplier": 1.5,
-        "stunTurns": 1
+        "stunTurns": 1,
+        "name": "대지 찍기"
       },
       {
         "chance": 0.2,
         "kind": "selfShield",
-        "percent": 0.3
+        "percent": 0.3,
+        "name": "대지 방패"
       }
     ]
   },
@@ -1308,18 +1316,21 @@ export const MONSTER_COMBAT_V3 = Object.freeze({
       {
         "chance": 0.25,
         "kind": "heavy",
-        "multiplier": 1.6
+        "multiplier": 1.6,
+        "name": "사랑의 매"
       },
       {
         "chance": 0.2,
         "kind": "multi",
         "hits": 2,
-        "multiplier": 0.72
+        "multiplier": 0.72,
+        "name": "숙제 폭탄"
       },
       {
         "chance": 0.15,
         "kind": "chillPlayer",
-        "turns": 1
+        "turns": 1,
+        "name": "따끔한 꾸중"
       }
     ]
   },
@@ -1346,17 +1357,20 @@ export const MONSTER_COMBAT_V3 = Object.freeze({
       {
         "chance": 0.37,
         "kind": "selfShield",
-        "percent": 0.35
+        "percent": 0.35,
+        "name": "점액 방패"
       },
       {
         "chance": 0.18,
         "kind": "heavy",
-        "multiplier": 1.5
+        "multiplier": 1.5,
+        "name": "분노의 일격"
       },
       {
         "chance": 0.15,
         "kind": "selfShield",
-        "percent": 0.225
+        "percent": 0.225,
+        "name": "단단해지기"
       }
     ]
   },
@@ -1383,7 +1397,8 @@ export const MONSTER_COMBAT_V3 = Object.freeze({
       {
         "chance": 0.22,
         "kind": "poison",
-        "turns": 2
+        "turns": 2,
+        "name": "포자 뿌리기"
       }
     ]
   },
@@ -1410,7 +1425,8 @@ export const MONSTER_COMBAT_V3 = Object.freeze({
       {
         "chance": 0.25,
         "kind": "selfShield",
-        "percent": 0.35
+        "percent": 0.35,
+        "name": "점액 방패"
       }
     ]
   },
@@ -1437,17 +1453,20 @@ export const MONSTER_COMBAT_V3 = Object.freeze({
       {
         "chance": 0.37,
         "kind": "lifesteal",
-        "percent": 1
+        "percent": 1,
+        "name": "물어뜯기"
       },
       {
         "chance": 0.18,
         "kind": "heavy",
-        "multiplier": 1.5
+        "multiplier": 1.5,
+        "name": "분노의 일격"
       },
       {
         "chance": 0.15,
         "kind": "selfShield",
-        "percent": 0.225
+        "percent": 0.225,
+        "name": "단단해지기"
       }
     ]
   },
@@ -1475,13 +1494,15 @@ export const MONSTER_COMBAT_V3 = Object.freeze({
         "chance": 0.3,
         "kind": "multi",
         "hits": 2,
-        "multiplier": 0.62
+        "multiplier": 0.62,
+        "name": "연속 물기"
       },
       {
         "chance": 0.2,
         "kind": "heavy",
         "multiplier": 1.3,
-        "stunTurns": 1
+        "stunTurns": 1,
+        "name": "마비 독니"
       }
     ]
   },
@@ -1508,7 +1529,8 @@ export const MONSTER_COMBAT_V3 = Object.freeze({
       {
         "chance": 0.25,
         "kind": "lifesteal",
-        "percent": 1
+        "percent": 1,
+        "name": "물어뜯기"
       }
     ]
   }

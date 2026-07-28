@@ -451,11 +451,18 @@ function performMonsterAction({ player, state, random, events }) {
     }
   }
   if (finiteInteger(state.monsterStatuses.stunTurns) > 0) {
+    pushEvent(events, { type:'monster-action' });
     state.monsterStatuses.stunTurns -= 1;
     pushEvent(events, { type:'monster-status', status:'stun', turns:state.monsterStatuses.stunTurns });
     return;
   }
+  // 어떤 기술을 쓰는지 정한 뒤에 알려야 전투 로그에 기술 이름을 보여줄 수 있다
   const pattern = chooseMonsterPattern(state, random);
+  pushEvent(events, {
+    type:'monster-action',
+    ...(pattern?.name ? { name:String(pattern.name) } : {}),
+    ...(pattern?.kind ? { kind:String(pattern.kind) } : {}),
+  });
   if (pattern?.kind === 'selfShield') {
     const amount = Math.max(1, Math.ceil(state.monsterMaxHp * (Number(pattern.percent) || 0)));
     state.monsterShield = Math.min(1000000, state.monsterShield + amount);
@@ -689,7 +696,6 @@ export function resolveTurn({
 
   let enemyRounds = 0;
   const takeEnemyRound = () => {
-    pushEvent(events, { type:'monster-action' });
     performMonsterAction({ player, state, random, events });
     performRoundDamageOverTime({ player, state, random, events });
     state.cooldowns = tickCooldowns(state.cooldowns);

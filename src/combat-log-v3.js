@@ -51,6 +51,11 @@
     let damagingHits = 0;   // 다단히트에서 몇 번째 타격인지
     let totalDamage = 0;
     let sawMonsterAction = false;
+    // 기도의 방벽은 '반사 피해 + 회복'이 한 줄이었다. 회복분을 미리 찾아 두고 반사 줄에 합친다.
+    const prayerHeal = events.find(
+      (event) => event?.type === 'player-heal' && event?.source === 'prayer-barrier',
+    );
+    let prayerHealUsed = false;
 
     const effectId = () => `${batchId}:${notices.length}`;
 
@@ -80,6 +85,20 @@
 
         // 내가 몬스터를 때린 것 — 예전에는 player-hit / 추가타는 player-extra-hit 였다
         case 'monster-damage': {
+          // 기도의 방벽·무기 숙련의 반사 피해는 내 공격이 아니라 '반격' 줄이다
+          if (event?.reflected === true) {
+            const healAmount = prayerHeal && !prayerHealUsed ? int(prayerHeal.amount) : 0;
+            if (healAmount > 0) prayerHealUsed = true;
+            notices.push({
+              type:'retaliation',
+              text:`기도의 방벽이 발동했다! ${monsterName}에게 반사 피해 ${amount}!`
+                + (healAmount > 0 ? ` 실제 회복 ${healAmount}!` : ''),
+              duration:DURATIONS.support,
+              audioId:'prayerBarrier',
+              effect:{ id:effectId(), type:'retaliation', combatId, amount },
+            });
+            break;
+          }
           const first = damagingHits === 0;
           damagingHits += 1;
           totalDamage += amount;
@@ -173,6 +192,8 @@
           break;
 
         case 'player-heal':
+          // 기도의 방벽 회복은 위 반격 줄에 이미 합쳐졌다
+          if (event?.source === 'prayer-barrier' && prayerHealUsed) break;
           notices.push({
             type:'player-support',
             text:`HP +${amount}`,
@@ -190,16 +211,19 @@
           break;
 
         // 여기서부터 몬스터 차례
-        case 'monster-action':
+        case 'monster-action': {
           sawMonsterAction = true;
+          // 서버가 어떤 기술을 썼는지 알려주면 예전처럼 기술 이름을 보여준다
+          const techniqueName = String(event?.name || '').trim();
           notices.push({
             type:'monster-action',
-            text:`${monsterName}의 공격!`,
+            text:techniqueName ? `${techniqueName}을(를) 사용했다!` : `${monsterName}의 공격!`,
             duration:DURATIONS.notice,
             audioId:'synthWindupCue',
             ...(monsterFx ? { fx:{ ...monsterFx, phase:'wind-up', mode:'wind-up' } } : {}),
           });
           break;
+        }
 
         case 'monster-miss':
           notices.push({
@@ -212,14 +236,28 @@
           break;
 
         case 'player-damage': {
+          // 서버는 보호막이 막은 몫과 실제로 깎인 체력을 나눠 보낸다. 예전처럼 둘 다 보여준다.
+          const shieldDamage = int(event?.shieldDamage);
+          const hpDamage = event?.hpDamage == null ? amount : int(event.hpDamage);
+          const critical = event?.critical === true ? '💥 치명타! ' : '';
+          let text;
+          if (shieldDamage > 0 && hpDamage > 0) {
+            text = `${critical}🛡️ 보호막이 ${shieldDamage}을 막아냈다! ${hpDamage}의 피해를 받았다! (총 ${amount}의 데미지)`;
+          } else if (shieldDamage > 0) {
+            text = `🛡️ 보호막이 ${shieldDamage}을 모두 막아냈다!`;
+          } else {
+            text = `${critical}${hpDamage}의 피해를 받았다!`;
+          }
           const notice = {
             type:'player-damage',
-            text:`${amount}의 피해를 받았다!`,
+            text,
             duration:DURATIONS.notice,
             tone:'enemy-action',
-            audioId:'enemyAttack',
+            audioId:(shieldDamage > 0 && hpDamage === 0) ? 'shieldBlock' : 'enemyAttack',
             fallbackSfx:'hit',
-            effect:{ id:effectId(), type:'player-damage', combatId, amount },
+            ...(amount > 0
+              ? { effect:{ id:effectId(), type:'player-damage', combatId, amount } }
+              : {}),
           };
           if (monsterFx) notice.fx = { ...monsterFx, phase:'impact', mode:'projectile' };
           notices.push(notice);

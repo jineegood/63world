@@ -220,3 +220,67 @@ test('the translator is handed the pieces it needs to animate and sound', () => 
     assert.ok(block.includes(`${field}:`), `${field} 를 넘겨주지 않습니다`);
   }
 });
+
+/* ── 2단계: 서버가 더 자세히 알려주게 된 것들 ── */
+
+test('the monster announces the technique it used', () => {
+  const log = loadLog();
+  const named = log.translate([{ type:'monster-action', name:'포자 뿌리기' }], context);
+  assert.equal(named.notices[0].text, '포자 뿌리기을(를) 사용했다!');
+  // 이름이 없으면 예전처럼 뭉뚱그린 문구로 돌아간다
+  const plain = log.translate([{ type:'monster-action' }], context);
+  assert.equal(plain.notices[0].text, '버섯돌이의 공격!');
+});
+
+test('a blocked blow reports what the shield ate and what got through', () => {
+  const log = loadLog();
+  const partial = log.translate([{ type:'player-damage', amount:7, shieldDamage:5, hpDamage:2 }], context);
+  assert.match(partial.notices[0].text, /보호막이 5을 막아냈다/);
+  assert.match(partial.notices[0].text, /2의 피해를 받았다/);
+  assert.match(partial.notices[0].text, /총 7의 데미지/);
+
+  const fully = log.translate([{ type:'player-damage', amount:5, shieldDamage:5, hpDamage:0 }], context);
+  assert.match(fully.notices[0].text, /모두 막아냈다/);
+  assert.equal(fully.notices[0].audioId, 'shieldBlock', '완전히 막았을 때는 방패 소리가 나야 합니다');
+
+  const plain = log.translate([{ type:'player-damage', amount:4, shieldDamage:0, hpDamage:4 }], context);
+  assert.equal(plain.notices[0].text, '4의 피해를 받았다!');
+});
+
+test('prayer barrier shows its reflected damage and healing on one line', () => {
+  const log = loadLog();
+  const { notices } = log.translate([
+    { type:'player-damage', amount:7, hpDamage:7 },
+    { type:'monster-damage', amount:1, reflected:true },
+    { type:'player-heal', amount:1, source:'prayer-barrier' },
+  ], context);
+
+  const retaliation = notices.find((notice) => notice.type === 'retaliation');
+  assert.ok(retaliation, '반격 줄이 없습니다');
+  assert.match(retaliation.text, /기도의 방벽이 발동했다/);
+  assert.match(retaliation.text, /반사 피해 1/);
+  assert.match(retaliation.text, /실제 회복 1/);
+  // 회복이 반격 줄에 합쳐졌으므로 따로 또 나오면 안 된다
+  assert.equal(notices.filter((notice) => notice.type === 'player-support').length, 0);
+  // 반사는 내 공격 횟수에 포함되지 않는다
+  assert.equal(notices.filter((notice) => notice.type === 'player-hit').length, 0);
+});
+
+test('a reflected hit without healing still reads cleanly', () => {
+  const log = loadLog();
+  const { notices } = log.translate([{ type:'monster-damage', amount:3, reflected:true }], context);
+  assert.equal(notices[0].type, 'retaliation');
+  assert.doesNotMatch(notices[0].text, /실제 회복/);
+});
+
+test('reflected damage never counts toward the multi hit total', () => {
+  const log = loadLog();
+  const { notices, totalDamage, hits } = log.translate([
+    { type:'monster-damage', amount:7 },
+    { type:'monster-damage', amount:5 },
+    { type:'monster-damage', amount:1, reflected:true },
+  ], context);
+  assert.equal(hits, 2);
+  assert.equal(totalDamage, 12);
+  assert.equal(notices.at(-1).text, '총 12의 피해를 주었다!');
+});
