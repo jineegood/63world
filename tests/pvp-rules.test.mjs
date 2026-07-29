@@ -92,6 +92,21 @@ test('both players receive the same question while the private answer stays serv
   });
 });
 
+test('shared workbook q fields are accepted by the PvP question selector', async () => {
+  const rules = await import(rulesUrl.href);
+  const picked = rules.selectQuestion([
+    { enabled:true, questions:[
+      { id:'shared-q1', q:'6 × 7 = ?', answer:'42', choices:['36', '42', '48'] },
+    ] },
+  ], sequence([0]));
+  assert.deepEqual(rules.publicQuestion(picked), {
+    id:'shared-q1',
+    prompt:'6 × 7 = ?',
+    choices:['36', '42', '48'],
+  });
+  assert.equal(rules.judgeAnswer(picked, '42'), true);
+});
+
 test('wrong answers deal half damage and first-strike KO cancels the second action', async () => {
   const rules = await import(rulesUrl.href);
   const resolved = rules.resolveRound({

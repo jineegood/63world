@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.110.8';
 import { createPvpService } from '../_shared/pvp-service.mjs';
 import { createSupabasePvpStore } from '../_shared/pvp-store.mjs';
+import { publicPvpErrorCode } from '../_shared/pvp-error.mjs';
 
 const cors = {
   'Access-Control-Allow-Origin':'*',
@@ -35,7 +36,7 @@ Deno.serve(async (request) => {
     const result = await service.handle(data.user.id, body);
     return Response.json({ data:result }, { headers:{ ...cors, 'Content-Type':'application/json' } });
   } catch (error) {
-    const code = String(error?.code || 'SERVER_ERROR');
+    const code = publicPvpErrorCode(error);
     const status = code === 'UNAUTHENTICATED' ? 401 : code === 'SERVER_ERROR' ? 500 : 400;
     return Response.json({ error:code }, { status, headers:{ ...cors, 'Content-Type':'application/json' } });
   }

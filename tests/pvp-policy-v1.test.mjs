@@ -7,6 +7,7 @@ const root = path.resolve(import.meta.dirname, '..');
 const migrationPath = path.join(root, 'supabase/migrations/202607250001_student_pvp_v1.sql');
 const hardeningPath = path.join(root, 'supabase/migrations/202607260001_pvp_runtime_hardening_v1.sql');
 const roundLockPath = path.join(root, 'supabase/migrations/202607290005_pvp_round_resolution_lock_v2.sql');
+const finishCompatibilityPath = path.join(root, 'supabase/migrations/202607300001_pvp_v2_finish_compatibility.sql');
 
 test('PvP storage forces RLS and keeps authoritative tables client read-only', () => {
   const sql = fs.readFileSync(migrationPath, 'utf8');
@@ -66,4 +67,13 @@ test('round submission uses one service-only database lock and can recover a sta
   assert.match(sql, /on conflict\s*\(\s*match_id\s*,\s*round_no\s*,\s*user_id\s*\)\s*do nothing/i);
   assert.match(sql, /grant execute on function public\.private_submit_pvp_round_v2[\s\S]*to service_role/i);
   assert.match(sql, /from anon, authenticated/i);
+});
+
+test('recovery PvP finishes against v2 records without depending on retired v3 profiles', () => {
+  const sql = fs.readFileSync(finishCompatibilityPath, 'utf8');
+  assert.match(sql, /create or replace function public\.finish_pvp_match_v1/i);
+  assert.match(sql, /from public\.pvp_matches_v1[\s\S]*for update/i);
+  assert.match(sql, /insert into public\.pvp_records_v1/i);
+  assert.doesNotMatch(sql, /player_core_v3/i);
+  assert.match(sql, /grant execute on function public\.finish_pvp_match_v1[\s\S]*to service_role/i);
 });

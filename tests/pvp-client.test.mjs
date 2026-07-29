@@ -53,6 +53,28 @@ test('PvP requests invoke only the secure endpoint and never send caller records
   }
 });
 
+test('server response codes inside an Edge Function error replace the generic connection message', async () => {
+  const window = {};
+  vm.runInNewContext(source, { window });
+  const response = {
+    clone() { return this; },
+    async json() { return { error:'NO_QUESTIONS' }; },
+  };
+  const api = window.YuksamPvpClient.create({
+    client:{
+      functions:{ invoke:async () => ({
+        data:null,
+        error:{ message:'Edge Function returned a non-2xx status code', context:response },
+      }) },
+    },
+    getIdentity:() => ({ userId:'student-a' }),
+  });
+  await assert.rejects(
+    api.invite('student-b'),
+    (error) => error.code === 'NO_QUESTIONS' && error.message !== '대전 서버에 연결하지 못했어요.',
+  );
+});
+
 test('match subscription emits each event sequence once and cleans up its channel', () => {
   const { api, channels, removed } = harness();
   const received = [];

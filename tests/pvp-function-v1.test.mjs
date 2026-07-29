@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 
 const root = path.resolve(import.meta.dirname, '..');
 const serviceUrl = pathToFileURL(path.join(root, 'supabase/functions/_shared/pvp-service.mjs'));
+const errorUrl = pathToFileURL(path.join(root, 'supabase/functions/_shared/pvp-error.mjs'));
 
 test('Edge endpoint verifies JWT identity and never trusts a caller user id', () => {
   const source = fs.readFileSync(path.join(root, 'supabase/functions/pvp-match-v1/index.ts'), 'utf8');
@@ -16,6 +17,13 @@ test('Edge endpoint verifies JWT identity and never trusts a caller user id', ()
   assert.doesNotMatch(source, /body\.(?:userId|callerId)/);
   assert.match(source, /request\.method\s*!==\s*['"]POST['"]/);
   assert.match(config, /\[functions\.pvp-match-v1\][\s\S]*verify_jwt\s*=\s*true/);
+});
+
+test('database error messages expose only known PvP codes and hide raw failures', async () => {
+  const { publicPvpErrorCode } = await import(errorUrl.href);
+  assert.equal(publicPvpErrorCode({ code:'P0001', message:'ROUND_CHANGED' }), 'ROUND_CHANGED');
+  assert.equal(publicPvpErrorCode({ code:'NO_QUESTIONS', message:'ignored' }), 'NO_QUESTIONS');
+  assert.equal(publicPvpErrorCode({ code:'23505', message:'sensitive database detail' }), 'SERVER_ERROR');
 });
 
 test('service rejects challenges unless both students are available in town', async () => {

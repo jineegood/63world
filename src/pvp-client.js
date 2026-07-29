@@ -10,6 +10,15 @@
     RECONNECTING:'상대 학생의 재접속을 기다리는 중이에요.',
     PROFILE_MISSING:'저장된 캐릭터 정보를 확인한 뒤 다시 시도해 주세요.',
     UNAUTHENTICATED:'다시 로그인한 뒤 이용해 주세요.',
+    NOT_INVITED:'이미 끝났거나 나에게 온 대전 신청이 아니에요.',
+    INVITE_CLOSED:'대전 신청 시간이 지났어요. 다시 신청해 주세요.',
+    NOT_PARTICIPANT:'이 대전에 참가한 학생 계정으로 다시 로그인해 주세요.',
+    MATCH_NOT_FOUND:'대전 정보를 찾지 못했어요. 다시 신청해 주세요.',
+    MATCH_STATE_MISSING:'대전 상태를 불러오지 못했어요. 다시 신청해 주세요.',
+    ROUND_CHANGED:'이미 다음 문제로 넘어갔어요.',
+    ROUND_CLOSED:'이미 처리된 문제예요.',
+    INVALID_REQUEST:'대전 요청이 올바르지 않아요. 다시 시도해 주세요.',
+    INVALID_PVP_RESULT:'대전 결과를 저장하지 못했어요. 다시 시도해 주세요.',
   });
 
   function create({ client, getIdentity }) {
@@ -34,10 +43,25 @@
       return `${prefix}-${Date.now().toString(36)}-${requestSequence.toString(36)}`;
     }
 
+    async function readErrorCode(error, data) {
+      if (typeof data?.error === 'string' && data.error) return data.error;
+      const context = error?.context;
+      if (typeof context?.error === 'string' && context.error) return context.error;
+      if (context && typeof context.json === 'function') {
+        try {
+          const response = typeof context.clone === 'function' ? context.clone() : context;
+          const payload = await response.json();
+          if (typeof payload?.error === 'string' && payload.error) return payload.error;
+        } catch {}
+      }
+      const message = String(error?.message || '');
+      return Object.keys(messages).find((known) => message.includes(known)) || '';
+    }
+
     async function invoke(body) {
       identity();
       const { data, error } = await client.functions.invoke('pvp-match-v1', { body });
-      const code = error?.context?.error || error?.message || data?.error;
+      const code = await readErrorCode(error, data);
       if (error || data?.error) {
         const failure = new Error(messages[code] || '대전 서버에 연결하지 못했어요.');
         failure.code = code || 'PVP_SERVER_ERROR';

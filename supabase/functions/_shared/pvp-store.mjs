@@ -18,6 +18,11 @@ function check(result) {
   return result.data;
 }
 
+function workbookItems(value) {
+  if (Array.isArray(value)) return value;
+  return Array.isArray(value?.items) ? value.items : [];
+}
+
 const DISCONNECT_DETECT_MS = 10000;
 const RECONNECT_GRACE_MS = 30000;
 
@@ -222,7 +227,7 @@ export function createSupabasePvpStore(client) {
     },
     async readEnabledWorkbooks() {
       const row = check(await client.from('shared_state_v2').select('data').eq('key', 'workbooks').maybeSingle());
-      return row?.data?.items || [];
+      return workbookItems(row?.data);
     },
     async finishMatchOnce(id, winner, loser, reason) {
       const match = await getMatch(id);
@@ -264,7 +269,7 @@ export function createSupabasePvpStore(client) {
       const b = helpers.normalizeSnapshot({ ...bProfile, userId:invite.target_id });
       a.hp = a.maxHp; a.shield = 0; b.hp = b.maxHp; b.shield = 0;
       const workbookRow = check(await client.from('shared_state_v2').select('data').eq('key', 'workbooks').maybeSingle());
-      const question = helpers.selectQuestion(workbookRow?.data?.items || [], randomInt);
+      const question = helpers.selectQuestion(workbookItems(workbookRow?.data), randomInt);
       if (!question) throw Object.assign(new Error(), { code:'NO_QUESTIONS' });
       const match = check(await client.from('pvp_matches_v1').insert({
         invite_id:invite.id, player_a_id:invite.challenger_id, player_b_id:invite.target_id,
