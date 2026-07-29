@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import vm from 'node:vm';
 
@@ -106,4 +107,11 @@ test('the quest-only costume is hidden from the paid shop and game hooks tutoria
   assert.match(game, /grantQuestCostume/);
   assert.match(game, /openQuestNpcIntroV3/);
   assert.doesNotMatch(game, /ownsAllCostumes\(game\.player\.costumeInventory/);
+});
+
+test('the full healing tutorial attack reaches HP 1 after its impact animation', { timeout:10000 }, () => {
+  const script = path.join(root, 'tools', 'browser-smoke', 'try_healing_training_quest.js');
+  const result = spawnSync(process.execPath, [script, root], { encoding:'utf8', timeout:8000 });
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stdout, /PASS: healing training attack lands after its impact animation/);
 });

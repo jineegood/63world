@@ -6099,28 +6099,45 @@ function updateQuestTracker() {
     return !!changed;
   };
 
+  let healingTrainingAttackTimerV61 = null;
+  function triggerHealingTrainingShakeV61() {
+    const el = $('gameCanvas') || document.body;
+    el.classList.remove('screen-shake');
+    void el.offsetWidth;
+    el.classList.add('screen-shake');
+    setTimeout(() => el.classList.remove('screen-shake'), 920);
+  }
+
   function applyHealingTrainingAcceptV3(id) {
     if (id !== 'tut_healing_well') return false;
     const questState = getQuestState(id);
+    const trainingPlayer = game.player;
+    const hpBeforeAttack = Math.max(1, Number(trainingPlayer?.hp) || 1);
     const result = window.YuksamQuestTutorialPolishV3?.applyTrainingAccept({
       questId:id,
-      player:game.player,
+      player:trainingPlayer,
       questState,
     });
     if (!result?.applied) {
-      if (!questState || questState.status !== 'accepted' || Number(game.player?.hp) <= 1) return false;
+      if (!questState || questState.status !== 'accepted' || Number(trainingPlayer?.hp) <= 1) return false;
       questState.trainingApplied = true;
-      game.player.hp = 1;
+      trainingPlayer.hp = 1;
     }
-    game.player.hp = 1;
+    trainingPlayer.hp = hpBeforeAttack;
     game.combatImpact = { target:'player', until:Date.now() + 900 };
     playSfx('enemyAttack');
-    try { triggerScreenShakeV19(); } catch { triggerScreenShake?.(); }
-    savePlayer();
-    updateHud();
+    triggerHealingTrainingShakeV61();
     playSfx('critical');
     showCinematicMessage('치명타!', '명진쌤의 안전한 훈련 공격! HP가 1이 되었어요. 치유의 우물에서 문제를 풀어 회복해 보세요.', 2600);
     appendChatMessage('system', '회복 훈련', '명진쌤의 훈련 공격으로 HP가 1이 되었습니다.');
+    if (healingTrainingAttackTimerV61) clearTimeout(healingTrainingAttackTimerV61);
+    healingTrainingAttackTimerV61 = setTimeout(() => {
+      healingTrainingAttackTimerV61 = null;
+      if (game.player !== trainingPlayer) return;
+      trainingPlayer.hp = 1;
+      savePlayer();
+      updateHud();
+    }, 650);
     return true;
   }
 
