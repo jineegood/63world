@@ -25,7 +25,7 @@ function harness() {
       const channel = {
         name,
         on(type, filter, handler) { handlers.push({ type, filter, handler }); return channel; },
-        subscribe() { channels.push({ channel, handlers }); return channel; },
+        subscribe(onStatus) { channels.push({ channel, handlers, onStatus }); return channel; },
       };
       return channel;
     },
@@ -55,7 +55,7 @@ test('PvP requests invoke only the secure endpoint and never send caller records
 
 test('server response codes inside an Edge Function error replace the generic connection message', async () => {
   const window = {};
-  vm.runInNewContext(source, { window });
+  vm.runInNewContext(source, { window, setTimeout });
   const response = {
     clone() { return this; },
     async json() { return { error:'NO_QUESTIONS' }; },
@@ -73,6 +73,30 @@ test('server response codes inside an Edge Function error replace the generic co
     api.invite('student-b'),
     (error) => error.code === 'NO_QUESTIONS' && error.message !== '대전 서버에 연결하지 못했어요.',
   );
+});
+
+test('a transient Edge Function connection failure retries the exact same request once', async () => {
+  const window = {};
+  const bodies = [];
+  let attempts = 0;
+  vm.runInNewContext(source, {
+    window,
+    setTimeout:(callback) => callback(),
+  });
+  const api = window.YuksamPvpClient.create({
+    client:{
+      functions:{ invoke:async (_name, options) => {
+        attempts += 1;
+        bodies.push(options.body);
+        if (attempts === 1) throw new TypeError('Failed to fetch');
+        return { data:{ data:{ ok:true } }, error:null };
+      } },
+    },
+    getIdentity:() => ({ userId:'student-a' }),
+  });
+  assert.deepEqual(await api.profile('student-b'), { ok:true });
+  assert.equal(attempts, 2);
+  assert.deepEqual(bodies[0], bodies[1]);
 });
 
 test('match subscription emits each event sequence once, including out-of-order delivery, and cleans up its channel', () => {
@@ -93,9 +117,12 @@ test('match subscription emits each event sequence once, including out-of-order 
 
 test('incoming invitation subscription listens only for the signed-in target', () => {
   const { api, channels } = harness();
-  const unsubscribe = api.onInvite(() => {});
+  let ready = false;
+  const unsubscribe = api.onInvite(() => {}, () => { ready = true; });
   const filters = channels[0].handlers.map((entry) => entry.filter.filter);
   assert.deepEqual(filters, ['target_id=eq.student-a', 'challenger_id=eq.student-a']);
+  channels[0].onStatus('SUBSCRIBED');
+  assert.equal(ready, true);
   unsubscribe();
 });
 

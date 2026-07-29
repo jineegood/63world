@@ -175,45 +175,207 @@ strong { font-weight: 900; }
 .combat-notice.wrong-answer{color:#fbbf24;text-shadow:0 1px 0 rgba(69,26,3,.62)}
 
 .pvp-dice-overlay-v2{
-  position:absolute;left:50%;top:50%;z-index:30;width:min(360px,48%);
-  transform:translate(-50%,-50%);padding:14px 18px;border-radius:24px;text-align:center;
-  color:#f8fafc;background:linear-gradient(145deg,rgba(15,23,42,.96),rgba(30,64,175,.93));
-  border:2px solid rgba(147,197,253,.68);
-  box-shadow:0 22px 60px rgba(0,0,0,.58),0 0 36px rgba(59,130,246,.35);
-  animation:pvpDicePanelInV2 .28s ease-out both;
+  position:absolute;inset:14px 5% 10px;z-index:30;overflow:visible;
+  color:#f8fafc;text-align:center;pointer-events:none;isolation:isolate;
+  animation:pvpDiceStageInV3 .26s cubic-bezier(.2,.82,.32,1.18) both;
 }
-.pvp-dice-title-v2{margin-bottom:8px;color:#fde68a;font-size:18px;font-weight:900}
-.pvp-dice-pair-v2{display:grid;grid-template-columns:1fr 32px 1fr;align-items:center;gap:8px}
-.pvp-dice-pair-v2>strong{color:#facc15;font-size:18px}
-.pvp-die-shell-v2{display:grid;justify-items:center;gap:5px;min-width:0}
-.pvp-die-shell-v2 small{width:100%;overflow:hidden;color:#dbeafe;font-weight:900;text-overflow:ellipsis;white-space:nowrap}
+.pvp-dice-overlay-v2::before{
+  content:"";position:absolute;inset:18px -2% 24px;z-index:-2;border-radius:50%;
+  background:
+    radial-gradient(ellipse at 50% 66%,rgba(15,23,42,.86) 0 22%,rgba(15,23,42,.5) 43%,transparent 72%),
+    radial-gradient(ellipse at 50% 54%,rgba(59,130,246,.22),transparent 62%);
+  filter:blur(2px);
+}
+.pvp-dice-title-v2{
+  position:absolute;left:50%;top:0;z-index:8;display:flex;align-items:center;gap:7px;
+  transform:translateX(-50%);margin:0;padding:6px 15px;border-radius:999px;
+  color:#fde68a;background:rgba(15,23,42,.9);border:1px solid rgba(253,230,138,.42);
+  box-shadow:0 8px 22px rgba(0,0,0,.38),0 0 18px rgba(250,204,21,.13);
+  font-size:17px;font-weight:900;white-space:nowrap;
+}
+.pvp-dice-title-v2 span{font-size:20px;filter:drop-shadow(0 3px 4px rgba(0,0,0,.45))}
+.pvp-dice-stage-v3{position:absolute;inset:29px 0 40px;perspective:820px;transform-style:preserve-3d}
+.pvp-dice-floor-v3{
+  position:absolute;left:8%;right:8%;bottom:7px;height:100px;overflow:hidden;border-radius:50%;
+  transform:perspective(340px) rotateX(63deg);transform-origin:center bottom;
+  background:
+    repeating-radial-gradient(ellipse at center,transparent 0 17px,rgba(147,197,253,.18) 18px 19px,transparent 20px 34px),
+    radial-gradient(ellipse at center,rgba(96,165,250,.3),rgba(30,58,138,.15) 46%,rgba(2,6,23,.08) 68%,transparent 72%);
+  border:1px solid rgba(147,197,253,.2);
+  box-shadow:inset 0 0 38px rgba(96,165,250,.2),0 16px 26px rgba(0,0,0,.42);
+}
+.pvp-dice-floor-v3::before,.pvp-dice-floor-v3::after{
+  content:"";position:absolute;top:-20%;bottom:-20%;width:1px;
+  background:linear-gradient(transparent,rgba(191,219,254,.32),transparent);
+  box-shadow:38px 0 rgba(191,219,254,.11),-38px 0 rgba(191,219,254,.11);
+}
+.pvp-dice-floor-v3::before{left:38%;transform:rotate(24deg)}
+.pvp-dice-floor-v3::after{right:38%;transform:rotate(-24deg)}
+.pvp-dice-floor-v3 i{
+  position:absolute;left:50%;top:50%;width:8px;height:8px;border-radius:50%;
+  background:#bfdbfe;box-shadow:0 0 18px 4px rgba(96,165,250,.75);
+  animation:pvpDiceFloorSparkV3 1.5s ease-out both;
+}
+.pvp-dice-floor-v3 i:nth-child(1){transform:translate(-135px,-10px);animation-delay:.18s}
+.pvp-dice-floor-v3 i:nth-child(2){transform:translate(118px,8px);animation-delay:.34s}
+.pvp-dice-floor-v3 i:nth-child(3){transform:translate(-4px,19px);animation-delay:.62s}
+.pvp-dice-pair-v2{
+  position:absolute;inset:0;display:grid;grid-template-columns:minmax(0,1fr) 48px minmax(0,1fr);
+  align-items:stretch;gap:4px;
+}
+.pvp-dice-vs-v3{
+  align-self:center;z-index:7;display:grid;place-items:center;width:46px;height:46px;border-radius:50%;
+  color:#fef08a;background:rgba(15,23,42,.86);border:1px solid rgba(250,204,21,.48);
+  box-shadow:0 8px 22px rgba(0,0,0,.42),0 0 20px rgba(250,204,21,.22);
+  font-size:17px;animation:pvpDiceVsPulseV3 .72s ease-in-out infinite alternate;
+}
+.pvp-die-shell-v2{
+  --die-light:#f8fafc;--die-mid:#93c5fd;--die-deep:#2563eb;--die-ink:#172554;
+  position:relative;min-width:0;height:100%;transform-style:preserve-3d;
+}
+.pvp-die-shell-v2.side-right{
+  --die-light:#fff7ed;--die-mid:#fdba74;--die-deep:#ea580c;--die-ink:#431407;
+}
+.pvp-die-runner-v3{
+  position:absolute;left:50%;bottom:30px;z-index:6;width:88px;height:88px;margin-left:-44px;
+  transform-style:preserve-3d;will-change:transform,filter,opacity;
+  filter:drop-shadow(0 10px 10px rgba(0,0,0,.48));
+}
+.pvp-die-runner-v3.side-left.rolling{animation:pvpDieRunLeftV3 1.505s linear both}
+.pvp-die-runner-v3.side-right.rolling{animation:pvpDieRunRightV3 1.505s linear both}
+.pvp-die-runner-v3.settled{transform:translate3d(0,0,0)}
+.pvp-die-ground-shadow-v3{
+  position:absolute;left:50%;bottom:21px;z-index:1;width:92px;height:22px;border-radius:50%;
+  transform:translateX(-50%);background:rgba(2,6,23,.68);filter:blur(5px);
+  animation:pvpDieShadowBounceV3 1.505s linear both;
+}
+.pvp-die-shell-v2.side-left .pvp-die-ground-shadow-v3{box-shadow:0 0 24px rgba(59,130,246,.36)}
+.pvp-die-shell-v2.side-right .pvp-die-ground-shadow-v3{box-shadow:0 0 24px rgba(249,115,22,.3)}
+.pvp-die-dust-v3{
+  position:absolute;left:50%;bottom:23px;z-index:4;width:12px;height:12px;border-radius:50%;
+  transform:translateX(-50%);opacity:0;background:rgba(219,234,254,.75);
+  box-shadow:-28px 3px 0 -2px rgba(191,219,254,.5),28px 1px 0 -3px rgba(191,219,254,.42);
+  animation:pvpDieDustV3 1.505s linear both;
+}
 .pvp-die-v2{
-  display:grid;place-items:center;width:76px;height:76px;
-  clip-path:polygon(50% 0,88% 18%,100% 58%,72% 100%,28% 100%,0 58%,12% 18%);
-  color:#172554;background:
-    radial-gradient(circle at 34% 24%,#fff 0 8%,#dbeafe 40%,#93c5fd 72%,#60a5fa 100%);
-  border-radius:20px;font-family:"Arial Black","Jua",sans-serif;font-size:29px;font-weight:900;
-  text-shadow:0 1px 0 rgba(255,255,255,.8);
-  box-shadow:inset 0 0 18px rgba(255,255,255,.8),0 10px 24px rgba(0,0,0,.34);
-  transform-style:preserve-3d;
+  position:relative;display:grid;place-items:center;width:88px;height:88px;
+  clip-path:polygon(50% 0,74% 7%,93% 25%,100% 52%,89% 78%,65% 98%,36% 100%,11% 82%,0 55%,9% 27%,27% 8%);
+  color:var(--die-ink);background:
+    radial-gradient(circle at 32% 22%,rgba(255,255,255,.98) 0 5%,transparent 6%),
+    conic-gradient(from 18deg at 50% 50%,var(--die-light),var(--die-mid) 12%,var(--die-deep) 24%,var(--die-light) 36%,var(--die-mid) 51%,var(--die-deep) 65%,var(--die-light) 78%,var(--die-mid) 89%,var(--die-deep));
+  box-shadow:inset 0 0 0 2px rgba(255,255,255,.52),inset 0 -15px 22px rgba(15,23,42,.26);
+  transform-style:preserve-3d;backface-visibility:visible;will-change:transform,filter;
 }
-.pvp-die-v2.rolling{animation:pvpDieSpinV2 .22s linear infinite}
-.pvp-die-v2.settled{animation:pvpDieSettleV2 .46s cubic-bezier(.17,.84,.34,1.3) both}
-.pvp-dice-caption-v2{min-height:24px;margin-top:8px;color:#fef08a;font-size:15px;font-weight:900}
-.pvp-dice-history-v2{display:block;margin-top:3px;color:#bfdbfe}
-@keyframes pvpDicePanelInV2{
-  from{opacity:0;transform:translate(-50%,-50%) scale(.76)}
-  to{opacity:1;transform:translate(-50%,-50%) scale(1)}
+.pvp-die-v2::before,.pvp-die-v2::after{
+  content:"";position:absolute;inset:9%;z-index:1;pointer-events:none;
+  clip-path:polygon(50% 0,94% 35%,78% 100%,22% 100%,6% 35%);
+  border:1px solid rgba(255,255,255,.45);transform:rotate(25deg);
 }
-@keyframes pvpDieSpinV2{
-  0%{transform:perspective(160px) rotateX(0) rotateY(0) rotateZ(0) scale(.92)}
-  50%{transform:perspective(160px) rotateX(180deg) rotateY(235deg) rotateZ(120deg) scale(1.08)}
-  100%{transform:perspective(160px) rotateX(360deg) rotateY(470deg) rotateZ(240deg) scale(.92)}
+.pvp-die-v2::after{inset:18%;border-color:rgba(15,23,42,.22);transform:rotate(-31deg)}
+.pvp-die-v2 b{
+  position:relative;z-index:5;display:grid;place-items:center;min-width:44px;height:42px;padding:0 7px;
+  clip-path:polygon(50% 0,96% 30%,82% 88%,50% 100%,18% 88%,4% 30%);
+  color:var(--die-ink);background:rgba(255,255,255,.78);
+  font-family:"Arial Black","Jua",sans-serif;font-size:28px;font-weight:900;
+  line-height:1;text-shadow:0 1px 0 rgba(255,255,255,.9);
+  box-shadow:inset 0 0 12px rgba(255,255,255,.65);
 }
-@keyframes pvpDieSettleV2{
-  0%{transform:rotate(-18deg) scale(.72)}
-  62%{transform:rotate(6deg) scale(1.18)}
-  100%{transform:rotate(0) scale(1)}
+.pvp-die-facet-v3{position:absolute;z-index:2;pointer-events:none;border-top:1px solid rgba(255,255,255,.52)}
+.pvp-die-facet-v3.facet-a{left:8%;right:9%;top:49%;transform:rotate(7deg)}
+.pvp-die-facet-v3.facet-b{left:19%;right:25%;top:27%;transform:rotate(59deg)}
+.pvp-die-facet-v3.facet-c{left:28%;right:15%;bottom:25%;transform:rotate(-56deg)}
+.pvp-die-v2.rolling.motion-launch{animation:pvpDieTumbleFastV3 .13s linear infinite}
+.pvp-die-v2.rolling.motion-tumble{animation:pvpDieTumbleMidV3 .19s linear infinite}
+.pvp-die-v2.rolling.motion-brake{animation:pvpDieTumbleBrakeV3 .38s cubic-bezier(.3,.04,.7,1) infinite}
+.pvp-die-runner-v3.side-right .pvp-die-v2.rolling{animation-direction:reverse}
+.pvp-die-v2.settled{animation:pvpDieLandV3 .52s cubic-bezier(.16,.86,.3,1.32) both}
+.pvp-dice-caption-v2{
+  position:absolute;left:8%;right:8%;bottom:15px;z-index:8;min-height:24px;margin:0;
+  color:#fef08a;font-size:16px;font-weight:900;text-shadow:0 2px 6px rgba(0,0,0,.9);
+}
+.pvp-dice-history-v2{
+  position:absolute;left:12%;right:12%;bottom:-5px;z-index:8;display:block;min-height:16px;margin:0;
+  color:#bfdbfe;font-size:12px;font-weight:800;text-shadow:0 2px 5px rgba(0,0,0,.9);
+}
+.pvp-dice-overlay-v2.rerolling .pvp-dice-title-v2{
+  color:#fecaca;border-color:rgba(248,113,113,.52);box-shadow:0 8px 22px rgba(0,0,0,.38),0 0 24px rgba(248,113,113,.2);
+}
+@keyframes pvpDiceStageInV3{
+  from{opacity:0;transform:translateY(18px) scale(.9)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+@keyframes pvpDiceVsPulseV3{
+  from{transform:scale(.92);filter:brightness(.9)}
+  to{transform:scale(1.08);filter:brightness(1.25)}
+}
+@keyframes pvpDiceFloorSparkV3{
+  0%,100%{opacity:0;filter:blur(1px)}
+  18%,54%{opacity:.9;filter:blur(0)}
+}
+@keyframes pvpDieRunLeftV3{
+  0%{opacity:0;transform:translate3d(-145px,-110px,70px) scale(.42) rotateZ(-24deg)}
+  7%{opacity:1}
+  22%{transform:translate3d(-92px,-24px,48px) scale(.78) rotateZ(13deg)}
+  35%{transform:translate3d(-49px,-46px,70px) scale(.94) rotateZ(-10deg)}
+  48%{transform:translate3d(-13px,-6px,15px) scale(1.05) rotateZ(7deg)}
+  59%{transform:translate3d(10px,-22px,48px) scale(.98) rotateZ(-6deg)}
+  70%{transform:translate3d(-7px,-3px,8px) scale(1.03) rotateZ(4deg)}
+  79%{transform:translate3d(5px,-12px,28px) scale(1) rotateZ(-3deg)}
+  88%{transform:translate3d(-3px,-3px,4px) scale(1.02) rotateZ(2deg)}
+  94%{transform:translate3d(2px,-6px,12px) scale(1) rotateZ(-1deg)}
+  100%{opacity:1;transform:translate3d(0,0,0) scale(1) rotateZ(0)}
+}
+@keyframes pvpDieRunRightV3{
+  0%{opacity:0;transform:translate3d(145px,-118px,80px) scale(.42) rotateZ(26deg)}
+  7%{opacity:1}
+  22%{transform:translate3d(88px,-27px,50px) scale(.8) rotateZ(-14deg)}
+  35%{transform:translate3d(45px,-50px,74px) scale(.95) rotateZ(11deg)}
+  48%{transform:translate3d(12px,-7px,16px) scale(1.05) rotateZ(-7deg)}
+  59%{transform:translate3d(-11px,-24px,52px) scale(.98) rotateZ(6deg)}
+  70%{transform:translate3d(8px,-4px,9px) scale(1.03) rotateZ(-4deg)}
+  79%{transform:translate3d(-5px,-14px,30px) scale(1) rotateZ(3deg)}
+  88%{transform:translate3d(3px,-3px,4px) scale(1.02) rotateZ(-2deg)}
+  94%{transform:translate3d(-2px,-7px,13px) scale(1) rotateZ(1deg)}
+  100%{opacity:1;transform:translate3d(0,0,0) scale(1) rotateZ(0)}
+}
+@keyframes pvpDieTumbleFastV3{
+  0%{transform:rotateX(18deg) rotateY(-24deg) rotateZ(0) scale(.94)}
+  25%{transform:rotateX(-26deg) rotateY(18deg) rotateZ(180deg) scale(1.04)}
+  50%{transform:rotateX(24deg) rotateY(28deg) rotateZ(360deg) scale(1.08)}
+  75%{transform:rotateX(-20deg) rotateY(-24deg) rotateZ(540deg) scale(1.02)}
+  100%{transform:rotateX(18deg) rotateY(-24deg) rotateZ(720deg) scale(.94)}
+}
+@keyframes pvpDieTumbleMidV3{
+  0%{transform:rotateX(22deg) rotateY(-18deg) rotateZ(0)}
+  50%{transform:rotateX(-28deg) rotateY(24deg) rotateZ(190deg) scale(1.06)}
+  100%{transform:rotateX(18deg) rotateY(-20deg) rotateZ(380deg)}
+}
+@keyframes pvpDieTumbleBrakeV3{
+  0%{transform:rotateX(18deg) rotateY(-20deg) rotateZ(0)}
+  58%{transform:rotateX(-18deg) rotateY(16deg) rotateZ(130deg) scale(1.04)}
+  100%{transform:rotateX(6deg) rotateY(-5deg) rotateZ(220deg)}
+}
+@keyframes pvpDieLandV3{
+  0%{transform:translateY(-20px) rotateX(34deg) rotateY(-28deg) rotateZ(-13deg) scale(.82);filter:brightness(1.55)}
+  52%{transform:translateY(3px) rotateX(-5deg) rotateY(8deg) rotateZ(4deg) scale(1.13)}
+  76%{transform:translateY(-5px) rotateX(2deg) rotateY(-3deg) rotateZ(-2deg) scale(.98)}
+  100%{transform:translateY(0) rotateX(0) rotateY(0) rotateZ(0) scale(1);filter:brightness(1)}
+}
+@keyframes pvpDieShadowBounceV3{
+  0%{opacity:0;transform:translateX(-50%) scale(.28)}
+  22%{opacity:.32;transform:translateX(-50%) scale(.62)}
+  48%{opacity:1;transform:translateX(-50%) scale(1.08,.72)}
+  59%{opacity:.4;transform:translateX(-50%) scale(.62)}
+  70%{opacity:.94;transform:translateX(-50%) scale(1,.74)}
+  79%{opacity:.5;transform:translateX(-50%) scale(.76)}
+  88%,100%{opacity:.88;transform:translateX(-50%) scale(.96,.76)}
+}
+@keyframes pvpDieDustV3{
+  0%,43%,100%{opacity:0;transform:translateX(-50%) translateY(0) scale(.3)}
+  49%{opacity:.85;transform:translateX(-50%) translateY(-5px) scale(1.35)}
+  54%{opacity:0;transform:translateX(-50%) translateY(-11px) scale(2)}
+  69%{opacity:.65;transform:translateX(-50%) translateY(-3px) scale(.9)}
+  74%{opacity:0;transform:translateX(-50%) translateY(-8px) scale(1.55)}
 }
 
 /* 오른쪽 학생도 일반 전투의 직업별 공격 동작을 사용한다. */
@@ -246,12 +408,22 @@ strong { font-weight: 900; }
 @media(max-width:760px){
   .pvp-battle-v2{min-width:0}
   .pvp-combat-stage-v2{min-height:330px}
-  .pvp-dice-overlay-v2{width:min(330px,76%);padding:12px}
-  .pvp-die-v2{width:62px;height:62px;font-size:24px}
+  .pvp-dice-overlay-v2{inset:17px 1% 9px}
+  .pvp-dice-stage-v3{inset:31px 0 40px}
+  .pvp-dice-floor-v3{left:2%;right:2%;height:86px}
+  .pvp-dice-pair-v2{grid-template-columns:minmax(0,1fr) 38px minmax(0,1fr)}
+  .pvp-dice-vs-v3{width:36px;height:36px;font-size:14px}
+  .pvp-die-runner-v3{width:68px;height:68px;margin-left:-34px}
+  .pvp-die-v2{width:68px;height:68px}
+  .pvp-die-v2 b{min-width:36px;height:35px;font-size:22px}
+  .pvp-die-ground-shadow-v3{width:72px}
+  .pvp-dice-caption-v2{left:2%;right:2%;font-size:14px}
   .pvp-skill-menu-v2{grid-template-columns:1fr}
 }
 @media(prefers-reduced-motion:reduce){
-  .pvp-die-v2.rolling{animation-duration:1ms}
+  .pvp-die-runner-v3.rolling,.pvp-die-v2.rolling,
+  .pvp-die-ground-shadow-v3,.pvp-die-dust-v3,
+  .pvp-dice-floor-v3 i,.pvp-dice-vs-v3{animation-duration:1ms}
   .pvp-dice-overlay-v2,.pvp-die-v2.settled{animation-duration:1ms}
 }
 

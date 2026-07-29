@@ -15,6 +15,7 @@ function loadUi(overrides = {}) {
   const calls = [];
   const elements = new Map();
   let inviteListener = null;
+  let inviteReady = null;
   const document = {
     getElementById:(id) => elements.get(id) || null,
   };
@@ -29,15 +30,17 @@ function loadUi(overrides = {}) {
       },
       async invite(userId) { calls.push(['invite', userId]); return { ok:true }; },
       async respond(inviteId, accept) { calls.push(['respond', inviteId, accept]); return { accepted:accept }; },
-      async presence() { return { ok:true }; },
+      async presence() { calls.push(['presence']); return { ok:true }; },
       async sync(matchId) { calls.push(['sync', matchId]); return { id:matchId }; },
-      onInvite(listener) { inviteListener = listener; return () => {}; },
+      onInvite(listener, onReady) { inviteListener = listener; inviteReady = onReady; return () => {}; },
       ...pvpClientOverrides,
     }),
     getPvpIdentityV1:() => ({ userId:'student-a', displayName:'별빛', role:'student' }),
     getLocalPvpProfileV1:() => ({ map:'town', busy:false }),
+    flushLocalPlayerForPvpV1:async () => { calls.push(['flush']); },
     enterPvpMatchV1:(match) => calls.push(['enterMatch', match.id]),
     openModal:(html, options) => { opened.push({ html, options }); },
+    closeModal:() => calls.push(['close']),
     renderPlayerPortraitForPvpV1:(canvas, profile) => calls.push(['portrait', canvas, profile]),
     toast:(message) => calls.push(['toast', message]),
     ...windowOverrides,
@@ -47,7 +50,14 @@ function loadUi(overrides = {}) {
     setInterval:() => 1,
     clearInterval() {},
   });
-  return { window, opened, calls, elements, emitInvite:(invite) => inviteListener?.(invite) };
+  return {
+    window,
+    opened,
+    calls,
+    elements,
+    emitInvite:(invite) => inviteListener?.(invite),
+    emitInviteReady:() => inviteReady?.(),
+  };
 }
 
 test('right-click profile shows safe public details and renders equipped face portrait', async () => {
@@ -76,10 +86,93 @@ test('challenge and invitation response use the authenticated PvP client', async
   ]);
 });
 
+test('challenge and accept flush the latest character and refresh presence first', async () => {
+  const ui = loadUi();
+  await ui.window.challengeRemoteV1('student-b');
+  await ui.window.respondPvpInviteV1('invite-1', true);
+  assert.deepEqual(ui.calls.filter(([type]) => (
+    ['flush', 'presence', 'invite', 'respond'].includes(type)
+  )), [
+    ['flush'],
+    ['presence'],
+    ['invite', 'student-b'],
+    ['flush'],
+    ['presence'],
+    ['respond', 'invite-1', true],
+  ]);
+});
+
+test('rapid double clicks send only one challenge request', async () => {
+  let inviteAttempts = 0;
+  let releaseInvite;
+  const inviteGate = new Promise((resolve) => { releaseInvite = resolve; });
+  const ui = loadUi({
+    pvpClientOverrides:{
+      async invite() {
+        inviteAttempts += 1;
+        await inviteGate;
+        return { ok:true };
+      },
+    },
+  });
+  const first = ui.window.challengeRemoteV1('student-b');
+  const second = ui.window.challengeRemoteV1('student-b');
+  await second;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(inviteAttempts, 1);
+  releaseInvite();
+  await first;
+});
+
+test('a delayed setup response cannot close a PvP battle already opened by realtime', async () => {
+  let modalType = 'pvpProfile';
+  let releaseInvite;
+  const inviteGate = new Promise((resolve) => { releaseInvite = resolve; });
+  const ui = loadUi({
+    getModalStateTypeV1:() => modalType,
+    pvpClientOverrides:{
+      async invite() {
+        await inviteGate;
+        return { ok:true };
+      },
+    },
+  });
+  const request = ui.window.challengeRemoteV1('student-b');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  modalType = 'pvpBattle';
+  releaseInvite();
+  await request;
+  assert.equal(ui.calls.some(([type]) => type === 'close'), false);
+});
+
+test('accept resumes a match that was created before its response was lost', async () => {
+  let respondAttempts = 0;
+  const ui = loadUi({
+    pvpClientOverrides:{
+      async presence() {
+        return { ok:true, activeMatch:{ id:'match-already-created' } };
+      },
+      async respond() {
+        respondAttempts += 1;
+        return null;
+      },
+    },
+  });
+  const result = await ui.window.respondPvpInviteV1('invite-1', true);
+  assert.equal(result.recovered, true);
+  assert.equal(respondAttempts, 0);
+  assert.deepEqual(
+    ui.calls.filter(([type]) => type === 'enterMatch'),
+    [['enterMatch', 'match-already-created']],
+  );
+});
+
 test('game supplies the real equipped portrait and starts presence after entering the world', () => {
   assert.match(gameSource, /window\.renderPlayerPortraitForPvpV1\s*=/);
   assert.match(gameSource, /drawPlayerSprite\(/);
   assert.match(gameSource, /window\.getLocalPvpProfileV1\s*=/);
+  assert.match(gameSource, /window\.flushLocalPlayerForPvpV1\s*=/);
+  assert.match(gameSource, /window\.getModalStateTypeV1\s*=/);
   assert.match(gameSource, /window\.startPvpUiV1\?\.\(\)/);
   assert.ok(htmlSource.indexOf('src/pvp-ui.js') < htmlSource.indexOf('src/multiplayer.js'));
   assert.match(gameSource, /modalState\.type === 'pvpBattle'[\s\S]{0,100}surrenderPvpV1/);
@@ -110,4 +203,59 @@ test('entering the world after refresh restores the active server match', async 
     ui.calls.filter(([type]) => type === 'enterMatch'),
     [['enterMatch', 'match-restored']],
   );
+});
+
+test('presence backfill restores an invitation missed before realtime subscribed', async () => {
+  const pendingInvite = {
+    id:'invite-missed',
+    status:'pending',
+    challenger_id:'student-b',
+    target_id:'student-a',
+  };
+  const ui = loadUi({
+    pvpClientOverrides:{
+      async presence() { return { ok:true, pendingInvite }; },
+    },
+  });
+  ui.window.startPvpUiV1();
+  ui.emitInviteReady();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(ui.opened.some(({ options }) => options?.type === 'pvpInvite'), true);
+});
+
+test('a delayed pending invite profile cannot reopen over an accepted PvP match', async () => {
+  let releaseProfile;
+  const profileGate = new Promise((resolve) => { releaseProfile = resolve; });
+  const ui = loadUi({
+    pvpClientOverrides:{
+      async profile() {
+        return profileGate;
+      },
+    },
+  });
+  ui.window.startPvpUiV1();
+  ui.emitInvite({
+    id:'invite-race',
+    status:'pending',
+    challenger_id:'student-b',
+    target_id:'student-a',
+  });
+  await Promise.resolve();
+  ui.emitInvite({
+    id:'invite-race',
+    status:'accepted',
+    challenger_id:'student-b',
+    target_id:'student-a',
+    match_id:'match-race',
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  releaseProfile({ name:'늦게 도착한 학생' });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(
+    ui.calls.filter(([type]) => type === 'enterMatch'),
+    [['enterMatch', 'match-race']],
+  );
+  assert.equal(ui.opened.some(({ options }) => options?.type === 'pvpInvite'), false);
 });

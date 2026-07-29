@@ -671,6 +671,13 @@ function maxHpForPlayer(p = game.player) {
   return 8 + stamina * 3 + (p.level || 1) * 2; // [v50] 체력 스탯 1당 HP 3 (전사 안정성 너프)
 }
 
+window.flushLocalPlayerForPvpV1 = async function flushLocalPlayerForPvpV1() {
+  if (!game.player || !secureStudentAccess.enabled) return;
+  savePlayer();
+  await secureStudentAccess.flush?.();
+};
+window.getModalStateTypeV1 = () => game.modalState?.type || '';
+
 window.getLocalPvpProfileV1 = function getLocalPvpProfileV1() {
   const identity = secureStudentAccess.getIdentity();
   const player = game.player;
@@ -844,10 +851,11 @@ function playTone(freq, duration = 0.14, type = 'sine', volume = 0.35, destinati
 
 function getDesiredAudioFile() {
   if (!game.settings.bgmEnabled) return null;
-  if (screens.landing?.classList.contains('active')) return game.audio.loginFile || null;
+  // 로그인부터 캐릭터 생성 완료까지는 하나의 진입 흐름이다.
+  // 실제 월드 화면이 열리기 전에는 캐릭터 생성창에서도 로그인 음악을 유지한다.
+  if (!screens.game?.classList.contains('active')) return game.audio.loginFile || null;
   if (screens.game.classList.contains('active') && game.currentMap === 'forest') return game.audio.forestFile || null;
   if (screens.game.classList.contains('active') && game.currentMap === 'desert') return game.audio.desertFile || null;
-  if (!screens.game.classList.contains('active')) return game.audio.file || null;
   if (['town', 'equipmentShop', 'buildingShopInterior'].includes(game.currentMap || 'town')) return game.audio.file || null;
   return null;
 }

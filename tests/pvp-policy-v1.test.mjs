@@ -8,6 +8,7 @@ const migrationPath = path.join(root, 'supabase/migrations/202607250001_student_
 const hardeningPath = path.join(root, 'supabase/migrations/202607260001_pvp_runtime_hardening_v1.sql');
 const roundLockPath = path.join(root, 'supabase/migrations/202607290005_pvp_round_resolution_lock_v2.sql');
 const finishCompatibilityPath = path.join(root, 'supabase/migrations/202607300001_pvp_v2_finish_compatibility.sql');
+const inviteMatchLockPath = path.join(root, 'supabase/migrations/202607300002_pvp_invite_match_lock_v2.sql');
 
 test('PvP storage forces RLS and keeps authoritative tables client read-only', () => {
   const sql = fs.readFileSync(migrationPath, 'utf8');
@@ -76,4 +77,18 @@ test('recovery PvP finishes against v2 records without depending on retired v3 p
   assert.match(sql, /insert into public\.pvp_records_v1/i);
   assert.doesNotMatch(sql, /player_core_v3/i);
   assert.match(sql, /grant execute on function public\.finish_pvp_match_v1[\s\S]*to service_role/i);
+});
+
+test('invitation creation and acceptance serialize both students and commit one matched question secret', () => {
+  const sql = fs.readFileSync(inviteMatchLockPath, 'utf8');
+  assert.match(sql, /create or replace function public\.private_create_pvp_invite_v2/i);
+  assert.match(sql, /create or replace function public\.private_accept_pvp_invite_v2/i);
+  assert.match(sql, /pg_advisory_xact_lock[\s\S]*pg_advisory_xact_lock/i);
+  assert.match(sql, /update public\.pvp_invites_v1[\s\S]*expires_at <= p_requested_at/i);
+  assert.match(sql, /player_a_id in \(v_invite\.challenger_id, v_invite\.target_id\)[\s\S]*player_b_id in \(v_invite\.challenger_id, v_invite\.target_id\)/i);
+  assert.match(sql, /insert into public\.pvp_matches_v1[\s\S]*insert into public\.pvp_match_secrets_v1/i);
+  assert.match(sql, /v_invite\.status = 'accepted'[\s\S]*return jsonb_build_object\('match_id', v_invite\.match_id, 'created', false\)/i);
+  assert.match(sql, /grant execute on function public\.private_create_pvp_invite_v2[\s\S]*to service_role/i);
+  assert.match(sql, /grant execute on function public\.private_accept_pvp_invite_v2[\s\S]*to service_role/i);
+  assert.match(sql, /from public, anon, authenticated/i);
 });

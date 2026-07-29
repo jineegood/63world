@@ -135,6 +135,278 @@ test('event replay store reads ordered rows after a clamped sequence and strips 
   ]);
 });
 
+test('invite maintenance expires only stale requests involving the two participants', async () => {
+  const { createSupabasePvpStore } = await import(storeUrl.href);
+  const calls = [];
+  const makeQuery = () => ({
+    update(value) { calls.push(['update', value]); return this; },
+    eq(column, value) { calls.push(['eq', column, value]); return this; },
+    lte(column, value) { calls.push(['lte', column, value]); return this; },
+    in(column, value) { calls.push(['in', column, value]); return this; },
+    then(resolve, reject) {
+      return Promise.resolve({ data:[], error:null }).then(resolve, reject);
+    },
+  });
+  const store = createSupabasePvpStore({
+    from(table) {
+      calls.push(['from', table]);
+      return makeQuery();
+    },
+  });
+
+  await store.expirePendingInvitesForUsers(['a', 'b', 'a'], 5000);
+  const expiresAt = new Date(5000).toISOString();
+  assert.deepEqual(calls, [
+    ['from', 'pvp_invites_v1'],
+    ['update', { status:'expired' }],
+    ['eq', 'status', 'pending'],
+    ['lte', 'expires_at', expiresAt],
+    ['in', 'challenger_id', ['a', 'b']],
+    ['from', 'pvp_invites_v1'],
+    ['update', { status:'expired' }],
+    ['eq', 'status', 'pending'],
+    ['lte', 'expires_at', expiresAt],
+    ['in', 'target_id', ['a', 'b']],
+  ]);
+});
+
+test('presence backfill reads only the target current pending invitation', async () => {
+  const { createSupabasePvpStore } = await import(storeUrl.href);
+  const calls = [];
+  const invite = {
+    id:'invite-1', challenger_id:'a', target_id:'b', status:'pending',
+  };
+  const query = {
+    select(value) { calls.push(['select', value]); return this; },
+    eq(column, value) { calls.push(['eq', column, value]); return this; },
+    gt(column, value) { calls.push(['gt', column, value]); return this; },
+    order(column, value) { calls.push(['order', column, value]); return this; },
+    limit(value) { calls.push(['limit', value]); return this; },
+    async maybeSingle() { return { data:invite, error:null }; },
+  };
+  const store = createSupabasePvpStore({
+    from(table) {
+      calls.push(['from', table]);
+      return query;
+    },
+  });
+
+  assert.equal(await store.getPendingInviteForTarget('b', 5000), invite);
+  assert.deepEqual(calls, [
+    ['from', 'pvp_invites_v1'],
+    ['select', '*'],
+    ['eq', 'target_id', 'b'],
+    ['eq', 'status', 'pending'],
+    ['gt', 'expires_at', new Date(5000).toISOString()],
+    ['order', 'created_at', { ascending:false }],
+    ['limit', 1],
+  ]);
+});
+
+test('repeating the same invite request id returns its existing invitation without inserting twice', async () => {
+  const { createSupabasePvpStore } = await import(storeUrl.href);
+  let insertCalls = 0;
+  const existing = {
+    id:'invite-1',
+    challenger_id:'a',
+    target_id:'b',
+    request_id:'same-request',
+    status:'pending',
+  };
+  const client = {
+    from(table) {
+      assert.equal(table, 'pvp_invites_v1');
+      return {
+        select() { return this; },
+        eq() { return this; },
+        async maybeSingle() { return { data:existing, error:null }; },
+        insert() { insertCalls += 1; return this; },
+        single() { return Promise.resolve({ data:existing, error:null }); },
+      };
+    },
+  };
+  const store = createSupabasePvpStore(client);
+  const result = await store.createInvite({
+    challengerId:'a',
+    targetId:'b',
+    requestId:'same-request',
+    expiresAt:10000,
+  });
+  assert.equal(result.id, 'invite-1');
+  assert.equal(insertCalls, 0);
+});
+
+test('new invitation creation uses the participant-locking transaction RPC', async () => {
+  const { createSupabasePvpStore } = await import(storeUrl.href);
+  const calls = [];
+  const created = {
+    id:'invite-new',
+    challenger_id:'a',
+    target_id:'b',
+    request_id:'request-new',
+    status:'pending',
+  };
+  const client = {
+    from(table) {
+      assert.equal(table, 'pvp_invites_v1');
+      return {
+        select() { return this; },
+        eq() { return this; },
+        async maybeSingle() { return { data:null, error:null }; },
+      };
+    },
+    async rpc(name, args) {
+      calls.push([name, args]);
+      return { data:created, error:null };
+    },
+  };
+  const store = createSupabasePvpStore(client);
+  assert.equal(await store.createInvite({
+    challengerId:'a',
+    targetId:'b',
+    requestId:'request-new',
+    requestedAt:5000,
+    expiresAt:25000,
+  }), created);
+  assert.deepEqual(calls, [[
+    'private_create_pvp_invite_v2',
+    {
+      p_challenger_id:'a',
+      p_target_id:'b',
+      p_request_id:'request-new',
+      p_requested_at:new Date(5000).toISOString(),
+    },
+  ]]);
+});
+
+test('repeating acceptance of an accepted invite returns its existing public match', async () => {
+  const { createSupabasePvpStore } = await import(storeUrl.href);
+  const rows = {
+    pvp_invites_v1:{
+      id:'invite-1',
+      challenger_id:'a',
+      target_id:'b',
+      status:'accepted',
+      match_id:'match-1',
+      expires_at:'2026-07-30T00:00:20Z',
+    },
+    pvp_matches_v1:{
+      id:'match-1',
+      player_a_id:'a',
+      player_b_id:'b',
+      phase:'question',
+      round_no:1,
+      player_a_state:{ hp:22 },
+      player_b_state:{ hp:35 },
+      question_public:{ prompt:'2+2' },
+    },
+    pvp_match_secrets_v1:{ answer_key:'4' },
+  };
+  const client = {
+    from(table) {
+      return {
+        select() { return this; },
+        eq() { return this; },
+        async maybeSingle() { return { data:rows[table] || null, error:null }; },
+      };
+    },
+  };
+  const store = createSupabasePvpStore(client);
+  const result = await store.respondToInvite(
+    'b',
+    { inviteId:'invite-1', accept:true },
+    Date.parse('2026-07-30T00:00:10Z'),
+    () => 0,
+    {},
+  );
+  assert.equal(result.accepted, true);
+  assert.equal(result.recovered, true);
+  assert.equal(result.match.id, 'match-1');
+  assert.equal(Object.hasOwn(result.match, 'answerKey'), false);
+});
+
+test('pending invitation acceptance creates match and answer in one transaction RPC', async () => {
+  const { createSupabasePvpStore } = await import(storeUrl.href);
+  const calls = [];
+  const rows = {
+    pvp_invites_v1:{
+      id:'invite-1',
+      challenger_id:'a',
+      target_id:'b',
+      status:'pending',
+      expires_at:'2026-07-30T00:00:20Z',
+    },
+    pvp_matches_v1:{
+      id:'match-1',
+      player_a_id:'a',
+      player_b_id:'b',
+      phase:'question',
+      round_no:1,
+      player_a_state:{ userId:'a', hp:22, maxHp:22 },
+      player_b_state:{ userId:'b', hp:22, maxHp:22 },
+      question_public:{ prompt:'2+2' },
+    },
+    pvp_match_secrets_v1:{ answer_key:'4' },
+    shared_state_v2:{
+      data:[{ enabled:true, questions:[{ id:'q1', prompt:'2+2', answer:'4' }] }],
+    },
+  };
+  const profiles = {
+    a:{
+      display_name:'A',
+      data:{ name:'A', class:'warrior', exp:0, inventory:[], equipment:{}, skills:{} },
+    },
+    b:{
+      display_name:'B',
+      data:{ name:'B', class:'warrior', exp:0, inventory:[], equipment:{}, skills:{} },
+    },
+  };
+  const client = {
+    from(table) {
+      let selectedId = '';
+      return {
+        select() { return this; },
+        eq(column, value) {
+          if (column === 'user_id' || column === 'id' || column === 'key') selectedId = value;
+          return this;
+        },
+        async maybeSingle() {
+          if (table === 'player_profiles_v2') {
+            return { data:profiles[selectedId] || null, error:null };
+          }
+          return { data:rows[table] || null, error:null };
+        },
+      };
+    },
+    async rpc(name, args) {
+      calls.push([name, args]);
+      return { data:{ match_id:'match-1', created:true }, error:null };
+    },
+  };
+  const store = createSupabasePvpStore(client);
+  const result = await store.respondToInvite(
+    'b',
+    { inviteId:'invite-1', accept:true },
+    Date.parse('2026-07-30T00:00:10Z'),
+    () => 0,
+    {
+      normalizeSnapshot:(profile) => ({ ...profile }),
+      selectQuestion:() => ({ id:'q1', prompt:'2+2', answer:'4' }),
+      publicQuestion:(question) => ({ id:question.id, prompt:question.prompt }),
+    },
+  );
+  assert.equal(result.accepted, true);
+  assert.equal(result.recovered, false);
+  assert.equal(result.match.id, 'match-1');
+  assert.equal(Object.hasOwn(result.match, 'answerKey'), false);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][0], 'private_accept_pvp_invite_v2');
+  assert.equal(calls[0][1].p_invite_id, 'invite-1');
+  assert.equal(calls[0][1].p_user_id, 'b');
+  assert.deepEqual(calls[0][1].p_question_public, { id:'q1', prompt:'2+2' });
+  assert.equal(calls[0][1].p_answer_key, '4');
+});
+
 test('first PvP profile use shows one tutorial with green key phrases before opening the profile', async () => {
   const tutorialSource = fs.readFileSync(path.join(root, 'src/tutorial.js'), 'utf8');
   const uiSource = fs.readFileSync(path.join(root, 'src/pvp-ui.js'), 'utf8');

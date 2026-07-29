@@ -65,8 +65,34 @@ export function createPvpService({ store, now = Date.now, randomInt }) {
       : store.listEventsAfter(matchId, afterSequence);
   }
 
+  async function recoverSubmittedRound(userId, body, match) {
+    const requestId = String(body.requestId || '');
+    const requestedRound = Number(body.round);
+    if (!requestId || !Number.isInteger(requestedRound) || requestedRound < 1) return null;
+    const prior = await store.findRoundInputByRequest(userId, requestId);
+    if (!prior || prior.matchId !== match.id || Number(prior.round) !== requestedRound) return null;
+    const replay = await store.listEventsAfter(match.id, requestedRound * 1000 - 1);
+    const events = replay.filter((event) => Number(event.round) === requestedRound);
+    if (!events.length) return null;
+    if (match.phase === 'cancelled') {
+      return { cancelled:true, recovered:true, round:requestedRound, events };
+    }
+    if (match.finishedAt || match.phase === 'finished') {
+      return { finished:true, recovered:true, round:requestedRound, events };
+    }
+    if (Number(match.round) > requestedRound) {
+      return { resolved:true, recovered:true, round:requestedRound, events };
+    }
+    return null;
+  }
+
   async function invite(userId, body) {
     if (!body.targetUserId || body.targetUserId === userId) fail('INVALID_TARGET');
+    const requestedAt = now();
+    await store.expirePendingInvitesForUsers(
+      [userId, body.targetUserId],
+      requestedAt,
+    );
     const [challenger, target, challengerMatch, targetMatch] = await Promise.all([
       store.getPresence(userId),
       store.getPresence(body.targetUserId),
@@ -81,13 +107,23 @@ export function createPvpService({ store, now = Date.now, randomInt }) {
       challengerId:userId,
       targetId:body.targetUserId,
       requestId:String(body.requestId || ''),
-      expiresAt:now() + 20000,
+      requestedAt,
+      expiresAt:requestedAt + 20000,
     });
   }
 
   async function submit(userId, body) {
     const match = await store.getMatchForUpdate(body.matchId);
     if (!participant(match, userId)) fail('NOT_PARTICIPANT');
+    if (
+      match.finishedAt
+      || match.phase === 'finished'
+      || match.phase === 'cancelled'
+      || Number(body.round) !== Number(match.round)
+    ) {
+      const recovered = await recoverSubmittedRound(userId, body, match);
+      if (recovered) return recovered;
+    }
     if (match.finishedAt || match.phase === 'finished' || match.phase === 'cancelled') fail('MATCH_CLOSED');
     if (match.phase === 'reconnect') fail('RECONNECTING');
     if (Number(body.round) !== Number(match.round)) fail('ROUND_CHANGED');
@@ -179,14 +215,22 @@ export function createPvpService({ store, now = Date.now, randomInt }) {
       {
         const authoritative = await store.getAuthoritativeProfile(userId);
         if (!authoritative) fail('PROFILE_MISSING');
-        const activeMatch = await store.findActiveMatchForUser(userId);
+        const checkedAt = now();
+        const [activeMatch, pendingInvite] = await Promise.all([
+          store.findActiveMatchForUser(userId),
+          store.getPendingInviteForTarget(userId, checkedAt),
+        ]);
         const presence = await store.upsertPresence(userId, {
           map:String(authoritative.map || ''),
           busy:authoritative.map !== 'town' || !!activeMatch,
           publicProfile:publicProfile(authoritative),
-          lastSeenAt:now(),
+          lastSeenAt:checkedAt,
         });
-        return { ...(presence || { ok:true }), activeMatch:publicMatch(activeMatch) };
+        return {
+          ...(presence || { ok:true }),
+          activeMatch:publicMatch(activeMatch),
+          pendingInvite:pendingInvite || null,
+        };
       }
       case 'profile':
         return store.getPublicProfile(body.userId);

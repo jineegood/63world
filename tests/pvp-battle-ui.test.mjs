@@ -7,6 +7,7 @@ import vm from 'node:vm';
 const root = path.resolve(import.meta.dirname, '..');
 const sourcePath = path.join(root, 'src/pvp-battle.js');
 const source = fs.readFileSync(sourcePath, 'utf8');
+const styleSource = fs.readFileSync(path.join(root, 'style.css'), 'utf8');
 
 function createClassList(element, initial = '') {
   const names = new Set(String(initial).split(/\s+/).filter(Boolean));
@@ -368,21 +369,70 @@ test('dice visibly rolls and settles before queued damage is applied', async () 
   });
 
   assert.match(ui.lastHtml(), /pvp-dice-overlay-v2/);
+  assert.match(ui.lastHtml(), /pvp-dice-stage-v3/);
+  assert.match(ui.lastHtml(), /pvp-dice-floor-v3/);
+  assert.equal((ui.lastHtml().match(/pvp-die-runner-v3/g) || []).length, 2);
+  assert.equal((ui.lastHtml().match(/pvp-die-facet-v3/g) || []).length, 6);
   assert.equal((ui.lastHtml().match(/pvp-die-v2 rolling/g) || []).length, 2);
   assert.match(ui.lastHtml(), /HP 100\/100/);
+  assert.equal(ui.calls.some(([type, id]) => type === 'sfx' && id === 'transition'), true);
   assert.equal(ui.calls.some(([type, id]) => type === 'sfx' && id === 'hit'), false);
 
-  await ui.advance(800);
-  assert.equal(ui.elements.get('pvpLeftDieV2')?.textContent, '27');
-  assert.equal(ui.elements.get('pvpRightDieV2')?.textContent, '4');
+  await ui.advance(1_530);
+  assert.equal(ui.elements.get('pvpLeftDieValueV3')?.textContent, '27');
+  assert.equal(ui.elements.get('pvpRightDieValueV3')?.textContent, '4');
   assert.equal(ui.elements.get('pvpLeftDieV2')?.classList.contains('rolling'), false);
   assert.equal(ui.elements.get('pvpLeftDieV2')?.classList.contains('settled'), true);
+  assert.equal(ui.calls.filter(([type, id]) => type === 'sfx' && id === 'open').length, 1);
   assert.equal(ui.calls.some(([type, id]) => type === 'sfx' && id === 'hit'), false);
 
   await ui.advance(1_000);
   assert.match(ui.lastHtml(), /HP 85\/100/);
   assert.match(ui.lastHtml(), /B 학생이 체력 15 피해/);
   assert.equal(ui.calls.filter(([type, id]) => type === 'sfx' && id === 'hit').length, 1);
+});
+
+test('dice CSS travels, bounces, tumbles on multiple axes, and visibly brakes', () => {
+  assert.match(styleSource, /@keyframes pvpDieRunLeftV3[\s\S]*translate3d\(-145px,-\d+px,70px\)[\s\S]*translate3d\(0,0,0\)/);
+  assert.match(styleSource, /@keyframes pvpDieRunRightV3[\s\S]*translate3d\(145px,-\d+px,80px\)[\s\S]*translate3d\(0,0,0\)/);
+  assert.match(styleSource, /@keyframes pvpDieTumbleFastV3[\s\S]*rotateX\([\d]+deg\)[\s\S]*rotateY\([\d]+deg\)[\s\S]*rotateZ\([\d]+deg\)/);
+  assert.match(styleSource, /\.pvp-die-v2\.rolling\.motion-brake\{animation:pvpDieTumbleBrakeV3/);
+  assert.match(styleSource, /@keyframes pvpDieShadowBounceV3/);
+  assert.match(styleSource, /@keyframes pvpDieDustV3/);
+});
+
+test('a tied server roll lands, then launches both dice again and settles on the final roll', async () => {
+  const ui = harness();
+  ui.window.enterPvpMatchV1(ui.match);
+  ui.emit({
+    type:'event',
+    round:1,
+    sequenceNo:20,
+    kind:'dice',
+    rolls:[
+      { a:12, b:12 },
+      { a:5, b:28 },
+    ],
+    first:'b',
+  });
+
+  await ui.advance(1_530);
+  assert.equal(ui.elements.get('pvpLeftDieValueV3')?.textContent, '12');
+  assert.equal(ui.elements.get('pvpRightDieValueV3')?.textContent, '12');
+  assert.match(ui.elements.get('pvpDiceCaptionV2')?.textContent || '', /동점/);
+  assert.equal(ui.elements.get('pvpLeftDieV2')?.classList.contains('settled'), true);
+
+  await ui.advance(650);
+  assert.match(ui.lastHtml(), /pvp-dice-overlay-v2 rerolling/);
+  assert.equal(ui.elements.get('pvpLeftDieV2')?.classList.contains('rolling'), true);
+  assert.match(ui.elements.get('pvpDiceHistoryV3')?.textContent || '', /12 : 12/);
+
+  await ui.advance(1_530);
+  assert.equal(ui.elements.get('pvpLeftDieValueV3')?.textContent, '5');
+  assert.equal(ui.elements.get('pvpRightDieValueV3')?.textContent, '28');
+  assert.match(ui.elements.get('pvpDiceCaptionV2')?.textContent || '', /B 학생이 먼저 공격합니다/);
+  assert.equal(ui.calls.filter(([type, id]) => type === 'sfx' && id === 'transition').length, 2);
+  assert.equal(ui.calls.filter(([type, id]) => type === 'sfx' && id === 'open').length, 2);
 });
 
 test('heartbeat replay events finish before the next-round menu is shown', async () => {
@@ -430,9 +480,9 @@ test('heartbeat replay events finish before the next-round menu is shown', async
   assert.match(ui.lastHtml(), /pvp-dice-overlay-v2/);
   assert.doesNotMatch(ui.lastHtml(), /2라운드! 무엇을 할까요/);
 
-  await ui.advance(800);
-  assert.equal(ui.elements.get('pvpLeftDieV2')?.textContent, '24');
-  assert.equal(ui.elements.get('pvpRightDieV2')?.textContent, '7');
+  await ui.advance(1_530);
+  assert.equal(ui.elements.get('pvpLeftDieValueV3')?.textContent, '24');
+  assert.equal(ui.elements.get('pvpRightDieValueV3')?.textContent, '7');
   assert.equal(ui.calls.some(([type, id]) => type === 'sfx' && id === 'hit'), false);
 
   await ui.advance(2_200);
@@ -479,7 +529,7 @@ test('re-entering the same match does not reset an in-progress dice queue', asyn
   assert.equal(ui.lastHtml(), rollingHtml);
   assert.equal(ui.calls.some(([type]) => type === 'unsubscribe'), false);
 
-  await ui.advance(2_700);
+  await ui.advance(3_400);
   assert.match(ui.lastHtml(), /HP 90\/100/);
   assert.equal(ui.calls.filter(([type, id]) => type === 'sfx' && id === 'hit').length, 1);
 });

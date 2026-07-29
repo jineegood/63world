@@ -131,22 +131,42 @@
 
   function diceOverlay() {
     if (!diceVisual?.visible) return '';
-    const rollingClass = diceVisual.rolling ? ' rolling' : '';
-    return `<div class="pvp-dice-overlay-v2" aria-live="polite">
-      <div class="pvp-dice-title-v2">🎲 30면체 주사위</div>
-      <div class="pvp-dice-pair-v2">
-        <div class="pvp-die-shell-v2">
-          <small>${escape(playerForRole('me').name || '나')}</small>
-          <span id="pvpLeftDieV2" class="pvp-die-v2${rollingClass}">${Math.max(1, Number(diceVisual.left) || 1)}</span>
-        </div>
-        <strong>VS</strong>
-        <div class="pvp-die-shell-v2">
-          <small>${escape(playerForRole('opponent').name || '상대')}</small>
-          <span id="pvpRightDieV2" class="pvp-die-v2${rollingClass}">${Math.max(1, Number(diceVisual.right) || 1)}</span>
+    const stateClass = diceVisual.rolling ? ` rolling motion-${diceVisual.motion || 'launch'}` : ' settled';
+    const rerollClass = diceVisual.rerolling ? ' rerolling' : '';
+    return `<div class="pvp-dice-overlay-v2${rerollClass}" aria-live="polite">
+      <div class="pvp-dice-title-v2"><span>🎲</span> 30면체 주사위</div>
+      <div class="pvp-dice-stage-v3">
+        <div class="pvp-dice-floor-v3" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div class="pvp-dice-pair-v2">
+          <div class="pvp-die-shell-v2 side-left">
+            <span class="pvp-die-ground-shadow-v3" aria-hidden="true"></span>
+            <span class="pvp-die-dust-v3" aria-hidden="true"></span>
+            <span id="pvpLeftDieRunnerV3" class="pvp-die-runner-v3 side-left${stateClass}">
+              <span id="pvpLeftDieV2" class="pvp-die-v2${stateClass}">
+                <i class="pvp-die-facet-v3 facet-a" aria-hidden="true"></i>
+                <i class="pvp-die-facet-v3 facet-b" aria-hidden="true"></i>
+                <i class="pvp-die-facet-v3 facet-c" aria-hidden="true"></i>
+                <b id="pvpLeftDieValueV3">${Math.max(1, Number(diceVisual.left) || 1)}</b>
+              </span>
+            </span>
+          </div>
+          <strong class="pvp-dice-vs-v3">VS</strong>
+          <div class="pvp-die-shell-v2 side-right">
+            <span class="pvp-die-ground-shadow-v3" aria-hidden="true"></span>
+            <span class="pvp-die-dust-v3" aria-hidden="true"></span>
+            <span id="pvpRightDieRunnerV3" class="pvp-die-runner-v3 side-right${stateClass}">
+              <span id="pvpRightDieV2" class="pvp-die-v2${stateClass}">
+                <i class="pvp-die-facet-v3 facet-a" aria-hidden="true"></i>
+                <i class="pvp-die-facet-v3 facet-b" aria-hidden="true"></i>
+                <i class="pvp-die-facet-v3 facet-c" aria-hidden="true"></i>
+                <b id="pvpRightDieValueV3">${Math.max(1, Number(diceVisual.right) || 1)}</b>
+              </span>
+            </span>
+          </div>
         </div>
       </div>
       <div id="pvpDiceCaptionV2" class="pvp-dice-caption-v2">${escape(diceVisual.caption || '주사위를 굴리는 중...')}</div>
-      ${diceVisual.history ? `<small class="pvp-dice-history-v2">${escape(diceVisual.history)}</small>` : ''}
+      <small id="pvpDiceHistoryV3" class="pvp-dice-history-v2">${escape(diceVisual.history || '')}</small>
     </div>`;
   }
 
@@ -312,14 +332,25 @@
   function updateDiceDom() {
     const left = document.getElementById('pvpLeftDieV2');
     const right = document.getElementById('pvpRightDieV2');
+    const leftRunner = document.getElementById('pvpLeftDieRunnerV3');
+    const rightRunner = document.getElementById('pvpRightDieRunnerV3');
+    const leftValue = document.getElementById('pvpLeftDieValueV3');
+    const rightValue = document.getElementById('pvpRightDieValueV3');
     const caption = document.getElementById('pvpDiceCaptionV2');
-    if (left) left.textContent = String(diceVisual?.left ?? 1);
-    if (right) right.textContent = String(diceVisual?.right ?? 1);
+    const history = document.getElementById('pvpDiceHistoryV3');
+    if (leftValue) leftValue.textContent = String(diceVisual?.left ?? 1);
+    if (rightValue) rightValue.textContent = String(diceVisual?.right ?? 1);
     if (caption) caption.textContent = diceVisual?.caption || '';
-    [left, right].forEach((die) => {
-      if (!die?.classList) return;
-      die.classList.toggle('rolling', diceVisual?.rolling === true);
-      die.classList.toggle('settled', diceVisual?.rolling === false);
+    if (history) history.textContent = diceVisual?.history || '';
+    [left, right, leftRunner, rightRunner].forEach((part) => {
+      if (!part?.classList) return;
+      const rolling = diceVisual?.rolling === true;
+      const motion = diceVisual?.motion || 'launch';
+      part.classList.toggle('rolling', rolling);
+      part.classList.toggle('settled', !rolling);
+      part.classList.toggle('motion-launch', rolling && motion === 'launch');
+      part.classList.toggle('motion-tumble', rolling && motion === 'tumble');
+      part.classList.toggle('motion-brake', rolling && motion === 'brake');
     });
   }
 
@@ -347,23 +378,34 @@
       diceVisual = {
         visible:true,
         rolling:true,
+        motion:'launch',
+        rerolling:rollIndex > 0,
         left:randomDie(),
         right:randomDie(),
         caption:rollIndex === 0 ? '주사위를 굴리는 중...' : '동점! 다시 굴립니다...',
         history:history.join(' → '),
       };
       combatMessage = '누가 먼저 공격할지 주사위를 굴립니다!';
+      global.playSfx?.('transition');
       render();
-      for (let frame = 0; frame < 13; frame += 1) {
+      const frameDelays = [
+        55, 55, 55, 55, 55, 55, 55, 55,
+        75, 75, 75, 75, 75,
+        110, 110, 110,
+        180, 180,
+      ];
+      for (let frame = 0; frame < frameDelays.length; frame += 1) {
         if (!state || generation !== playbackGeneration) return;
+        diceVisual.motion = frame < 8 ? 'launch' : frame < 14 ? 'tumble' : 'brake';
         diceVisual.left = randomDie();
         diceVisual.right = randomDie();
         updateDiceDom();
-        await delay(60);
+        await delay(frameDelays[frame]);
       }
       diceVisual.left = Number(roll[mine]) || 1;
       diceVisual.right = Number(roll[opponent]) || 1;
       diceVisual.rolling = false;
+      diceVisual.motion = 'settled';
       const tied = Number(roll.a) === Number(roll.b);
       history.push(`${diceVisual.left} : ${diceVisual.right}`);
       diceVisual.history = history.join(' → ');
@@ -371,7 +413,7 @@
         ? '동점! 주사위를 다시 굴립니다.'
         : `${sideName(event.first)} 학생이 먼저 공격합니다!`;
       updateDiceDom();
-      global.playSfx?.(tied ? 'open' : 'reward');
+      global.playSfx?.('open');
       await delay(tied ? 650 : 900);
     }
     diceVisual = null;

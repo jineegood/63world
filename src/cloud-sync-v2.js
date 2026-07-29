@@ -81,6 +81,7 @@
     const cancelFn = typeof cancelSchedule === 'function' ? cancelSchedule : (id) => clearTimeout(id);
     let timer = null;
     let pending = null;
+    let flushInFlight = null;
 
     function assertUserId(userId) {
       if (typeof userId !== 'string' || !userId.trim()) {
@@ -154,28 +155,48 @@
       }, 1000);
     }
 
+    function schedulePendingRetry() {
+      if (!pending || timer !== null) return;
+      timer = scheduleFn(() => {
+        timer = null;
+        flush().catch(() => {});
+      }, 1000);
+    }
+
+    async function drainPendingSaves() {
+      while (pending) {
+        const snapshot = pending;
+        pending = null;
+        const payload = { data:snapshot.player, updated_at:new Date().toISOString() };
+        try {
+          const { error } = await client
+            .from('player_profiles_v2')
+            .update(payload)
+            .eq('user_id', snapshot.userId);
+          if (error) throw new CloudSyncV2Error('SAVE_FAILED', '캐릭터를 서버에 저장하지 못했어요.');
+        } catch (error) {
+          if (!pending) pending = snapshot;
+          schedulePendingRetry();
+          if (error instanceof CloudSyncV2Error) throw error;
+          if (isNetworkFailure(error)) {
+            throw new CloudSyncV2Error('OFFLINE', '인터넷 연결이 없어 로컬에만 임시 저장했어요.');
+          }
+          throw new CloudSyncV2Error('SAVE_FAILED', '캐릭터를 서버에 저장하지 못했어요.');
+        }
+      }
+    }
+
     async function flush() {
       if (timer !== null) {
         cancelFn(timer);
         timer = null;
       }
-      if (!pending) return;
-      const snapshot = pending;
-      pending = null;
-      const payload = { data:snapshot.player, updated_at:new Date().toISOString() };
-      try {
-        const { error } = await client
-          .from('player_profiles_v2')
-          .update(payload)
-          .eq('user_id', snapshot.userId);
-        if (error) throw new CloudSyncV2Error('SAVE_FAILED', '캐릭터를 서버에 저장하지 못했어요.');
-      } catch (error) {
-        if (!pending) pending = snapshot;
-        if (error instanceof CloudSyncV2Error) throw error;
-        if (isNetworkFailure(error)) {
-          throw new CloudSyncV2Error('OFFLINE', '인터넷 연결이 없어 로컬에만 임시 저장했어요.');
+      while (pending || flushInFlight) {
+        if (!flushInFlight) {
+          const running = drainPendingSaves();
+          flushInFlight = running.finally(() => { flushInFlight = null; });
         }
-        throw new CloudSyncV2Error('SAVE_FAILED', '캐릭터를 서버에 저장하지 못했어요.');
+        await flushInFlight;
       }
     }
 

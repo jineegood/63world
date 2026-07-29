@@ -51,6 +51,15 @@ export function normalizeSnapshot(raw = {}) {
     shield:Math.trunc(Math.max(0, Math.min(maxHp * 3, Number(raw.shield) || 0))),
     attack:Math.trunc(clamp(raw.attack, LIMITS.attack)),
     defense:Math.trunc(clamp(raw.defense, LIMITS.defense)),
+    appearance:raw.appearance && typeof raw.appearance === 'object' && !Array.isArray(raw.appearance)
+      ? { ...raw.appearance }
+      : {},
+    equipment:raw.equipment && typeof raw.equipment === 'object' && !Array.isArray(raw.equipment)
+      ? { ...raw.equipment }
+      : {},
+    costume:raw.costume && typeof raw.costume === 'object' && !Array.isArray(raw.costume)
+      ? { ...raw.costume }
+      : {},
     skills,
     cooldowns:cleanNumberMap(raw.cooldowns),
     statuses:raw.statuses && typeof raw.statuses === 'object' ? {

@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 
 const root = path.resolve(import.meta.dirname, '..');
 const rulesUrl = pathToFileURL(path.join(root, 'supabase/functions/_shared/pvp-rules.mjs'));
+const profileUrl = pathToFileURL(path.join(root, 'supabase/functions/_shared/pvp-profile.mjs'));
 
 function sequence(values) {
   let index = 0;
@@ -42,6 +43,113 @@ test('committed PvP catalog matches current game skills', () => {
   });
 });
 
+test('server PvP profile reproduces saved level, equipment, health, attack, and skills', async () => {
+  const { buildAuthoritativePvpProfile } = await import(profileUrl.href);
+  const levelOne = buildAuthoritativePvpProfile({
+    userId:'student-lv1',
+    displayName:'첫째',
+    data:{
+      name:'첫째',
+      class:'warrior',
+      level:1,
+      exp:0,
+      baseStatsVersion:2,
+      inventory:['training_greatsword'],
+      equipment:{ weapon:'training_greatsword', head:null, armor:null, accessory:null },
+      skills:{},
+      map:'town',
+      maxHp:99999,
+      attack:99999,
+    },
+  });
+  assert.equal(levelOne.level, 1);
+  assert.equal(levelOne.maxHp, 22);
+  assert.equal(levelOne.attack, 5);
+  assert.deepEqual(levelOne.skills, {});
+
+  const levelThree = buildAuthoritativePvpProfile({
+    userId:'student-lv3',
+    displayName:'셋째',
+    data:{
+      name:'셋째',
+      class:'warrior',
+      level:99,
+      exp:56,
+      baseStatsVersion:2,
+      inventory:['training_greatsword', 'bronzeGreatsword', 'noviceHat', 'whiteCloak'],
+      equipment:{
+        weapon:'bronzeGreatsword',
+        head:'noviceHat',
+        armor:'whiteCloak',
+        accessory:null,
+      },
+      skills:{ warrior_basic_guard:3, warrior_basic_strike:1 },
+      map:'town',
+    },
+  });
+  assert.equal(levelThree.level, 3);
+  assert.equal(levelThree.maxHp, 35);
+  assert.equal(levelThree.attack, 5);
+  assert.deepEqual(levelThree.equipment, {
+    weapon:'bronzeGreatsword',
+    head:'noviceHat',
+    armor:'whiteCloak',
+    accessory:null,
+  });
+  assert.deepEqual(levelThree.skills, {
+    warrior_basic_guard:3,
+    warrior_basic_strike:1,
+  });
+
+  const maximumLevel = buildAuthoritativePvpProfile({
+    userId:'student-max',
+    displayName:'최고',
+    data:{
+      name:'최고',
+      class:'mage',
+      exp:700,
+      baseStatsVersion:2,
+      inventory:['training_staff'],
+      equipment:{ weapon:'training_staff' },
+      skills:{},
+    },
+  });
+  assert.equal(maximumLevel.level, 11);
+});
+
+test('server PvP profile ignores request-like combat numbers and rejects impossible gear or skills', async () => {
+  const { buildAuthoritativePvpProfile } = await import(profileUrl.href);
+  const profile = buildAuthoritativePvpProfile({
+    userId:'student-safe',
+    displayName:'안전',
+    data:{
+      name:'안전',
+      class:'warrior',
+      level:100,
+      exp:56,
+      baseStatsVersion:2,
+      inventory:['training_greatsword', 'mithrilSword'],
+      equipment:{ weapon:'mithrilSword', head:'hacked-item' },
+      skills:{
+        warrior_basic_guard:99,
+        warrior_weapon_judgment:1,
+        mage_fire_meteor_v24:1,
+        hacked_skill:99,
+      },
+      attack:999999,
+      defense:999999,
+      maxHp:999999,
+    },
+  });
+  assert.equal(profile.level, 3);
+  assert.equal(profile.equipment.weapon, 'training_greatsword');
+  assert.equal(profile.equipment.head, null);
+  assert.deepEqual(profile.skills, { warrior_basic_guard:3 });
+  assert.equal(profile.maxHp, 26);
+  assert.equal(profile.attack, 5);
+  assert.equal(profile.defense, 0);
+});
+
 test('30-sided initiative rerolls ties and picks the higher player', async () => {
   const rules = await import(rulesUrl.href);
   assert.deepEqual(rules.rollInitiative(sequence([29, 29, 4, 18])), {
@@ -70,6 +178,9 @@ test('snapshot normalization drops unknown fields and clamps combat values', asy
     shield:0,
     attack:10000,
     defense:10,
+    appearance:{},
+    equipment:{},
+    costume:{},
     skills:{ warrior_basic_strike:1 },
     cooldowns:{},
     statuses:{ stun:0, chill:0, shadow:0 },

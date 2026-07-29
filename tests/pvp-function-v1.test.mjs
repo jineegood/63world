@@ -16,6 +16,11 @@ test('Edge endpoint verifies JWT identity and never trusts a caller user id', ()
   assert.match(source, /Deno\.env\.get\(['"]SUPABASE_SERVICE_ROLE_KEY['"]\)/);
   assert.doesNotMatch(source, /body\.(?:userId|callerId)/);
   assert.match(source, /request\.method\s*!==\s*['"]POST['"]/);
+  assert.match(source, /RETRYABLE_OPERATIONS[\s\S]*presence[\s\S]*profile[\s\S]*sync[\s\S]*heartbeat/);
+  assert.match(source, /x-pvp-trace-id/);
+  assert.match(source, /Retry-After/);
+  assert.match(source, /\{\s*error:code,\s*traceId\s*\}/);
+  assert.match(source, /transient retry/);
   assert.match(config, /\[functions\.pvp-match-v1\][\s\S]*verify_jwt\s*=\s*true/);
 });
 
@@ -23,6 +28,9 @@ test('database error messages expose only known PvP codes and hide raw failures'
   const { publicPvpErrorCode } = await import(errorUrl.href);
   assert.equal(publicPvpErrorCode({ code:'P0001', message:'ROUND_CHANGED' }), 'ROUND_CHANGED');
   assert.equal(publicPvpErrorCode({ code:'NO_QUESTIONS', message:'ignored' }), 'NO_QUESTIONS');
+  assert.equal(publicPvpErrorCode({ code:'PGRST002', message:'schema cache unavailable' }), 'TEMPORARY_UNAVAILABLE');
+  assert.equal(publicPvpErrorCode({ status:503, message:'upstream unavailable' }), 'TEMPORARY_UNAVAILABLE');
+  assert.equal(publicPvpErrorCode(new SyntaxError('bad json')), 'INVALID_REQUEST');
   assert.equal(publicPvpErrorCode({ code:'23505', message:'sensitive database detail' }), 'SERVER_ERROR');
 });
 
@@ -36,6 +44,7 @@ test('service rejects challenges unless both students are available in town', as
     now:() => 1000,
     randomInt:(min) => min,
     store:{
+      expirePendingInvitesForUsers:async () => ({ ok:true }),
       getPresence:(id) => presence.get(id),
       findActiveMatchForUser:async () => null,
       createInvite:async () => { throw new Error('should not create'); },
@@ -45,6 +54,43 @@ test('service rejects challenges unless both students are available in town', as
     service.handle('a', { op:'invite', targetUserId:'b', requestId:'r1' }),
     (error) => error.code === 'TOWN_ONLY',
   );
+});
+
+test('invite expires stale requests for both participants before availability checks', async () => {
+  const { createPvpService } = await import(serviceUrl.href);
+  const calls = [];
+  const service = createPvpService({
+    now:() => 5000,
+    randomInt:(minimum) => minimum,
+    store:{
+      expirePendingInvitesForUsers:async (userIds, checkedAt) => {
+        calls.push(['expire', userIds, checkedAt]);
+      },
+      getPresence:async (id) => ({
+        userId:id, map:'town', busy:false, lastSeenAt:5000,
+      }),
+      findActiveMatchForUser:async () => null,
+      createInvite:async (value) => {
+        calls.push(['create', value]);
+        return { id:'invite-new' };
+      },
+    },
+  });
+
+  const result = await service.handle('a', {
+    op:'invite', targetUserId:'b', requestId:'request-1',
+  });
+  assert.equal(result.id, 'invite-new');
+  assert.deepEqual(calls, [
+    ['expire', ['a', 'b'], 5000],
+    ['create', {
+      challengerId:'a',
+      targetId:'b',
+      requestId:'request-1',
+      requestedAt:5000,
+      expiresAt:25000,
+    }],
+  ]);
 });
 
 test('early answer submission reveals only waiting state', async () => {
@@ -79,6 +125,75 @@ test('early answer submission reveals only waiting state', async () => {
     }),
     { waiting:true, round:1 },
   );
+});
+
+test('a retried submit recovers the already-published round instead of returning ROUND_CHANGED', async () => {
+  const { createPvpService } = await import(serviceUrl.href);
+  let submittedAgain = false;
+  const service = createPvpService({
+    now:() => 5000,
+    randomInt:(minimum) => minimum,
+    store:{
+      getMatchForUpdate:async () => ({
+        id:'m1', playerAId:'a', playerBId:'b', round:2, phase:'question',
+      }),
+      findRoundInputByRequest:async () => ({
+        matchId:'m1', round:1, userId:'a', requestId:'same-request',
+      }),
+      listEventsAfter:async () => [
+        { id:'m1:1:dice', kind:'dice', round:1, sequenceNo:1000 },
+        { id:'m1:1:damage', kind:'damage', round:1, sequenceNo:1001 },
+      ],
+      submitRoundInput:async () => { submittedAgain = true; },
+    },
+  });
+
+  const result = await service.handle('a', {
+    op:'submit',
+    matchId:'m1',
+    round:1,
+    actionId:'basic',
+    answer:'5',
+    requestId:'same-request',
+  });
+  assert.equal(result.resolved, true);
+  assert.equal(result.recovered, true);
+  assert.equal(result.round, 1);
+  assert.equal(result.events.length, 2);
+  assert.equal(submittedAgain, false);
+});
+
+test('a retried final blow recovers the finished result and event batch', async () => {
+  const { createPvpService } = await import(serviceUrl.href);
+  const service = createPvpService({
+    now:() => 5000,
+    randomInt:(minimum) => minimum,
+    store:{
+      getMatchForUpdate:async () => ({
+        id:'m1', playerAId:'a', playerBId:'b', round:1, phase:'finished',
+        finishedAt:'2026-07-30T00:00:00Z',
+      }),
+      findRoundInputByRequest:async () => ({
+        matchId:'m1', round:1, userId:'a', requestId:'final-request',
+      }),
+      listEventsAfter:async () => [
+        { id:'m1:1:dice', kind:'dice', round:1, sequenceNo:1000 },
+        { id:'m1:1:damage', kind:'damage', round:1, sequenceNo:1001 },
+      ],
+    },
+  });
+
+  const result = await service.handle('a', {
+    op:'submit',
+    matchId:'m1',
+    round:1,
+    actionId:'basic',
+    answer:'5',
+    requestId:'final-request',
+  });
+  assert.equal(result.finished, true);
+  assert.equal(result.recovered, true);
+  assert.equal(result.events.length, 2);
 });
 
 test('surrender finalizes one opponent win without client record values', async () => {
@@ -259,18 +374,26 @@ test('answers cannot be submitted while a disconnected opponent is in the reconn
 test('presence returns the caller active match so a refreshed browser can restore it', async () => {
   const { createPvpService } = await import(serviceUrl.href);
   const activeMatch = { id:'m1', playerAId:'a', playerBId:'b', phase:'reconnect' };
+  const pendingInvite = {
+    id:'invite-1', challenger_id:'b', target_id:'a', status:'pending',
+  };
   const service = createPvpService({
     now:() => 6000,
     randomInt:(minimum) => minimum,
     store:{
       upsertPresence:async () => ({ ok:true }),
       findActiveMatchForUser:async (userId) => userId === 'a' ? activeMatch : null,
+      getPendingInviteForTarget:async (userId, checkedAt) => {
+        assert.equal(userId, 'a');
+        assert.equal(checkedAt, 6000);
+        return pendingInvite;
+      },
       getAuthoritativeProfile:async () => ({ name:'A', map:'town' }),
     },
   });
   assert.deepEqual(
     await service.handle('a', { op:'presence', map:'town', busy:true, publicProfile:{} }),
-    { ok:true, activeMatch },
+    { ok:true, activeMatch, pendingInvite },
   );
 });
 
@@ -285,6 +408,7 @@ test('presence ignores caller profile and map claims in favor of the saved serve
         name:'서버학생', map:'forest', level:4, className:'mage', attack:20,
       }),
       findActiveMatchForUser:async () => null,
+      getPendingInviteForTarget:async () => null,
       upsertPresence:async (_id, value) => { saved = value; return { ok:true }; },
     },
   });

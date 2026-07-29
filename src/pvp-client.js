@@ -19,6 +19,8 @@
     ROUND_CLOSED:'이미 처리된 문제예요.',
     INVALID_REQUEST:'대전 요청이 올바르지 않아요. 다시 시도해 주세요.',
     INVALID_PVP_RESULT:'대전 결과를 저장하지 못했어요. 다시 시도해 주세요.',
+    TEMPORARY_UNAVAILABLE:'대전 서버가 잠시 바쁩니다. 자동으로 다시 연결하고 있어요.',
+    SERVER_ERROR:'대전 서버가 잠시 응답하지 않습니다. 잠시 후 다시 시도해 주세요.',
   });
 
   function create({ client, getIdentity }) {
@@ -58,16 +60,30 @@
       return Object.keys(messages).find((known) => message.includes(known)) || '';
     }
 
+    const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
     async function invoke(body) {
       identity();
-      const { data, error } = await client.functions.invoke('pvp-match-v1', { body });
-      const code = await readErrorCode(error, data);
-      if (error || data?.error) {
-        const failure = new Error(messages[code] || '대전 서버에 연결하지 못했어요.');
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        let data;
+        let error;
+        try {
+          ({ data, error } = await client.functions.invoke('pvp-match-v1', { body }));
+        } catch (networkError) {
+          error = networkError;
+        }
+        const code = await readErrorCode(error, data);
+        if (!error && !data?.error) return data?.data ?? data;
+        const retryable = !code || ['SERVER_ERROR', 'PVP_SERVER_ERROR', 'TEMPORARY_UNAVAILABLE'].includes(code);
+        if (retryable && attempt === 0) {
+          await wait(350);
+          continue;
+        }
+        const failure = new Error(messages[code] || messages.SERVER_ERROR);
         failure.code = code || 'PVP_SERVER_ERROR';
         throw failure;
       }
-      return data?.data ?? data;
+      return null;
     }
 
     function remove(channel) {
@@ -105,7 +121,7 @@
       return () => remove(channel);
     }
 
-    function onInvite(listener) {
+    function onInvite(listener, onReady) {
       const me = identity();
       if (typeof client.channel !== 'function') return () => {};
       const channel = client.channel(`pvp-invites-${me.userId}`)
@@ -117,7 +133,9 @@
           event:'*', schema:'public', table:'pvp_invites_v1',
           filter:`challenger_id=eq.${me.userId}`,
         }, (payload) => listener(payload?.new || payload?.old))
-        .subscribe();
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') onReady?.();
+        });
       channels.add(channel);
       return () => remove(channel);
     }

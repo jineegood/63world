@@ -12,6 +12,7 @@ export const PVP_SKILLS = Object.freeze({
     },
     "classOnly": "mage",
     "id": "mage_basic_barrier",
+    "line": 4,
     "maxPoints": 1,
     "name": "환기"
   },
@@ -24,6 +25,7 @@ export const PVP_SKILLS = Object.freeze({
     },
     "classOnly": "mage",
     "id": "mage_basic_bolt",
+    "line": 3,
     "maxPoints": 1,
     "name": "마력탄"
   },
@@ -38,12 +40,17 @@ export const PVP_SKILLS = Object.freeze({
       15
     ],
     "id": "mage_basic_element",
+    "line": 2,
     "maxPoints": 5,
     "name": "원소 폭발"
   },
   "mage_basic_mana": {
+    "bonuses": {
+      "지능": 1
+    },
     "classOnly": "mage",
     "id": "mage_basic_mana",
+    "line": 1,
     "maxPoints": 5,
     "name": "기초 마력 수련"
   },
@@ -57,11 +64,15 @@ export const PVP_SKILLS = Object.freeze({
     },
     "classOnly": "mage",
     "id": "mage_fire_burst_v24",
+    "line": 8,
     "maxPoints": 1,
     "name": "폭열",
     "specOnly": "화염"
   },
   "mage_fire_ember_v24": {
+    "bonuses": {
+      "지능": 1
+    },
     "classOnly": "mage",
     "critDmgBonus": [
       0,
@@ -72,11 +83,15 @@ export const PVP_SKILLS = Object.freeze({
       1
     ],
     "id": "mage_fire_ember_v24",
+    "line": 7,
     "maxPoints": 5,
     "name": "불씨 증폭",
     "specOnly": "화염"
   },
   "mage_fire_focus_v24": {
+    "bonuses": {
+      "지능": 1
+    },
     "classOnly": "mage",
     "critChanceBonus": [
       0,
@@ -85,6 +100,7 @@ export const PVP_SKILLS = Object.freeze({
       0.3
     ],
     "id": "mage_fire_focus_v24",
+    "line": 5,
     "maxPoints": 3,
     "name": "화염 집중",
     "specOnly": "화염"
@@ -99,6 +115,7 @@ export const PVP_SKILLS = Object.freeze({
     },
     "classOnly": "mage",
     "id": "mage_fire_meteor_v24",
+    "line": 9,
     "maxPoints": 1,
     "name": "메테오",
     "specOnly": "화염"
@@ -113,6 +130,7 @@ export const PVP_SKILLS = Object.freeze({
     },
     "classOnly": "mage",
     "id": "mage_fireball_v24",
+    "line": 6,
     "maxPoints": 1,
     "name": "대화염구",
     "specOnly": "화염"
@@ -126,6 +144,7 @@ export const PVP_SKILLS = Object.freeze({
     },
     "classOnly": "mage",
     "id": "mage_frost_armor_v24",
+    "line": 7,
     "maxPoints": 1,
     "name": "서리 갑옷",
     "specOnly": "냉기"
@@ -137,8 +156,12 @@ export const PVP_SKILLS = Object.freeze({
       0.21,
       0.35
     ],
+    "bonuses": {
+      "지능": 1
+    },
     "classOnly": "mage",
     "id": "mage_frost_focus_v24",
+    "line": 5,
     "maxPoints": 3,
     "name": "냉기 집중",
     "specOnly": "냉기"
@@ -154,13 +177,18 @@ export const PVP_SKILLS = Object.freeze({
     },
     "classOnly": "mage",
     "id": "mage_frost_lance_v24",
+    "line": 6,
     "maxPoints": 1,
     "name": "빙결 창",
     "specOnly": "냉기"
   },
   "mage_frost_mind_v24": {
+    "bonuses": {
+      "지능": 4
+    },
     "classOnly": "mage",
     "id": "mage_frost_mind_v24",
+    "line": 8,
     "maxPoints": 5,
     "name": "혹한의 정신",
     "specOnly": "냉기"
@@ -175,19 +203,25 @@ export const PVP_SKILLS = Object.freeze({
     },
     "classOnly": "mage",
     "id": "mage_frost_storm_v24",
+    "line": 9,
     "maxPoints": 1,
     "name": "빙하 폭풍",
     "specOnly": "냉기"
   },
   "priest_basic_faith": {
+    "bonuses": {
+      "정신": 1
+    },
     "classOnly": "priest",
     "id": "priest_basic_faith",
+    "line": 1,
     "maxPoints": 3,
     "name": "기초 신앙"
   },
   "priest_basic_life": {
     "classOnly": "priest",
     "id": "priest_basic_life",
+    "line": 2,
     "maxPoints": 5,
     "monsterMissChance": [
       0,
@@ -202,6 +236,7 @@ export const PVP_SKILLS = Object.freeze({
   "priest_basic_prayer": {
     "classOnly": "priest",
     "id": "priest_basic_prayer",
+    "line": 4,
     "maxPoints": 3,
     "name": "기도의 방벽",
     "reflectPct": [
@@ -221,6 +256,7 @@ export const PVP_SKILLS = Object.freeze({
     },
     "classOnly": "priest",
     "id": "priest_basic_smite",
+    "line": 3,
     "maxPoints": 1,
     "name": "신앙의 일격"
   },
@@ -233,6 +269,7 @@ export const PVP_SKILLS = Object.freeze({
     },
     "classOnly": "priest",
     "id": "priest_holy_absorb_v24",
+    "line": 6,
     "maxPoints": 1,
     "name": "빛의 섬광",
     "specOnly": "신성"
@@ -246,13 +283,18 @@ export const PVP_SKILLS = Object.freeze({
     },
     "classOnly": "priest",
     "id": "priest_holy_barrier_v24",
+    "line": 7,
     "maxPoints": 1,
     "name": "신성 보호막",
     "specOnly": "신성"
   },
   "priest_holy_focus_v24": {
+    "bonuses": {
+      "정신": 2
+    },
     "classOnly": "priest",
     "id": "priest_holy_focus_v24",
+    "line": 5,
     "maxPoints": 5,
     "name": "신성 집중",
     "specOnly": "신성"
@@ -266,6 +308,7 @@ export const PVP_SKILLS = Object.freeze({
       1.5
     ],
     "id": "priest_holy_grace_v24",
+    "line": 8,
     "maxPoints": 3,
     "name": "치유 숙련",
     "specOnly": "신성"
@@ -280,13 +323,18 @@ export const PVP_SKILLS = Object.freeze({
     },
     "classOnly": "priest",
     "id": "priest_holy_judgment_v24",
+    "line": 9,
     "maxPoints": 1,
     "name": "은총의 심판",
     "specOnly": "신성"
   },
   "priest_shadow_focus_v24": {
+    "bonuses": {
+      "정신": 2
+    },
     "classOnly": "priest",
     "id": "priest_shadow_focus_v24",
+    "line": 5,
     "maxPoints": 5,
     "name": "암흑 집중",
     "shadowLifestealChance": [
@@ -310,6 +358,7 @@ export const PVP_SKILLS = Object.freeze({
     },
     "classOnly": "priest",
     "id": "priest_shadow_judgment_v24",
+    "line": 9,
     "maxPoints": 1,
     "name": "암흑 심판",
     "specOnly": "암흑"
@@ -324,6 +373,7 @@ export const PVP_SKILLS = Object.freeze({
     },
     "classOnly": "priest",
     "id": "priest_shadow_mark_v24",
+    "line": 7,
     "maxPoints": 1,
     "name": "암흑 낙인",
     "specOnly": "암흑"
@@ -338,13 +388,18 @@ export const PVP_SKILLS = Object.freeze({
     },
     "classOnly": "priest",
     "id": "priest_shadow_seed_v24",
+    "line": 6,
     "maxPoints": 1,
     "name": "암흑의 씨앗",
     "specOnly": "암흑"
   },
   "priest_shadow_void_v24": {
+    "bonuses": {
+      "정신": 2
+    },
     "classOnly": "priest",
     "id": "priest_shadow_void_v24",
+    "line": 8,
     "maxPoints": 5,
     "name": "공허 숙련",
     "shadowCritChance": [
@@ -358,14 +413,22 @@ export const PVP_SKILLS = Object.freeze({
     "specOnly": "암흑"
   },
   "warrior_basic_blade": {
+    "bonuses": {
+      "힘": 1
+    },
     "classOnly": "warrior",
     "id": "warrior_basic_blade",
+    "line": 2,
     "maxPoints": 3,
     "name": "기초 검술"
   },
   "warrior_basic_body": {
+    "bonuses": {
+      "체력": 2
+    },
     "classOnly": "warrior",
     "id": "warrior_basic_body",
+    "line": 1,
     "maxPoints": 3,
     "name": "기초 체력 단련"
   },
@@ -378,6 +441,7 @@ export const PVP_SKILLS = Object.freeze({
       0.06
     ],
     "id": "warrior_basic_guard",
+    "line": 3,
     "maxPoints": 3,
     "name": "막기 훈련"
   },
@@ -391,6 +455,7 @@ export const PVP_SKILLS = Object.freeze({
     },
     "classOnly": "warrior",
     "id": "warrior_basic_strike",
+    "line": 4,
     "maxPoints": 1,
     "name": "전사의 일격"
   },
@@ -404,7 +469,11 @@ export const PVP_SKILLS = Object.freeze({
       0.1
     ],
     "classOnly": "warrior",
+    "flatBonuses": {
+      "체력": 3
+    },
     "id": "warrior_def_armor",
+    "line": 6,
     "maxPoints": 5,
     "name": "공세 갑옷",
     "specOnly": "방어"
@@ -412,6 +481,7 @@ export const PVP_SKILLS = Object.freeze({
   "warrior_def_bastion": {
     "classOnly": "warrior",
     "id": "warrior_def_bastion",
+    "line": 9,
     "maxPoints": 1,
     "name": "수호자의 맹세",
     "reviveCooldown": 11,
@@ -419,6 +489,9 @@ export const PVP_SKILLS = Object.freeze({
     "specOnly": "방어"
   },
   "warrior_def_resist": {
+    "bonuses": {
+      "체력": 1
+    },
     "classOnly": "warrior",
     "cleanseChance": [
       0,
@@ -429,6 +502,7 @@ export const PVP_SKILLS = Object.freeze({
       1
     ],
     "id": "warrior_def_resist",
+    "line": 7,
     "maxPoints": 5,
     "name": "불굴의 의지",
     "specOnly": "방어"
@@ -442,6 +516,7 @@ export const PVP_SKILLS = Object.freeze({
     },
     "classOnly": "warrior",
     "id": "warrior_def_stance",
+    "line": 5,
     "maxPoints": 1,
     "name": "방어 태세",
     "specOnly": "방어"
@@ -455,6 +530,7 @@ export const PVP_SKILLS = Object.freeze({
     },
     "classOnly": "warrior",
     "id": "warrior_def_wall",
+    "line": 8,
     "maxPoints": 1,
     "name": "방패 돌진",
     "specOnly": "방어"
@@ -468,6 +544,7 @@ export const PVP_SKILLS = Object.freeze({
       0.75
     ],
     "id": "warrior_weapon_breaker",
+    "line": 8,
     "maxPoints": 3,
     "name": "더블 어택",
     "specOnly": "무기"
@@ -482,13 +559,18 @@ export const PVP_SKILLS = Object.freeze({
     },
     "classOnly": "warrior",
     "id": "warrior_weapon_judgment",
+    "line": 9,
     "maxPoints": 1,
     "name": "최후의 심판",
     "specOnly": "무기"
   },
   "warrior_weapon_mastery": {
+    "bonuses": {
+      "힘": 1
+    },
     "classOnly": "warrior",
     "id": "warrior_weapon_mastery",
+    "line": 5,
     "maxPoints": 5,
     "name": "무기 숙련",
     "reflectPct": [
@@ -502,8 +584,12 @@ export const PVP_SKILLS = Object.freeze({
     "specOnly": "무기"
   },
   "warrior_weapon_rage": {
+    "bonuses": {
+      "힘": 3
+    },
     "classOnly": "warrior",
     "id": "warrior_weapon_rage",
+    "line": 7,
     "maxPoints": 3,
     "name": "전투의 대가",
     "specOnly": "무기"
@@ -518,8 +604,520 @@ export const PVP_SKILLS = Object.freeze({
     },
     "classOnly": "warrior",
     "id": "warrior_weapon_slash",
+    "line": 6,
     "maxPoints": 1,
     "name": "파쇄 일격",
     "specOnly": "무기"
+  }
+});
+export const PVP_PROFILE_CATALOG = Object.freeze({
+  "classes": {
+    "mage": {
+      "baseStats": {
+        "정신": 5,
+        "지능": 9,
+        "체력": 2,
+        "힘": 2
+      },
+      "defaultWeapon": "training_staff",
+      "legacyVitality": 5
+    },
+    "priest": {
+      "baseStats": {
+        "정신": 9,
+        "지능": 5,
+        "체력": 2,
+        "힘": 3
+      },
+      "defaultWeapon": "training_book",
+      "legacyVitality": 5
+    },
+    "warrior": {
+      "baseStats": {
+        "정신": 3,
+        "지능": 2,
+        "체력": 4,
+        "힘": 8
+      },
+      "defaultWeapon": "training_greatsword",
+      "legacyVitality": 8
+    }
+  },
+  "items": {
+    "blueSword": {
+      "classOnly": "warrior",
+      "id": "blueSword",
+      "levelReq": 3,
+      "slot": "weapon",
+      "stats": {
+        "체력": 1,
+        "힘": 4
+      }
+    },
+    "blueWizardHat": {
+      "classOnly": "mage",
+      "id": "blueWizardHat",
+      "levelReq": 3,
+      "slot": "head",
+      "stats": {
+        "지능": 2
+      }
+    },
+    "bronzeGreatsword": {
+      "classOnly": "warrior",
+      "id": "bronzeGreatsword",
+      "slot": "weapon",
+      "stats": {
+        "체력": 1,
+        "힘": 2
+      }
+    },
+    "cloverBadge": {
+      "classOnly": null,
+      "id": "cloverBadge",
+      "levelReq": 3,
+      "possessStats": {
+        "힘": 1
+      },
+      "slot": "accessory",
+      "stats": {
+        "체력": 1,
+        "힘": 3
+      }
+    },
+    "crimsonArmor": {
+      "classOnly": "warrior",
+      "id": "crimsonArmor",
+      "levelReq": 9,
+      "slot": "armor",
+      "stats": {
+        "체력": 6,
+        "힘": 2
+      }
+    },
+    "crimsonHelm": {
+      "classOnly": "warrior",
+      "id": "crimsonHelm",
+      "levelReq": 9,
+      "slot": "head",
+      "stats": {
+        "체력": 3,
+        "힘": 3
+      }
+    },
+    "crystalStaff": {
+      "classOnly": "mage",
+      "id": "crystalStaff",
+      "slot": "weapon",
+      "stats": {
+        "지능": 3
+      }
+    },
+    "dawnTome": {
+      "classOnly": "priest",
+      "id": "dawnTome",
+      "levelReq": 9,
+      "slot": "weapon",
+      "stats": {
+        "정신": 10
+      }
+    },
+    "featherWing": {
+      "classOnly": null,
+      "id": "featherWing",
+      "levelReq": 3,
+      "possessStats": {
+        "정신": 1
+      },
+      "slot": "accessory",
+      "stats": {
+        "정신": 2,
+        "체력": 4
+      }
+    },
+    "forestCloak": {
+      "classOnly": null,
+      "id": "forestCloak",
+      "slot": "armor",
+      "stats": {
+        "체력": 2
+      }
+    },
+    "goldCirclet": {
+      "classOnly": "priest",
+      "id": "goldCirclet",
+      "levelReq": 6,
+      "slot": "head",
+      "stats": {
+        "정신": 3,
+        "체력": 1
+      }
+    },
+    "goldVestment": {
+      "classOnly": "priest",
+      "id": "goldVestment",
+      "levelReq": 6,
+      "slot": "armor",
+      "stats": {
+        "정신": 2,
+        "체력": 3
+      }
+    },
+    "guardAura": {
+      "classOnly": null,
+      "id": "guardAura",
+      "levelReq": 3,
+      "possessStats": {
+        "체력": 1
+      },
+      "slot": "accessory",
+      "stats": {
+        "체력": 3
+      }
+    },
+    "holyBook": {
+      "classOnly": "priest",
+      "id": "holyBook",
+      "slot": "weapon",
+      "stats": {
+        "정신": 3
+      }
+    },
+    "honorCrown": {
+      "classOnly": null,
+      "id": "honorCrown",
+      "slot": "head",
+      "stats": {
+        "정신": 2,
+        "지능": 2,
+        "체력": 2,
+        "힘": 2
+      }
+    },
+    "ironSword": {
+      "classOnly": "warrior",
+      "id": "ironSword",
+      "levelReq": 6,
+      "slot": "weapon",
+      "stats": {
+        "체력": 2,
+        "힘": 6
+      }
+    },
+    "ironwoodStaff": {
+      "classOnly": "mage",
+      "id": "ironwoodStaff",
+      "levelReq": 6,
+      "slot": "weapon",
+      "stats": {
+        "지능": 7
+      }
+    },
+    "leatherArmor": {
+      "classOnly": "warrior",
+      "id": "leatherArmor",
+      "levelReq": 3,
+      "slot": "armor",
+      "stats": {
+        "체력": 2,
+        "힘": 1
+      }
+    },
+    "leatherHelm": {
+      "classOnly": "warrior",
+      "id": "leatherHelm",
+      "levelReq": 3,
+      "slot": "head",
+      "stats": {
+        "체력": 1,
+        "힘": 1
+      }
+    },
+    "mithrilStaff": {
+      "classOnly": "mage",
+      "id": "mithrilStaff",
+      "levelReq": 9,
+      "slot": "weapon",
+      "stats": {
+        "지능": 10
+      }
+    },
+    "mithrilSword": {
+      "classOnly": "warrior",
+      "id": "mithrilSword",
+      "levelReq": 9,
+      "slot": "weapon",
+      "stats": {
+        "체력": 3,
+        "힘": 9
+      }
+    },
+    "navyRobe": {
+      "classOnly": "mage",
+      "id": "navyRobe",
+      "levelReq": 6,
+      "slot": "armor",
+      "stats": {
+        "지능": 2,
+        "체력": 3
+      }
+    },
+    "navyWizardHat": {
+      "classOnly": "mage",
+      "id": "navyWizardHat",
+      "levelReq": 6,
+      "slot": "head",
+      "stats": {
+        "지능": 3,
+        "체력": 1
+      }
+    },
+    "noviceHat": {
+      "classOnly": null,
+      "id": "noviceHat",
+      "slot": "head",
+      "stats": {
+        "체력": 1
+      }
+    },
+    "oakStaff": {
+      "classOnly": "mage",
+      "id": "oakStaff",
+      "levelReq": 3,
+      "slot": "weapon",
+      "stats": {
+        "지능": 5
+      }
+    },
+    "prayerBook": {
+      "classOnly": "priest",
+      "id": "prayerBook",
+      "levelReq": 3,
+      "slot": "weapon",
+      "stats": {
+        "정신": 5
+      }
+    },
+    "roseHood": {
+      "classOnly": "priest",
+      "id": "roseHood",
+      "levelReq": 9,
+      "slot": "head",
+      "stats": {
+        "정신": 4,
+        "체력": 1
+      }
+    },
+    "roseVestment": {
+      "classOnly": "priest",
+      "id": "roseVestment",
+      "levelReq": 9,
+      "slot": "armor",
+      "stats": {
+        "정신": 3,
+        "체력": 4
+      }
+    },
+    "silverBook": {
+      "classOnly": "priest",
+      "id": "silverBook",
+      "levelReq": 6,
+      "slot": "weapon",
+      "stats": {
+        "정신": 7
+      }
+    },
+    "sixthWing": {
+      "classOnly": null,
+      "id": "sixthWing",
+      "levelReq": 3,
+      "possessStats": {
+        "체력": 1
+      },
+      "slot": "accessory",
+      "stats": {
+        "정신": 3,
+        "체력": 2
+      }
+    },
+    "skyRobe": {
+      "classOnly": "mage",
+      "id": "skyRobe",
+      "levelReq": 3,
+      "slot": "armor",
+      "stats": {
+        "지능": 1,
+        "체력": 2
+      }
+    },
+    "starCape": {
+      "classOnly": null,
+      "id": "starCape",
+      "slot": "armor",
+      "stats": {
+        "정신": 2,
+        "지능": 2,
+        "체력": 4,
+        "힘": 2
+      }
+    },
+    "starPendant": {
+      "classOnly": null,
+      "id": "starPendant",
+      "levelReq": 3,
+      "possessStats": {
+        "지능": 1
+      },
+      "slot": "accessory",
+      "stats": {
+        "지능": 3
+      }
+    },
+    "steelArmor": {
+      "classOnly": "warrior",
+      "id": "steelArmor",
+      "levelReq": 6,
+      "slot": "armor",
+      "stats": {
+        "체력": 4,
+        "힘": 1
+      }
+    },
+    "steelHelm": {
+      "classOnly": "warrior",
+      "id": "steelHelm",
+      "levelReq": 6,
+      "slot": "head",
+      "stats": {
+        "체력": 2,
+        "힘": 2
+      }
+    },
+    "training_book": {
+      "classOnly": "priest",
+      "id": "training_book",
+      "slot": "weapon",
+      "stats": {
+        "정신": 1
+      }
+    },
+    "training_greatsword": {
+      "classOnly": "warrior",
+      "id": "training_greatsword",
+      "slot": "weapon",
+      "stats": {
+        "힘": 1
+      }
+    },
+    "training_staff": {
+      "classOnly": "mage",
+      "id": "training_staff",
+      "slot": "weapon",
+      "stats": {
+        "지능": 1
+      }
+    },
+    "violetRobe": {
+      "classOnly": "mage",
+      "id": "violetRobe",
+      "levelReq": 9,
+      "slot": "armor",
+      "stats": {
+        "지능": 3,
+        "체력": 4
+      }
+    },
+    "violetWizardHat": {
+      "classOnly": "mage",
+      "id": "violetWizardHat",
+      "levelReq": 9,
+      "slot": "head",
+      "stats": {
+        "지능": 4,
+        "체력": 1
+      }
+    },
+    "whiteCloak": {
+      "classOnly": null,
+      "id": "whiteCloak",
+      "slot": "armor",
+      "stats": {
+        "체력": 1
+      }
+    },
+    "whiteHood": {
+      "classOnly": "priest",
+      "id": "whiteHood",
+      "levelReq": 3,
+      "slot": "head",
+      "stats": {
+        "정신": 2
+      }
+    },
+    "whiteVestment": {
+      "classOnly": "priest",
+      "id": "whiteVestment",
+      "levelReq": 3,
+      "slot": "armor",
+      "stats": {
+        "정신": 1,
+        "체력": 2
+      }
+    }
+  },
+  "pets": {
+    "cat": {
+      "id": "cat",
+      "stats": {
+        "정신": 5
+      }
+    },
+    "chick": {
+      "id": "chick",
+      "stats": {
+        "지능": 5
+      }
+    },
+    "dog": {
+      "id": "dog",
+      "stats": {
+        "체력": 3,
+        "힘": 3
+      }
+    },
+    "dragon": {
+      "id": "dragon",
+      "stats": {
+        "힘": 5
+      }
+    },
+    "miniMushroom": {
+      "id": "miniMushroom",
+      "stats": {
+        "정신": 3,
+        "체력": 3
+      }
+    },
+    "yuksam": {
+      "id": "yuksam",
+      "stats": {
+        "정신": 8,
+        "지능": 8,
+        "체력": 8,
+        "힘": 8
+      }
+    }
+  },
+  "xpRequirements": {
+    "1": 10,
+    "2": 40,
+    "3": 80,
+    "4": 130,
+    "5": 200,
+    "6": 280,
+    "7": 370,
+    "8": 470,
+    "9": 580,
+    "10": 700
   }
 });

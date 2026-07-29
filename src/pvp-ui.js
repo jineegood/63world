@@ -5,6 +5,10 @@
   let stopInvites = null;
   let presenceTimer = null;
   let activeInviteId = null;
+  let challengePending = false;
+  let responsePending = false;
+  let presenceInFlight = null;
+  const settledInviteIds = new Set();
 
   function escape(value) {
     return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -16,6 +20,40 @@
     const value = global.getPvpClientV1?.();
     if (!value) throw new Error('로그인한 뒤 대전을 이용해 주세요.');
     return value;
+  }
+
+  function closeSetupModal(type) {
+    const current = global.getModalStateTypeV1?.();
+    if (!current || current === type) global.closeModal?.();
+  }
+
+  function markInviteSettled(inviteId) {
+    const safeId = String(inviteId || '');
+    if (!safeId) return;
+    settledInviteIds.add(safeId);
+    if (activeInviteId === safeId) activeInviteId = null;
+  }
+
+  async function updatePresence(pvp, flushFirst = false) {
+    if (presenceInFlight) {
+      if (!flushFirst) return presenceInFlight;
+      try { await presenceInFlight; } catch {}
+    }
+    const operation = (async () => {
+      if (flushFirst) await global.flushLocalPlayerForPvpV1?.();
+      const profile = global.getLocalPvpProfileV1?.();
+      return profile ? pvp.presence(profile.map, profile.busy, profile) : null;
+    })();
+    presenceInFlight = operation;
+    try {
+      return await operation;
+    } finally {
+      if (presenceInFlight === operation) presenceInFlight = null;
+    }
+  }
+
+  async function refreshMyPvpState(pvp) {
+    return updatePresence(pvp, true);
   }
 
   async function openRemoteProfileV1(userId, skipTutorial = false) {
@@ -49,20 +87,47 @@
   }
 
   async function challengeRemoteV1(userId) {
+    if (challengePending) return;
+    challengePending = true;
     try {
-      await client().invite(userId);
+      const pvp = client();
+      const refreshed = await refreshMyPvpState(pvp);
+      if (refreshed?.activeMatch?.id) {
+        closeSetupModal('pvpProfile');
+        if (global.getActivePvpMatchV1?.()?.matchId !== refreshed.activeMatch.id) {
+          global.enterPvpMatchV1?.(refreshed.activeMatch);
+        }
+        return;
+      }
+      await pvp.invite(userId);
       global.toast?.('대전 신청을 보냈어요. 상대의 응답을 기다려 주세요!', 3000);
-      global.closeModal?.();
+      closeSetupModal('pvpProfile');
     } catch (error) {
       global.toast?.(error?.message || '대전 신청을 보내지 못했어요.', 3000);
+    } finally {
+      challengePending = false;
     }
   }
 
   async function respondPvpInviteV1(inviteId, accept) {
+    if (responsePending) return null;
+    responsePending = true;
     try {
-      const result = await client().respond(inviteId, accept === true);
-      activeInviteId = null;
-      global.closeModal?.();
+      const pvp = client();
+      if (accept === true) {
+        const refreshed = await refreshMyPvpState(pvp);
+        if (refreshed?.activeMatch?.id) {
+          markInviteSettled(inviteId);
+          closeSetupModal('pvpInvite');
+          if (global.getActivePvpMatchV1?.()?.matchId !== refreshed.activeMatch.id) {
+            global.enterPvpMatchV1?.(refreshed.activeMatch);
+          }
+          return { accepted:true, match:refreshed.activeMatch, recovered:true };
+        }
+      }
+      const result = await pvp.respond(inviteId, accept === true);
+      markInviteSettled(inviteId);
+      closeSetupModal('pvpInvite');
       if (result?.accepted && result.match
         && global.getActivePvpMatchV1?.()?.matchId !== result.match.id) {
         global.enterPvpMatchV1?.(result.match);
@@ -72,11 +137,16 @@
     } catch (error) {
       global.toast?.(error?.message || '대전 신청에 응답하지 못했어요.', 3000);
       return null;
+    } finally {
+      responsePending = false;
     }
   }
 
   function showInvite(invite) {
-    if (!invite?.id || invite.status !== 'pending' || activeInviteId === invite.id) return;
+    if (!invite?.id || invite.status !== 'pending'
+      || settledInviteIds.has(String(invite.id))
+      || activeInviteId === invite.id
+      || global.getActivePvpMatchV1?.()) return;
     activeInviteId = invite.id;
     const name = invite.challenger_name || invite.challengerName || '다른 학생';
     global.openModal?.(`
@@ -94,7 +164,13 @@
 
   async function handleInvite(pvp, invite) {
     const me = global.getPvpIdentityV1?.();
+    const inviteId = String(invite?.id || '');
     const matchId = invite?.match_id || invite?.matchId;
+    if (inviteId && invite?.status !== 'pending') {
+      const wasVisible = activeInviteId === inviteId;
+      markInviteSettled(inviteId);
+      if (wasVisible) closeSetupModal('pvpInvite');
+    }
     if (invite?.status === 'accepted' && matchId
       && (invite.challenger_id === me?.userId || invite.target_id === me?.userId)) {
       try {
@@ -108,10 +184,14 @@
       return;
     }
     if (invite?.status !== 'pending' || invite.target_id !== me?.userId) return;
+    if (settledInviteIds.has(inviteId) || activeInviteId === inviteId
+      || global.getActivePvpMatchV1?.()) return;
     try {
       const challenger = await pvp.profile(invite.challenger_id);
+      if (settledInviteIds.has(inviteId) || global.getActivePvpMatchV1?.()) return;
       showInvite({ ...invite, challenger_name:challenger?.name || '다른 학생' });
     } catch {
+      if (settledInviteIds.has(inviteId) || global.getActivePvpMatchV1?.()) return;
       showInvite(invite);
     }
   }
@@ -120,16 +200,21 @@
     if (stopInvites) return;
     let pvp;
     try { pvp = client(); } catch { return; }
-    stopInvites = pvp.onInvite((invite) => { handleInvite(pvp, invite); });
     const sendPresence = () => {
-      const profile = global.getLocalPvpProfileV1?.();
-      if (!profile) return;
-      pvp.presence(profile.map, profile.busy, profile).then((result) => {
+      updatePresence(pvp).then((result) => {
         const match = result?.activeMatch;
         const active = global.getActivePvpMatchV1?.();
-        if (match?.id && active?.matchId !== match.id) global.enterPvpMatchV1?.(match);
+        if (match?.id) {
+          if (active?.matchId !== match.id) global.enterPvpMatchV1?.(match);
+          return;
+        }
+        if (result?.pendingInvite) handleInvite(pvp, result.pendingInvite);
       }).catch(() => {});
     };
+    stopInvites = pvp.onInvite(
+      (invite) => { handleInvite(pvp, invite); },
+      sendPresence,
+    );
     sendPresence();
     pvp.cleanup?.().catch?.(() => {});
     presenceTimer = setInterval(sendPresence, 5000);
@@ -141,6 +226,10 @@
     if (presenceTimer) clearInterval(presenceTimer);
     presenceTimer = null;
     activeInviteId = null;
+    challengePending = false;
+    responsePending = false;
+    presenceInFlight = null;
+    settledInviteIds.clear();
   }
 
   global.openRemoteProfileV1 = openRemoteProfileV1;

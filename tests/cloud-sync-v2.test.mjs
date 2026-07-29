@@ -189,6 +189,56 @@ test('flush updates only data and updated_at for the authenticated user', async 
   assert.deepEqual(remote.calls.at(-1), ['updateEq', 'user_id', 'user-a']);
 });
 
+test('overlapping flushes serialize saves and leave the newest character on the server', async () => {
+  const api = loadApi();
+  const requests = [];
+  const client = {
+    async rpc() { return { data:null, error:null }; },
+    from() {
+      return {
+        update(payload) {
+          return {
+            eq(_column, userId) {
+              return new Promise((resolve) => {
+                requests.push({ payload, userId, resolve });
+              });
+            },
+          };
+        },
+      };
+    },
+  };
+  const service = api.create({
+    client,
+    storage:memoryStorage(),
+    schedule() { return 1; },
+    cancelSchedule() {},
+  });
+  service.queueSave('user-a', { name:'별빛', level:1, map:'forest' });
+  let firstDone = false;
+  const firstFlush = service.flush().then(() => { firstDone = true; });
+  await Promise.resolve();
+  assert.equal(requests.length, 1);
+
+  service.queueSave('user-a', { name:'별빛', level:3, map:'town' });
+  const secondFlush = service.flush();
+  await Promise.resolve();
+  assert.equal(requests.length, 1, 'the newer save must wait for the in-flight save');
+
+  requests[0].resolve({ data:null, error:null });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(requests.length, 2);
+  assert.equal(firstDone, false, 'all flush callers wait until the newest pending save is stored');
+  assert.equal(JSON.stringify(requests[1].payload.data), JSON.stringify({
+    name:'별빛', level:3, map:'town',
+  }));
+
+  requests[1].resolve({ data:null, error:null });
+  await Promise.all([firstFlush, secondFlush]);
+  assert.equal(firstDone, true);
+});
+
 test('flush surfaces a remote save failure', async () => {
   const api = loadApi();
   const remote = fakeClient({ updateError:{ code:'42501', message:'permission denied' } });
