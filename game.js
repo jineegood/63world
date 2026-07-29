@@ -930,7 +930,7 @@ function openSettingsModal() {
       <div class="range-row"><span>배경음</span><input id="bgmVolumeRange" type="range" min="0" max="100" value="${Math.round(game.settings.bgmVolume * 100)}" /><b id="bgmVolumeText">${Math.round(game.settings.bgmVolume * 100)}</b></div>
       <label><input type="checkbox" id="sfxEnabledBox" ${game.settings.sfxEnabled ? 'checked' : ''} /> 효과음 켜기</label>
       <div class="range-row"><span>효과음</span><input id="sfxVolumeRange" type="range" min="0" max="100" value="${Math.round(game.settings.sfxVolume * 100)}" /><b id="sfxVolumeText">${Math.round(game.settings.sfxVolume * 100)}</b></div>
-      <p class="muted">브라우저 정책상 배경음은 첫 클릭 이후 재생됩니다. 로그인/캐릭터 생성/마을/사냥터별 배경음을 재생합니다.</p>
+      <p class="muted">로그인/캐릭터 생성/마을/사냥터별 배경음을 재생합니다.</p>
       <button class="ghost wide" onclick="openAdminPanel()">관리자 창 열기</button>
     </div>
   `, { type: 'settings', pause: true });
@@ -2724,6 +2724,10 @@ function dispatchBaseWorldInteraction(nearest) {
   if (!nearest) return false;
   if (nearest.type === 'portal') { openWorldMapModal(); return true; }
   if (nearest.type === 'npc') { openQuestNpc(); return true; }
+  if (nearest.type === 'shopDoor') { enterEquipmentShop(); return true; }
+  if (nearest.type === 'buildingShopDoor') { enterBuildingShopInterior(); return true; }
+  if (nearest.type === 'equipmentShopExit') { window.exitBuildingToTownV23?.('equipment'); return true; }
+  if (nearest.type === 'buildingShopExit') { window.exitBuildingToTownV23?.('building'); return true; }
   if (nearest.type === 'stageReturnPortal') { confirmStageReturn(); return true; }
   if (nearest.type === 'bossPortal') { confirmBossPortal(game.currentMap); return true; }
   if (nearest.type === 'bossRoomExit') { returnToStageFromBossRoom(); return true; }
@@ -3331,6 +3335,7 @@ const clickMovementControllerV1 = YuksamClickMovement.createController({
   onStateChange:(state) => {
     game.clickMovement = state;
     if (state) clickMovementArrivalLockV1 = state.map;
+    if (state?.moving) clickInteractHandledV59 = '';
     if (state && state.moving === false) tryClickInteractOnArrivalV59(state);
   },
   radius:30,
@@ -3512,7 +3517,7 @@ function openShopModal(kind = 'all') {
   `).join('');
   openModal(`
     <h2>${kindLabel}</h2>
-    <div class="panel-card"><b>보유 골드:</b> ${game.player.gold}</div>
+    <div class="resource-balance-banner resource-gold"><span>현재 보유 골드</span><b>🪙 ${game.player.gold}</b></div>
     <div class="shop-grid" style="margin-top:12px">${items}</div>
   `, { type: 'shop', pause: true });
 }
@@ -3545,7 +3550,7 @@ function openBuildingShopModal() {
   `).join('');
   openModal(`
     <h2>특별 상인 새나리</h2>
-    <div class="panel-card"><b>보유 빌딩:</b> ${game.player.building}</div>
+    <div class="resource-balance-banner resource-building"><span>현재 보유 빌딩 화폐</span><b>🏢 ${game.player.building}</b></div>
     <div class="shop-grid" style="margin-top:12px">${items}</div>
   `, { type: 'buildingShop', pause: true });
 }
@@ -3769,6 +3774,15 @@ function bindEvents() {
       const k = e.key.toLowerCase();
       const activeTag = document.activeElement?.tagName?.toLowerCase();
       const typing = ['input', 'textarea', 'select'].includes(activeTag);
+      if (k === 'e' && ['tutorial', 'pvpTutorial'].includes(game.modalState?.type)) {
+        const tutorialNext = document.querySelector('#modalContent [data-tutorial-next-v62="true"]');
+        if (tutorialNext) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          tutorialNext.click();
+          return true;
+        }
+      }
 
       const keyMap = { arrowup: 'w', arrowdown: 's', arrowleft: 'a', arrowright: 'd' };
       const moveKey = keyMap[k] || k;
@@ -4174,11 +4188,13 @@ function findBaseWorldInteractable() {
   }
   if (game.currentMap === 'equipmentShop') {
     const shop = worldDefs.equipmentShop;
+    if (distance(p, shop.exit) < 100) return { type: 'equipmentShopExit', label: '출구로 이동하면 마을로 나가기' };
     if (distance(p, shop.genie) < 90) return { type: 'weaponShop', label: 'E: 무기 상인 의석과 대화' };
     if (distance(p, shop.andre) < 90) return { type: 'armorShop', label: 'E: 방어구 상인 상미와 대화' };
   }
   if (game.currentMap === 'buildingShopInterior') {
     const shop = worldDefs.buildingShopInterior;
+    if (distance(p, shop.exit) < 100) return { type: 'buildingShopExit', label: '출구로 이동하면 마을로 나가기' };
     if (distance(p, shop.saenari) < 90) return { type: 'buildingShopNpc', label: 'E: 특별 상인 새나리와 대화' };
     if (shop.sangnam && distance(p, shop.sangnam) < 90) return { type: 'costumeShopNpc', label: 'E: 옷 상인 상남과 대화' };
   }
@@ -4886,7 +4902,7 @@ function renderNpcDialogue() {
     <div class="dialogue-box">
       <div class="dialogue-speaker">
         <h2>명진쌤 ${hasAvailableQuest() ? '<span class="badge">!</span>' : ''}</h2>
-        <div class="badge">클릭으로 대화 진행</div>
+        <div class="badge">E키로 진행</div>
       </div>
       <div class="dialogue-text">${escapeHtml(text)}</div>
       <div class="dialogue-options">
@@ -5417,7 +5433,7 @@ function updateQuestTracker() {
       options.push({ label: '대화 종료', action: 'closeModal()' });
     }
     const selected = Math.min(game.dialogue.selected || 0, options.length - 1); game.dialogue.selected = selected;
-    openModal(`<div class="dialogue-box"><div class="dialogue-speaker"><h2>명진쌤 ${hasAvailableQuest() ? '<span class="badge">!</span>' : ''}</h2><div class="badge">클릭으로 대화 진행</div></div><div class="dialogue-text">${escapeHtml(text)}</div><div class="dialogue-options">${options.map((opt,i)=>`<button class="${i===selected?'selected':''}" onclick="${opt.action}">${escapeHtml(opt.label)}</button>`).join('')}</div></div>`, { type:'dialogue', pause:true });
+    openModal(`<div class="dialogue-box"><div class="dialogue-speaker"><h2>명진쌤 ${hasAvailableQuest() ? '<span class="badge">!</span>' : ''}</h2><div class="badge">E키로 진행</div></div><div class="dialogue-text">${escapeHtml(text)}</div><div class="dialogue-options">${options.map((opt,i)=>`<button class="${i===selected?'selected':''}" onclick="${opt.action}">${escapeHtml(opt.label)}</button>`).join('')}</div></div>`, { type:'dialogue', pause:true });
   };
 
   // 로그인 안내 문구 개선
@@ -5749,7 +5765,7 @@ function updateQuestTracker() {
       else options.push({ label: '완료한 퀘스트 다시 보기', action: 'startQuestStory()' });
       options.push({ label: '대화 종료', action: 'closeModal()' });
     }
-    openModal(`<div class="dialogue-box"><div class="dialogue-speaker"><h2>명진쌤 ${hasAvailableQuest() ? '<span class="badge">!</span>' : ''}</h2><div class="badge">클릭으로 대화 진행</div></div><div class="dialogue-text">${escapeHtml(text)}</div><div class="dialogue-options">${options.map((opt,i)=>`<button class="${i===selected?'selected':''}" onclick="${opt.action}">${escapeHtml(opt.label)}</button>`).join('')}</div></div>`, { type:'dialogue', pause:true });
+    openModal(`<div class="dialogue-box"><div class="dialogue-speaker"><h2>명진쌤 ${hasAvailableQuest() ? '<span class="badge">!</span>' : ''}</h2><div class="badge">E키로 진행</div></div><div class="dialogue-text">${escapeHtml(text)}</div><div class="dialogue-options">${options.map((opt,i)=>`<button class="${i===selected?'selected':''}" onclick="${opt.action}">${escapeHtml(opt.label)}</button>`).join('')}</div></div>`, { type:'dialogue', pause:true });
   }
 
 
@@ -6224,7 +6240,7 @@ function updateQuestTracker() {
       questStatus:q?.status,
       hasQuest:!!def,
     }) || '';
-    openModal(`<div class="dialogue-box${dialogueTheme}"><div class="dialogue-speaker"><h2>명진쌤 ${marker ? `<span class="badge quest-marker-badge">${marker}</span>` : ''}</h2><div class="badge">클릭 또는 E키로 진행</div></div><div class="dialogue-text">${YuksamQuestText.emphasize(text)}</div><div class="dialogue-options">${options.map((opt,i)=>`<button class="${i===game.dialogue.selected?'selected':''}" onclick="${opt.action}">${YuksamQuestText.emphasize(opt.label)}</button>`).join('')}</div></div>`, { type:'dialogue', pause:true });
+    openModal(`<div class="dialogue-box${dialogueTheme}"><div class="dialogue-speaker"><h2>명진쌤 ${marker ? `<span class="badge quest-marker-badge">${marker}</span>` : ''}</h2><div class="badge">E키로 진행</div></div><div class="dialogue-text">${YuksamQuestText.emphasize(text)}</div><div class="dialogue-options">${options.map((opt,i)=>`<button class="${i===game.dialogue.selected?'selected':''}" onclick="${opt.action}">${YuksamQuestText.emphasize(opt.label)}</button>`).join('')}</div></div>`, { type:'dialogue', pause:true });
   }
   window.startQuestStory = function startQuestStoryV21() { game.dialogue = { page: 0, selected: 0, mode: 'quest' }; renderNpcDialogueV21(); };
   window.nextDialoguePage = function nextDialoguePageV21() { const id = getCurrentQuestIdForNpcV21(); const def = QUEST_DEFS[id]; game.dialogue.page = Math.min((def?.pages?.length || 1) - 1, (game.dialogue.page || 0) + 1); renderNpcDialogueV21(); };
@@ -7081,6 +7097,7 @@ function updateQuestTracker() {
   }
   function skillBlockReasonV24(skill) {
     if (!game.player || !skill) return '스킬 정보를 확인할 수 없습니다.';
+    if (!getQuestState('tut_skill')) return '아직 명진쌤의 가르침을 받지 못했습니다!';
     if (skill.classOnly && skill.classOnly !== game.player.class) return '이 직업의 능력이 아닙니다.';
     if (getSkillRank(skill.id) >= (skill.maxPoints || 1)) return '이미 최대 랭크입니다.';
     const needLv = skillUnlockLevelV24(skill);
@@ -7703,7 +7720,7 @@ function updateQuestTracker() {
       <div class="panel-card worldmap-v20 worldmap-v25">
         <p>입장할 사냥터를 선택하세요. <b>←/→</b>로 사냥터를 고르고 <b>E</b>로 입장할 수 있습니다.</p>
         <div class="student-grid dungeon-grid-v20">${cards}</div>
-        <p class="worldmap-help-v25">현재 선택: ${escapeHtml(DUNGEONS_V25[game.worldMapSelectedIndex].title)} · 마우스 클릭도 가능</p>
+        <p class="worldmap-help-v25">현재 선택: ${escapeHtml(DUNGEONS_V25[game.worldMapSelectedIndex].title)}</p>
       </div>`, { type:'worldmap', pause:true });
   }
   openWorldMapModal = function openWorldMapModalV25() {
@@ -8917,6 +8934,7 @@ function updateQuestTracker() {
   }
   function skillBlockReasonV26(skill) {
     if (!game.player || !skill) return '스킬 정보를 확인할 수 없습니다.';
+    if (!getQuestState('tut_skill')) return '아직 명진쌤의 가르침을 받지 못했습니다!';
     if (skill.classOnly && skill.classOnly !== game.player.class) return '이 직업의 능력이 아닙니다.';
     if (getSkillRank(skill.id) >= 1) return '이미 배운 능력입니다.';
     if (skill.specOnly && currentSpecV26() !== normalizeSpecV26(skill.specOnly)) return game.player.spec ? '이 능력은 배울 수 없습니다.(전문화 확인)' : 'Lv.5에서 전문화를 선택해야 배울 수 있습니다.';
@@ -8971,14 +8989,40 @@ function updateQuestTracker() {
     buttons[next].focus({ preventScroll: true });
     $('modalContent').dataset.choiceIndexV26 = String(next);
   }
+  function moveChoiceGridV62(buttons, index, key) {
+    const current = buttons[index];
+    const grid = current?.closest?.('.choice-grid, .combat-choice-grid');
+    if (!grid) return null;
+    const gridButtons = Array.from(grid.querySelectorAll('button')).filter((button) => !button.disabled);
+    const gridIndex = gridButtons.indexOf(current);
+    if (gridIndex < 0) return null;
+    const columns = 2;
+    const row = Math.floor(gridIndex / columns);
+    const column = gridIndex % columns;
+    const rows = Math.ceil(gridButtons.length / columns);
+    let targetRow = row;
+    let targetColumn = column;
+    if (key === 'arrowup' || key === 'w') targetRow = Math.max(0, row - 1);
+    else if (key === 'arrowdown' || key === 's') targetRow = Math.min(rows - 1, row + 1);
+    else if (key === 'arrowleft' || key === 'a') targetColumn = Math.max(0, column - 1);
+    else if (key === 'arrowright' || key === 'd') targetColumn = Math.min(columns - 1, column + 1);
+    let targetGridIndex = targetRow * columns + targetColumn;
+    if (targetGridIndex >= gridButtons.length) targetGridIndex = gridButtons.length - 1;
+    return buttons.indexOf(gridButtons[targetGridIndex]);
+  }
   YuksamInputRouter.register({ id:'v26-modal-choices', type:'keydown', priority:70, handle:(e) => {
     const k = e.key?.toLowerCase();
     const buttons = modalChoiceButtonsV26();
     if (!buttons.length) return;
     let idx = Number($('modalContent')?.dataset.choiceIndexV26 || buttons.findIndex((b) => b.classList.contains('selected')) || 0);
     if (!Number.isFinite(idx) || idx < 0) idx = 0;
-    if (['arrowleft','arrowup','a','w'].includes(k)) { e.preventDefault(); e.stopImmediatePropagation(); setChoiceIndexV26(buttons, idx - 1); }
-    else if (['arrowright','arrowdown','d','s'].includes(k)) { e.preventDefault(); e.stopImmediatePropagation(); setChoiceIndexV26(buttons, idx + 1); }
+    if (['arrowleft','arrowup','a','w','arrowright','arrowdown','d','s'].includes(k)) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const gridIndex = moveChoiceGridV62(buttons, idx, k);
+      const fallbackStep = ['arrowleft','arrowup','a','w'].includes(k) ? -1 : 1;
+      setChoiceIndexV26(buttons, gridIndex === null || gridIndex < 0 ? idx + fallbackStep : gridIndex);
+    }
     else if (k === 'e' || k === 'enter') { e.preventDefault(); e.stopImmediatePropagation(); setChoiceIndexV26(buttons, idx); buttons[Math.max(0, Math.min(buttons.length - 1, idx))].click(); }
     return ['arrowleft','arrowup','a','w','arrowright','arrowdown','d','s','e','enter'].includes(k);
   }});
@@ -9606,7 +9650,7 @@ function updateQuestTracker() {
         <div class="upgrade-weapon-v27 ${tierClassV28(tier)}"><div class="upgrade-icon-v27">${item ? itemIcon(item) : '▫️'}</div><div><b>${item ? displayItemNameV28(item) : '무기 없음'}</b><p>${item ? enhancedStatsTextV28(item) : '장착한 무기가 없습니다.'}</p><small>현재 등급: ${current.name}</small></div></div>
         <div class="upgrade-info-v27"><b>강화 비용: 3빌딩</b><p>${next ? `성공 시 ${next.name} 등급으로 상승 · 성공률 ${chance}%` : '이미 전설 등급입니다.'}</p><p class="muted">강화에는 약 3초가 걸립니다.</p><button class="primary wide" ${(!item || !next || game.upgradeInProgress) ? 'disabled' : ''} onclick="upgradeCurrentWeaponV27()">무기 강화</button></div>
       </div>
-      <div class="panel-card"><b>보유 빌딩:</b> ${game.player?.building || 0}</div>`, { type:'upgradeShop', pause:true });
+      <div class="resource-balance-banner resource-building"><span>현재 보유 빌딩 화폐</span><b>🏢 ${game.player?.building || 0}</b><small>강화 1회에 3빌딩이 필요합니다</small></div>`, { type:'upgradeShop', pause:true });
   }
   window.openUpgradeShopModalV28 = openUpgradeShopModalV28;
 
@@ -11974,7 +12018,8 @@ function updateQuestTracker() {
         <b>랜덤 펫 소환</b>
         <p>수정구의 빛을 따라 새로운 동행을 만납니다.</p>
         <p class="muted">일반 펫 각 19% · 전설 펫 육삼이 5%</p>
-        <p class="muted">비용: 10빌딩 · 보유 빌딩: ${game.player?.building || 0}</p>
+        <p class="muted">소환 비용: 10빌딩</p>
+        <div class="resource-balance-banner resource-building"><span>현재 보유 빌딩 화폐</span><b>🏢 ${game.player?.building || 0}</b></div>
         <br>
         <button class="primary summon-btn-v34" onclick="rollPetV34()">랜덤 펫 소환</button>
       </div></div>`, { type:'petShop', pause:true });

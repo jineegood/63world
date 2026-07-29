@@ -45,7 +45,7 @@
     call('openModal')?.(`
       <h2>🧵 옷 상인 상남</h2>
       <p class="muted" style="margin:2px 0 10px">“능력치는 안 오르지만, 멋과 귀여움은 확실히 올라!”<br>코스튬은 <b>성능은 그대로 두고 겉모습만</b> 바꿔줍니다. (상태창 → 코스튬 칸에서 착용)</p>
-      <div class="panel-card" style="margin-bottom:10px">보유 골드: <b style="color:#fde68a">🪙 ${p.gold || 0}</b></div>
+      <div class="resource-balance-banner resource-gold"><span>현재 보유 골드</span><b>🪙 ${p.gold || 0}</b></div>
       <div style="display:grid;gap:8px">${cards}</div>
       <button class="ghost wide" onclick="closeModal()" style="margin-top:12px">닫기</button>
     `, { type: 'costumeShop', pause: true });

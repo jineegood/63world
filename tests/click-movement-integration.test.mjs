@@ -119,4 +119,8 @@ test('game connects the tested controller to input, update, rendering, and cance
   assert.match(gameSource, /clickMovementControllerV1\.drawMarker\(/);
   assert.match(gameSource, /window\.cancelClickMovementV1/);
   assert.match(gameSource, /clickMovementArrivalLockV1/);
+  assert.match(gameSource, /nearest\.type === 'shopDoor'\) \{ enterEquipmentShop\(\)/);
+  assert.match(gameSource, /nearest\.type === 'buildingShopDoor'\) \{ enterBuildingShopInterior\(\)/);
+  assert.match(gameSource, /nearest\.type === 'equipmentShopExit'/);
+  assert.match(gameSource, /nearest\.type === 'buildingShopExit'/);
 });

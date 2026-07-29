@@ -734,6 +734,31 @@ body.defeated #app { filter: grayscale(1) brightness(.62); transition: filter .3
 .choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
 .choice-grid button { text-align: left; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.07); }
 .choice-grid button:hover { border-color: rgba(92,200,255,.55); background: rgba(92,200,255,.12); }
+.resource-balance-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0 14px;
+  padding: 14px 18px;
+  border: 2px solid rgba(255,255,255,.24);
+  border-radius: 14px;
+  box-shadow: 0 8px 22px rgba(0,0,0,.24);
+  font-weight: 900;
+}
+.resource-balance-banner span { font-size: 16px; }
+.resource-balance-banner b { margin-left: auto; font-size: 24px; line-height: 1; }
+.resource-balance-banner small { flex-basis: 100%; color: rgba(255,255,255,.8); font-weight: 800; text-align: right; }
+.resource-balance-banner.resource-gold {
+  color: #fff4b8;
+  background: linear-gradient(135deg, rgba(146,93,8,.72), rgba(75,48,4,.82));
+  border-color: rgba(250,204,21,.78);
+}
+.resource-balance-banner.resource-building {
+  color: #ffd4f5;
+  background: linear-gradient(135deg, rgba(131,24,108,.72), rgba(72,15,58,.84));
+  border-color: rgba(244,114,182,.78);
+}
 .choice-grid button.correct-answer-review,
 .choice-grid button.correct-answer-review:disabled {
   color: #ecfdf5;

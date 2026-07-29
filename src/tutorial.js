@@ -53,8 +53,8 @@
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">
         <div>${dots}</div>
         <div style="display:flex;gap:8px">
-          ${idx > 0 ? `<button class="ghost small" onclick="__tutorialStepV53(${idx - 1})">이전</button>` : ''}
-          <button class="primary" data-default-action="true" onclick="${isLast ? '__tutorialDoneV53()' : `__tutorialStepV53(${idx + 1})`}">${isLast ? '시작하기!' : '다음'}</button>
+          <button class="primary" data-default-action="true" data-tutorial-next-v62="true" style="order:2" onclick="${isLast ? '__tutorialDoneV53()' : `__tutorialStepV53(${idx + 1})`}">${isLast ? '시작하기!' : '다음'}</button>
+          ${idx > 0 ? `<button class="ghost small" style="order:1" onclick="__tutorialStepV53(${idx - 1})">이전</button>` : ''}
         </div>
       </div>
     `, { type: 'tutorial', pause: true });
@@ -101,8 +101,8 @@
       <h2>${step.title}</h2>
       <div class="panel-card" style="line-height:1.7">${step.body}</div>
       <div class="action-row" style="justify-content:flex-end;margin-top:12px">
-        ${idx > 0 ? `<button class="ghost" onclick="__pvpTutorialStepV1(${idx - 1})">이전</button>` : ''}
-        <button class="primary" data-default-action="true" onclick="${isLast ? '__pvpTutorialDoneV1()' : `__pvpTutorialStepV1(${idx + 1})`}">${isLast ? '확인' : '다음'}</button>
+        <button class="primary" data-default-action="true" data-tutorial-next-v62="true" style="order:2" onclick="${isLast ? '__pvpTutorialDoneV1()' : `__pvpTutorialStepV1(${idx + 1})`}">${isLast ? '확인' : '다음'}</button>
+        ${idx > 0 ? `<button class="ghost" style="order:1" onclick="__pvpTutorialStepV1(${idx - 1})">이전</button>` : ''}
       </div>
     `, { type:'pvpTutorial', pause:true });
   }
@@ -119,4 +119,20 @@
     pvpTutorialDone = typeof done === 'function' ? done : null;
     renderPvpTutorial(0);
   };
+
+  // 튜토리얼에서는 현재 포커스와 무관하게 E키가 항상 '다음/확인'을 실행한다.
+  window.YuksamInputRouter?.register({
+    id:'tutorial-default-next-v62',
+    type:'keydown',
+    priority:96,
+    handle:(event) => {
+      if (event.key?.toLowerCase() !== 'e') return false;
+      const next = window.document?.querySelector('#modalContent [data-tutorial-next-v62="true"]');
+      if (!next) return false;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      next.click();
+      return true;
+    },
+  });
 })();

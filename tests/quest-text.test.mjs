@@ -32,6 +32,13 @@ test('quest quantities are highlighted once as complete green phrases', () => {
   assert.doesNotMatch(html, /<strong[^>]*><strong/);
 });
 
+test('early route and shop directions use bold green emphasis', () => {
+  const html = loadApi().emphasize('사냥터는 마을 가운데의 포탈로 가고, 상점은 서쪽 장비 상점에 있습니다.');
+  for (const phrase of ['사냥터', '마을 가운데의 포탈', '서쪽 장비 상점']) {
+    assert.match(html, new RegExp(`<strong class="quest-keyword-green">${phrase}</strong>`));
+  }
+});
+
 test('quest dialogue and tracker use emphasis without changing chat rendering', () => {
   const game = fs.readFileSync(path.join(root, 'game.js'), 'utf8');
   const dialogue = game.match(/function renderNpcDialogueV21\(\) \{[\s\S]*?\n  }/)?.[0] || '';
