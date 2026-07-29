@@ -98,6 +98,7 @@ const secureStudentAccess = YuksamStudentAccessV2.create({
   storage:localStorage,
   defaultWorkbooks,
 });
+window.secureStudentAccessV2 = secureStudentAccess;
 let pvpClientV1 = null;
 window.getPvpIdentityV1 = () => secureStudentAccess.getIdentity();
 window.getPvpClientV1 = () => {

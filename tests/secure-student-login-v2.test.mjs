@@ -13,7 +13,7 @@ function runMode(mode) {
   assert.match(result.stdout, /RESULT: PASS/);
 }
 
-test('secure modules load in order before game and the production switch stays off', () => {
+test('secure modules load in order before game and the safe server switch is enabled', () => {
   const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   const config = fs.readFileSync(path.join(root, 'src/cloud-config.js'), 'utf8');
   const order = [
@@ -26,7 +26,8 @@ test('secure modules load in order before game and the production switch stays o
   ].map((file) => index.indexOf(`src="${file}"`));
   assert.equal(order.every((position) => position >= 0), true);
   assert.equal(order.every((position, indexNumber) => indexNumber === 0 || position > order[indexNumber - 1]), true);
-  assert.match(config, /securityV2Enabled\s*:\s*false/);
+  assert.match(config, /securityV2Enabled\s*:\s*true/);
+  assert.doesNotMatch(config, /serverAuthorityV3Enabled\s*:\s*true/);
 });
 
 test('legacy cloud sync closes before REST setup whenever secure v2 is enabled', () => {

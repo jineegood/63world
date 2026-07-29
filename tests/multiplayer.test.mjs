@@ -98,7 +98,9 @@ test('two mocked browser sessions exchange positions and chat', async () => {
       setTimeout:() => 1,
       clearTimeout() {},
       worldRenderPipeline:{ registerLayer(layer) { layers.push(layer); } },
-      drawPlayerSprite:(ctx, sx, sy, appearance, cls, state) => { drawn.push({ x:sx, y:sy, moving:state?.moving }); },
+      drawPlayerSprite:(ctx, sx, sy, appearance, cls, state) => {
+        drawn.push({ x:sx, y:sy, moving:state?.moving, dance:Boolean(state?.dance) });
+      },
       worldToScreen:(px, py) => ({ x:px, y:py }),
       PLAYER_WORLD_SCALE:1.26,
     };
@@ -130,7 +132,15 @@ test('two mocked browser sessions exchange positions and chat', async () => {
 
   first.layers[0].render();
   // 처음 보이는 학생은 미끄러져 들어오지 않고 받은 좌표 그대로 그려져야 한다
-  assert.deepEqual(first.drawn.at(-1), { x:300, y:200, moving:false });
+  assert.deepEqual(first.drawn.at(-1), { x:300, y:200, moving:false, dance:false });
+
+  second.game.danceTimer = 3000;
+  await new Promise((resolve) => setTimeout(resolve, 230));
+  second.intervals.find((entry) => entry.ms === 220).fn();
+  await Promise.resolve();
+  first.layers[0].render();
+  assert.equal([...first.window.__remotePlayersV53.values()].find((remote) => remote.x === 300)?.dance, true);
+  assert.equal(first.drawn.at(-1).dance, true);
 
   const contextmenu = first.canvasListeners.get('contextmenu');
   let prevented = false;

@@ -13,13 +13,13 @@ function runMode(mode) {
   assert.match(result.stdout, /RESULT: PASS/);
 }
 
-test('admin Auth module loads before the dashboard and production stays disabled', () => {
+test('admin Auth module loads before the dashboard in safe server mode', () => {
   const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   const config = fs.readFileSync(path.join(root, 'src/cloud-config.js'), 'utf8');
   const authPosition = index.indexOf('src="src/admin-auth-v2.js"');
   const dashboardPosition = index.indexOf('src="src/admin-dashboard.js"');
   assert.ok(authPosition >= 0 && dashboardPosition > authPosition);
-  assert.match(config, /securityV2Enabled\s*:\s*false/);
+  assert.match(config, /securityV2Enabled\s*:\s*true/);
 });
 
 test('secure dashboard uses a separately stored teacher client and delegates password changes', () => {

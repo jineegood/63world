@@ -180,13 +180,15 @@ export function createSupabasePvpStore(client) {
       const match = await getMatch(id);
       return match && (match.playerAId === userId || match.playerBId === userId) ? match : null;
     },
-    async insertRoundInputOnce(value) {
-      const result = await client.from('pvp_round_inputs_v1').upsert({
-        match_id:value.matchId, round_no:value.round, user_id:value.userId,
-        request_id:value.requestId, action_id:value.actionId,
-        submitted_answer:value.answer, submitted_at:new Date(value.submittedAt).toISOString(),
-      }, { onConflict:'match_id,round_no,user_id', ignoreDuplicates:true });
-      check(result); return true;
+    async submitRoundInput(value) {
+      return check(await client.rpc('private_submit_pvp_round_v2', {
+        p_user_id:value.userId,
+        p_match_id:value.matchId,
+        p_round_no:value.round,
+        p_request_id:value.requestId,
+        p_action_id:value.actionId,
+        p_answer:value.answer,
+      }));
     },
     async listRoundInputs(matchId, round) {
       return (check(await client.from('pvp_round_inputs_v1').select('*').eq('match_id', matchId).eq('round_no', round)) || [])
@@ -200,15 +202,23 @@ export function createSupabasePvpStore(client) {
       if (patch.playerBState) row.player_b_state = patch.playerBState;
       if (patch.question) row.question_public = patch.question;
       if (patch.deadline) row.question_deadline = new Date(patch.deadline).toISOString();
+      if (patch.phase) {
+        row.resolution_started_at = patch.phase === 'resolving'
+          ? new Date().toISOString()
+          : null;
+      }
       row.updated_at = new Date().toISOString();
       check(await client.from('pvp_matches_v1').update(row).eq('id', id));
       if (patch.answerKey) check(await client.from('pvp_match_secrets_v1').upsert({ match_id:id, answer_key:patch.answerKey }));
     },
     async appendEvents(matchId, round, events) {
       if (!events.length) return;
-      check(await client.from('pvp_match_events_v1').insert(events.map((event, index) => ({
+      check(await client.from('pvp_match_events_v1').upsert(events.map((event, index) => ({
         match_id:matchId, round_no:round, sequence_no:round * 1000 + index, event,
-      }))));
+      })), {
+        onConflict:'match_id,sequence_no',
+        ignoreDuplicates:true,
+      }));
     },
     async readEnabledWorkbooks() {
       const row = check(await client.from('shared_state_v2').select('data').eq('key', 'workbooks').maybeSingle());

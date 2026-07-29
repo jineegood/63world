@@ -53,6 +53,7 @@
     "test:tutorial-quests-polish-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 tutorial-quests-polish-v2",
     "test:tutorial-highlight-v1": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 tutorial-highlight-v1",
     "test:multiplayer": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 multiplayer",
+    "test:safe-server-boundary-v2": "node --test tests/safe-server-boundary-v2.test.mjs",
     "test:pvp-rules": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 pvp-rules",
     "test:pvp-policy-v1": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 pvp-policy-v1",
     "test:pvp-function-v1": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 pvp-function-v1",

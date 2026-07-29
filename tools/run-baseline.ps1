@@ -69,6 +69,7 @@ if ($Mode -eq 'all' -or $Mode -eq 'check') {
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/combat-entry-pipeline.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/combat-frame-pipeline.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/audio-volume-pipeline.js')
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/audio-defaults.js')
   if (Test-Path -LiteralPath 'src/game-data.js') {
     Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/game-data.js')
   }
@@ -77,6 +78,8 @@ if ($Mode -eq 'all' -or $Mode -eq 'check') {
   }
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/quest-text.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/quest-tutorial-polish-v3.js')
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/quest-dialogue-theme.js')
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/wrong-answer-review.js')
   if (Test-Path -LiteralPath 'src/patch-data.js') {
     Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/patch-data.js')
   }
@@ -114,8 +117,12 @@ if ($Mode -eq 'all' -or $Mode -eq 'check') {
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/admin-auth-v2.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/admin-data-v2.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/shared-state-v2.js')
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/workbook-import.js')
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/chatgpt-prompt.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/multiplayer-core.js')
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/remote-motion.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/multiplayer.js')
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/login-keys.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/tutorial.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/costume-data.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/costume-ui.js')

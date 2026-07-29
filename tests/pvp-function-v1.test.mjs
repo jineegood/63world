@@ -55,7 +55,7 @@ test('early answer submission reveals only waiting state', async () => {
     randomInt:(min) => min,
     store:{
       getMatchForUpdate:async () => match,
-      insertRoundInputOnce:async (input) => { inputs.push(input); return true; },
+      submitRoundInput:async (input) => { inputs.push(input); return { resolver:false }; },
       listRoundInputs:async () => inputs,
       updateMatch:async () => {},
     },
@@ -107,7 +107,7 @@ test('resolved simultaneous submissions publish dice before ordered combat effec
     randomInt:(minimum) => rolls.shift() ?? minimum,
     store:{
       getMatchForUpdate:async () => match,
-      insertRoundInputOnce:async (input) => { inputs.push(input); },
+      submitRoundInput:async (input) => { inputs.push(input); return { resolver:true }; },
       listRoundInputs:async () => inputs,
       appendEvents:async (_id, _round, events) => appended.push(...events),
       readEnabledWorkbooks:async () => [{ enabled:true, questions:[{ id:'q2', prompt:'3+3', answer:'6' }] }],
@@ -137,7 +137,7 @@ test('heartbeat resolves an expired unanswered round so neither player can stall
     store:{
       heartbeat:async () => { calls.push('heartbeat'); return { ok:true }; },
       getMatchForUpdate:async () => match,
-      insertRoundInputOnce:async (input) => { inputs.push(input); },
+      submitRoundInput:async (input) => { inputs.push(input); return { resolver:true }; },
       listRoundInputs:async () => inputs,
       appendEvents:async () => { calls.push('events'); },
       readEnabledWorkbooks:async () => [{ enabled:true, questions:[{ id:'q2', prompt:'3+3', answer:'6' }] }],

@@ -109,9 +109,10 @@
         costume: G.player.costume || {},
         pvpAvailable:G.currentMap === 'town' && !G.modalState?.pause && !G.currentCombatMonsterId,
         moving: !!G.isMoving,
+        dance: Number(G.danceTimer || 0) > 0,
       };
       // 달라진 게 없으면 굳이 보내지 않는다. 대신 사라지지 않도록 가끔은 알린다.
-      const key = `${payload.map}|${payload.x}|${payload.y}|${payload.moving}|${payload.pvpAvailable}|${payload.level}`;
+      const key = `${payload.userId || ''}|${payload.map}|${payload.x}|${payload.y}|${payload.moving}|${payload.dance}|${payload.pvpAvailable}|${payload.level}`;
       if (key !== lastPayloadKey || now - lastKeepaliveAt >= IDLE_KEEPALIVE_MS) {
         lastPayloadKey = key;
         lastKeepaliveAt = now;
@@ -146,7 +147,7 @@
       ctx.globalAlpha = 0.96;
       try {
         draw(ctx, s.x, s.y, p.appearance || {}, p.class || 'warrior',
-          { attack: 0, moving: !!p.moving || !!eased?.moving, dance: 0, equipment: p.equipment || {}, costume:p.costume || {} },
+          { attack: 0, moving: !!p.moving || !!eased?.moving, dance: p.dance ? 1 : 0, equipment: p.equipment || {}, costume:p.costume || {} },
           (typeof PLAYER_WORLD_SCALE !== 'undefined' ? PLAYER_WORLD_SCALE : 1.26), p.spec || null);
       } catch {}
       ctx.restore();
