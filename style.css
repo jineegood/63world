@@ -147,20 +147,113 @@ strong { font-weight: 900; }
 .pvp-invite-v1{text-align:center}.pvp-invite-v1 .action-row{justify-content:center;margin-top:18px}
 @media(max-width:620px){.pvp-profile-v1{grid-template-columns:1fr;text-align:center}.pvp-profile-v1 canvas{margin:auto}}
 
-.pvp-battle-v1{min-width:min(920px,90vw)}
-.pvp-battle-v1>header{display:flex;justify-content:space-between;align-items:center;gap:12px}
-.pvp-arena-v1{display:grid;grid-template-columns:180px minmax(260px,1fr) 180px;gap:16px;align-items:center;padding:18px;border-radius:20px;background:radial-gradient(circle at 50% 35%,rgba(59,130,246,.22),rgba(15,23,42,.92) 65%)}
-.pvp-fighter-v1{text-align:center}.pvp-fighter-v1 canvas{width:150px;height:150px;border-radius:50%;background:#dbeafe;border:3px solid #60a5fa}
-.pvp-fighter-v1 h3{margin:7px 0}.pvp-fighter-v1 span{display:block;color:#93c5fd;margin-top:4px}
-.pvp-hp-v1{height:14px;background:#334155;border-radius:999px;overflow:hidden;margin:7px 0}.pvp-hp-v1 i{display:block;height:100%;background:linear-gradient(90deg,#ef4444,#fb7185);transition:width .35s}
-.pvp-center-v1{text-align:center}.pvp-question-v1{display:grid;gap:10px;padding:16px;border-radius:16px;background:rgba(15,23,42,.72)}
-.pvp-question-v1 input,.pvp-question-v1 select{width:100%;box-sizing:border-box}
-.pvp-timer-v1{font-size:1.35rem;font-weight:900;color:#fde047}.pvp-wait-v1,.pvp-result-v1{padding:24px;border-radius:16px;background:rgba(30,41,59,.86);font-weight:800}
-.pvp-dice-v1{margin-bottom:12px;padding:12px;border-radius:16px;background:rgba(30,64,175,.3);animation:pvpDicePopV1 .35s ease-out}
-.pvp-dice-row-v1{display:flex;justify-content:center;align-items:center;gap:12px;margin:6px}.pvp-dice-row-v1 em{font-style:normal;color:#fde047}
-.pvp-die-v1{display:grid;place-items:center;width:58px;height:58px;border-radius:14px;background:#f8fafc;color:#1e3a8a;font-size:1.45rem;font-weight:900;box-shadow:0 8px 20px rgba(0,0,0,.28)}
-@keyframes pvpDicePopV1{from{transform:scale(.7) rotate(-5deg);opacity:0}to{transform:scale(1);opacity:1}}
-@media(max-width:760px){.pvp-arena-v1{grid-template-columns:1fr}.pvp-fighter-v1 canvas{width:110px;height:110px}.pvp-battle-v1{min-width:0}}
+.pvp-battle-v2{min-width:min(960px,90vw)}
+.pvp-battle-v2>h2{display:flex;align-items:center;gap:12px}
+.pvp-round-badge-v2{
+  display:inline-flex;align-items:center;padding:5px 11px;border-radius:999px;
+  color:#dbeafe;background:rgba(37,99,235,.23);border:1px solid rgba(96,165,250,.42);
+  font-family:"Gowun Dodum","Noto Sans KR",sans-serif;font-size:13px;font-weight:900;
+}
+.pvp-round-badge-v2 b{
+  margin-left:8px;padding-left:8px;border-left:1px solid rgba(191,219,254,.38);
+  color:#fde047;font-size:14px;
+}
+.pvp-combat-stage-v2{min-height:340px}
+.pvp-combat-stage-v2 .combat-player canvas,
+.pvp-combat-stage-v2 .combat-monster canvas{width:230px;height:190px}
+.pvp-combat-stage-v2 .pvp-defeated-v2{
+  filter:grayscale(1) brightness(.62);transform:translateY(24px) rotate(-8deg);opacity:.72;
+}
+.pvp-combat-panel-v2{min-height:132px}
+.pvp-combat-progress-v2,.pvp-wait-v1,.pvp-result-v1{
+  padding:22px;border-radius:16px;text-align:center;
+  background:rgba(30,41,59,.86);font-weight:800;
+}
+.pvp-question-topline-v2{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.pvp-question-topline-v2>b{font-size:20px;color:#fde047}
+.pvp-skill-menu-v2{grid-template-columns:repeat(3,minmax(0,1fr))}
+.combat-notice.wrong-answer{color:#fbbf24;text-shadow:0 1px 0 rgba(69,26,3,.62)}
+
+.pvp-dice-overlay-v2{
+  position:absolute;left:50%;top:50%;z-index:30;width:min(360px,48%);
+  transform:translate(-50%,-50%);padding:14px 18px;border-radius:24px;text-align:center;
+  color:#f8fafc;background:linear-gradient(145deg,rgba(15,23,42,.96),rgba(30,64,175,.93));
+  border:2px solid rgba(147,197,253,.68);
+  box-shadow:0 22px 60px rgba(0,0,0,.58),0 0 36px rgba(59,130,246,.35);
+  animation:pvpDicePanelInV2 .28s ease-out both;
+}
+.pvp-dice-title-v2{margin-bottom:8px;color:#fde68a;font-size:18px;font-weight:900}
+.pvp-dice-pair-v2{display:grid;grid-template-columns:1fr 32px 1fr;align-items:center;gap:8px}
+.pvp-dice-pair-v2>strong{color:#facc15;font-size:18px}
+.pvp-die-shell-v2{display:grid;justify-items:center;gap:5px;min-width:0}
+.pvp-die-shell-v2 small{width:100%;overflow:hidden;color:#dbeafe;font-weight:900;text-overflow:ellipsis;white-space:nowrap}
+.pvp-die-v2{
+  display:grid;place-items:center;width:76px;height:76px;
+  clip-path:polygon(50% 0,88% 18%,100% 58%,72% 100%,28% 100%,0 58%,12% 18%);
+  color:#172554;background:
+    radial-gradient(circle at 34% 24%,#fff 0 8%,#dbeafe 40%,#93c5fd 72%,#60a5fa 100%);
+  border-radius:20px;font-family:"Arial Black","Jua",sans-serif;font-size:29px;font-weight:900;
+  text-shadow:0 1px 0 rgba(255,255,255,.8);
+  box-shadow:inset 0 0 18px rgba(255,255,255,.8),0 10px 24px rgba(0,0,0,.34);
+  transform-style:preserve-3d;
+}
+.pvp-die-v2.rolling{animation:pvpDieSpinV2 .22s linear infinite}
+.pvp-die-v2.settled{animation:pvpDieSettleV2 .46s cubic-bezier(.17,.84,.34,1.3) both}
+.pvp-dice-caption-v2{min-height:24px;margin-top:8px;color:#fef08a;font-size:15px;font-weight:900}
+.pvp-dice-history-v2{display:block;margin-top:3px;color:#bfdbfe}
+@keyframes pvpDicePanelInV2{
+  from{opacity:0;transform:translate(-50%,-50%) scale(.76)}
+  to{opacity:1;transform:translate(-50%,-50%) scale(1)}
+}
+@keyframes pvpDieSpinV2{
+  0%{transform:perspective(160px) rotateX(0) rotateY(0) rotateZ(0) scale(.92)}
+  50%{transform:perspective(160px) rotateX(180deg) rotateY(235deg) rotateZ(120deg) scale(1.08)}
+  100%{transform:perspective(160px) rotateX(360deg) rotateY(470deg) rotateZ(240deg) scale(.92)}
+}
+@keyframes pvpDieSettleV2{
+  0%{transform:rotate(-18deg) scale(.72)}
+  62%{transform:rotate(6deg) scale(1.18)}
+  100%{transform:rotate(0) scale(1)}
+}
+
+/* 오른쪽 학생도 일반 전투의 직업별 공격 동작을 사용한다. */
+.pvp-combat-stage-v2 .combat-monster.combat-fx-motion-slash{
+  animation:pvpOpponentSlashV2 .34s ease-out;
+}
+.pvp-combat-stage-v2 .combat-monster.combat-fx-motion-cast,
+.pvp-combat-stage-v2 .combat-monster.combat-fx-motion-prayer{
+  animation:pvpOpponentCastV2 .4s ease-out;
+}
+.pvp-combat-stage-v2 .combat-monster.combat-fx-motion-shield,
+.pvp-combat-stage-v2 .combat-monster.combat-fx-motion-charge-up{
+  animation:combatFxGuardPulse .45s ease-out;
+}
+.pvp-combat-stage-v2 .combat-monster.combat-fx-motion-shield-charge{
+  animation:pvpOpponentChargeV2 .52s ease-out;
+}
+@keyframes pvpOpponentSlashV2{
+  0%,100%{transform:translateX(0) rotate(0)}
+  55%{transform:translateX(-34px) rotate(4deg);filter:brightness(1.35)}
+}
+@keyframes pvpOpponentCastV2{
+  0%,100%{transform:translateY(0) scale(1)}
+  50%{transform:translateY(-9px) scale(1.04);filter:brightness(1.42)}
+}
+@keyframes pvpOpponentChargeV2{
+  0%,100%{transform:translateX(0) scale(1)}
+  58%{transform:translateX(var(--combat-fx-motion-distance,-85%)) scale(1.06);filter:brightness(1.34)}
+}
+@media(max-width:760px){
+  .pvp-battle-v2{min-width:0}
+  .pvp-combat-stage-v2{min-height:330px}
+  .pvp-dice-overlay-v2{width:min(330px,76%);padding:12px}
+  .pvp-die-v2{width:62px;height:62px;font-size:24px}
+  .pvp-skill-menu-v2{grid-template-columns:1fr}
+}
+@media(prefers-reduced-motion:reduce){
+  .pvp-die-v2.rolling{animation-duration:1ms}
+  .pvp-dice-overlay-v2,.pvp-die-v2.settled{animation-duration:1ms}
+}
 
 .toast { position: fixed; top: 92px; left: 50%; transform: translateX(-50%); z-index: 60; background: rgba(6,12,22,.95); border: 1px solid rgba(255,255,255,.11); border-radius: 999px; padding: 12px 18px; box-shadow: var(--shadow); }
 .modal { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(3,8,16,.74); padding: 24px; z-index: 100; }

@@ -135,5 +135,52 @@ test('shield absorbs damage before HP and effects are assigned stable event ids'
   assert.equal(resolved.state.b.shield, 0);
   assert.equal(resolved.state.b.hp, 190);
   assert.equal(resolved.events[0].id, 'match-2:3:0');
-  assert.equal(resolved.events[0].absorbed, 30);
+  assert.equal(resolved.events[0].kind, 'action');
+  assert.equal(resolved.events[1].absorbed, 30);
+});
+
+test('Block Training grants at least one shield before each incoming action', async () => {
+  const rules = await import(rulesUrl.href);
+  const resolved = rules.resolveRound({
+    match:{ id:'match-guard', round:1 },
+    a:{ player:fighter('a', { attack:10 }), actionId:'basic', correct:true },
+    b:{
+      player:fighter('b', {
+        maxHp:20,
+        hp:20,
+        skills:{ warrior_basic_guard:1 },
+      }),
+      actionId:'basic',
+      correct:true,
+    },
+    randomInt:sequence([30, 1]),
+  });
+  const firstActionIndex = resolved.events.findIndex((event) => event.kind === 'action' && event.source === 'a');
+  const guardIndex = resolved.events.findIndex((event) => event.skillId === 'warrior_basic_guard');
+  const firstDamageIndex = resolved.events.findIndex((event) => event.kind === 'damage' && event.source === 'a');
+  assert.ok(firstActionIndex >= 0);
+  assert.ok(guardIndex > firstActionIndex);
+  assert.ok(firstDamageIndex > guardIndex);
+  assert.equal(resolved.events[guardIndex].amount, 1);
+  assert.equal(resolved.events[firstDamageIndex].absorbed, 1);
+});
+
+test('Block Training cannot activate for a non-warrior snapshot', async () => {
+  const rules = await import(rulesUrl.href);
+  const resolved = rules.resolveRound({
+    match:{ id:'match-guard-class', round:1 },
+    a:{ player:fighter('a', { attack:10 }), actionId:'basic', correct:true },
+    b:{
+      player:fighter('b', {
+        className:'mage',
+        maxHp:20,
+        hp:20,
+        skills:{ warrior_basic_guard:3 },
+      }),
+      actionId:'basic',
+      correct:true,
+    },
+    randomInt:sequence([30, 1]),
+  });
+  assert.equal(resolved.events.some((event) => event.skillId === 'warrior_basic_guard'), false);
 });

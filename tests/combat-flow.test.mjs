@@ -521,8 +521,9 @@ test('combat notice effects apply before the matching frame is rendered', () => 
 });
 
 test('warrior feedback queues Block Training before the counterattack and tags its extra hit motion', () => {
-  const counterAttack = gameSource.match(/monsterCounterAttack = function monsterCounterAttackV25[\s\S]*?\n  };\n  window\.submitCombatAnswer/)?.[0] || '';
-  const submitAnswer = gameSource.match(/window\.submitCombatAnswer = function submitCombatAnswer[\s\S]*?\n  };\n\n  \/\//)?.[0] || '';
+  const counterAttack = gameSource.match(/monsterCounterAttack = function monsterCounterAttackV25[\s\S]*?\r?\n  };\r?\n  window\.submitCombatAnswer/)?.[0] || '';
+  const submitAnswer = gameSource.match(/window\.submitCombatAnswer = function submitCombatAnswer[\s\S]*?\r?\n  };\r?\n\r?\n  \/\//)?.[0] || '';
+  assert.match(counterAttack, /guardGain = Math\.max\(1, Math\.floor\(game\.player\.hp \* guardShieldPct\)\)/);
   assert.match(counterAttack, /text:`막기 훈련으로 보호막 \$\{guardGain\}을 생성했다!`/);
   assert.match(counterAttack, /effect:makeCounterEffect\('player-status', \{ status:'shield', damage:guardGain \}\)/);
   assert.match(counterAttack, /if \(blockTrainingNotice\) monsterEvents\.push\(blockTrainingNotice\);[\s\S]*type:'monster-action'/);

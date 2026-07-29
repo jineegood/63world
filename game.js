@@ -723,6 +723,33 @@ window.renderPlayerPortraitForPvpV1 = function renderPlayerPortraitForPvpV1(canv
   ctx.restore();
 };
 
+window.renderPlayerCombatantForPvpV1 = function renderPlayerCombatantForPvpV1(canvas, profile, faceLeft = false) {
+  const ctx = canvas?.getContext?.('2d');
+  if (!ctx || !profile) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  if (faceLeft) {
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+  }
+  drawPlayerSprite(
+    ctx,
+    canvas.width / 2,
+    140,
+    profile.appearance || {},
+    profile.className || profile.class || 'warrior',
+    {
+      attack:0,
+      moving:false,
+      equipment:profile.equipment || {},
+      costume:profile.costume || {},
+    },
+    1.9,
+    profile.spec || null,
+  );
+  ctx.restore();
+};
+
 function ensurePlayerHp() {
   if (!game.player) return;
   const maxHp = maxHpForPlayer(game.player);
@@ -8220,7 +8247,10 @@ function updateQuestTracker() {
     let guardGain = 0;
     if (guardRank > 0) {
       const arr = SKILL_DEFS.warrior_basic_guard?.guardShieldPct || [];
-      guardGain = Math.floor(game.player.hp * (arr[guardRank] || 0));
+      const guardShieldPct = Number(arr[guardRank] || 0);
+      if (game.player.hp > 0 && guardShieldPct > 0) {
+        guardGain = Math.max(1, Math.floor(game.player.hp * guardShieldPct));
+      }
     }
     const blockTrainingNotice = guardGain > 0 ? {
       type:'enemy-status',

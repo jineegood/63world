@@ -63,7 +63,10 @@
       const result = await client().respond(inviteId, accept === true);
       activeInviteId = null;
       global.closeModal?.();
-      if (result?.accepted && result.match) global.enterPvpMatchV1?.(result.match);
+      if (result?.accepted && result.match
+        && global.getActivePvpMatchV1?.()?.matchId !== result.match.id) {
+        global.enterPvpMatchV1?.(result.match);
+      }
       else if (!accept) global.toast?.('대전 신청을 거절했어요.');
       return result;
     } catch (error) {
@@ -96,7 +99,9 @@
       && (invite.challenger_id === me?.userId || invite.target_id === me?.userId)) {
       try {
         const match = await pvp.sync(matchId);
-        if (match) global.enterPvpMatchV1?.(match);
+        if (match && global.getActivePvpMatchV1?.()?.matchId !== match.id) {
+          global.enterPvpMatchV1?.(match);
+        }
       } catch (error) {
         global.toast?.(error?.message || '대전 화면을 열지 못했어요.');
       }

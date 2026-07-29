@@ -75,15 +75,18 @@ test('server response codes inside an Edge Function error replace the generic co
   );
 });
 
-test('match subscription emits each event sequence once and cleans up its channel', () => {
+test('match subscription emits each event sequence once, including out-of-order delivery, and cleans up its channel', () => {
   const { api, channels, removed } = harness();
   const received = [];
   const unsubscribe = api.subscribe('match-1', (event) => received.push(event));
   const eventsHandler = channels[0].handlers.find((entry) => entry.filter.table === 'pvp_match_events_v1').handler;
-  eventsHandler({ new:{ sequence_no:3, event:{ kind:'damage' } } });
-  eventsHandler({ new:{ sequence_no:3, event:{ kind:'damage' } } });
-  eventsHandler({ new:{ sequence_no:4, event:{ kind:'heal' } } });
-  assert.deepEqual(received.map((event) => event.sequenceNo), [3, 4]);
+  eventsHandler({ new:{ sequence_no:3, round_no:7, event:{ kind:'damage' } } });
+  eventsHandler({ new:{ sequence_no:3, round_no:7, event:{ kind:'damage' } } });
+  eventsHandler({ new:{ sequence_no:5, round_no:7, event:{ kind:'heal' } } });
+  eventsHandler({ new:{ sequence_no:4, round_no:7, event:{ kind:'dice' } } });
+  eventsHandler({ new:{ sequence_no:4, round_no:7, event:{ kind:'dice' } } });
+  assert.deepEqual(received.map((event) => event.sequenceNo), [3, 5, 4]);
+  assert.deepEqual(received.map((event) => event.round), [7, 7, 7]);
   unsubscribe();
   assert.deepEqual(removed, ['pvp-match-match-1']);
 });

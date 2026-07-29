@@ -62,6 +62,79 @@ test('disconnect decisions pause, resume, forfeit, or cancel a match after the g
   );
 });
 
+test('event replay store reads ordered rows after a clamped sequence and strips private fields', async () => {
+  const { createSupabasePvpStore } = await import(storeUrl.href);
+  const calls = [];
+  const rows = [
+    {
+      round_no:2,
+      sequence_no:2000,
+      event:{
+        id:'m1:2:action',
+        kind:'action',
+        source:'a',
+        correct:false,
+        correctAnswer:'5',
+        submittedAnswer:'4',
+      },
+    },
+    {
+      round_no:2,
+      sequence_no:2001,
+      event:{
+        id:'m1:2:damage',
+        kind:'damage',
+        amount:5,
+        correctAnswer:'should-not-leak',
+        answerKey:'should-not-leak',
+      },
+    },
+  ];
+  const query = {
+    select(value) { calls.push(['select', value]); return this; },
+    eq(column, value) { calls.push(['eq', column, value]); return this; },
+    gt(column, value) { calls.push(['gt', column, value]); return this; },
+    order(column, value) { calls.push(['order', column, value]); return this; },
+    limit(value) { calls.push(['limit', value]); return this; },
+    then(resolve, reject) {
+      return Promise.resolve({ data:rows, error:null }).then(resolve, reject);
+    },
+  };
+  const store = createSupabasePvpStore({
+    from(table) {
+      calls.push(['from', table]);
+      return query;
+    },
+  });
+
+  assert.deepEqual(await store.listEventsAfter('m1', -99), [
+    {
+      id:'m1:2:action',
+      kind:'action',
+      source:'a',
+      correct:false,
+      correctAnswer:'5',
+      round:2,
+      sequenceNo:2000,
+    },
+    {
+      id:'m1:2:damage',
+      kind:'damage',
+      amount:5,
+      round:2,
+      sequenceNo:2001,
+    },
+  ]);
+  assert.deepEqual(calls, [
+    ['from', 'pvp_match_events_v1'],
+    ['select', 'round_no,sequence_no,event'],
+    ['eq', 'match_id', 'm1'],
+    ['gt', 'sequence_no', 0],
+    ['order', 'sequence_no', { ascending:true }],
+    ['limit', 500],
+  ]);
+});
+
 test('first PvP profile use shows one tutorial with green key phrases before opening the profile', async () => {
   const tutorialSource = fs.readFileSync(path.join(root, 'src/tutorial.js'), 'utf8');
   const uiSource = fs.readFileSync(path.join(root, 'src/pvp-ui.js'), 'utf8');

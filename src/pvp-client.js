@@ -79,7 +79,7 @@
     function subscribe(matchId, listener) {
       identity();
       if (typeof client.channel !== 'function') return () => {};
-      let lastSequence = -1;
+      const seenSequences = new Set();
       const channel = client.channel(`pvp-match-${matchId}`)
         .on('postgres_changes', {
           event:'*', schema:'public', table:'pvp_match_events_v1',
@@ -87,9 +87,14 @@
         }, (payload) => {
           const row = payload?.new;
           const sequenceNo = Number(row?.sequence_no);
-          if (!Number.isFinite(sequenceNo) || sequenceNo <= lastSequence) return;
-          lastSequence = sequenceNo;
-          listener({ type:'event', sequenceNo, ...(row.event || {}) });
+          if (!Number.isFinite(sequenceNo) || seenSequences.has(sequenceNo)) return;
+          seenSequences.add(sequenceNo);
+          listener({
+            type:'event',
+            sequenceNo,
+            round:Number(row?.round_no) || undefined,
+            ...(row.event || {}),
+          });
         })
         .on('postgres_changes', {
           event:'UPDATE', schema:'public', table:'pvp_matches_v1',
@@ -129,8 +134,8 @@
       submit:(matchId, round, actionId, answer) => invoke({
         op:'submit', matchId, round, actionId, answer, requestId:requestId('submit'),
       }),
-      sync:(matchId) => invoke({ op:'sync', matchId }),
-      heartbeat:(matchId) => invoke({ op:'heartbeat', matchId }),
+      sync:(matchId, afterSequence) => invoke({ op:'sync', matchId, afterSequence }),
+      heartbeat:(matchId, afterSequence) => invoke({ op:'heartbeat', matchId, afterSequence }),
       surrender:(matchId) => invoke({ op:'surrender', matchId, requestId:requestId('surrender') }),
       cleanup:() => invoke({ op:'cleanup' }),
       subscribe,

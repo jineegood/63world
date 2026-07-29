@@ -23,6 +23,27 @@ function workbookItems(value) {
   return Array.isArray(value?.items) ? value.items : [];
 }
 
+function safeSequenceNo(value) {
+  const number = Number(value);
+  if (Number.isNaN(number) || number <= 0) return 0;
+  return Math.min(Number.MAX_SAFE_INTEGER, Math.trunc(number));
+}
+
+function publicEventRow(row) {
+  const sequenceNo = Number(row?.sequence_no);
+  const round = Number(row?.round_no);
+  if (!Number.isSafeInteger(sequenceNo) || sequenceNo < 0) return null;
+  if (!Number.isSafeInteger(round) || round < 1) return null;
+  if (!row?.event || typeof row.event !== 'object' || Array.isArray(row.event)) return null;
+  const event = { ...row.event };
+  for (const privateKey of [
+    'answerKey', 'answer_key', 'submittedAnswer', 'submitted_answer',
+    'playerAState', 'playerBState', 'requestId',
+  ]) delete event[privateKey];
+  if (event.kind !== 'action') delete event.correctAnswer;
+  return { ...event, round, sequenceNo };
+}
+
 const DISCONNECT_DETECT_MS = 10000;
 const RECONNECT_GRACE_MS = 30000;
 
@@ -224,6 +245,15 @@ export function createSupabasePvpStore(client) {
         onConflict:'match_id,sequence_no',
         ignoreDuplicates:true,
       }));
+    },
+    async listEventsAfter(matchId, afterSequence) {
+      const rows = check(await client.from('pvp_match_events_v1')
+        .select('round_no,sequence_no,event')
+        .eq('match_id', matchId)
+        .gt('sequence_no', safeSequenceNo(afterSequence))
+        .order('sequence_no', { ascending:true })
+        .limit(500)) || [];
+      return rows.map(publicEventRow).filter(Boolean);
     },
     async readEnabledWorkbooks() {
       const row = check(await client.from('shared_state_v2').select('data').eq('key', 'workbooks').maybeSingle());

@@ -16,6 +16,22 @@ function participant(match, userId) {
   return match?.playerAId === userId || match?.playerBId === userId;
 }
 
+function safeAfterSequence(value) {
+  const number = Number(value);
+  if (Number.isNaN(number) || number <= 0) return 0;
+  return Math.min(Number.MAX_SAFE_INTEGER, Math.trunc(number));
+}
+
+function requestedAfterSequence(body) {
+  if (!Object.prototype.hasOwnProperty.call(body || {}, 'afterSequence')) return null;
+  const value = body.afterSequence;
+  if (value === null || typeof value === 'boolean') return null;
+  if (typeof value === 'string' && !value.trim()) return null;
+  const number = Number(value);
+  if (Number.isNaN(number)) return null;
+  return safeAfterSequence(number);
+}
+
 function publicMatch(match) {
   if (!match) return null;
   const { answerKey:privateAnswerKey, ...safe } = match;
@@ -41,6 +57,13 @@ function publicProfile(profile = {}) {
 
 export function createPvpService({ store, now = Date.now, randomInt }) {
   if (!store || typeof randomInt !== 'function') throw new Error('PvP service dependencies are required');
+
+  async function replayEventsFor(matchId, body) {
+    const afterSequence = requestedAfterSequence(body);
+    return afterSequence === null
+      ? []
+      : store.listEventsAfter(matchId, afterSequence);
+  }
 
   async function invite(userId, body) {
     if (!body.targetUserId || body.targetUserId === userId) fail('INVALID_TARGET');
@@ -88,37 +111,44 @@ export function createPvpService({ store, now = Date.now, randomInt }) {
     const inputFor = (id) => byUser.get(id) || { actionId:'basic', answer:'' };
     const aInput = inputFor(match.playerAId);
     const bInput = inputFor(match.playerBId);
+    const aCorrect = judgeAnswer({ answer:match.answerKey }, aInput.answer);
+    const bCorrect = judgeAnswer({ answer:match.answerKey }, bInput.answer);
     const resolution = resolveRound({
       match:{ id:match.id, round:match.round },
       a:{
         player:match.playerAState,
         actionId:aInput.actionId,
-        correct:judgeAnswer({ answer:match.answerKey }, aInput.answer),
+        correct:aCorrect,
       },
       b:{
         player:match.playerBState,
         actionId:bInput.actionId,
-        correct:judgeAnswer({ answer:match.answerKey }, bInput.answer),
+        correct:bCorrect,
       },
       randomInt,
     });
+    const resolvedEvents = resolution.events.map((event) => (
+      event.kind === 'action'
+        ? { ...event, correctAnswer:match.answerKey }
+        : event
+    ));
     const publicEvents = [{
       id:`${match.id}:${match.round}:dice`,
       kind:'dice',
       rolls:resolution.initiative.rolls,
       first:resolution.initiative.first,
-    }, ...resolution.events];
+    }, ...resolvedEvents];
     await store.appendEvents(match.id, match.round, publicEvents);
     if (resolution.winner) {
       const winnerId = resolution.winner === 'a' ? match.playerAId : match.playerBId;
       const loserId = resolution.winner === 'a' ? match.playerBId : match.playerAId;
       await store.finishMatchOnce(match.id, winnerId, loserId, 'defeat');
-      return { finished:true };
+      return { finished:true, round:Number(match.round), events:publicEvents };
     }
     const question = selectQuestion(await store.readEnabledWorkbooks(), randomInt);
     if (!question) {
       await store.cancelMatch(match.id, 'no_questions');
-      return { cancelled:true };
+      return { cancelled:true, round:Number(match.round), events:publicEvents };
     }
     await store.updateMatch(match.id, {
       phase:'question',
@@ -129,7 +159,7 @@ export function createPvpService({ store, now = Date.now, randomInt }) {
       answerKey:question.answer,
       deadline:now() + 20000,
     });
-    return { resolved:true, events:publicEvents };
+    return { resolved:true, round:Number(match.round), events:publicEvents };
   }
 
   async function surrender(userId, body) {
@@ -173,7 +203,8 @@ export function createPvpService({ store, now = Date.now, randomInt }) {
       case 'sync': {
         const match = await store.getMatchForUser(body.matchId, userId);
         if (!match) fail('NOT_PARTICIPANT');
-        return publicMatch(match);
+        const replayEvents = await replayEventsFor(match.id, body);
+        return { ...publicMatch(match), replayEvents };
       }
       case 'heartbeat':
       {
@@ -183,13 +214,29 @@ export function createPvpService({ store, now = Date.now, randomInt }) {
         if (participant(match, userId)
           && ['question', 'waiting'].includes(match.phase)
           && now() >= Number(match.deadline || 0)) {
-          return submit(userId, {
+          const timeoutResult = await submit(userId, {
             matchId:match.id,
             round:match.round,
             actionId:'basic',
             answer:'',
             requestId:`timeout-${match.id}-${match.round}-${userId}`,
           });
+          if (!timeoutResult?.waiting) return timeoutResult;
+          const replayEvents = await replayEventsFor(match.id, body);
+          return {
+            ...(heartbeat || { ok:true }),
+            ...timeoutResult,
+            match:publicMatch(match),
+            replayEvents,
+          };
+        }
+        if (participant(match, userId)) {
+          const replayEvents = await replayEventsFor(match.id, body);
+          return {
+            ...(heartbeat || { ok:true }),
+            match:publicMatch(match),
+            replayEvents,
+          };
         }
         return heartbeat;
       }

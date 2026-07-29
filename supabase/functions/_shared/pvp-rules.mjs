@@ -136,6 +136,25 @@ function applyDamage(sourceKey, targetKey, state, amount, active, events) {
   });
 }
 
+function applyBlockTraining(targetKey, state, events) {
+  const target = state[targetKey];
+  if (target.className !== 'warrior') return;
+  const rank = Math.max(0, Math.trunc(Number(target.skills.warrior_basic_guard) || 0));
+  const rates = PVP_SKILLS.warrior_basic_guard?.guardShieldPct || [];
+  const rate = Number(rates[rank] || 0);
+  if (!(target.hp > 0) || !(rank > 0) || !(rate > 0)) return;
+  const amount = Math.max(1, Math.floor(target.hp * rate));
+  target.shield += amount;
+  events.push({
+    kind:'shield',
+    source:targetKey,
+    target:targetKey,
+    skillId:'warrior_basic_guard',
+    passive:true,
+    amount,
+  });
+}
+
 function applyAction(sourceKey, targetKey, entry, state, events) {
   const source = state[sourceKey];
   const target = state[targetKey];
@@ -207,6 +226,15 @@ export function resolveRound({ match, a, b, randomInt }) {
   const order = initiative.first === 'a' ? [['a', 'b', a], ['b', 'a', b]] : [['b', 'a', b], ['a', 'b', a]];
   for (const [sourceKey, targetKey, entry] of order) {
     if (state[sourceKey].hp <= 0 || state[targetKey].hp <= 0) break;
+    events.push({
+      kind:'action',
+      source:sourceKey,
+      target:targetKey,
+      actionId:actionFor(state[sourceKey], entry.actionId).id,
+      correct:entry.correct === true,
+      prevented:state[sourceKey].statuses.stun > 0 ? 'stun' : null,
+    });
+    applyBlockTraining(targetKey, state, events);
     applyAction(sourceKey, targetKey, entry, state, events);
   }
   tickState(state.a);
