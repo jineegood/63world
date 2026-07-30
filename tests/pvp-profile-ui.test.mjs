@@ -76,6 +76,24 @@ test('right-click profile shows safe public details and renders equipped face po
   assert.equal(portrait[2].costume.hat, 'cap');
 });
 
+test('my PvP record refreshes presence and reads the authenticated student profile', async () => {
+  const profiledIds = [];
+  const ui = loadUi({
+    pvpClientOverrides:{
+      async profile(userId) {
+        profiledIds.push(userId);
+        return { wins:4.9, losses:1 };
+      },
+    },
+  });
+
+  const record = await ui.window.getMyPvpRecordV1();
+  assert.equal(record.wins, 4);
+  assert.equal(record.losses, 1);
+  assert.deepEqual(profiledIds, ['student-a']);
+  assert.equal(ui.calls.some(([type]) => type === 'presence'), true);
+});
+
 test('challenge and invitation response use the authenticated PvP client', async () => {
   const ui = loadUi();
   await ui.window.challengeRemoteV1('student-b');
@@ -177,6 +195,27 @@ test('game supplies the real equipped portrait and starts presence after enterin
   assert.ok(htmlSource.indexOf('src/pvp-ui.js') < htmlSource.indexOf('src/multiplayer.js'));
   assert.match(gameSource, /modalState\.type === 'pvpBattle'[\s\S]{0,100}surrenderPvpV1/);
   assert.match(gameSource, /modalState\.type === 'pvpSurrender'[\s\S]{0,100}restorePvpMatchV1/);
+});
+
+test('character status orders five fixed identity cells and loads the player PvP record', () => {
+  const panel = gameSource.slice(
+    gameSource.indexOf('function openCharacterPanelV33'),
+    gameSource.indexOf('function openUpgradeShopModalV33'),
+  );
+  const positions = [
+    'identity-chip-name',
+    'identity-chip-lv',
+    'identity-chip-job',
+    'identity-chip-spec',
+    'identity-chip-pvp',
+  ].map((marker) => panel.indexOf(marker));
+
+  assert.equal(positions.every((position) => position >= 0), true);
+  assert.deepEqual(positions, [...positions].sort((left, right) => left - right));
+  assert.match(panel, /id="characterPvpRecordV33">확인 중…/);
+  assert.match(panel, /window\.getMyPvpRecordV1\(\)/);
+  assert.match(gameSource, /\.identity-strip-v33\{[^}]*grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
+  assert.match(gameSource, /\.char-name-v33\{[^}]*text-overflow:ellipsis;white-space:nowrap/);
 });
 
 test('challenger enters the match when the opponent accepts the invitation', async () => {

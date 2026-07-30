@@ -11221,11 +11221,13 @@ function updateQuestTracker() {
     style.id = 'yuksam-v33-style';
     style.textContent = `
       .character-panel-v33{grid-template-columns:minmax(520px,.95fr) minmax(390px,1.05fr)!important;align-items:start;}
-      .identity-strip-v33{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:10px;}
+      .identity-strip-v33{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-bottom:10px;}
       .identity-chip-v33{border-radius:14px;padding:9px 10px;background:rgba(15,23,42,.62);border:1px solid rgba(148,163,184,.14);}
       .identity-chip-v33 span{display:block;font-size:11px;color:#9fb7d4;font-weight:800;}
       .identity-chip-v33 b{display:flex;align-items:baseline;gap:9px;color:#f8fafc;font-size:14px;margin-top:2px;}
-      .identity-chip-v33 .char-name-v33{font-size:18px;color:#fff;font-weight:950;text-shadow:0 0 10px rgba(125,211,252,.24);}
+      .identity-chip-name{min-width:0;overflow:hidden;}
+      .identity-chip-name b{min-width:0;max-width:100%;overflow:hidden;}
+      .identity-chip-v33 .char-name-v33{display:block;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:18px;color:#fff;font-weight:950;text-shadow:0 0 10px rgba(125,211,252,.24);}
       .character-right-v33{display:flex;flex-direction:column;gap:12px;min-width:0;}
       .paperdoll-v7{min-height:500px!important;max-height:none!important;}
       .slot-pet-v33{
@@ -11273,6 +11275,8 @@ function updateQuestTracker() {
       .identity-chip-name{background:rgba(74,222,128,.14);border-color:rgba(74,222,128,.32);}
       .identity-chip-job{background:rgba(251,146,60,.15);border-color:rgba(251,146,60,.34);}
       .identity-chip-spec{background:rgba(192,132,252,.15);border-color:rgba(192,132,252,.34);}
+      .identity-chip-pvp{background:rgba(244,63,94,.13);border-color:rgba(251,113,133,.32);}
+      .identity-chip-pvp b{color:#fecdd3;white-space:nowrap;}
       .wallet-chip-v32 span{font-weight:900;}
       .wallet-chip-v32 b{font-weight:900;}
       .wallet-gold-v33 b{color:#fbbf24;}
@@ -11366,11 +11370,13 @@ function updateQuestTracker() {
       '체력': '체력은 캐릭터의 체력을 올려주는 능력치입니다.',
     };
     const statHtml = Object.entries(stats).map(([k,v]) => `<div class="mini-stat" data-tooltip="${tooltipAttrV33((statTipMapV33[k] ? `${k}\n${statTipMapV33[k]}` : `현재 총 ${k}`))}"><span>${k}</span><b>${v}</b></div>`).join('');
+    const playerNameV33 = String(game.player.name || '이름없음');
     const identityHtml = `<div class="identity-strip-v33">
+      <div class="identity-chip-v33 identity-chip-name" data-tooltip="${tooltipAttrV33(playerNameV33)}"><span>이름</span><b><strong class="char-name-v33">${escapeHtml(playerNameV33)}</strong></b></div>
       <div class="identity-chip-v33 identity-chip-lv"><span>레벨</span><b><em>Lv.${game.player.level}</em></b></div>
-      <div class="identity-chip-v33 identity-chip-name"><span>이름</span><b><strong class="char-name-v33">${escapeHtml(game.player.name || '이름없음')}</strong></b></div>
       <div class="identity-chip-v33 identity-chip-job"><span>직업</span><b>${classNameV33(game.player.class)}</b></div>
       <div class="identity-chip-v33 identity-chip-spec"><span>전문화</span><b>${game.player.spec || '잠김'}</b></div>
+      <div class="identity-chip-v33 identity-chip-pvp"><span>PVP 전적</span><b id="characterPvpRecordV33">확인 중…</b></div>
     </div>`;
     const resourceHtml = `<div class="resource-panel-v32">
       <div class="resource-row-v32"><span>HP</span><div class="resource-bar-v32 hp"><b style="width:${hpPct}%"></b></div><strong>${game.player.hp}/${game.player.maxHp}</strong></div>
@@ -11409,7 +11415,25 @@ function updateQuestTracker() {
         <div class="panel-card paperdoll-card-v7 status-panel-v27 status-panel-v29 character-left-v32"><h3>캐릭터 상태</h3>${identityHtml}<div class="paperdoll paperdoll-v7"><canvas id="characterPanelCanvas" width="420" height="420"></canvas>${slotHtml('head','slot-head-v7')}${slotHtml('armor','slot-armor-v7')}${slotHtml('weapon','slot-weapon-v7')}${slotHtml('accessory','slot-accessory-v7')}${petSlot}</div><div class="mini-stat-grid mini-stat-grid-v7 stat-grid-v27">${statHtml}</div></div>
         <div class="character-right-v33"><div class="panel-card">${resourceHtml}</div><div class="panel-card bag-panel-v27 bag-panel-v32"><h3>가방</h3><p class="muted">아이템 위에 마우스를 올리면 상세 능력치를 확인할 수 있습니다.</p><div class="bag-grid">${bagSlots.join('')}</div></div></div>
       </div></div>`, { type:'character', pause:true });
-    setTimeout(() => { document.querySelectorAll('.slot-connector-v29').forEach((el)=>el.remove()); drawCharacterPanelCanvas?.(); }, 20);
+    setTimeout(() => {
+      document.querySelectorAll('.slot-connector-v29').forEach((el)=>el.remove());
+      drawCharacterPanelCanvas?.();
+      const recordElement = document.getElementById('characterPvpRecordV33');
+      if (!recordElement || typeof window.getMyPvpRecordV1 !== 'function') {
+        if (recordElement) recordElement.textContent = '확인 불가';
+        return;
+      }
+      window.getMyPvpRecordV1()
+        .then((record) => {
+          const current = document.getElementById('characterPvpRecordV33');
+          if (!current) return;
+          current.textContent = `${Math.max(0, Number(record?.wins) || 0)}승 ${Math.max(0, Number(record?.losses) || 0)}패`;
+        })
+        .catch(() => {
+          const current = document.getElementById('characterPvpRecordV33');
+          if (current) current.textContent = '확인 불가';
+        });
+    }, 20);
   }
   openCharacterPanel = openCharacterPanelV33;
   window.openCharacterPanel = openCharacterPanelV33;

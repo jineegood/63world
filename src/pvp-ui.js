@@ -56,6 +56,19 @@
     return updatePresence(pvp, true);
   }
 
+  async function getMyPvpRecordV1() {
+    const pvp = client();
+    const identity = global.getPvpIdentityV1?.();
+    if (!identity?.userId) throw new Error('로그인한 뒤 전적을 확인해 주세요.');
+    await updatePresence(pvp);
+    const profile = await pvp.profile(identity.userId);
+    if (!profile) throw new Error('PVP 전적을 불러오지 못했어요.');
+    return {
+      wins:Math.max(0, Math.trunc(Number(profile.wins) || 0)),
+      losses:Math.max(0, Math.trunc(Number(profile.losses) || 0)),
+    };
+  }
+
   async function openRemoteProfileV1(userId, skipTutorial = false) {
     if (!skipTutorial && global.shouldShowPvpTutorialV1?.() && global.startPvpTutorialV1) {
       global.startPvpTutorialV1(() => openRemoteProfileV1(userId, true));
@@ -235,6 +248,7 @@
   global.openRemoteProfileV1 = openRemoteProfileV1;
   global.challengeRemoteV1 = challengeRemoteV1;
   global.respondPvpInviteV1 = respondPvpInviteV1;
+  global.getMyPvpRecordV1 = getMyPvpRecordV1;
   global.startPvpUiV1 = startPvpUiV1;
   global.stopPvpUiV1 = stopPvpUiV1;
 })(window);
