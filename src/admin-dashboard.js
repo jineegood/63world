@@ -25,13 +25,20 @@ let secureAdminWorkbookRefreshV2 = false;
 let secureAdminWorkbookSyncedAtV2 = 0;
 let secureAdminCheatPendingV3 = false;
 const CHEAT_ENABLED_KEY_V2 = 'ysb_teacher_cheat_enabled_v2';
-try {
-  window.__cheatEnabledV54 = sessionStorage.getItem(CHEAT_ENABLED_KEY_V2) === '1';
-} catch {
-  window.__cheatEnabledV54 = false;
-}
+window.__cheatEnabledV54 = false;
 const initialCheatClusterV2 = document.getElementById('cheatCluster');
-if (initialCheatClusterV2 && window.__cheatEnabledV54) initialCheatClusterV2.style.display = 'flex';
+if (initialCheatClusterV2) initialCheatClusterV2.style.display = 'none';
+
+function setTeacherCheatUiV3(enabled) {
+  window.__cheatEnabledV54 = Boolean(enabled);
+  try { sessionStorage.setItem(CHEAT_ENABLED_KEY_V2, enabled ? '1' : '0'); } catch {}
+  const cluster = document.getElementById('cheatCluster');
+  if (cluster) cluster.style.display = enabled ? 'flex' : 'none';
+  if (!enabled) {
+    const panel = document.getElementById('cheatPanel');
+    if (panel) panel.classList.add('hidden');
+  }
+}
 
 if (SECURE_ADMIN_MODE_V2) {
   const secureAdminUrlV2 = String(window.YUKSAM_CLOUD?.url || '')
@@ -79,10 +86,11 @@ window.adminApplyCurrentStudentCheatV3 = async function adminApplyCurrentStudent
     toast('먼저 학생 캐릭터로 로그인해 주세요.');
     return;
   }
-  if (!requireTeacherAuth() || !secureAdminDataV2?.applyStudentCheatV3) return;
+  if (!requireTeacherAuth() || !secureAdminDataV2?.applyStudentCheat) return;
   secureAdminCheatPendingV3 = true;
   try {
-    const result = await secureAdminDataV2.applyStudentCheatV3(identity.userId, action);
+    await window.flushLocalPlayerForPvpV1?.();
+    const result = await secureAdminDataV2.applyStudentCheat(identity.userId, action);
     if (!window.applyAuthoritySnapshotFromServerV3?.(result.snapshot)) {
       throw new Error('서버 캐릭터 정보를 적용하지 못했어요.');
     }
@@ -459,13 +467,36 @@ function teacherSettingsHtml(){
   </div>`;
 }
 
-window.adminSetCheatEnabled = function adminSetCheatEnabled(on){
-  window.__cheatEnabledV54 = !!on;
-  try { sessionStorage.setItem(CHEAT_ENABLED_KEY_V2, on ? '1' : '0'); } catch {}
-  const cluster = document.getElementById('cheatCluster');
-  if (cluster) cluster.style.display = on ? 'flex' : 'none';
-  if (!on) { const panel = document.getElementById('cheatPanel'); if (panel) panel.classList.add('hidden'); }
+window.adminSetCheatEnabled = async function adminSetCheatEnabled(on){
+  if (on) {
+    try {
+      if (!secureAdminAuthV2) throw new Error('관리자 연결 설정을 확인해 주세요.');
+      await secureAdminAuthV2.requireTeacher();
+      __teacherAuthed = true;
+    } catch (error) {
+      setTeacherCheatUiV3(false);
+      __teacherAuthed = false;
+      toast(error?.message || '교사 계정으로 로그인해야 치트를 사용할 수 있어요.');
+      openTeacherLogin();
+      return;
+    }
+  }
+  setTeacherCheatUiV3(Boolean(on));
   if (typeof openAdminPanel === 'function') openAdminPanel('settings');
+};
+
+window.requireTeacherCheatAccessV3 = async function requireTeacherCheatAccessV3() {
+  try {
+    if (!SECURE_ADMIN_MODE_V2 || !secureAdminAuthV2) throw new Error('FORBIDDEN');
+    await secureAdminAuthV2.requireTeacher();
+    __teacherAuthed = true;
+    return true;
+  } catch (_) {
+    setTeacherCheatUiV3(false);
+    __teacherAuthed = false;
+    toast('교사 계정으로 로그인해야 치트를 사용할 수 있어요.');
+    return false;
+  }
 };
 
 function buildAdminPanelHtml(tab){
@@ -490,8 +521,16 @@ let __teacherAuthed = false;
 
 if (SECURE_ADMIN_MODE_V2 && secureAdminAuthV2) {
   secureAdminAuthV2.restore()
-    .then((identity) => { __teacherAuthed = Boolean(identity); })
-    .catch(() => { __teacherAuthed = false; });
+    .then((identity) => {
+      __teacherAuthed = Boolean(identity);
+      let restoreCheat = false;
+      try { restoreCheat = sessionStorage.getItem(CHEAT_ENABLED_KEY_V2) === '1'; } catch {}
+      setTeacherCheatUiV3(Boolean(identity) && restoreCheat);
+    })
+    .catch(() => {
+      __teacherAuthed = false;
+      setTeacherCheatUiV3(false);
+    });
 }
 
 function teacherStore(){
@@ -592,6 +631,7 @@ window.adminTeacherLogout = async function adminTeacherLogout(){
     catch (error) { toast(error?.message || '로그아웃하지 못했어요.'); return; }
   }
   __teacherAuthed = false;
+  setTeacherCheatUiV3(false);
   openTeacherLogin();
 };
 

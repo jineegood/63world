@@ -18,7 +18,13 @@
     if (fn) fn(msg); else console.log('[cheat]', msg);
   }
 
-  function togglePanel(force) {
+  async function hasTeacherAccess() {
+    const requireAccess = call('requireTeacherCheatAccessV3');
+    return Boolean(requireAccess && await requireAccess());
+  }
+
+  async function togglePanel(force) {
+    if (!(await hasTeacherAccess())) return;
     const panel = document.getElementById('cheatPanel');
     const cluster = document.getElementById('cheatCluster');
     if (!panel) return;
@@ -27,7 +33,8 @@
     if (cluster) cluster.classList.toggle('open', open);
   }
 
-  function killCurrentMonster() {
+  async function killCurrentMonster() {
+    if (!(await hasTeacherAccess())) return;
     const gm = g();
     const ccm = call('currentCombatMonster');
     const monster = ccm ? ccm() : (gm && gm.currentCombatMonster ? gm.currentCombatMonster() : null);
@@ -38,7 +45,8 @@
     toastMsg('치트: 몬스터 즉시 처치!');
   }
 
-  function completeAcceptedQuest() {
+  async function completeAcceptedQuest() {
+    if (!(await hasTeacherAccess())) return;
     const gm = g();
     if (!gm || !gm.player || !gm.player.quests) { toastMsg('진행 중인 퀘스트가 없습니다.'); return; }
     const defs = window.QUEST_DEFS || (typeof QUEST_DEFS !== 'undefined' ? QUEST_DEFS : {});
@@ -60,22 +68,23 @@
     const toggle = document.getElementById('cheatToggleBtn');
     if (toggle && !toggle.dataset.boundV41) {
       toggle.dataset.boundV41 = '1';
-      toggle.addEventListener('click', () => togglePanel());
+      toggle.addEventListener('click', () => { togglePanel(); });
     }
     const killBtn = document.getElementById('cheatKillMonsterBtn');
     if (killBtn && !killBtn.dataset.boundV41) {
       killBtn.dataset.boundV41 = '1';
-      killBtn.addEventListener('click', killCurrentMonster);
+      killBtn.addEventListener('click', () => { killCurrentMonster(); });
     }
     const questBtn = document.getElementById('cheatCompleteQuestBtn');
     if (questBtn && !questBtn.dataset.boundV41) {
       questBtn.dataset.boundV41 = '1';
-      questBtn.addEventListener('click', completeAcceptedQuest);
+      questBtn.addEventListener('click', () => { completeAcceptedQuest(); });
     }
     const speedBtn = document.getElementById('combatLogSpeedBtn');
     if (speedBtn && !speedBtn.dataset.boundV50) {
       speedBtn.dataset.boundV50 = '1';
-      speedBtn.addEventListener('click', function () {
+      speedBtn.addEventListener('click', async function () {
+        if (!(await hasTeacherAccess())) return;
         window.__combatLogFastV50 = !window.__combatLogFastV50;
         speedBtn.textContent = '⏩ 전투로그 2배속 ' + (window.__combatLogFastV50 ? 'ON' : 'OFF');
         toastMsg('전투 로그 속도: ' + (window.__combatLogFastV50 ? '2배속' : '기본'));
@@ -84,7 +93,8 @@
     const upgradeBtn = document.getElementById('cheatUpgradeWeaponBtn');
     if (upgradeBtn && !upgradeBtn.dataset.boundV42) {
       upgradeBtn.dataset.boundV42 = '1';
-      upgradeBtn.addEventListener('click', () => {
+      upgradeBtn.addEventListener('click', async () => {
+        if (!(await hasTeacherAccess())) return;
         const upgrade = call('cheatUpgradeEquippedWeapon');
         if (upgrade) upgrade(); else toastMsg('무기 즉시 강화 기능을 찾을 수 없습니다.');
       });

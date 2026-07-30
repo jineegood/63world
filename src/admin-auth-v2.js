@@ -153,7 +153,7 @@
       return Object.freeze({ displayName:data.displayName });
     }
 
-    return Object.freeze({ signIn, restore, signOut, changeOwnPassword, resetStudentPassword });
+    return Object.freeze({ signIn, restore, requireTeacher, signOut, changeOwnPassword, resetStudentPassword });
   }
 
   global.YuksamAdminAuthV2 = Object.freeze({ AdminAuthV2Error, create });

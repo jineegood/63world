@@ -42,6 +42,8 @@
     "test:admin-data-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 admin-data-v2",
     "test:student-reward-grants-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 student-reward-grants-v2",
     "test:teacher-delete-function": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 teacher-delete-function",
+    "test:teacher-cheat-function": "node --test tests/teacher-cheat-function.test.mjs",
+    "test:teacher-cheat-ui": "node --test tests/teacher-cheat-ui.test.mjs",
     "test:secure-cloud-student-admin-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 secure-cloud-student-admin-v2",
     "test:shared-state-policy-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 shared-state-policy-v2",
     "test:shared-state-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 shared-state-v2",

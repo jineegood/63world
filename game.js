@@ -438,6 +438,31 @@ function savePlayer() {
   playerStore.write(game.player);
 }
 
+window.applyAuthoritySnapshotFromServerV3 = function applyAuthoritySnapshotFromServerV3(snapshot) {
+  if (!game.player || !snapshot || typeof snapshot !== 'object') return false;
+  const beforeLevel = Math.max(1, Number(game.player.level) || 1);
+  const safeInteger = (value, fallback = 0) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? Math.max(0, Math.trunc(number)) : fallback;
+  };
+  game.player.exp = safeInteger(snapshot.exp, game.player.exp);
+  game.player.level = Math.max(1, Math.min(10, safeInteger(snapshot.level, game.player.level)));
+  game.player.skillPoints = safeInteger(snapshot.skillPoints, game.player.skillPoints);
+  game.player.gold = safeInteger(snapshot.gold, game.player.gold);
+  game.player.building = safeInteger(snapshot.building, game.player.building);
+  ensurePlayerHp();
+  if (snapshot.fullyHealed) {
+    game.player.hp = game.player.maxHp;
+  } else {
+    game.player.hp = Math.min(game.player.maxHp, safeInteger(snapshot.hp, game.player.hp));
+  }
+  const gainedLevels = Math.max(0, game.player.level - beforeLevel);
+  if (gainedLevels > 0) triggerLevelUpEffect(gainedLevels);
+  updateHud();
+  savePlayer();
+  return true;
+};
+
 function savePlayerRecord(player) { return playerStore.write(player); }
 
 function deletePlayer(name) {
@@ -3788,10 +3813,10 @@ function bindEvents() {
   $('chooseSpecBtn').addEventListener('click', () => openSpecModal());
   $('openCharacterPanelBtn').addEventListener('click', () => openCharacterPanel());
   if ($('openSkillTreeBtn')) $('openSkillTreeBtn').addEventListener('click', () => openSkillTreeModal());
-  $('testExpBtn').addEventListener('click', () => { addExp(20); toast('테스트 EXP +20'); });
-  if ($('testExp100Btn')) $('testExp100Btn').addEventListener('click', () => { addExp(100); toast('테스트 EXP +100'); });
-  $('testGoldBtn').addEventListener('click', () => { addGold(3000); appendChatMessage('system', '테스트', 'Gold +3000'); });
-  if ($('testBuildingBtn')) $('testBuildingBtn').addEventListener('click', () => { addBuilding(200); appendChatMessage('system', '테스트', '빌딩 +200'); });
+  $('testExpBtn').addEventListener('click', () => window.adminApplyCurrentStudentCheatV3?.('exp20'));
+  if ($('testExp100Btn')) $('testExp100Btn').addEventListener('click', () => window.adminApplyCurrentStudentCheatV3?.('exp100'));
+  $('testGoldBtn').addEventListener('click', () => window.adminApplyCurrentStudentCheatV3?.('gold3000'));
+  if ($('testBuildingBtn')) $('testBuildingBtn').addEventListener('click', () => window.adminApplyCurrentStudentCheatV3?.('building200'));
   $('returnTownBtn').addEventListener('click', () => { if (game.currentMap === 'forest' || game.currentMap === 'desert' || game.currentMap === 'swamp') confirmStageReturn(); else if (game.currentMap === 'bossRoom') returnToStageFromBossRoom(); else returnTownWithLoading(); });
   if ($('chatInput')) $('chatInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); sendChatMessage(); } });
 
@@ -5394,7 +5419,8 @@ function updateQuestTracker() {
   // 관리자 테스트 이동속도
   game.adminSpeedBoost = false;
   const speedBtn = $('testSpeedBtn');
-  if (speedBtn) speedBtn.addEventListener('click', () => {
+  if (speedBtn) speedBtn.addEventListener('click', async () => {
+    if (!(await window.requireTeacherCheatAccessV3?.())) return;
     game.adminSpeedBoost = !game.adminSpeedBoost;
     speedBtn.textContent = game.adminSpeedBoost ? '이속 5배 ON' : '이속 5배 OFF';
     appendChatMessage('system', '관리자', game.adminSpeedBoost ? '이동속도 5배 모드 ON' : '이동속도 5배 모드 OFF');
@@ -7692,21 +7718,18 @@ function updateQuestTracker() {
     const healBtn = $('testHealBtn');
     if (healBtn && !healBtn.dataset.boundV25) {
       healBtn.dataset.boundV25 = '1';
-      healBtn.addEventListener('click', () => {
-        if (!game.player) return;
-        ensurePlayerHp?.();
-        game.player.hp = game.player.maxHp;
+      healBtn.addEventListener('click', async () => {
+        if (!(await window.requireTeacherCheatAccessV3?.())) return;
+        await window.adminApplyCurrentStudentCheatV3?.('heal');
         game.combatShield = Math.max(0, game.combatShield || 0);
-        savePlayer?.(); updateHud?.();
-        appendChatMessage?.('system', '테스트', 'HP 100% 회복');
-        toast('테스트: HP 100% 회복');
         if (game.modalState?.type === 'combat') renderCombatMenu('테스트: HP를 전부 회복했습니다.');
       });
     }
     const cdBtn = $('testCooldownBtn');
     if (cdBtn && !cdBtn.dataset.boundV25) {
       cdBtn.dataset.boundV25 = '1';
-      cdBtn.addEventListener('click', () => {
+      cdBtn.addEventListener('click', async () => {
+        if (!(await window.requireTeacherCheatAccessV3?.())) return;
         if (!game.player) return;
         game.player.skillCooldowns = game.player.skillCooldowns || {};
         Object.keys(game.player.skillCooldowns).forEach((id) => { game.player.skillCooldowns[id] = 0; });
@@ -12852,7 +12875,8 @@ function updateQuestTracker() {
   appendChatMessage?.('system', '패치', 'v38: 행동형 튜토리얼 퀘스트와 퀘스트 보상 아이템이 추가되었습니다.');
 })();
 
-window.cheatUpgradeEquippedWeapon = function cheatUpgradeEquippedWeapon() {
+window.cheatUpgradeEquippedWeapon = async function cheatUpgradeEquippedWeapon() {
+  if (!(await window.requireTeacherCheatAccessV3?.())) return false;
   const player = game.player;
   const weaponId = player?.equipment?.weapon;
   const item = weaponId ? getItemDefinition(weaponId, player.class) : null;

@@ -18,6 +18,7 @@
     LOAD_FAILED:'학생 목록을 불러오지 못했어요.',
     GRANT_FAILED:'학생 보상을 저장하지 못했어요.',
     DELETE_FAILED:'학생 계정을 삭제하지 못했어요.',
+    CHEAT_FAILED:'교사 전용 치트를 적용하지 못했어요.',
   });
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -164,7 +165,24 @@
       return Object.freeze({ displayName:safeText(data.displayName, 20) });
     }
 
-    return Object.freeze({ listStudents, grantReward, deleteStudent });
+    async function applyStudentCheat(userId, action) {
+      const targetUserId = validateUserId(userId);
+      await requireTeacher();
+      const allowed = new Set(['exp20', 'exp100', 'gold3000', 'building200', 'heal']);
+      if (!allowed.has(action)) throw error('CHEAT_FAILED');
+      const { data, error:cheatError } = await client.functions.invoke('teacher-apply-cheat', {
+        body:{ userId:targetUserId, action },
+      });
+      if (cheatError) throw mapError(cheatError, 'CHEAT_FAILED');
+      if (!data?.ok || !data.snapshot || typeof data.snapshot !== 'object') throw error('CHEAT_FAILED');
+      return Object.freeze({
+        displayName:safeText(data.displayName, 20),
+        action,
+        snapshot:Object.freeze({ ...data.snapshot }),
+      });
+    }
+
+    return Object.freeze({ listStudents, grantReward, deleteStudent, applyStudentCheat });
   }
 
   global.YuksamAdminDataV2 = Object.freeze({ AdminDataV2Error, create });

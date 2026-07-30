@@ -99,6 +99,7 @@ test('student or user_metadata teacher claims cannot list or mutate', async () =
     await assert.rejects(service.listStudents(), (error) => error.code === 'FORBIDDEN');
     await assert.rejects(service.grantReward(studentId, { gold:1, building:0, exp:0 }), (error) => error.code === 'FORBIDDEN');
     await assert.rejects(service.deleteStudent(studentId), (error) => error.code === 'FORBIDDEN');
+    await assert.rejects(service.applyStudentCheat(studentId, 'exp20'), (error) => error.code === 'FORBIDDEN');
   }
 });
 
@@ -127,6 +128,24 @@ test('deleteStudent invokes the exact server function with only an immutable use
   const invoke = calls.find(([name]) => name === 'invoke');
   assert.equal(invoke[1], 'teacher-delete-student');
   assert.deepEqual(JSON.parse(JSON.stringify(invoke[2])), { body:{ userId:studentId } });
+});
+
+test('applyStudentCheat accepts only fixed actions and delegates to the teacher function', async () => {
+  const snapshot = { exp:20, level:2, skillPoints:2, gold:0, building:0, hp:24, maxHp:24 };
+  const { calls, service } = setup({
+    invokeResult:{ data:{ ok:true, displayName:'별빛', snapshot }, error:null },
+  });
+  for (const action of ['exp1000', 'gold999999', '', null]) {
+    await assert.rejects(service.applyStudentCheat(studentId, action), (error) => error.code === 'CHEAT_FAILED');
+  }
+  await assert.rejects(service.applyStudentCheat('not-a-uuid', 'exp20'), (error) => error.code === 'STUDENT_NOT_FOUND');
+
+  const result = await service.applyStudentCheat(studentId, 'exp20');
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), { displayName:'별빛', action:'exp20', snapshot });
+  const invoke = calls.find(([name, fn]) => name === 'invoke' && fn === 'teacher-apply-cheat');
+  assert.deepEqual(JSON.parse(JSON.stringify(invoke[2])), {
+    body:{ userId:studentId, action:'exp20' },
+  });
 });
 
 test('backend failures map to safe errors without leaking raw details', async () => {
