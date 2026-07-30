@@ -168,6 +168,20 @@
       else if (!accept) global.toast?.('대전 신청을 거절했어요.');
       return result;
     } catch (error) {
+      if (['NOT_INVITED', 'INVITE_CLOSED'].includes(error?.code)) {
+        markInviteSettled(inviteId);
+        closeSetupModal('pvpInvite');
+        try {
+          const refreshed = await updatePresence(client());
+          if (refreshed?.activeMatch?.id) {
+            global.enterPvpMatchV1?.(refreshed.activeMatch);
+            return { accepted:true, match:refreshed.activeMatch, recovered:true };
+          }
+          if (refreshed?.pendingInvite) handleInvite(client(), refreshed.pendingInvite);
+        } catch {}
+        global.toast?.('대전 신청이 만료되었어요. 상대 학생에게 다시 신청해 달라고 해주세요.', 3200);
+        return null;
+      }
       global.toast?.(error?.message || '대전 신청에 응답하지 못했어요.', 3000);
       return null;
     } finally {

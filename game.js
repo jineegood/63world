@@ -96,6 +96,7 @@ const secureStudentAccess = YuksamStudentAccessV2.create({
   cloudApi:window.YuksamCloudSyncV2,
   sharedApi:window.YuksamSharedStateV2,
   storage:localStorage,
+  authStorage:window.sessionStorage,
   defaultWorkbooks,
 });
 window.secureStudentAccessV2 = secureStudentAccess;

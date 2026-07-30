@@ -41,7 +41,7 @@ function dependencies(overrides = {}) {
   return {
     calls,
     identity,
-    clientFactory(url, key) { calls.push(['createClient', url, key]); return { auth:{} }; },
+    clientFactory(url, key, options) { calls.push(['createClient', url, key, options]); return { auth:{} }; },
     authApi:{ createAuthService({ client }) { calls.push(['createAuthService', client]); return authService; } },
     cloudApi:{ create({ client, storage }) { calls.push(['createCloudService', client, storage]); return cloudService; } },
     sharedApi:{ create({ client, storage }) { calls.push(['createSharedService', client, storage]); return sharedService; } },
@@ -87,6 +87,22 @@ test('ready controller normalizes the project URL and constructs one dependency 
   assert.equal(deps.calls[0][0], 'createClient');
   assert.equal(deps.calls[0][1], 'https://project.supabase.co');
   assert.equal(deps.calls.filter(([name]) => name === 'createClient').length, 1);
+});
+
+test('student authentication uses isolated per-tab storage', () => {
+  const api = loadApi();
+  const deps = dependencies();
+  const authStorage = {
+    getItem() { return null; },
+    setItem() {},
+    removeItem() {},
+  };
+  api.create({ config:validConfig(), ...deps, authStorage });
+  const options = deps.calls.find(([name]) => name === 'createClient')[3];
+  assert.equal(options.auth.storage, authStorage);
+  assert.equal(options.auth.storageKey, 'ysb_student_auth_v2');
+  assert.equal(options.auth.persistSession, true);
+  assert.equal(options.auth.detectSessionInUrl, false);
 });
 
 test('closed classroom rejects before any Auth login or signup attempt', async () => {

@@ -40,7 +40,16 @@
     });
   }
 
-  function create({ config, clientFactory, authApi, cloudApi, sharedApi, storage, defaultWorkbooks } = {}) {
+  function create({
+    config,
+    clientFactory,
+    authApi,
+    cloudApi,
+    sharedApi,
+    storage,
+    authStorage,
+    defaultWorkbooks,
+  } = {}) {
     if (config?.securityV2Enabled !== true) {
       return closedController('off', new StudentAccessV2Error('DISABLED', '새 보안 로그인이 아직 켜지지 않았어요.'));
     }
@@ -58,7 +67,16 @@
       );
     }
 
-    const client = clientFactory(projectUrl, anonKey);
+    const authOptions = {
+      storageKey:'ysb_student_auth_v2',
+      persistSession:true,
+      autoRefreshToken:true,
+      detectSessionInUrl:false,
+    };
+    if (authStorage && typeof authStorage.getItem === 'function') {
+      authOptions.storage = authStorage;
+    }
+    const client = clientFactory(projectUrl, anonKey, { auth:authOptions });
     const auth = authApi.createAuthService({ client });
     const cloud = cloudApi.create({ client, storage });
     const shared = sharedApi.create({ client, storage, defaultWorkbooks });

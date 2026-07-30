@@ -14,6 +14,11 @@ function harness() {
   const removed = [];
   const channels = [];
   const client = {
+    auth:{
+      async getUser() {
+        return { data:{ user:{ id:'student-a' } }, error:null };
+      },
+    },
     functions:{
       async invoke(name, options) {
         invokes.push({ name, body:options.body });
@@ -97,6 +102,37 @@ test('a transient Edge Function connection failure retries the exact same reques
   assert.deepEqual(await api.profile('student-b'), { ok:true });
   assert.equal(attempts, 2);
   assert.deepEqual(bodies[0], bodies[1]);
+});
+
+test('challenge and acceptance stop before the server when another tab changed the login account', async () => {
+  const window = {};
+  let invokes = 0;
+  vm.runInNewContext(source, { window, setTimeout });
+  const api = window.YuksamPvpClient.create({
+    client:{
+      auth:{
+        async getUser() {
+          return { data:{ user:{ id:'student-other-tab' } }, error:null };
+        },
+      },
+      functions:{
+        async invoke() {
+          invokes += 1;
+          return { data:{ data:{ ok:true } }, error:null };
+        },
+      },
+    },
+    getIdentity:() => ({ userId:'student-a' }),
+  });
+  await assert.rejects(
+    api.invite('student-b'),
+    (error) => error.code === 'SESSION_CHANGED' && error.message.includes('다시 로그인'),
+  );
+  await assert.rejects(
+    api.respond('invite-1', true),
+    (error) => error.code === 'SESSION_CHANGED',
+  );
+  assert.equal(invokes, 0);
 });
 
 test('match subscription emits each event sequence once, including out-of-order delivery, and cleans up its channel', () => {

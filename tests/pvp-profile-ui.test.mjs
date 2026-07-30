@@ -198,6 +198,22 @@ test('accept resumes a match that was created before its response was lost', asy
   );
 });
 
+test('a stale invitation closes cleanly and checks for a recovered match', async () => {
+  const staleError = Object.assign(new Error('stale'), { code:'NOT_INVITED' });
+  const ui = loadUi({
+    pvpClientOverrides:{
+      async respond() { throw staleError; },
+      async presence() { return { ok:true }; },
+    },
+  });
+  const result = await ui.window.respondPvpInviteV1('invite-stale', true);
+  assert.equal(result, null);
+  assert.equal(ui.calls.some(([type]) => type === 'close'), true);
+  assert.equal(ui.calls.some(([type, message]) => (
+    type === 'toast' && String(message).includes('다시 신청')
+  )), true);
+});
+
 test('game supplies the real equipped portrait and starts presence after entering the world', () => {
   assert.match(gameSource, /window\.renderPlayerPortraitForPvpV1\s*=/);
   assert.match(gameSource, /drawPlayerSprite\(/);
@@ -205,6 +221,7 @@ test('game supplies the real equipped portrait and starts presence after enterin
   assert.match(gameSource, /window\.flushLocalPlayerForPvpV1\s*=/);
   assert.match(gameSource, /window\.getModalStateTypeV1\s*=/);
   assert.match(gameSource, /window\.startPvpUiV1\?\.\(\)/);
+  assert.match(gameSource, /authStorage:window\.sessionStorage/);
   assert.ok(htmlSource.indexOf('src/pvp-ui.js') < htmlSource.indexOf('src/multiplayer.js'));
   assert.match(gameSource, /modalState\.type === 'pvpBattle'[\s\S]{0,100}surrenderPvpV1/);
   assert.match(gameSource, /modalState\.type === 'pvpSurrender'[\s\S]{0,100}restorePvpMatchV1/);

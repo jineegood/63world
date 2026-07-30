@@ -5,6 +5,7 @@
     INVALID_TARGET:'대전 상대를 다시 선택해 주세요.',
     INVALID_OPERATION:'대전 요청을 다시 시도해 주세요.',
     METHOD_NOT_ALLOWED:'대전 연결 방식이 올바르지 않아요.',
+    SESSION_CHANGED:'이 창의 로그인 계정이 바뀌었어요. 게임에서 로그아웃한 뒤 다시 로그인해 주세요.',
     TOWN_ONLY:'대전 신청은 두 학생 모두 마을에 있을 때만 할 수 있어요.',
     OFFLINE:'상대 학생이 지금 접속 중이 아니에요.',
     BUSY:'상대 학생은 지금 다른 활동 중이에요.',
@@ -43,6 +44,23 @@
       return value;
     }
 
+    async function assertLiveIdentity() {
+      const expected = identity();
+      if (typeof client.auth?.getUser !== 'function') return expected;
+      try {
+        const { data } = await client.auth.getUser();
+        const actualUserId = String(data?.user?.id || '');
+        if (actualUserId && actualUserId !== String(expected.userId)) {
+          const error = new Error(messages.SESSION_CHANGED);
+          error.code = 'SESSION_CHANGED';
+          throw error;
+        }
+      } catch (error) {
+        if (error?.code === 'SESSION_CHANGED') throw error;
+      }
+      return expected;
+    }
+
     function requestId(prefix) {
       requestSequence += 1;
       return `${prefix}-${Date.now().toString(36)}-${requestSequence.toString(36)}`;
@@ -65,8 +83,9 @@
 
     const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-    async function invoke(body) {
-      identity();
+    async function invoke(body, options = {}) {
+      if (options.verifySession === true) await assertLiveIdentity();
+      else identity();
       for (let attempt = 0; attempt < 2; attempt += 1) {
         let data;
         let error;
@@ -150,8 +169,14 @@
     return Object.freeze({
       presence:(map, busy, publicProfile) => invoke({ op:'presence', map, busy, publicProfile }),
       profile:(userId) => invoke({ op:'profile', userId }),
-      invite:(targetUserId) => invoke({ op:'invite', targetUserId, requestId:requestId('invite') }),
-      respond:(inviteId, accept) => invoke({ op:'respond', inviteId, accept, requestId:requestId('respond') }),
+      invite:(targetUserId) => invoke(
+        { op:'invite', targetUserId, requestId:requestId('invite') },
+        { verifySession:true },
+      ),
+      respond:(inviteId, accept) => invoke(
+        { op:'respond', inviteId, accept, requestId:requestId('respond') },
+        { verifySession:true },
+      ),
       submit:(matchId, round, actionId, answer) => invoke({
         op:'submit', matchId, round, actionId, answer, requestId:requestId('submit'),
       }),
