@@ -3,12 +3,14 @@
 
   const SUPPORT_TYPES = new Set(['shield', 'buff', 'healBuff', 'healAllies']);
   const LOG_HOLD_SCALE = 1.6;
+  const LOG_HOLD_EXTRA_MS = 1000;
+  const PVP_QUESTION_TIME_MS = 30000;
   const EVENT_DELAYS = Object.freeze({
-    action:700 * LOG_HOLD_SCALE,
-    damage:850 * LOG_HOLD_SCALE,
-    heal:750 * LOG_HOLD_SCALE,
-    shield:750 * LOG_HOLD_SCALE,
-    status:700 * LOG_HOLD_SCALE,
+    action:700 * LOG_HOLD_SCALE + LOG_HOLD_EXTRA_MS,
+    damage:850 * LOG_HOLD_SCALE + LOG_HOLD_EXTRA_MS,
+    heal:750 * LOG_HOLD_SCALE + LOG_HOLD_EXTRA_MS,
+    shield:750 * LOG_HOLD_SCALE + LOG_HOLD_EXTRA_MS,
+    status:700 * LOG_HOLD_SCALE + LOG_HOLD_EXTRA_MS,
   });
 
   let state = null;
@@ -32,6 +34,7 @@
   let hpDisplay = { me:null, opponent:null };
   let submittedRound = null;
   let syncInFlight = false;
+  let roundReadyInFlight = false;
   const processedEvents = new Set();
   const playedResultSoundMatches = new Set();
 
@@ -65,7 +68,7 @@
       matchId:match.id,
       round:Number(match.round ?? match.round_no) || 1,
       phase:match.phase || 'question',
-      deadline:Number(match.deadline) || (match.question_deadline ? new Date(match.question_deadline).getTime() : Date.now() + 20000),
+      deadline:Number(match.deadline) || (match.question_deadline ? new Date(match.question_deadline).getTime() : Date.now() + PVP_QUESTION_TIME_MS),
       reconnectDeadline:Number(match.reconnectDeadline) || (match.reconnect_deadline ? new Date(match.reconnect_deadline).getTime() : 0),
       playerAId:match.playerAId || match.player_a_id || a.userId,
       playerBId:match.playerBId || match.player_b_id || b.userId,
@@ -74,6 +77,11 @@
       question:match.question || match.question_public || {},
       winnerId:match.winnerId || match.winner_id || null,
       loserId:match.loserId || match.loser_id || null,
+      playerAReadyRound:Number(match.playerAReadyRound ?? match.player_a_ready_round) || 0,
+      playerBReadyRound:Number(match.playerBReadyRound ?? match.player_b_ready_round) || 0,
+      timerStartedRound:Number(match.timerStartedRound ?? match.timer_started_round)
+        || Number(match.round ?? match.round_no)
+        || 1,
     };
   }
 
@@ -261,6 +269,9 @@
     if (processingEvents || uiMode === 'playback') {
       return '<div class="pvp-combat-progress-v2">선공부터 차례대로 공격합니다.</div>';
     }
+    if (uiMode === 'round-ready') {
+      return '<div class="pvp-wait-v1">전투 연출이 끝났습니다. 상대 화면도 준비되는 중이에요...</div>';
+    }
     if (uiMode === 'waiting') {
       return '<div class="pvp-wait-v1">상대가 문제를 풀고 있어요. 잠시만 기다려 주세요!</div>';
     }
@@ -280,7 +291,7 @@
       <div class="pvp-battle-header-v4">
         <h2>전투</h2>
         <span class="pvp-round-badge-v2">친선 대전 · ${Math.max(1, Number(state.round) || 1)}라운드
-          ${!['finished', 'cancelled'].includes(state.phase) ? `<b id="pvpRoundTimerV2">${remainingSeconds()}초</b>` : ''}
+          ${!['finished', 'cancelled'].includes(state.phase) && uiMode !== 'round-ready' ? `<b id="pvpRoundTimerV2">${remainingSeconds()}초</b>` : ''}
         </span>
       </div>
       <div class="combat-layout">
@@ -647,6 +658,32 @@
     applyPendingMatchSoon(320);
   }
 
+  function hasRoundTimerStarted(match = state) {
+    const round = Math.max(1, Number(match?.round) || 1);
+    return round === 1 || Number(match?.timerStartedRound) >= round;
+  }
+
+  async function signalRoundReady() {
+    if (!state || Number(state.round) <= 1 || hasRoundTimerStarted() || roundReadyInFlight) return;
+    const matchId = state.matchId;
+    const round = Number(state.round);
+    roundReadyInFlight = true;
+    try {
+      const result = await global.getPvpClientV1?.()?.ready?.(matchId, round);
+      if (!state || state.matchId !== matchId || Number(state.round) !== round) return;
+      if (result?.match) {
+        pendingMatch = normalizedMatch(result.match);
+        applyPendingMatchSoon(0);
+      }
+    } catch (error) {
+      if (!state || state.matchId !== matchId || Number(state.round) !== round) return;
+      global.toast?.(error?.message || '다음 라운드를 준비하지 못했어요. 다시 연결하고 있습니다.');
+      setTimeout(() => signalRoundReady(), 1200);
+    } finally {
+      roundReadyInFlight = false;
+    }
+  }
+
   function applyPendingMatchSoon(delayMs = 700) {
     if (!pendingMatch || processingEvents || eventQueue.length) return;
     if (pendingMatchTimer) clearTimeout(pendingMatchTimer);
@@ -684,6 +721,17 @@
       }
       if (roundAdvanced) {
         submittedRound = null;
+        selectedAction = 'basic';
+        uiMode = hasRoundTimerStarted() ? 'menu' : 'round-ready';
+        combatMessage = hasRoundTimerStarted()
+          ? `${state.round}라운드! 무엇을 할까요?`
+          : `${state.round}라운드를 함께 준비하고 있습니다.`;
+        combatTone = '';
+        render();
+        if (!hasRoundTimerStarted()) signalRoundReady();
+        return;
+      }
+      if (uiMode === 'round-ready' && hasRoundTimerStarted()) {
         selectedAction = 'basic';
         uiMode = 'menu';
         combatMessage = `${state.round}라운드! 무엇을 할까요?`;
@@ -752,13 +800,18 @@
     hpDisplay = { me:null, opponent:null };
     submittedRound = null;
     syncInFlight = false;
+    roundReadyInFlight = false;
     selectedAction = 'basic';
-    uiMode = ['finished', 'cancelled'].includes(state.phase) ? 'result' : 'menu';
+    uiMode = ['finished', 'cancelled'].includes(state.phase)
+      ? 'result'
+      : (hasRoundTimerStarted() ? 'menu' : 'round-ready');
     combatMessage = state.phase === 'finished'
       ? '대전이 끝났습니다.'
       : state.phase === 'cancelled'
         ? '대전을 안전하게 종료했습니다.'
-        : `${playerForRole('opponent').name || '상대'} 학생과의 대전!`;
+        : (hasRoundTimerStarted()
+          ? `${playerForRole('opponent').name || '상대'} 학생과의 대전!`
+          : `${state.round}라운드를 함께 준비하고 있습니다.`);
     combatTone = '';
     diceVisual = null;
     confirmingSurrender = false;
@@ -777,6 +830,7 @@
     if (countdownTimer) clearInterval(countdownTimer);
     countdownTimer = setInterval(updateCountdown, 1000);
     render();
+    if (!hasRoundTimerStarted()) signalRoundReady();
     loadProfiles(state.matchId, profileGeneration).catch(() => {});
   }
 
@@ -972,6 +1026,7 @@
     hpDisplay = { me:null, opponent:null };
     submittedRound = null;
     syncInFlight = false;
+    roundReadyInFlight = false;
     global.closeModal?.();
   }
 

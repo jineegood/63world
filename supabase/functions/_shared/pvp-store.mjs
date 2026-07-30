@@ -11,6 +11,9 @@ function rowMatch(row) {
     disconnectedUserId:row.disconnected_user_id || null,
     resumePhase:row.resume_phase || null,
     pausedQuestionMs:Number(row.paused_question_ms) || 0,
+    playerAReadyRound:Number(row.player_a_ready_round) || 0,
+    playerBReadyRound:Number(row.player_b_ready_round) || 0,
+    timerStartedRound:Number(row.timer_started_round) || 1,
     finishedAt:row.finished_at, winnerId:row.winner_id, loserId:row.loser_id,
   };
 }
@@ -55,6 +58,7 @@ function publicEventRow(row) {
 
 const DISCONNECT_DETECT_MS = 10000;
 const RECONNECT_GRACE_MS = 30000;
+const PVP_QUESTION_TIME_MS = 30000;
 
 export function decideDisconnectV1(match, lastSeen, now) {
   if (!match || match.finishedAt || ['finished', 'cancelled'].includes(match.phase)) return null;
@@ -78,7 +82,7 @@ export function decideDisconnectV1(match, lastSeen, now) {
       type:'resume',
       phase,
       deadline:phase === 'question' || phase === 'waiting'
-        ? now + Math.max(1000, Number(match.pausedQuestionMs) || 20000)
+        ? now + Math.max(1000, Number(match.pausedQuestionMs) || PVP_QUESTION_TIME_MS)
         : Number(match.deadline) || now,
     };
   }
@@ -284,6 +288,7 @@ export function createSupabasePvpStore(client) {
       if (patch.playerBState) row.player_b_state = patch.playerBState;
       if (patch.question) row.question_public = patch.question;
       if (patch.deadline) row.question_deadline = new Date(patch.deadline).toISOString();
+      if (Number.isInteger(patch.timerStartedRound)) row.timer_started_round = patch.timerStartedRound;
       if (patch.phase) {
         row.resolution_started_at = patch.phase === 'resolving'
           ? new Date().toISOString()
@@ -292,6 +297,18 @@ export function createSupabasePvpStore(client) {
       row.updated_at = new Date().toISOString();
       check(await client.from('pvp_matches_v1').update(row).eq('id', id));
       if (patch.answerKey) check(await client.from('pvp_match_secrets_v1').upsert({ match_id:id, answer_key:patch.answerKey }));
+    },
+    async markRoundReady(userId, matchId, round, now) {
+      const ready = check(await client.rpc('private_mark_pvp_round_ready_v1', {
+        p_user_id:userId,
+        p_match_id:matchId,
+        p_round_no:round,
+        p_ready_at:new Date(now).toISOString(),
+      }));
+      return {
+        ...(ready || { ready:true }),
+        match:publicStoredMatch(await getMatch(matchId)),
+      };
     },
     async appendEvents(matchId, round, events) {
       if (!events.length) return;
@@ -373,7 +390,7 @@ export function createSupabasePvpStore(client) {
         p_player_b_state:b,
         p_question_public:helpers.publicQuestion(question),
         p_answer_key:question.answer,
-        p_question_deadline:new Date(now + 20000).toISOString(),
+        p_question_deadline:new Date(now + PVP_QUESTION_TIME_MS).toISOString(),
       }));
       const match = accepted?.match_id ? await getMatch(accepted.match_id) : null;
       if (!match) throw Object.assign(new Error(), { code:'MATCH_NOT_FOUND' });

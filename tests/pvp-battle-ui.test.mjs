@@ -159,6 +159,10 @@ function harness({ viewerId = 'a', submitResult = { waiting:true, round:1 } } = 
       calls.push(['submit', ...args]);
       return submitResult;
     },
+    async ready(id, round) {
+      calls.push(['ready', id, round]);
+      return { ready:true };
+    },
     async heartbeat(id) {
       calls.push(['heartbeat', id]);
       return heartbeatResult;
@@ -224,7 +228,7 @@ function harness({ viewerId = 'a', submitResult = { waiting:true, round:1 } } = 
     id:'m1',
     round:1,
     phase:'question',
-    deadline:now + 20_000,
+    deadline:now + 30_000,
     playerAId:'a',
     playerBId:'b',
     playerAState:{
@@ -266,6 +270,7 @@ function harness({ viewerId = 'a', submitResult = { waiting:true, round:1 } } = 
     setHeartbeatResult:(result) => { heartbeatResult = result; },
     setSyncResult:(result) => { syncResult = result; },
     advance,
+    now:() => now,
     tickIntervals,
     lastHtml:() => opened.at(-1)?.html || '',
   };
@@ -301,7 +306,7 @@ test('round and countdown share a centered header while the countdown stays prom
   const html = ui.lastHtml();
   assert.match(
     html,
-    /<div class="pvp-battle-header-v4">\s*<h2>전투<\/h2>\s*<span class="pvp-round-badge-v2">친선 대전 · 1라운드\s*<b id="pvpRoundTimerV2">20초<\/b>/,
+    /<div class="pvp-battle-header-v4">\s*<h2>전투<\/h2>\s*<span class="pvp-round-badge-v2">친선 대전 · 1라운드\s*<b id="pvpRoundTimerV2">30초<\/b>/,
   );
   assert.match(styleSource, /\.pvp-battle-header-v4\{[\s\S]*justify-content:center/);
   assert.match(styleSource, /\.pvp-battle-header-v4>h2\{position:absolute;left:0/);
@@ -370,13 +375,48 @@ test('leaving PvP resynchronizes the current map music', () => {
   assert.equal(ui.calls.filter(([type]) => type === 'pvpBgmSync').length, 2);
 });
 
-test('PvP combat-log hold durations are sixty percent longer', () => {
+test('PvP combat logs keep the prior pacing plus one extra second', () => {
   assert.match(source, /const LOG_HOLD_SCALE = 1\.6;/);
-  assert.match(source, /action:700 \* LOG_HOLD_SCALE/);
-  assert.match(source, /damage:850 \* LOG_HOLD_SCALE/);
-  assert.match(source, /heal:750 \* LOG_HOLD_SCALE/);
-  assert.match(source, /shield:750 \* LOG_HOLD_SCALE/);
-  assert.match(source, /status:700 \* LOG_HOLD_SCALE/);
+  assert.match(source, /const LOG_HOLD_EXTRA_MS = 1000;/);
+  assert.match(source, /action:700 \* LOG_HOLD_SCALE \+ LOG_HOLD_EXTRA_MS/);
+  assert.match(source, /damage:850 \* LOG_HOLD_SCALE \+ LOG_HOLD_EXTRA_MS/);
+  assert.match(source, /heal:750 \* LOG_HOLD_SCALE \+ LOG_HOLD_EXTRA_MS/);
+  assert.match(source, /shield:750 \* LOG_HOLD_SCALE \+ LOG_HOLD_EXTRA_MS/);
+  assert.match(source, /status:700 \* LOG_HOLD_SCALE \+ LOG_HOLD_EXTRA_MS/);
+});
+
+test('later rounds wait for both playbacks and then show a fresh thirty-second timer', async () => {
+  const ui = harness();
+  ui.window.enterPvpMatchV1(ui.match);
+  ui.emit({
+    type:'match',
+    match:{
+      ...ui.match,
+      round:2,
+      deadline:ui.now() + 60_000,
+      timerStartedRound:1,
+      question:{ prompt:'6 + 7 = ?', choices:['11', '12', '13', '14'] },
+    },
+  });
+  await ui.advance(1_200);
+  assert.match(ui.lastHtml(), /상대 화면도 준비되는 중/);
+  assert.equal(ui.calls.some(([type, id, round]) => (
+    type === 'ready' && id === 'm1' && round === 2
+  )), true);
+
+  ui.emit({
+    type:'match',
+    match:{
+      ...ui.match,
+      round:2,
+      deadline:ui.now() + 30_000,
+      timerStartedRound:2,
+      question:{ prompt:'6 + 7 = ?', choices:['11', '12', '13', '14'] },
+    },
+  });
+  await ui.advance(800);
+  assert.match(ui.lastHtml(), /2라운드! 무엇을 할까요/);
+  assert.match(ui.lastHtml(), />30초</);
 });
 
 test('attack opens the shared question as a four-choice 2x2 grid', () => {
@@ -574,7 +614,7 @@ test('heartbeat replay events finish before the next-round menu is shown', async
   assert.equal(ui.elements.get('pvpRightDieValueV3')?.textContent, '7');
   assert.equal(ui.calls.some(([type, id]) => type === 'sfx' && id === 'hit'), false);
 
-  await ui.advance(2_700);
+  await ui.advance(3_700);
   assert.match(ui.lastHtml(), /친선 대전 · 2라운드/);
   assert.match(ui.lastHtml(), /2라운드! 무엇을 할까요\?/);
   assert.match(ui.lastHtml(), /HP 85\/100/);
@@ -658,7 +698,7 @@ test('wrong-answer action log is complete before minimum guard shield playback',
   );
   assert.doesNotMatch(ui.lastHtml(), /막기 훈련|보호막 1 생성/);
 
-  await ui.advance(1_119);
+  await ui.advance(2_119);
   assert.doesNotMatch(ui.lastHtml(), /막기 훈련|보호막 1 생성/);
 
   await ui.advance(1);

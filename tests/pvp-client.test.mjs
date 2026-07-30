@@ -48,9 +48,14 @@ function harness() {
 test('PvP requests invoke only the secure endpoint and never send caller records', async () => {
   const { api, invokes } = harness();
   await api.invite('student-b');
+  await api.ready('match-1', 2);
   await api.surrender('match-1');
   assert.equal(invokes.every((call) => call.name === 'pvp-match-v1'), true);
   assert.equal(invokes[0].body.targetUserId, 'student-b');
+  assert.equal(
+    JSON.stringify(invokes[1].body),
+    JSON.stringify({ op:'ready', matchId:'match-1', round:2 }),
+  );
   for (const call of invokes) {
     assert.equal('userId' in call.body, false);
     assert.equal('wins' in call.body, false);

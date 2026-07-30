@@ -58,6 +58,7 @@ test('two mocked browser sessions exchange positions and chat', async () => {
     const intervals = [];
     const chats = [];
     const drawn = [];
+    const paintedText = [];
     const canvasListeners = new Map();
     const layers = [];
     const window = {
@@ -66,9 +67,13 @@ test('two mocked browser sessions exchange positions and chat', async () => {
       appendChatMessage:(type, sender, message) => chats.push({ type, sender, message }),
       getPvpIdentityV1:() => ({ userId:`id-${name}`, displayName:name, role:'student' }),
       openRemoteProfileV1:(userId) => chats.push({ type:'profile', userId }),
+      PET_DEFS_V27:{
+        chick:{ id:'chick', name:'삐약이', icon:'🐤', color:'#fde68a', bob:0 },
+      },
     };
     const game = {
-      player:{ name, x, y:200, level:1, class:'warrior', equipment:{}, appearance:{}, costume:{ hat:'blue-cap' } },
+      player:{ name, x, y:200, level:1, class:'warrior', equipment:{}, appearance:{}, costume:{ hat:'blue-cap' }, activePet:'chick' },
+      lastMove:{ x:1, y:0 },
       currentMap:'town',
       isMoving:false,
       currentCombatMonsterId:null,
@@ -81,7 +86,9 @@ test('two mocked browser sessions exchange positions and chat', async () => {
       width:800, height:450,
       ctx:{
         save() {}, restore() {}, measureText:() => ({ width:50 }),
-        beginPath() {}, roundRect() {}, fill() {}, fillText() {},
+        beginPath() {}, roundRect() {}, fill() {},
+        fillText(text) { paintedText.push(String(text)); },
+        strokeText(text) { paintedText.push(String(text)); },
       },
     };
     const context = {
@@ -107,7 +114,7 @@ test('two mocked browser sessions exchange positions and chat', async () => {
     vm.runInNewContext(coreSource(), context);
     vm.runInNewContext(remoteMotionSource(), context);
     vm.runInNewContext(multiplayerSource(), context);
-    return { window, game, intervals, chats, canvasListeners, layers, drawn };
+    return { window, game, intervals, chats, canvasListeners, layers, drawn, paintedText };
   }
 
   const first = createSession('첫째', 100);
@@ -124,6 +131,7 @@ test('two mocked browser sessions exchange positions and chat', async () => {
   assert.equal(second.window.__remotePlayersV53.get('첫째').x, 100);
   assert.equal(first.window.__remotePlayersV53.get('둘째').userId, 'id-둘째');
   assert.equal(first.window.__remotePlayersV53.get('둘째').costume.hat, 'blue-cap');
+  assert.equal(first.window.__remotePlayersV53.get('둘째').activePet, 'chick');
   assert.equal(first.window.__remotePlayersV53.get('둘째').pvpAvailable, true);
 
   first.window.__mpBroadcastChatV53('안녕!');
@@ -133,6 +141,8 @@ test('two mocked browser sessions exchange positions and chat', async () => {
   first.layers[0].render();
   // 처음 보이는 학생은 미끄러져 들어오지 않고 받은 좌표 그대로 그려져야 한다
   assert.deepEqual(first.drawn.at(-1), { x:300, y:200, moving:false, dance:false });
+  assert.equal(first.paintedText.includes('🐤'), true);
+  assert.equal(first.paintedText.includes('삐약이'), true);
 
   second.game.danceTimer = 3000;
   await new Promise((resolve) => setTimeout(resolve, 230));

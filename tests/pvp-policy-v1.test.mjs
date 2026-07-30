@@ -10,6 +10,7 @@ const roundLockPath = path.join(root, 'supabase/migrations/202607290005_pvp_roun
 const finishCompatibilityPath = path.join(root, 'supabase/migrations/202607300001_pvp_v2_finish_compatibility.sql');
 const inviteMatchLockPath = path.join(root, 'supabase/migrations/202607300002_pvp_invite_match_lock_v2.sql');
 const presenceGracePath = path.join(root, 'supabase/migrations/202607310001_pvp_presence_grace_v1.sql');
+const roundReadyTimerPath = path.join(root, 'supabase/migrations/202607310002_pvp_round_ready_timer_v1.sql');
 
 test('PvP storage forces RLS and keeps authoritative tables client read-only', () => {
   const sql = fs.readFileSync(migrationPath, 'utf8');
@@ -102,4 +103,17 @@ test('classroom presence grace updates both serialized invitation checks', () =>
   assert.doesNotMatch(sql, /interval '15 seconds'/i);
   assert.match(sql, /expires_at <= p_requested_at/i);
   assert.match(sql, /p_requested_at \+ interval '20 seconds'/i);
+});
+
+test('later-round questions start a locked thirty-second timer after both clients are ready', () => {
+  const sql = fs.readFileSync(roundReadyTimerPath, 'utf8');
+  assert.match(sql, /add column if not exists player_a_ready_round/i);
+  assert.match(sql, /add column if not exists player_b_ready_round/i);
+  assert.match(sql, /add column if not exists timer_started_round/i);
+  assert.match(sql, /create or replace function public\.private_mark_pvp_round_ready_v1/i);
+  assert.match(sql, /from public\.pvp_matches_v1[\s\S]*for update/i);
+  assert.match(sql, /player_a_ready_round >= p_round_no[\s\S]*player_b_ready_round >= p_round_no/i);
+  assert.match(sql, /question_deadline = p_ready_at \+ interval '30 seconds'/i);
+  assert.match(sql, /grant execute on function public\.private_mark_pvp_round_ready_v1[\s\S]*to service_role/i);
+  assert.match(sql, /from public, anon, authenticated/i);
 });

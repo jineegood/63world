@@ -249,6 +249,7 @@ test('surrender finalizes one opponent win without client record values', async 
 test('resolved simultaneous submissions publish dice before ordered combat effects', async () => {
   const { createPvpService } = await import(serviceUrl.href);
   const appended = [];
+  const updates = [];
   const inputs = [{ userId:'a', actionId:'basic', answer:'5' }];
   const match = {
     id:'m1', playerAId:'a', playerBId:'b', round:1, phase:'waiting',
@@ -266,7 +267,7 @@ test('resolved simultaneous submissions publish dice before ordered combat effec
       listRoundInputs:async () => inputs,
       appendEvents:async (_id, _round, events) => appended.push(...events),
       readEnabledWorkbooks:async () => [{ enabled:true, questions:[{ id:'q2', prompt:'3+3', answer:'6' }] }],
-      updateMatch:async () => {},
+      updateMatch:async (_id, patch) => updates.push(patch),
     },
   });
   const result = await service.handle('b', { op:'submit', matchId:'m1', round:1, actionId:'basic', answer:'5', requestId:'b1' });
@@ -286,6 +287,44 @@ test('resolved simultaneous submissions publish dice before ordered combat effec
   assert.equal(appended[3].source, 'a');
   assert.equal(appended[4].kind, 'damage');
   assert.equal(appended[4].source, 'a');
+  assert.equal(updates[0].round, 2);
+  assert.equal(updates[0].deadline, 66000);
+  assert.equal(updates[0].timerStartedRound, 1);
+});
+
+test('a later-round timer starts only after both clients finish playback', async () => {
+  const { createPvpService } = await import(serviceUrl.href);
+  const match = {
+    id:'m-ready',
+    playerAId:'a',
+    playerBId:'b',
+    round:2,
+    phase:'question',
+  };
+  const calls = [];
+  const service = createPvpService({
+    now:() => 10000,
+    randomInt:(minimum) => minimum,
+    store:{
+      getMatchForUpdate:async () => match,
+      markRoundReady:async (userId, matchId, round, now) => {
+        calls.push({ userId, matchId, round, now });
+        return { ready:true, started:false, match };
+      },
+    },
+  });
+  const result = await service.handle('a', {
+    op:'ready',
+    matchId:'m-ready',
+    round:2,
+  });
+  assert.equal(result.ready, true);
+  assert.deepEqual(calls, [{
+    userId:'a',
+    matchId:'m-ready',
+    round:2,
+    now:10000,
+  }]);
 });
 
 test('heartbeat resolves an expired unanswered round so neither player can stall forever', async () => {

@@ -107,12 +107,17 @@
         level: G.player.level, class: G.player.class, spec: G.player.spec || null,
         equipment: G.player.equipment || {}, appearance: G.player.appearance || {},
         costume: G.player.costume || {},
+        activePet:typeof G.player.activePet === 'string' ? G.player.activePet : null,
+        facing:{
+          x:Number(G.lastMove?.x) || 0,
+          y:Number(G.lastMove?.y) || 1,
+        },
         pvpAvailable:G.currentMap === 'town' && !G.modalState?.pause && !G.currentCombatMonsterId,
         moving: !!G.isMoving,
         dance: Number(G.danceTimer || 0) > 0,
       };
       // 달라진 게 없으면 굳이 보내지 않는다. 대신 사라지지 않도록 가끔은 알린다.
-      const key = `${payload.userId || ''}|${payload.map}|${payload.x}|${payload.y}|${payload.moving}|${payload.dance}|${payload.pvpAvailable}|${payload.level}`;
+      const key = `${payload.userId || ''}|${payload.map}|${payload.x}|${payload.y}|${payload.moving}|${payload.dance}|${payload.pvpAvailable}|${payload.level}|${payload.activePet || ''}|${payload.facing.x},${payload.facing.y}`;
       if (key !== lastPayloadKey || now - lastKeepaliveAt >= IDLE_KEEPALIVE_MS) {
         lastPayloadKey = key;
         lastKeepaliveAt = now;
@@ -128,6 +133,41 @@
   connect();
 
   /* ── 렌더: 같은 맵의 다른 플레이어 그리기 ── */
+  function drawRemotePet(ctx, remote, worldX, worldY, toScreen, now, moving) {
+    const pet = window.PET_DEFS_V27?.[String(remote?.activePet || '')];
+    if (!pet) return;
+    const directionX = Number(remote?.facing?.x) || 0;
+    const directionY = Number(remote?.facing?.y) || 1;
+    const backX = Math.abs(directionX) > 0.1 ? -Math.sign(directionX) * 58 : -48;
+    const backY = Math.abs(directionY) > 0.1 ? -Math.sign(directionY) * 38 : 38;
+    const bob = Number(pet.bob) || 0;
+    const hop = moving
+      ? Math.abs(Math.sin(now / 115 + bob)) * 10
+      : Math.sin(now / 330 + bob) * 3;
+    const dancing = remote.dance === true;
+    const danceX = dancing ? Math.sin(now / 80 + bob) * 16 : 0;
+    const point = toScreen(worldX + backX + danceX, worldY + backY - hop);
+    ctx.save();
+    ctx.globalAlpha = 0.94;
+    ctx.font = '900 30px "Noto Sans KR", "Apple Color Emoji", "Segoe UI Emoji", system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(15,23,42,.55)';
+    ctx.strokeText?.(pet.icon, point.x, point.y);
+    ctx.fillText(pet.icon, point.x, point.y);
+    if (dancing) {
+      ctx.font = '900 14px "Noto Sans KR", system-ui';
+      ctx.fillStyle = pet.color || '#fde68a';
+      ctx.fillText('♪', point.x - 24, point.y - 23);
+      ctx.fillText('♬', point.x + 24, point.y - 28);
+    }
+    ctx.font = '900 9px "Noto Sans KR", system-ui';
+    ctx.fillStyle = 'rgba(15,23,42,.78)';
+    ctx.fillText(pet.name, point.x, point.y - 29);
+    ctx.restore();
+  }
+
   function renderRemotes() {
     const G = g();
     if (!G?.player || !G.ctx) return;
@@ -141,8 +181,11 @@
       if (!p || p.map !== G.currentMap || typeof p.x !== 'number') return;
       // 마지막으로 받은 좌표로 튀지 않고, 두 지점 사이를 채운 위치에 그린다
       const eased = motions.get(name)?.sample(now) || null;
-      const s = toScreen(eased ? eased.x : p.x, eased ? eased.y : p.y);
+      const worldX = eased ? eased.x : p.x;
+      const worldY = eased ? eased.y : p.y;
+      const s = toScreen(worldX, worldY);
       if (s.x < -120 || s.y < -120 || s.x > G.width + 120 || s.y > G.height + 120) return;
+      drawRemotePet(ctx, p, worldX, worldY, toScreen, now, !!p.moving || !!eased?.moving);
       ctx.save();
       ctx.globalAlpha = 0.96;
       try {

@@ -8,7 +8,7 @@ const cors = {
   'Access-Control-Allow-Headers':'authorization, x-client-info, apikey, content-type',
   'Access-Control-Expose-Headers':'x-pvp-trace-id',
 };
-const RETRYABLE_OPERATIONS = new Set(['presence', 'profile', 'sync', 'heartbeat', 'cleanup']);
+const RETRYABLE_OPERATIONS = new Set(['presence', 'profile', 'ready', 'sync', 'heartbeat', 'cleanup']);
 const retryDelay = () => new Promise((resolve) => setTimeout(resolve, 90));
 
 Deno.serve(async (request) => {

@@ -177,6 +177,7 @@
         { op:'respond', inviteId, accept, requestId:requestId('respond') },
         { verifySession:true },
       ),
+      ready:(matchId, round) => invoke({ op:'ready', matchId, round }),
       submit:(matchId, round, actionId, answer) => invoke({
         op:'submit', matchId, round, actionId, answer, requestId:requestId('submit'),
       }),

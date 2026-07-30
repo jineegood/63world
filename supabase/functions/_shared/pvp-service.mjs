@@ -7,6 +7,7 @@ import {
 } from './pvp-rules.mjs';
 
 const PVP_PRESENCE_GRACE_MS = 90000;
+const PVP_NEXT_ROUND_READY_WINDOW_MS = 60000;
 
 function fail(code) {
   const error = new Error(code);
@@ -196,7 +197,8 @@ export function createPvpService({ store, now = Date.now, randomInt }) {
       playerBState:resolution.state.b,
       question:publicQuestion(question),
       answerKey:question.answer,
-      deadline:now() + 20000,
+      deadline:now() + PVP_NEXT_ROUND_READY_WINDOW_MS,
+      timerStartedRound:Number(match.round),
     });
     return { resolved:true, round:Number(match.round), events:publicEvents };
   }
@@ -245,6 +247,14 @@ export function createPvpService({ store, now = Date.now, randomInt }) {
           selectQuestion,
           publicQuestion,
         });
+      case 'ready':
+      {
+        const match = await store.getMatchForUpdate(body.matchId);
+        if (!participant(match, userId)) fail('NOT_PARTICIPANT');
+        if (match.finishedAt || ['finished', 'cancelled'].includes(match.phase)) fail('MATCH_CLOSED');
+        if (Number(body.round) !== Number(match.round)) fail('ROUND_CHANGED');
+        return store.markRoundReady(userId, match.id, Number(match.round), now());
+      }
       case 'submit':
         return submit(userId, body);
       case 'sync': {
