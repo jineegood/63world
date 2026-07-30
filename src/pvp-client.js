@@ -2,6 +2,9 @@
   'use strict';
 
   const messages = Object.freeze({
+    INVALID_TARGET:'대전 상대를 다시 선택해 주세요.',
+    INVALID_OPERATION:'대전 요청을 다시 시도해 주세요.',
+    METHOD_NOT_ALLOWED:'대전 연결 방식이 올바르지 않아요.',
     TOWN_ONLY:'대전 신청은 두 학생 모두 마을에 있을 때만 할 수 있어요.',
     OFFLINE:'상대 학생이 지금 접속 중이 아니에요.',
     BUSY:'상대 학생은 지금 다른 활동 중이에요.',
