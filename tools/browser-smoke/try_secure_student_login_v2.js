@@ -82,6 +82,9 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   if ($('toast').textContent) console.log('LOGIN ERROR: ' + $('toast').textContent);
 
   if (mode === 'new') {
+    check('new account shows creation notice', $('cinematicTitle').textContent === '새 캐릭터를 생성합니다');
+    check('creation notice is visible before creator', $('cinematicOverlay').classList.contains('visible'));
+    await sleep(1750);
     check('new account opens character creator', $('creator').classList.contains('active'));
     click('createCharacterBtn');
     await sleep(1350);

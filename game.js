@@ -4673,6 +4673,36 @@ function handlePlayerDefeat() {
   }, 5000);
 }
 
+function showNewCharacterCreatorTransition(name) {
+  const openCreator = () => {
+    game.selectedClass = 'warrior';
+    game.currentAppearance = randomAppearance();
+    $('creatorNameLabel').textContent = name;
+    document.querySelectorAll('.classBtn').forEach((btn) => btn.classList.toggle('selected', btn.dataset.class === 'warrior'));
+    drawPreview();
+    showScreen('creator');
+    syncAudioFileBgm();
+  };
+  const overlay = $('cinematicOverlay');
+  const title = $('cinematicTitle');
+  const sub = $('cinematicSub');
+  if (!overlay || !title || !sub) {
+    openCreator();
+    return;
+  }
+  title.textContent = '새 캐릭터를 생성합니다';
+  sub.textContent = '잠시 후 캐릭터 생성창으로 이동합니다.';
+  overlay.classList.remove('hidden', 'leaving');
+  overlay.classList.add('visible');
+  playSfx('world');
+  setTimeout(() => overlay.classList.add('leaving'), 1250);
+  setTimeout(() => {
+    overlay.classList.add('hidden');
+    overlay.classList.remove('visible', 'leaving');
+    openCreator();
+  }, 1700);
+}
+
 async function handleStudentLogin() {
   const name = $('loginName').value.trim();
   const password = secureStudentAccess.enabled ? $('loginPassword').value : $('loginPassword').value.trim();
@@ -4710,12 +4740,7 @@ async function handleStudentLogin() {
       return;
     }
   }
-  game.selectedClass = 'warrior';
-  game.currentAppearance = randomAppearance();
-  $('creatorNameLabel').textContent = name;
-  document.querySelectorAll('.classBtn').forEach((btn) => btn.classList.toggle('selected', btn.dataset.class === 'warrior'));
-  drawPreview();
-  showScreen('creator');
+  showNewCharacterCreatorTransition(game.currentName || name);
 }
 
 function hasAvailableQuest() {
@@ -5922,24 +5947,7 @@ function updateQuestTracker() {
       startGame(true);
       return;
     }
-    const overlay = $('cinematicOverlay');
-    $('cinematicTitle').textContent = '새 캐릭터를 등록합니다';
-    $('cinematicSub').textContent = '잠시 후 캐릭터 생성창으로 이동합니다.';
-    overlay.classList.remove('hidden', 'leaving');
-    overlay.classList.add('visible');
-    playSfx('world');
-    setTimeout(() => overlay.classList.add('leaving'), 1250);
-    setTimeout(() => {
-      overlay.classList.add('hidden');
-      overlay.classList.remove('visible', 'leaving');
-      game.selectedClass = 'warrior';
-      game.currentAppearance = randomAppearance();
-      $('creatorNameLabel').textContent = name;
-      document.querySelectorAll('.classBtn').forEach((btn) => btn.classList.toggle('selected', btn.dataset.class === 'warrior'));
-      drawPreview();
-      showScreen('creator');
-      syncAudioFileBgm();
-    }, 1700);
+    showNewCharacterCreatorTransition(name);
   };
   const studentBtn = $('studentLoginBtn');
   if (studentBtn) {
@@ -11221,13 +11229,15 @@ function updateQuestTracker() {
     style.id = 'yuksam-v33-style';
     style.textContent = `
       .character-panel-v33{grid-template-columns:minmax(520px,.95fr) minmax(390px,1.05fr)!important;align-items:start;}
-      .identity-strip-v33{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-bottom:10px;}
+      .character-status-title-v60{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:12px;margin-bottom:10px;}
+      .character-status-title-v60 h3{margin:0!important;white-space:nowrap;}
+      .character-name-line-v60{min-width:0;display:flex;align-items:center;gap:10px;padding:7px 12px;border-radius:14px;background:rgba(74,222,128,.14);border:1px solid rgba(74,222,128,.32);overflow:hidden;}
+      .character-name-line-v60 span{flex:0 0 auto;color:#bbf7d0;font-size:12px;font-weight:900;}
+      .character-name-line-v60 b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#fff;font-size:20px;line-height:1.05;font-weight:950;text-shadow:0 0 10px rgba(74,222,128,.24);}
+      .identity-strip-v33{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:10px;}
       .identity-chip-v33{border-radius:14px;padding:9px 10px;background:rgba(15,23,42,.62);border:1px solid rgba(148,163,184,.14);}
       .identity-chip-v33 span{display:block;font-size:11px;color:#9fb7d4;font-weight:800;}
       .identity-chip-v33 b{display:flex;align-items:baseline;gap:9px;color:#f8fafc;font-size:14px;margin-top:2px;}
-      .identity-chip-name{min-width:0;overflow:hidden;}
-      .identity-chip-name b{min-width:0;max-width:100%;overflow:hidden;}
-      .identity-chip-v33 .char-name-v33{display:block;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:18px;color:#fff;font-weight:950;text-shadow:0 0 10px rgba(125,211,252,.24);}
       .character-right-v33{display:flex;flex-direction:column;gap:12px;min-width:0;}
       .paperdoll-v7{min-height:500px!important;max-height:none!important;}
       .slot-pet-v33{
@@ -11269,16 +11279,17 @@ function updateQuestTracker() {
       .identity-chip-v33 span{font-weight:900;color:#b6ccec;}
       .identity-chip-v33 b{font-weight:800;font-size:15px;}
       .identity-chip-v33 b em{font-style:normal;font-weight:800;color:#7dd3fc;}
-      .identity-chip-v33 .char-name-v33{font-size:20px;font-weight:900;letter-spacing:-.01em;}
       /* 신분 칩 4색 배경 (요청 4) */
       .identity-chip-lv{background:rgba(56,189,248,.16);border-color:rgba(56,189,248,.34);}
-      .identity-chip-name{background:rgba(74,222,128,.14);border-color:rgba(74,222,128,.32);}
       .identity-chip-job{background:rgba(251,146,60,.15);border-color:rgba(251,146,60,.34);}
       .identity-chip-spec{background:rgba(192,132,252,.15);border-color:rgba(192,132,252,.34);}
       .identity-chip-pvp{background:rgba(244,63,94,.13);border-color:rgba(251,113,133,.32);}
       .identity-chip-pvp b{color:#fecdd3;white-space:nowrap;}
-      .wallet-chip-v32 span{font-weight:900;}
-      .wallet-chip-v32 b{font-weight:900;}
+      .wallet-chip-v32 span{font-size:12px;font-weight:900;}
+      .wallet-chip-v32 b{display:block;margin-top:4px;font-size:20px;line-height:1;font-weight:950;}
+      .wallet-gold-v33{background:rgba(245,158,11,.15);border-color:rgba(251,191,36,.34);}
+      .wallet-building-v33{background:rgba(139,92,246,.16);border-color:rgba(167,139,250,.34);}
+      .wallet-skillp-v33{background:rgba(14,165,233,.16);border-color:rgba(56,189,248,.34);}
       .wallet-gold-v33 b{color:#fbbf24;}
       .wallet-building-v33 b{color:#c4b5fd;}
       .wallet-skillp-v33 b{color:#7dd3fc;}
@@ -11370,9 +11381,7 @@ function updateQuestTracker() {
       '체력': '체력은 캐릭터의 체력을 올려주는 능력치입니다.',
     };
     const statHtml = Object.entries(stats).map(([k,v]) => `<div class="mini-stat" data-tooltip="${tooltipAttrV33((statTipMapV33[k] ? `${k}\n${statTipMapV33[k]}` : `현재 총 ${k}`))}"><span>${k}</span><b>${v}</b></div>`).join('');
-    const playerNameV33 = String(game.player.name || '이름없음');
     const identityHtml = `<div class="identity-strip-v33">
-      <div class="identity-chip-v33 identity-chip-name" data-tooltip="${tooltipAttrV33(playerNameV33)}"><span>이름</span><b><strong class="char-name-v33">${escapeHtml(playerNameV33)}</strong></b></div>
       <div class="identity-chip-v33 identity-chip-lv"><span>레벨</span><b><em>Lv.${game.player.level}</em></b></div>
       <div class="identity-chip-v33 identity-chip-job"><span>직업</span><b>${classNameV33(game.player.class)}</b></div>
       <div class="identity-chip-v33 identity-chip-spec"><span>전문화</span><b>${game.player.spec || '잠김'}</b></div>
@@ -11412,7 +11421,7 @@ function updateQuestTracker() {
 
     openModal(`<div class="character-window-v27 character-window-v32 character-window-v33"><header class="character-head-v27"><h2>인벤토리 / 상태창 <span class="badge">C 키</span></h2><p>장비와 펫을 확인하고, 아이템 위에 마우스를 올려 상세 능력치를 봅니다.</p></header>
       <div class="character-panel character-panel-v7 character-panel-v26 character-panel-v27 character-panel-v32 character-panel-v33">
-        <div class="panel-card paperdoll-card-v7 status-panel-v27 status-panel-v29 character-left-v32"><h3>캐릭터 상태</h3>${identityHtml}<div class="paperdoll paperdoll-v7"><canvas id="characterPanelCanvas" width="420" height="420"></canvas>${slotHtml('head','slot-head-v7')}${slotHtml('armor','slot-armor-v7')}${slotHtml('weapon','slot-weapon-v7')}${slotHtml('accessory','slot-accessory-v7')}${petSlot}</div><div class="mini-stat-grid mini-stat-grid-v7 stat-grid-v27">${statHtml}</div></div>
+        <div class="panel-card paperdoll-card-v7 status-panel-v27 status-panel-v29 character-left-v32"><div class="character-status-title-v60"><h3>캐릭터 상태</h3><div class="character-name-line-v60"><span>이름</span><b>${escapeHtml(game.player.name || '이름없음')}</b></div></div>${identityHtml}<div class="paperdoll paperdoll-v7"><canvas id="characterPanelCanvas" width="420" height="420"></canvas>${slotHtml('head','slot-head-v7')}${slotHtml('armor','slot-armor-v7')}${slotHtml('weapon','slot-weapon-v7')}${slotHtml('accessory','slot-accessory-v7')}${petSlot}</div><div class="mini-stat-grid mini-stat-grid-v7 stat-grid-v27">${statHtml}</div></div>
         <div class="character-right-v33"><div class="panel-card">${resourceHtml}</div><div class="panel-card bag-panel-v27 bag-panel-v32"><h3>가방</h3><p class="muted">아이템 위에 마우스를 올리면 상세 능력치를 확인할 수 있습니다.</p><div class="bag-grid">${bagSlots.join('')}</div></div></div>
       </div></div>`, { type:'character', pause:true });
     setTimeout(() => {

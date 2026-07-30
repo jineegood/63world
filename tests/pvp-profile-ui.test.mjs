@@ -197,13 +197,12 @@ test('game supplies the real equipped portrait and starts presence after enterin
   assert.match(gameSource, /modalState\.type === 'pvpSurrender'[\s\S]{0,100}restorePvpMatchV1/);
 });
 
-test('character status orders five fixed identity cells and loads the player PvP record', () => {
+test('character status keeps the name beside its title and orders four fixed identity cells below', () => {
   const panel = gameSource.slice(
     gameSource.indexOf('function openCharacterPanelV33'),
     gameSource.indexOf('function openUpgradeShopModalV33'),
   );
   const positions = [
-    'identity-chip-name',
     'identity-chip-lv',
     'identity-chip-job',
     'identity-chip-spec',
@@ -212,10 +211,16 @@ test('character status orders five fixed identity cells and loads the player PvP
 
   assert.equal(positions.every((position) => position >= 0), true);
   assert.deepEqual(positions, [...positions].sort((left, right) => left - right));
+  assert.match(panel, /character-status-title-v60"><h3>캐릭터 상태<\/h3><div class="character-name-line-v60"><span>이름<\/span><b>/);
+  assert.doesNotMatch(panel, /identity-chip-name|data-tooltip="\$\{tooltipAttrV33\(playerNameV33\)\}"/);
   assert.match(panel, /id="characterPvpRecordV33">확인 중…/);
   assert.match(panel, /window\.getMyPvpRecordV1\(\)/);
-  assert.match(gameSource, /\.identity-strip-v33\{[^}]*grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
-  assert.match(gameSource, /\.char-name-v33\{[^}]*text-overflow:ellipsis;white-space:nowrap/);
+  assert.match(gameSource, /\.identity-strip-v33\{[^}]*grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+  assert.match(gameSource, /\.character-name-line-v60 b\{[^}]*font-size:20px[^}]*font-weight:950/);
+  assert.match(gameSource, /\.wallet-gold-v33\{[^}]*background:/);
+  assert.match(gameSource, /\.wallet-building-v33\{[^}]*background:/);
+  assert.match(gameSource, /\.wallet-skillp-v33\{[^}]*background:/);
+  assert.match(gameSource, /\.wallet-chip-v32 b\{[^}]*font-size:20px/);
 });
 
 test('challenger enters the match when the opponent accepts the invitation', async () => {
