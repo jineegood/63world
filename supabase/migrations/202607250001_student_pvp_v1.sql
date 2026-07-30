@@ -1,12 +1,10 @@
 begin;
-
 create table if not exists public.pvp_records_v1 (
   user_id uuid primary key references auth.users(id) on delete cascade,
   wins integer not null default 0 check (wins >= 0),
   losses integer not null default 0 check (losses >= 0),
   updated_at timestamptz not null default now()
 );
-
 create table if not exists public.pvp_presence_v1 (
   user_id uuid primary key references auth.users(id) on delete cascade,
   map text not null default 'town',
@@ -14,7 +12,6 @@ create table if not exists public.pvp_presence_v1 (
   public_profile jsonb not null default '{}'::jsonb,
   last_seen_at timestamptz not null default now()
 );
-
 create table if not exists public.pvp_invites_v1 (
   id uuid primary key default extensions.gen_random_uuid(),
   challenger_id uuid not null references auth.users(id) on delete cascade,
@@ -30,7 +27,6 @@ create table if not exists public.pvp_invites_v1 (
   check (expires_at > created_at and expires_at <= created_at + interval '20 seconds'),
   unique (challenger_id, request_id)
 );
-
 create table if not exists public.pvp_matches_v1 (
   id uuid primary key default extensions.gen_random_uuid(),
   invite_id uuid unique references public.pvp_invites_v1(id) on delete set null,
@@ -55,14 +51,12 @@ create table if not exists public.pvp_matches_v1 (
   finished_at timestamptz,
   check (player_a_id <> player_b_id)
 );
-
 -- Correct answers never live in a participant-readable row.
 create table if not exists public.pvp_match_secrets_v1 (
   match_id uuid primary key references public.pvp_matches_v1(id) on delete cascade,
   answer_key text not null,
   created_at timestamptz not null default now()
 );
-
 create table if not exists public.pvp_round_inputs_v1 (
   id uuid primary key default extensions.gen_random_uuid(),
   match_id uuid not null references public.pvp_matches_v1(id) on delete cascade,
@@ -75,7 +69,6 @@ create table if not exists public.pvp_round_inputs_v1 (
   unique (match_id, round_no, user_id),
   unique (user_id, request_id)
 );
-
 create table if not exists public.pvp_match_events_v1 (
   id uuid primary key default extensions.gen_random_uuid(),
   match_id uuid not null references public.pvp_matches_v1(id) on delete cascade,
@@ -85,7 +78,6 @@ create table if not exists public.pvp_match_events_v1 (
   created_at timestamptz not null default now(),
   unique (match_id, sequence_no)
 );
-
 create unique index if not exists pvp_one_pending_invite_per_challenger_v1
   on public.pvp_invites_v1 (challenger_id) where status = 'pending';
 create unique index if not exists pvp_one_pending_invite_per_target_v1
@@ -94,7 +86,6 @@ create unique index if not exists pvp_one_live_match_per_player_a_v1
   on public.pvp_matches_v1 (player_a_id) where finished_at is null and phase <> 'cancelled';
 create unique index if not exists pvp_one_live_match_per_player_b_v1
   on public.pvp_matches_v1 (player_b_id) where finished_at is null and phase <> 'cancelled';
-
 alter table public.pvp_records_v1 enable row level security;
 alter table public.pvp_records_v1 force row level security;
 alter table public.pvp_presence_v1 enable row level security;
@@ -109,7 +100,6 @@ alter table public.pvp_round_inputs_v1 enable row level security;
 alter table public.pvp_round_inputs_v1 force row level security;
 alter table public.pvp_match_events_v1 enable row level security;
 alter table public.pvp_match_events_v1 force row level security;
-
 revoke all on table public.pvp_records_v1 from anon, authenticated;
 revoke all on table public.pvp_presence_v1 from anon, authenticated;
 revoke all on table public.pvp_invites_v1 from anon, authenticated;
@@ -117,24 +107,19 @@ revoke all on table public.pvp_matches_v1 from anon, authenticated;
 revoke all on table public.pvp_match_secrets_v1 from anon, authenticated;
 revoke all on table public.pvp_round_inputs_v1 from anon, authenticated;
 revoke all on table public.pvp_match_events_v1 from anon, authenticated;
-
 grant select on table public.pvp_records_v1 to authenticated;
 grant select on table public.pvp_invites_v1 to authenticated;
 grant select on table public.pvp_matches_v1 to authenticated;
 grant select on table public.pvp_match_events_v1 to authenticated;
-
 create policy "authenticated students read pvp records"
   on public.pvp_records_v1 for select to authenticated
   using (true);
-
 create policy "invite participants read their invitations"
   on public.pvp_invites_v1 for select to authenticated
   using (auth.uid() = challenger_id or auth.uid() = target_id);
-
 create policy "match participants read their matches"
   on public.pvp_matches_v1 for select to authenticated
   using (auth.uid() = player_a_id or auth.uid() = player_b_id);
-
 create policy "match participants read public events"
   on public.pvp_match_events_v1 for select to authenticated
   using (
@@ -145,7 +130,6 @@ create policy "match participants read public events"
         and (auth.uid() = match.player_a_id or auth.uid() = match.player_b_id)
     )
   );
-
 create or replace function public.finish_pvp_match_v1(
   _match_id uuid,
   _winner_id uuid,
@@ -204,9 +188,7 @@ begin
   return true;
 end;
 $$;
-
 revoke all on function public.finish_pvp_match_v1(uuid, uuid, uuid, text) from public;
 revoke all on function public.finish_pvp_match_v1(uuid, uuid, uuid, text) from anon, authenticated;
 grant execute on function public.finish_pvp_match_v1(uuid, uuid, uuid, text) to service_role;
-
 commit;

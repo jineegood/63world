@@ -19,6 +19,7 @@
     GRANT_FAILED:'학생 보상을 저장하지 못했어요.',
     DELETE_FAILED:'학생 계정을 삭제하지 못했어요.',
     CHEAT_FAILED:'교사 전용 치트를 적용하지 못했어요.',
+    AUDIT_FAILED:'보안 알림을 불러오지 못했어요.',
   });
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -87,6 +88,28 @@
   function validateUserId(userId) {
     if (typeof userId !== 'string' || !UUID.test(userId)) throw error('STUDENT_NOT_FOUND');
     return userId;
+  }
+
+  function summarizeSecurityAlert(row) {
+    const observed = row?.observed && typeof row.observed === 'object' && !Array.isArray(row.observed)
+      ? row.observed : {};
+    return Object.freeze({
+      id:safeText(row?.id, 36),
+      userId:safeText(row?.user_id, 36),
+      displayName:safeText(row?.display_name, 20),
+      issues:Object.freeze((Array.isArray(row?.issues) ? row.issues : []).map((item) => safeText(item, 60))),
+      observed:Object.freeze({
+        level:nonNegativeInteger(observed.level),
+        exp:nonNegativeInteger(observed.exp),
+        gold:nonNegativeInteger(observed.gold),
+        building:nonNegativeInteger(observed.building),
+        skillPoints:nonNegativeInteger(observed.skillPoints),
+        learnedSkillPoints:nonNegativeInteger(observed.learnedSkillPoints),
+      }),
+      occurrences:Math.max(1, nonNegativeInteger(row?.occurrences)),
+      firstSeenAt:safeText(row?.first_seen_at, 40),
+      lastSeenAt:safeText(row?.last_seen_at, 40),
+    });
   }
 
   function validateReward(input) {
@@ -182,7 +205,34 @@
       });
     }
 
-    return Object.freeze({ listStudents, grantReward, deleteStudent, applyStudentCheat });
+    async function listSecurityAlerts() {
+      await requireTeacher();
+      const { data, error:listError } = await client
+        .from('profile_security_audits_v1')
+        .select('id,user_id,display_name,issues,observed,occurrences,first_seen_at,last_seen_at')
+        .is('resolved_at', null)
+        .order('last_seen_at', { ascending:false })
+        .limit(100);
+      if (listError) throw mapError(listError, 'AUDIT_FAILED');
+      return Object.freeze((Array.isArray(data) ? data : []).map(summarizeSecurityAlert));
+    }
+
+    async function resolveSecurityAlert(alertId) {
+      const id = validateUserId(alertId);
+      await requireTeacher();
+      const { error:updateError } = await client
+        .from('profile_security_audits_v1')
+        .update({ resolved_at:new Date().toISOString() })
+        .eq('id', id)
+        .is('resolved_at', null);
+      if (updateError) throw mapError(updateError, 'AUDIT_FAILED');
+      return true;
+    }
+
+    return Object.freeze({
+      listStudents, grantReward, deleteStudent, applyStudentCheat,
+      listSecurityAlerts, resolveSecurityAlert,
+    });
   }
 
   global.YuksamAdminDataV2 = Object.freeze({ AdminDataV2Error, create });

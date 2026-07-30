@@ -11,22 +11,17 @@ create table if not exists public.student_reward_grants_v2 (
   claimed_at timestamptz null,
   constraint student_reward_grants_v2_positive check (gold > 0 or building > 0 or exp > 0)
 );
-
 create index if not exists student_reward_grants_v2_unclaimed_idx
   on public.student_reward_grants_v2 (user_id, created_at)
   where claimed_at is null;
-
 alter table public.student_reward_grants_v2 enable row level security;
 alter table public.student_reward_grants_v2 force row level security;
-
 revoke all on table public.student_reward_grants_v2 from anon, authenticated;
 grant select, insert on table public.student_reward_grants_v2 to authenticated;
-
 drop policy if exists "teachers select reward grants v2" on public.student_reward_grants_v2;
 create policy "teachers select reward grants v2"
 on public.student_reward_grants_v2 for select to authenticated
 using ((select public.is_teacher()));
-
 drop policy if exists "teachers insert reward grants v2" on public.student_reward_grants_v2;
 create policy "teachers insert reward grants v2"
 on public.student_reward_grants_v2 for insert to authenticated
@@ -34,7 +29,6 @@ with check (
   (select public.is_teacher())
   and created_by = (select auth.uid())
 );
-
 create or replace function public.claim_student_rewards_v2()
 returns jsonb
 language plpgsql
@@ -110,6 +104,5 @@ begin
   return profile_data;
 end;
 $$;
-
 revoke all on function public.claim_student_rewards_v2() from public;
 grant execute on function public.claim_student_rewards_v2() to authenticated;

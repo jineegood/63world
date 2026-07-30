@@ -35,6 +35,5 @@ as $$
     limit 5
   ) as ranked;
 $$;
-
 revoke all on function public.load_hall_of_fame_v2() from public;
 grant execute on function public.load_hall_of_fame_v2() to authenticated;

@@ -1,5 +1,4 @@
 begin;
-
 -- Creating reciprocal invitations at the same moment must not leave two pending
 -- rows for the same students. The advisory locks use the two ids in a stable
 -- order, so every create/accept operation for either student is serialized.
@@ -127,7 +126,6 @@ begin
   return to_jsonb(v_invite);
 end;
 $$;
-
 -- Match creation, the public question, and its private answer are committed in
 -- one transaction. A repeated accept returns the existing match and never
 -- rewrites its question, which keeps question_public and answer_key paired.
@@ -306,7 +304,6 @@ begin
   return jsonb_build_object('match_id', v_match.id, 'created', v_created);
 end;
 $$;
-
 revoke all on function public.private_create_pvp_invite_v2(
   uuid, uuid, text, timestamptz
 ) from public, anon, authenticated;
@@ -319,5 +316,4 @@ grant execute on function public.private_create_pvp_invite_v2(
 grant execute on function public.private_accept_pvp_invite_v2(
   uuid, uuid, timestamptz, jsonb, jsonb, jsonb, text, timestamptz
 ) to service_role;
-
 commit;

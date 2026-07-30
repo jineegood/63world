@@ -44,6 +44,8 @@
     "test:teacher-delete-function": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 teacher-delete-function",
     "test:teacher-cheat-function": "node --test tests/teacher-cheat-function.test.mjs",
     "test:teacher-cheat-ui": "node --test tests/teacher-cheat-ui.test.mjs",
+    "test:production-guard": "node --test tests/production-guard.test.mjs",
+    "test:profile-security-audit": "node --test tests/profile-security-audit-v1.test.mjs",
     "test:secure-cloud-student-admin-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 secure-cloud-student-admin-v2",
     "test:shared-state-policy-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 shared-state-policy-v2",
     "test:shared-state-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 shared-state-v2",

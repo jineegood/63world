@@ -1,5 +1,4 @@
 begin;
-
 -- The recovery client stores characters in player_profiles_v2.
 -- PvP records therefore remain independent from the retired growth authority.
 create or replace function public.finish_pvp_match_v1(
@@ -61,7 +60,6 @@ begin
   return true;
 end;
 $$;
-
 revoke all on function public.finish_pvp_match_v1(
   uuid, uuid, uuid, text
 ) from public;
@@ -71,5 +69,4 @@ revoke all on function public.finish_pvp_match_v1(
 grant execute on function public.finish_pvp_match_v1(
   uuid, uuid, uuid, text
 ) to service_role;
-
 commit;

@@ -60,6 +60,7 @@ if ($Mode -eq 'all' -or $Mode -eq 'check') {
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/core-utils.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/player-store.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/input-router.js')
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/production-guard.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/world-interaction-registry.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/world-navigation-registry.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/click-movement.js')

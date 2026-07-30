@@ -13,6 +13,9 @@ let secureAdminStudentsV2 = [];
 let secureAdminStudentsStatusV2 = 'idle';
 let secureAdminStudentsErrorV2 = '';
 let secureAdminMutationV2 = false;
+let secureAdminAlertsV1 = [];
+let secureAdminAlertsStatusV1 = 'idle';
+let secureAdminAlertsErrorV1 = '';
 const checkedAdminStudentsV2 = new Set();
 // [v59] 문제집 화면을 다시 그려도 펼친 목록·수정 중인 문제·직전 등록 결과를 잃지 않게 보존
 const openWorkbookDetailsV2 = new Set();
@@ -126,6 +129,93 @@ function teacherZoneOptions(selected){
   const zones = [['silent_forest','고요한 숲'],['desert_wasteland','황량한 사막'],['spooky_swamp','으스스한 늪지']];
   return zones.map(([k,v]) => `<option value="${k}" ${selected===k?'selected':''}>${escapeHtml(v)}</option>`).join('');
 }
+
+const SECURITY_ISSUE_LABELS_V1 = Object.freeze({
+  INVALID_EXP:'경험치 값 형식 이상',
+  INVALID_GOLD:'골드 값 형식 이상',
+  INVALID_BUILDING:'빌딩 값 형식 이상',
+  INVALID_LEVEL:'레벨 값 형식 이상',
+  NEGATIVE_RESOURCE:'재화가 음수로 변경됨',
+  LEVEL_EXP_MISMATCH:'경험치와 레벨이 맞지 않음',
+  LARGE_EXP_JUMP:'경험치가 한 번에 크게 증가함',
+  LARGE_GOLD_JUMP:'골드가 한 번에 크게 증가함',
+  LARGE_BUILDING_JUMP:'빌딩이 한 번에 크게 증가함',
+  EXTREME_RESOURCE_VALUE:'재화가 비정상적으로 큰 값임',
+  SKILL_BUDGET_EXCEEDED:'레벨보다 스킬 포인트를 많이 사용함',
+  SPEC_TOO_EARLY:'Lv.5 전에 전문화를 보유함',
+  INVALID_CLASS:'존재하지 않는 직업 값',
+  OVERSIZED_INVENTORY:'인벤토리 항목이 지나치게 많음',
+});
+
+function teacherSecurityHtmlV1(){
+  if (secureAdminAlertsStatusV1 === 'loading' || secureAdminAlertsStatusV1 === 'idle') {
+    return '<div class="teacher-body"><div class="empty-state">보안 알림을 불러오는 중...</div></div>';
+  }
+  if (secureAdminAlertsStatusV1 === 'error') {
+    return `<div class="teacher-body"><div class="empty-state danger-text">${escapeHtml(secureAdminAlertsErrorV1 || '보안 알림을 불러오지 못했어요.')}
+      <button class="ghost" onclick="adminRetrySecurityAlertsV1()">다시 시도</button></div></div>`;
+  }
+  if (!secureAdminAlertsV1.length) {
+    return `<div class="teacher-body"><div class="panel-card">
+      <h3>🛡️ 저장값 감시</h3>
+      <p class="good-text" style="font-weight:800">현재 확인할 의심 기록이 없습니다.</p>
+      <p class="muted">학생 저장은 막지 않고, 말이 안 되는 변화만 이곳에 기록합니다.</p>
+    </div></div>`;
+  }
+  const rows = secureAdminAlertsV1.map((alert) => {
+    const labels = alert.issues.map((issue) => SECURITY_ISSUE_LABELS_V1[issue] || issue);
+    const values = alert.observed;
+    return `<tr>
+      <td><b>${escapeHtml(alert.displayName || '이름 없음')}</b></td>
+      <td>${labels.map((label) => `<span class="badge danger">${escapeHtml(label)}</span>`).join(' ')}</td>
+      <td>Lv.${values.level} · EXP ${values.exp}<br>Gold ${values.gold} · 빌딩 ${values.building}<br>스킬 ${values.learnedSkillPoints}+${values.skillPoints}</td>
+      <td>${alert.occurrences}회</td>
+      <td class="muted">${fmtDate(alert.lastSeenAt)}</td>
+      <td><button class="ghost tiny" onclick="adminResolveSecurityAlertV1('${alert.id}')">확인 처리</button></td>
+    </tr>`;
+  }).join('');
+  return `<div class="teacher-body">
+    <div class="panel-card"><h3>⚠️ 확인이 필요한 저장값 ${secureAdminAlertsV1.length}건</h3>
+      <p class="muted">현재는 기록만 하며 학생의 게임이나 저장을 차단하지 않습니다.</p>
+    </div>
+    <table class="teacher-table" style="margin-top:10px">
+      <thead><tr><th>학생</th><th>감지 내용</th><th>관찰값</th><th>횟수</th><th>최근</th><th>처리</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+async function loadSecurityAlertsV1(){
+  if (!SECURE_ADMIN_MODE_V2 || !secureAdminDataV2 || secureAdminAlertsStatusV1 === 'loading') return;
+  secureAdminAlertsStatusV1 = 'loading';
+  secureAdminAlertsErrorV1 = '';
+  try {
+    secureAdminAlertsV1 = await secureAdminDataV2.listSecurityAlerts();
+    secureAdminAlertsStatusV1 = 'ready';
+  } catch (error) {
+    secureAdminAlertsV1 = [];
+    secureAdminAlertsStatusV1 = 'error';
+    secureAdminAlertsErrorV1 = error?.message || '보안 알림을 불러오지 못했어요.';
+  }
+  if (__teacherAuthed) openAdminPanel('security', { skipSecurityLoad:true });
+}
+
+window.adminRetrySecurityAlertsV1 = function adminRetrySecurityAlertsV1(){
+  secureAdminAlertsStatusV1 = 'idle';
+  openAdminPanel('security');
+};
+
+window.adminResolveSecurityAlertV1 = async function adminResolveSecurityAlertV1(alertId){
+  if (!requireTeacherAuth() || !secureAdminDataV2) return;
+  try {
+    await secureAdminDataV2.resolveSecurityAlert(alertId);
+    secureAdminAlertsStatusV1 = 'idle';
+    await loadSecurityAlertsV1();
+    toast('보안 알림을 확인 처리했어요.');
+  } catch (error) {
+    toast(error?.message || '보안 알림을 처리하지 못했어요.');
+  }
+};
 
 function teacherStudentsHtml(){
   if (SECURE_ADMIN_MODE_V2) {
@@ -501,12 +591,13 @@ window.requireTeacherCheatAccessV3 = async function requireTeacherCheatAccessV3(
 
 function buildAdminPanelHtml(tab){
   const tabs = SECURE_ADMIN_MODE_V2
-    ? [['students', '👨‍🎓 학생 관리'], ['workbooks', '📚 문제집 관리'], ['settings', '⚙️ 수업 설정']]
+    ? [['students', '👨‍🎓 학생 관리'], ['workbooks', '📚 문제집 관리'], ['security', '🛡️ 보안 알림'], ['settings', '⚙️ 수업 설정']]
     : [['students', '👨‍🎓 학생 현황'], ['workbooks', '📚 문제집 관리'], ['settings', '⚙️ 수업 설정']];
   const active = tabs.some(([k]) => k === tab) ? tab : 'students';
   let body = '';
   if (active === 'students') body = teacherStudentsHtml();
   else if (active === 'workbooks') body = teacherWorkbooksHtml();
+  else if (active === 'security') body = teacherSecurityHtmlV1();
   else body = teacherSettingsHtml();
   return `
     <h2>🧑‍🏫 교사 대시보드</h2>
@@ -856,6 +947,11 @@ function openAdminPanel(tab, options) {
     && !(options && options.skipSecureLoad)
     && secureAdminStudentsStatusV2 !== 'loading') {
     loadSecureAdminStudentsV2();
+  }
+  if (SECURE_ADMIN_MODE_V2 && tab === 'security'
+    && !(options && options.skipSecurityLoad)
+    && secureAdminAlertsStatusV1 !== 'loading') {
+    loadSecurityAlertsV1();
   }
   if (prevTop != null) {
     const restore = () => {
