@@ -56,6 +56,38 @@ test('service rejects challenges unless both students are available in town', as
   );
 });
 
+test('presence grace tolerates delayed classroom timers but still rejects stale sessions', async () => {
+  const { createPvpService } = await import(serviceUrl.href);
+  const buildService = (targetLastSeenAt) => createPvpService({
+    now:() => 100000,
+    randomInt:(minimum) => minimum,
+    store:{
+      expirePendingInvitesForUsers:async () => ({ ok:true }),
+      getPresence:async (id) => ({
+        userId:id,
+        map:'town',
+        busy:false,
+        lastSeenAt:id === 'a' ? 100000 : targetLastSeenAt,
+      }),
+      findActiveMatchForUser:async () => null,
+      createInvite:async () => ({ id:'invite-new' }),
+    },
+  });
+
+  assert.equal(
+    (await buildService(10000).handle('a', {
+      op:'invite', targetUserId:'b', requestId:'within-grace',
+    })).id,
+    'invite-new',
+  );
+  await assert.rejects(
+    buildService(9999).handle('a', {
+      op:'invite', targetUserId:'b', requestId:'outside-grace',
+    }),
+    (error) => error.code === 'OFFLINE',
+  );
+});
+
 test('invite expires stale requests for both participants before availability checks', async () => {
   const { createPvpService } = await import(serviceUrl.href);
   const calls = [];

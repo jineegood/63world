@@ -6,6 +6,8 @@ import {
   selectQuestion,
 } from './pvp-rules.mjs';
 
+const PVP_PRESENCE_GRACE_MS = 90000;
+
 function fail(code) {
   const error = new Error(code);
   error.code = code;
@@ -99,7 +101,8 @@ export function createPvpService({ store, now = Date.now, randomInt }) {
       store.findActiveMatchForUser(userId),
       store.findActiveMatchForUser(body.targetUserId),
     ]);
-    const online = (presence) => presence && now() - Number(presence.lastSeenAt) <= 15000;
+    const online = (presence) => presence
+      && now() - Number(presence.lastSeenAt) <= PVP_PRESENCE_GRACE_MS;
     if (!online(challenger) || !online(target)) fail('OFFLINE');
     if (challenger.map !== 'town' || target.map !== 'town') fail('TOWN_ONLY');
     if (challenger.busy || target.busy || challengerMatch || targetMatch) fail('BUSY');

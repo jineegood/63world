@@ -70,12 +70,22 @@
   }
 
   async function openRemoteProfileV1(userId, skipTutorial = false) {
+    const targetUserId = String(userId || '').trim();
+    const myUserId = String(global.getPvpIdentityV1?.()?.userId || '').trim();
+    if (!targetUserId) {
+      global.toast?.('대전 상대를 다시 선택해 주세요.', 2600);
+      return;
+    }
+    if (targetUserId === myUserId) {
+      global.toast?.('두 학생이 서로 다른 계정으로 로그인했는지 확인해 주세요.', 3200);
+      return;
+    }
     if (!skipTutorial && global.shouldShowPvpTutorialV1?.() && global.startPvpTutorialV1) {
-      global.startPvpTutorialV1(() => openRemoteProfileV1(userId, true));
+      global.startPvpTutorialV1(() => openRemoteProfileV1(targetUserId, true));
       return;
     }
     try {
-      const profile = await client().profile(userId);
+      const profile = await client().profile(targetUserId);
       if (!profile) throw new Error('상대 학생의 정보를 불러오지 못했어요.');
       const available = profile.pvpAvailable === true;
       global.openModal?.(`
@@ -101,6 +111,16 @@
 
   async function challengeRemoteV1(userId) {
     if (challengePending) return;
+    const targetUserId = String(userId || '').trim();
+    const myUserId = String(global.getPvpIdentityV1?.()?.userId || '').trim();
+    if (!targetUserId) {
+      global.toast?.('대전 상대를 다시 선택해 주세요.', 2600);
+      return;
+    }
+    if (targetUserId === myUserId) {
+      global.toast?.('두 학생이 서로 다른 계정으로 로그인했는지 확인해 주세요.', 3200);
+      return;
+    }
     challengePending = true;
     try {
       const pvp = client();
@@ -112,7 +132,7 @@
         }
         return;
       }
-      await pvp.invite(userId);
+      await pvp.invite(targetUserId);
       global.toast?.('대전 신청을 보냈어요. 상대의 응답을 기다려 주세요!', 3000);
       closeSetupModal('pvpProfile');
     } catch (error) {

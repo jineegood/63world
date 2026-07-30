@@ -9,6 +9,7 @@ const hardeningPath = path.join(root, 'supabase/migrations/202607260001_pvp_runt
 const roundLockPath = path.join(root, 'supabase/migrations/202607290005_pvp_round_resolution_lock_v2.sql');
 const finishCompatibilityPath = path.join(root, 'supabase/migrations/202607300001_pvp_v2_finish_compatibility.sql');
 const inviteMatchLockPath = path.join(root, 'supabase/migrations/202607300002_pvp_invite_match_lock_v2.sql');
+const presenceGracePath = path.join(root, 'supabase/migrations/202607310001_pvp_presence_grace_v1.sql');
 
 test('PvP storage forces RLS and keeps authoritative tables client read-only', () => {
   const sql = fs.readFileSync(migrationPath, 'utf8');
@@ -91,4 +92,14 @@ test('invitation creation and acceptance serialize both students and commit one 
   assert.match(sql, /grant execute on function public\.private_create_pvp_invite_v2[\s\S]*to service_role/i);
   assert.match(sql, /grant execute on function public\.private_accept_pvp_invite_v2[\s\S]*to service_role/i);
   assert.match(sql, /from public, anon, authenticated/i);
+});
+
+test('classroom presence grace updates both serialized invitation checks', () => {
+  const sql = fs.readFileSync(presenceGracePath, 'utf8');
+  assert.match(sql, /create or replace function public\.private_create_pvp_invite_v2/i);
+  assert.match(sql, /create or replace function public\.private_accept_pvp_invite_v2/i);
+  assert.equal((sql.match(/interval '90 seconds'/gi) || []).length, 2);
+  assert.doesNotMatch(sql, /interval '15 seconds'/i);
+  assert.match(sql, /expires_at <= p_requested_at/i);
+  assert.match(sql, /p_requested_at \+ interval '20 seconds'/i);
 });

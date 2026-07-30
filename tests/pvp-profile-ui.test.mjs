@@ -104,6 +104,19 @@ test('challenge and invitation response use the authenticated PvP client', async
   ]);
 });
 
+test('a same-account remote is rejected before any server invitation', async () => {
+  const ui = loadUi();
+  await ui.window.openRemoteProfileV1('student-a');
+  await ui.window.challengeRemoteV1('student-a');
+  assert.equal(ui.calls.some(([type]) => type === 'invite'), false);
+  assert.equal(
+    ui.calls.filter(([type, message]) => (
+      type === 'toast' && String(message).includes('서로 다른 계정')
+    )).length,
+    2,
+  );
+});
+
 test('challenge and accept flush the latest character and refresh presence first', async () => {
   const ui = loadUi();
   await ui.window.challengeRemoteV1('student-b');
