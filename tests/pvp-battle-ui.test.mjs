@@ -183,7 +183,11 @@ function harness({ viewerId = 'a', submitResult = { waiting:true, round:1 } } = 
     },
     toast:(message) => calls.push(['toast', message]),
     playSfx:(id) => calls.push(['sfx', id]),
-    playMappedAudio:() => true,
+    playMappedAudio:(id) => {
+      calls.push(['mappedAudio', id]);
+      return true;
+    },
+    syncPvpBgmV1:() => calls.push(['pvpBgmSync']),
     YuksamInputRouter:{
       register({ handle }) {
         window.escapeHandler = handle;
@@ -288,6 +292,91 @@ test('PvP reuses the normal combat stage and keeps the local player on the left 
   assert.equal(opponentDraw.profile.name, 'A');
   assert.equal(opponentDraw.flipped, true);
   assert.ok(html.indexOf('Lv.6 B') < html.indexOf('Lv.5 A'));
+});
+
+test('round and countdown share a centered header while the countdown stays prominent', () => {
+  const ui = harness();
+  ui.window.enterPvpMatchV1(ui.match);
+
+  const html = ui.lastHtml();
+  assert.match(
+    html,
+    /<div class="pvp-battle-header-v4">\s*<h2>전투<\/h2>\s*<span class="pvp-round-badge-v2">친선 대전 · 1라운드\s*<b id="pvpRoundTimerV2">20초<\/b>/,
+  );
+  assert.match(styleSource, /\.pvp-battle-header-v4\{[\s\S]*justify-content:center/);
+  assert.match(styleSource, /\.pvp-battle-header-v4>h2\{position:absolute;left:0/);
+  assert.match(styleSource, /\.pvp-round-badge-v2 b\{[\s\S]*font-size:25px;line-height:1/);
+});
+
+test('finished PvP result omits the world-health and resources explanation', () => {
+  const ui = harness();
+  ui.window.enterPvpMatchV1({
+    ...ui.match,
+    phase:'finished',
+    winnerId:'a',
+    loserId:'b',
+  });
+
+  assert.match(ui.lastHtml(), /🏆 승리!/);
+  assert.doesNotMatch(ui.lastHtml(), /월드 체력과 보유 자원은 그대로 유지됩니다/);
+});
+
+test('PvP switches to battle BGM and plays the victory sound once after winning', async () => {
+  const ui = harness();
+  ui.window.enterPvpMatchV1(ui.match);
+  assert.deepEqual(ui.calls.filter(([type]) => type === 'pvpBgmSync'), [['pvpBgmSync']]);
+
+  const finished = {
+    ...ui.match,
+    phase:'finished',
+    winnerId:'a',
+    loserId:'b',
+  };
+  ui.emit({ type:'match', match:finished });
+  await ui.advance(1_200);
+
+  assert.deepEqual(
+    ui.calls.filter(([type]) => type === 'mappedAudio'),
+    [['mappedAudio', 'pvpVictory']],
+  );
+  ui.window.enterPvpMatchV1(finished);
+  await ui.advance(100);
+  assert.equal(ui.calls.filter(([type]) => type === 'mappedAudio').length, 1);
+});
+
+test('the losing player hears the failure sound, while a cancelled match stays silent', () => {
+  const loser = harness({ viewerId:'b' });
+  loser.window.enterPvpMatchV1({
+    ...loser.match,
+    phase:'finished',
+    winnerId:'a',
+    loserId:'b',
+  });
+  assert.deepEqual(
+    loser.calls.filter(([type]) => type === 'mappedAudio'),
+    [['mappedAudio', 'upgradeFail']],
+  );
+
+  const cancelled = harness();
+  cancelled.window.enterPvpMatchV1({ ...cancelled.match, phase:'cancelled' });
+  assert.equal(cancelled.calls.some(([type]) => type === 'mappedAudio'), false);
+});
+
+test('leaving PvP resynchronizes the current map music', () => {
+  const ui = harness();
+  ui.window.enterPvpMatchV1(ui.match);
+  ui.window.leavePvpScreenV1();
+
+  assert.equal(ui.calls.filter(([type]) => type === 'pvpBgmSync').length, 2);
+});
+
+test('PvP combat-log hold durations are sixty percent longer', () => {
+  assert.match(source, /const LOG_HOLD_SCALE = 1\.6;/);
+  assert.match(source, /action:700 \* LOG_HOLD_SCALE/);
+  assert.match(source, /damage:850 \* LOG_HOLD_SCALE/);
+  assert.match(source, /heal:750 \* LOG_HOLD_SCALE/);
+  assert.match(source, /shield:750 \* LOG_HOLD_SCALE/);
+  assert.match(source, /status:700 \* LOG_HOLD_SCALE/);
 });
 
 test('attack opens the shared question as a four-choice 2x2 grid', () => {
@@ -485,7 +574,7 @@ test('heartbeat replay events finish before the next-round menu is shown', async
   assert.equal(ui.elements.get('pvpRightDieValueV3')?.textContent, '7');
   assert.equal(ui.calls.some(([type, id]) => type === 'sfx' && id === 'hit'), false);
 
-  await ui.advance(2_200);
+  await ui.advance(2_700);
   assert.match(ui.lastHtml(), /친선 대전 · 2라운드/);
   assert.match(ui.lastHtml(), /2라운드! 무엇을 할까요\?/);
   assert.match(ui.lastHtml(), /HP 85\/100/);
@@ -569,7 +658,10 @@ test('wrong-answer action log is complete before minimum guard shield playback',
   );
   assert.doesNotMatch(ui.lastHtml(), /막기 훈련|보호막 1 생성/);
 
-  await ui.advance(320);
+  await ui.advance(1_119);
+  assert.doesNotMatch(ui.lastHtml(), /막기 훈련|보호막 1 생성/);
+
+  await ui.advance(1);
   const shieldNotice = ui.lastHtml().match(/<h3 class="combat-notice[^"]*">([^<]*)<\/h3>/)?.[1];
   assert.equal(shieldNotice, 'B 학생의 막기 훈련! 보호막 1 생성!');
   assert.match(ui.lastHtml(), /HP 100\/100 <span class="shield-badge">🛡 1<\/span>/);
@@ -634,6 +726,10 @@ test('surrender requires confirmation and does not grant local world rewards', a
   );
   assert.match(ui.lastHtml(), /대전이 끝났습니다|다음엔 이길 수 있어요/);
   assert.doesNotMatch(ui.lastHtml(), /경험치|골드|빌딩/);
+  assert.deepEqual(
+    ui.calls.filter(([type]) => type === 'mappedAudio'),
+    [['mappedAudio', 'upgradeFail']],
+  );
 });
 
 test('Escape opens surrender confirmation instead of silently closing an active match', () => {

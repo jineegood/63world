@@ -27,6 +27,7 @@ test('central manifest inventories only existing numbered Korean audio files', (
   assert.equal(manifest?.assets.critical.src, 'assets/3. 치명타 소리.mp3');
   assert.equal(manifest?.assets.townBgm.src, 'assets/1. 마을 음악.mp3');
   assert.equal(manifest?.assets.battleBgm.src, 'assets/1. 전투씬 음악.mp3');
+  assert.equal(manifest?.assets.pvpVictory.src, 'assets/2. pvp승리음악.mp3');
   assert.equal(existsSync(resolve(root, 'assets/1. 전투씬 음악.wav')), false);
   assert.equal(manifest?.assets.guardianOath.src, 'assets/5. 수호자의 맹세 소리 .mp3');
   assert.equal(manifest?.assets.meteor.src, 'assets/7. 메테오 소리 .mp3');

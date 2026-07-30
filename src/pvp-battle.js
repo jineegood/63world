@@ -2,12 +2,13 @@
   'use strict';
 
   const SUPPORT_TYPES = new Set(['shield', 'buff', 'healBuff', 'healAllies']);
+  const LOG_HOLD_SCALE = 1.6;
   const EVENT_DELAYS = Object.freeze({
-    action:700,
-    damage:850,
-    heal:750,
-    shield:750,
-    status:700,
+    action:700 * LOG_HOLD_SCALE,
+    damage:850 * LOG_HOLD_SCALE,
+    heal:750 * LOG_HOLD_SCALE,
+    shield:750 * LOG_HOLD_SCALE,
+    status:700 * LOG_HOLD_SCALE,
   });
 
   let state = null;
@@ -32,6 +33,20 @@
   let submittedRound = null;
   let syncInFlight = false;
   const processedEvents = new Set();
+  const playedResultSoundMatches = new Set();
+
+  function syncPvpAudioState() {
+    global.syncPvpBgmV1?.();
+    if (!state || state.phase !== 'finished' || !state.matchId) return;
+    if (playedResultSoundMatches.has(state.matchId)) return;
+    const myId = global.getPvpIdentityV1?.()?.userId;
+    const soundId = state.winnerId === myId
+      ? 'pvpVictory'
+      : (state.loserId === myId ? 'upgradeFail' : null);
+    if (!soundId) return;
+    playedResultSoundMatches.add(state.matchId);
+    global.playMappedAudio?.(soundId);
+  }
 
   function escape(value) {
     return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -237,7 +252,6 @@
       const won = state.winnerId === global.getPvpIdentityV1?.()?.userId;
       return `<div class="pvp-result-v1">
         <h2>${won ? '🏆 승리!' : '다음엔 이길 수 있어요!'}</h2>
-        <p>월드 체력과 보유 자원은 그대로 유지됩니다.</p>
         <button class="primary" onclick="leavePvpScreenV1()">마을로 돌아가기</button>
       </div>`;
     }
@@ -263,9 +277,12 @@
     const opponentDefeated = Number(opponent.hp) <= 0 ? ' pvp-defeated-v2' : '';
     const message = combatMessage || `${opponent.name || '상대'} 학생과의 대전! 무엇을 할까요?`;
     global.openModal?.(`<div class="pvp-battle-v2">
-      <h2>전투 <span class="pvp-round-badge-v2">친선 대전 · ${Math.max(1, Number(state.round) || 1)}라운드
-        ${!['finished', 'cancelled'].includes(state.phase) ? `<b id="pvpRoundTimerV2">${remainingSeconds()}초</b>` : ''}
-      </span></h2>
+      <div class="pvp-battle-header-v4">
+        <h2>전투</h2>
+        <span class="pvp-round-badge-v2">친선 대전 · ${Math.max(1, Number(state.round) || 1)}라운드
+          ${!['finished', 'cancelled'].includes(state.phase) ? `<b id="pvpRoundTimerV2">${remainingSeconds()}초</b>` : ''}
+        </span>
+      </div>
       <div class="combat-layout">
         <div class="combat-stage combat-layout-rollback-v27 pvp-combat-stage-v2">
           <div class="combat-vs-flash"></div>
@@ -511,7 +528,10 @@
         return;
       }
       playActionSound(event.source, event.actionId || 'basic', skill);
+      const actionStartedAt = Date.now();
       await playActionFx(event, skill);
+      const actionFxElapsed = Math.max(0, Date.now() - actionStartedAt);
+      await delay(Math.max(0, EVENT_DELAYS.action - actionFxElapsed));
       return;
     }
 
@@ -658,6 +678,7 @@
         combatTone = state.phase === 'finished'
           ? (state.winnerId === global.getPvpIdentityV1?.()?.userId ? 'correct-answer' : 'enemy-action')
           : '';
+        syncPvpAudioState();
         render();
         return;
       }
@@ -741,6 +762,7 @@
     combatTone = '';
     diceVisual = null;
     confirmingSurrender = false;
+    syncPvpAudioState();
     const client = global.getPvpClientV1?.();
     unsubscribe = client?.subscribe(state.matchId, handleRealtime) || null;
     if (heartbeatTimer) clearInterval(heartbeatTimer);
@@ -908,6 +930,7 @@
       combatMessage = '항복하여 대전이 끝났습니다.';
       combatTone = 'enemy-action';
       uiMode = 'result';
+      syncPvpAudioState();
     } catch (error) {
       global.toast?.(error?.message || '항복을 처리하지 못했어요.');
     }
@@ -936,6 +959,7 @@
     queueStartTimer = null;
     pendingMatch = null;
     state = null;
+    global.syncPvpBgmV1?.();
     uiMode = 'menu';
     selectedAction = 'basic';
     combatMessage = '';

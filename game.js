@@ -6038,6 +6038,8 @@ function updateQuestTracker() {
   getDesiredAudioFile = function getDesiredAudioFileV21() {
     ensureBossAudioV21();
     if (!game.settings.bgmEnabled) return null;
+    const activePvpV21 = window.getActivePvpMatchV1?.();
+    if (activePvpV21 && !['finished', 'cancelled'].includes(activePvpV21.phase)) return game.audio.battleFile || null;
     if (screens.game.classList.contains('active') && (game.currentMap === 'bossRoom' || game.currentMap === 'finalBossRoom')) return game.audio.bossFile || null;
     return oldGetDesiredAudioFileV21();
   };
@@ -6052,6 +6054,9 @@ function updateQuestTracker() {
       if (file === desired) file.play().catch(() => {});
       else if (file && file !== desired) file.pause();
     });
+  };
+  window.syncPvpBgmV1 = function syncPvpBgmV1() {
+    resumeAudio();
   };
   audioVolumePipeline.register({
     id:'audio-volume-v21',

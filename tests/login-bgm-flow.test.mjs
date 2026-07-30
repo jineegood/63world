@@ -30,3 +30,13 @@ test('screen changes resynchronize BGM and world entry opens the game screen', (
   assert.match(showScreen, /syncAudioFileBgm\?\.\(\);/);
   assert.match(startGame, /showScreen\('game'\);/);
 });
+
+test('an active friendly match selects the looping battle music before map music', () => {
+  const pvpSelector = functionSource('getDesiredAudioFileV21');
+  const pvpSync = functionSource('syncPvpBgmV1');
+
+  assert.match(pvpSelector, /window\.getActivePvpMatchV1\?\.\(\)/);
+  assert.match(pvpSelector, /!\['finished', 'cancelled'\]\.includes\(activePvpV21\.phase\)/);
+  assert.match(pvpSelector, /return game\.audio\.battleFile \|\| null;/);
+  assert.match(pvpSync, /resumeAudio\(\);/);
+});

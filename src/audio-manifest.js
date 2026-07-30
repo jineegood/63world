@@ -13,6 +13,7 @@
     upgradeCharge: { src:'assets/2. 강화 음악.mp3', volume:1, channel:'sfx' },
     upgradeSuccess: { src:'assets/2. 강화 성공.mp3', volume:1, channel:'sfx' },
     upgradeFail: { src:'assets/2. 강화 실패.mp3', volume:1, channel:'sfx' },
+    pvpVictory: { src:'assets/2. pvp승리음악.mp3', volume:1, channel:'sfx' },
     door: { src:'assets/2. 문여는 소리.mp3', volume:1, channel:'sfx' },
     questCompleteMusic: { src:'assets/2. 퀘스트 완료 음악.mp3', volume:1, channel:'sfx' },
     questComplete: { src:'assets/2. 퀘스트 완료될때 소리.mp3', volume:1, channel:'sfx' },
