@@ -38,7 +38,7 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   expectType('town upgrade door uses final candidate', 'town', { x:worlds.town.upgradeShop.doorX, y:worlds.town.upgradeShop.doorY }, 'upgradeShopDoor');
   expectType('town healing well remains interactive', 'town', worlds.town.healingWell, 'healingWell');
   const equipmentExit = candidate('equipmentShop', worlds.equipmentShop.exit);
-  check('equipment-shop automatic exit is hidden from E lookup', equipmentExit === null, `actual=${equipmentExit?.type || 'null'}`);
+  check('equipment-shop exit remains available to click arrival and E', equipmentExit?.type === 'equipmentShopExit', `actual=${equipmentExit?.type || 'null'}`);
   expectType('equipment weapon NPC remains interactive', 'equipmentShop', worlds.equipmentShop.genie, 'weaponShop');
   expectType('pet interior exit remains an informational candidate', 'petShopInterior', worlds.petShopInterior.exit, 'petShopExit');
   expectType('pet orb uses final candidate', 'petShopInterior', worlds.petShopInterior.orb, 'petOrbNpc');
@@ -57,6 +57,11 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   window.eval('interact()');
   check('healing action opens the healing modal', G.modalState.type === 'healingWell', `type=${G.modalState.type}`);
   window.eval('closeModal()');
+
+  G.transitionLock = 0;
+  candidate('town', { x:worlds.town.petShop.doorX, y:worlds.town.petShop.doorY });
+  window.eval('interact()');
+  check('pet-shop door action enters the interior', G.currentMap === 'petShopInterior', `map=${G.currentMap}`);
 
   candidate('petShopInterior', worlds.petShopInterior.orb);
   window.eval('interact()');

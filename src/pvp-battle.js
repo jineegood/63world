@@ -5,6 +5,8 @@
   const LOG_HOLD_SCALE = 1.6;
   const LOG_HOLD_EXTRA_MS = 1000;
   const PVP_QUESTION_TIME_MS = 30000;
+  const WRONG_ANSWER_REVIEW_MS = 2000;
+  const PVP_INTRO_MS = 1800;
   const EVENT_DELAYS = Object.freeze({
     action:700 * LOG_HOLD_SCALE + LOG_HOLD_EXTRA_MS,
     damage:850 * LOG_HOLD_SCALE + LOG_HOLD_EXTRA_MS,
@@ -35,6 +37,9 @@
   let submittedRound = null;
   let syncInFlight = false;
   let roundReadyInFlight = false;
+  let wrongReview = null;
+  let introVisible = false;
+  let introTimer = null;
   const processedEvents = new Set();
   const playedResultSoundMatches = new Set();
 
@@ -241,6 +246,49 @@
     </div>`;
   }
 
+  function normalizedAnswer(value) {
+    return String(value ?? '').trim().toLocaleLowerCase('ko-KR');
+  }
+
+  function wrongReviewHtml() {
+    const question = state?.question || {};
+    const correctAnswer = String(wrongReview?.correctAnswer ?? '');
+    const choices = Array.isArray(question.choices) && question.choices.length >= 2
+      ? question.choices.slice(0, 4)
+      : null;
+    const answerHtml = choices ? `<div class="choice-grid">
+      ${choices.map((choice, index) => {
+        const correct = normalizedAnswer(choice) === normalizedAnswer(correctAnswer);
+        return `<button disabled class="${correct ? 'correct-answer-review' : ''}">
+          <span class="objective-chip">${index + 1}</span>${escape(choice)}
+        </button>`;
+      }).join('')}
+    </div>` : `<div class="answer-row">
+      <input value="${escape(correctAnswer)}" readonly class="correct-answer-review" aria-label="정답" />
+    </div>`;
+    return `<div class="combat-question pvp-wrong-review-v5">
+      <div class="pvp-question-topline-v2"><span class="badge">오답 풀이</span><b>정답 확인</b></div>
+      <h3>${escape(question.prompt || question.q || '문제')}</h3>
+      ${answerHtml}
+      <p class="muted">초록색으로 표시된 정답을 확인하세요.</p>
+    </div>`;
+  }
+
+  function introOverlay() {
+    if (!introVisible || !state) return '';
+    const me = playerForRole('me');
+    const opponent = playerForRole('opponent');
+    return `<div class="pvp-battle-intro-v5" aria-live="polite">
+      <div class="pvp-intro-title-v5">⚔ 친선 대전 ⚔</div>
+      <div class="pvp-intro-versus-v5">
+        <strong>${escape(me.name || '나')}</strong>
+        <span>VS</span>
+        <strong>${escape(opponent.name || '상대')}</strong>
+      </div>
+      <div class="pvp-intro-start-v5">전투 시작!</div>
+    </div>`;
+  }
+
   function remainingSeconds() {
     if (!state) return 0;
     const deadline = state.phase === 'reconnect' ? state.reconnectDeadline : state.deadline;
@@ -266,6 +314,7 @@
     if (state.phase === 'reconnect') {
       return `<div class="pvp-wait-v1">상대의 재접속을 기다리고 있어요. <b id="pvpTimerV2">${remainingSeconds()}초</b></div>`;
     }
+    if (uiMode === 'wrong-review') return wrongReviewHtml();
     if (processingEvents || uiMode === 'playback') {
       return '<div class="pvp-combat-progress-v2">선공부터 차례대로 공격합니다.</div>';
     }
@@ -306,6 +355,7 @@
             <canvas id="pvpOpponentCanvasV2" width="230" height="190"></canvas>
           </div>
           ${diceOverlay()}
+          ${introOverlay()}
         </div>
         <div class="panel-card pvp-combat-panel-v2">
           <h3 class="combat-notice ${escape(combatTone)}">${escape(message)}</h3>
@@ -494,7 +544,7 @@
     }
   }
 
-  function showImpact(targetSide, amount, kind = 'damage') {
+  function showImpact(targetSide, amount, kind = 'damage', lane = 0) {
     const targetIsMe = targetSide === meSide();
     const selector = targetIsMe ? '.combat-player' : '.combat-monster';
     const actor = document.querySelector?.(`#modalContent ${selector}`) || document.querySelector?.(selector);
@@ -506,7 +556,8 @@
     const number = document.createElement('span');
     number.className = `combat-floating-damage ${targetIsMe ? 'player' : 'monster'} ${kind}`;
     number.textContent = kind === 'heal' || kind === 'shield' ? `+${Math.max(0, Number(amount) || 0)}` : `-${Math.max(0, Number(amount) || 0)}`;
-    number.style.left = targetIsMe ? '24%' : '76%';
+    const baseLeft = targetIsMe ? 24 : 76;
+    number.style.left = `${baseLeft + Math.max(-1, Math.min(1, Number(lane) || 0)) * 6}%`;
     number.style.top = targetIsMe ? '62%' : '48%';
     stage.appendChild(number);
     setTimeout(() => number.remove?.(), 1250);
@@ -533,6 +584,16 @@
         ? `${answerMessage} 하지만 기절해서 행동하지 못했습니다!`
         : wrong ? answerMessage : `${answerMessage} ${action.name}!`;
       setCombatLog(message, wrong ? 'wrong-answer' : event.source === meSide() ? 'correct-answer' : 'enemy-action');
+      if (wrong) {
+        wrongReview = { correctAnswer:String(event.correctAnswer ?? '') };
+        uiMode = 'wrong-review';
+        render();
+        await delay(WRONG_ANSWER_REVIEW_MS);
+        if (!state || generation !== playbackGeneration) return;
+        wrongReview = null;
+        uiMode = 'playback';
+        render();
+      }
       if (event.prevented === 'stun') {
         global.playSfx?.('open');
         await delay(EVENT_DELAYS.action);
@@ -559,11 +620,15 @@
       target.hp = Math.max(0, Number(target.hp || 0) - hpDamage);
       const targetName = target.name || sideName(event.target);
       const parts = [];
-      if (hpDamage > 0) parts.push(`체력 ${hpDamage} 피해`);
-      if (absorbed > 0) parts.push(`보호막 ${absorbed} 피해`);
-      setCombatLog(`${targetName} 학생이 ${parts.join(', ') || '피해를 막아냈습니다'}!`,
+      if (absorbed > 0) parts.push(`보호막 ${absorbed}`);
+      if (hpDamage > 0) parts.push(`체력 ${hpDamage}`);
+      const totalDamage = absorbed + hpDamage;
+      setCombatLog(totalDamage > 0
+        ? `${sourceName} 학생이 ${targetName} 학생에게 총 ${totalDamage}의 피해를 주었습니다! (${parts.join(', ')})`
+        : `${targetName} 학생이 피해를 막아냈습니다!`,
         event.target === meSide() ? 'enemy-action' : 'correct-answer');
-      showImpact(event.target, hpDamage || absorbed, hpDamage > 0 ? 'damage' : 'shield-damage');
+      if (absorbed > 0) showImpact(event.target, absorbed, 'shield-damage', hpDamage > 0 ? -1 : 0);
+      if (hpDamage > 0) showImpact(event.target, hpDamage, 'damage', absorbed > 0 ? 1 : 0);
       if (absorbed > 0 && hpDamage === 0) global.playSfx?.('shieldBlock');
       else global.playSfx?.('hit');
       await delay(EVENT_DELAYS.damage);
@@ -655,6 +720,7 @@
     if (!state || generation !== playbackGeneration) return;
     processingEvents = false;
     diceVisual = null;
+    wrongReview = null;
     applyPendingMatchSoon(320);
   }
 
@@ -801,6 +867,9 @@
     submittedRound = null;
     syncInFlight = false;
     roundReadyInFlight = false;
+    wrongReview = null;
+    if (introTimer) clearTimeout(introTimer);
+    introVisible = Number(state.round) === 1 && !['finished', 'cancelled'].includes(state.phase);
     selectedAction = 'basic';
     uiMode = ['finished', 'cancelled'].includes(state.phase)
       ? 'result'
@@ -830,6 +899,15 @@
     if (countdownTimer) clearInterval(countdownTimer);
     countdownTimer = setInterval(updateCountdown, 1000);
     render();
+    if (introVisible) {
+      introTimer = setTimeout(() => {
+        introTimer = null;
+        introVisible = false;
+        if (state && !confirmingSurrender) {
+          render();
+        }
+      }, PVP_INTRO_MS);
+    }
     if (!hasRoundTimerStarted()) signalRoundReady();
     loadProfiles(state.matchId, profileGeneration).catch(() => {});
   }
@@ -1027,6 +1105,10 @@
     submittedRound = null;
     syncInFlight = false;
     roundReadyInFlight = false;
+    wrongReview = null;
+    introVisible = false;
+    if (introTimer) clearTimeout(introTimer);
+    introTimer = null;
     global.closeModal?.();
   }
 

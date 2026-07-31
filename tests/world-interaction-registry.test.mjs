@@ -93,7 +93,8 @@ test('real browser preserves final world candidates and actions', { timeout:3000
   const script = join(root, 'tools', 'browser-smoke', 'try_world_interactions.js');
   const result = spawnSync(process.execPath, [script, root], { encoding:'utf8', timeout:25000 });
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
-  assert.match(result.stdout, /PASS: equipment-shop automatic exit is hidden from E lookup/);
+  assert.match(result.stdout, /PASS: equipment-shop exit remains available to click arrival and E/);
+  assert.match(result.stdout, /PASS: pet-shop door action enters the interior/);
   assert.match(result.stdout, /PASS: pet automatic exit ignores E/);
   assert.match(result.stdout, /PASS: final room blocks lower-map candidate fallback/);
   assert.match(result.stdout, /PASS: final exit returns to its recorded map/);

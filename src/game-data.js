@@ -84,7 +84,7 @@
     starCape: { id: 'starCape', name: '별빛 망토', slot: 'armor', classOnly: null, desc: '전설의 망토. 주요 능력치 +2, 체력 +4 (퀘스트 보상)', stats: { 힘: 2, 지능: 2, 정신: 2, 체력: 4 }, visual: 'starCape', questReward: true },
     honorCrown: { id: 'honorCrown', name: '명예 왕관', slot: 'head', classOnly: null, desc: '명예의 증표. 모든 주요 능력치 +2 (퀘스트 보상)', stats: { 힘: 2, 지능: 2, 정신: 2, 체력: 2 }, visual: 'crown', questReward: true },
   };
-  // 빌딩 화폐 상점 = 악세서리 전문점 (5종, Lv.3+, 소지만 해도 possessStats 보너스)
+  // 특별 상점 = 악세서리 전문점 (5종, Lv.3+, 소지만 해도 possessStats 보너스)
   const BUILDING_ITEM_DEFS = {
     featherWing: { id: 'featherWing', name: '하얀 날개 장식', slot: 'accessory', classOnly: null, buildingPrice: 5, levelReq: 3, desc: '순백의 날개. 장착: 정신 +2, 체력 +4 · 소지: 정신 +1', stats: { 정신: 2, 체력: 4 }, possessStats: { 정신: 1 }, visual: 'whiteWing', look: { type: 'wing', color: 'rgba(255,255,255,.92)' } },
     sixthWing: { id: 'sixthWing', name: '육삼 황금 날개', slot: 'accessory', classOnly: null, buildingPrice: 5, levelReq: 3, desc: '63층의 바람을 담은 금빛 날개. 장착: 정신 +3, 체력 +2 · 소지: 체력 +1', stats: { 정신: 3, 체력: 2 }, possessStats: { 체력: 1 }, visual: 'sixthWing', look: { type: 'wing', color: 'rgba(250,204,21,.92)' } },
@@ -304,7 +304,7 @@
       portal: { x: 1200, y: 930, r: 94 },
       npc: { x: 1338, y: 842, r: 26, name: '명진쌤' },
       shop: { x: 700, y: 650, w: 260, h: 200, name: '장비상점', doorX: 700, doorY: 760 },
-      buildingShop: { x: 1660, y: 980, w: 270, h: 210, name: '빌딩 화폐 상점', doorX: 1660, doorY: 1100 },
+      buildingShop: { x: 1660, y: 980, w: 270, h: 210, name: '특별 상점', doorX: 1660, doorY: 1100 },
       hall: { x: 1200, y: 500, w: 300, h: 220, name: '명예의 전당' },
     },
     forest: {
@@ -335,7 +335,7 @@
     },
     buildingShopInterior: {
       key: 'buildingShopInterior',
-      label: '빌딩 화폐 상점 내부',
+      label: '특별 상점 내부',
       width: 1600,
       height: 1000,
       playerSpawn: { x: 800, y: 820 },

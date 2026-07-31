@@ -178,6 +178,35 @@ strong { font-weight: 900; }
 .pvp-question-topline-v2>b{font-size:20px;color:#fde047}
 .pvp-skill-menu-v2{grid-template-columns:repeat(3,minmax(0,1fr))}
 .combat-notice.wrong-answer{color:#fbbf24;text-shadow:0 1px 0 rgba(69,26,3,.62)}
+.pvp-wrong-review-v5 .pvp-question-topline-v2>b{color:#4ade80;font-size:18px}
+.pvp-battle-intro-v5{
+  position:absolute;inset:10px 4%;z-index:45;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:15px;overflow:hidden;border-radius:28px;
+  color:#f8fafc;pointer-events:none;
+  background:
+    radial-gradient(circle at center,rgba(37,99,235,.42),rgba(15,23,42,.94) 68%),
+    linear-gradient(135deg,rgba(239,68,68,.28),rgba(59,130,246,.28));
+  border:2px solid rgba(253,224,71,.64);
+  box-shadow:inset 0 0 70px rgba(96,165,250,.3),0 0 34px rgba(250,204,21,.24);
+  animation:pvpBattleIntroV5 1.8s cubic-bezier(.2,.82,.25,1) both;
+}
+.pvp-battle-intro-v5::before{
+  content:"";position:absolute;inset:-70%;z-index:-1;
+  background:conic-gradient(from 0deg,transparent,rgba(255,255,255,.2),transparent 22%);
+  animation:pvpIntroSweepV5 1.2s ease-out both;
+}
+.pvp-intro-title-v5{font-size:20px;font-weight:900;letter-spacing:.14em;color:#fde68a}
+.pvp-intro-versus-v5{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;width:min(620px,88%);gap:22px;text-align:center}
+.pvp-intro-versus-v5 strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:29px;text-shadow:0 3px 12px rgba(0,0,0,.85)}
+.pvp-intro-versus-v5 span{font:900 46px/1 "Arial Black",sans-serif;color:#facc15;-webkit-text-stroke:2px rgba(120,53,15,.85);filter:drop-shadow(0 0 14px rgba(250,204,21,.6));animation:pvpIntroVsV5 .7s cubic-bezier(.18,.9,.25,1.35) both}
+.pvp-intro-start-v5{padding:8px 28px;border-radius:999px;background:rgba(239,68,68,.82);font-size:25px;font-weight:900;letter-spacing:.08em;box-shadow:0 0 24px rgba(248,113,113,.6)}
+@keyframes pvpBattleIntroV5{
+  0%{opacity:0;transform:scale(.78);filter:brightness(2)}
+  14%,78%{opacity:1;transform:scale(1);filter:brightness(1)}
+  100%{opacity:0;transform:scale(1.06);filter:brightness(1.35)}
+}
+@keyframes pvpIntroSweepV5{from{transform:rotate(-55deg)}to{transform:rotate(215deg)}}
+@keyframes pvpIntroVsV5{from{opacity:0;transform:scale(3) rotate(-10deg)}to{opacity:1;transform:scale(1) rotate(0)}}
 
 .pvp-dice-overlay-v2{
   position:absolute;inset:14px 5% 10px;z-index:30;overflow:visible;

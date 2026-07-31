@@ -313,6 +313,21 @@ test('round and countdown share a centered header while the countdown stays prom
   assert.match(styleSource, /\.pvp-round-badge-v2 b\{[\s\S]*font-size:25px;line-height:1/);
 });
 
+test('PvP opens with a short named versus intro without blocking the battle panel', async () => {
+  const ui = harness();
+  ui.window.enterPvpMatchV1(ui.match);
+
+  assert.match(ui.lastHtml(), /pvp-battle-intro-v5/);
+  assert.match(ui.lastHtml(), /친선 대전/);
+  assert.match(ui.lastHtml(), /<strong>A<\/strong>[\s\S]*<span>VS<\/span>[\s\S]*<strong>B<\/strong>/);
+  assert.match(ui.lastHtml(), /전투 시작!/);
+  assert.match(ui.lastHtml(), />공격<\/button>/);
+
+  await ui.advance(1_800);
+  assert.doesNotMatch(ui.lastHtml(), /pvp-battle-intro-v5/);
+  assert.match(styleSource, /@keyframes pvpBattleIntroV5/);
+});
+
 test('finished PvP result omits the world-health and resources explanation', () => {
   const ui = harness();
   ui.window.enterPvpMatchV1({
@@ -517,7 +532,7 @@ test('dice visibly rolls and settles before queued damage is applied', async () 
 
   await ui.advance(1_000);
   assert.match(ui.lastHtml(), /HP 85\/100/);
-  assert.match(ui.lastHtml(), /B 학생이 체력 15 피해/);
+  assert.match(ui.lastHtml(), /A 학생이 B 학생에게 총 15의 피해를 주었습니다! \(체력 15\)/);
   assert.equal(ui.calls.filter(([type, id]) => type === 'sfx' && id === 'hit').length, 1);
 });
 
@@ -528,6 +543,37 @@ test('dice CSS travels, bounces, tumbles on multiple axes, and visibly brakes', 
   assert.match(styleSource, /\.pvp-die-v2\.rolling\.motion-brake\{animation:pvpDieTumbleBrakeV3/);
   assert.match(styleSource, /@keyframes pvpDieShadowBounceV3/);
   assert.match(styleSource, /@keyframes pvpDieDustV3/);
+});
+
+test('damage split across shield and HP shows the total log and two floating numbers', async () => {
+  const ui = harness();
+  ui.window.enterPvpMatchV1({
+    ...ui.match,
+    playerBState:{ ...ui.match.playerBState, shield:7 },
+  });
+  ui.emit({
+    type:'event',
+    round:1,
+    sequenceNo:8,
+    kind:'damage',
+    source:'a',
+    target:'b',
+    amount:15,
+    absorbed:7,
+    hpDamage:8,
+  });
+
+  await ui.advance(70);
+  assert.match(
+    ui.lastHtml(),
+    /A 학생이 B 학생에게 총 15의 피해를 주었습니다! \(보호막 7, 체력 8\)/,
+  );
+  const numbers = ui.actors.stage.children.filter((child) => /combat-floating-damage/.test(child.className));
+  assert.equal(numbers.length, 2);
+  assert.deepEqual(numbers.map((child) => child.textContent), ['-7', '-8']);
+  assert.match(numbers[0].className, /shield-damage/);
+  assert.match(numbers[1].className, /damage/);
+  assert.notEqual(numbers[0].style.left, numbers[1].style.left);
 });
 
 test('a tied server roll lands, then launches both dice again and settles on the final roll', async () => {
@@ -696,15 +742,44 @@ test('wrong-answer action log is complete before minimum guard shield playback',
     actionNotice,
     'A: 오답입니다! 정답은 5 (오답이라 데미지가 절반만 들어갑니다)',
   );
+  assert.match(ui.lastHtml(), /pvp-wrong-review-v5/);
+  assert.match(ui.lastHtml(), /class="correct-answer-review"[\s\S]*>5/);
   assert.doesNotMatch(ui.lastHtml(), /막기 훈련|보호막 1 생성/);
 
-  await ui.advance(2_119);
+  await ui.advance(4_119);
   assert.doesNotMatch(ui.lastHtml(), /막기 훈련|보호막 1 생성/);
 
   await ui.advance(1);
   const shieldNotice = ui.lastHtml().match(/<h3 class="combat-notice[^"]*">([^<]*)<\/h3>/)?.[1];
   assert.equal(shieldNotice, 'B 학생의 막기 훈련! 보호막 1 생성!');
   assert.match(ui.lastHtml(), /HP 100\/100 <span class="shield-badge">🛡 1<\/span>/);
+});
+
+test('a wrong typed answer displays the correct answer in a green readonly field for two seconds', async () => {
+  const ui = harness();
+  ui.window.enterPvpMatchV1({
+    ...ui.match,
+    question:{ prompt:'12 ÷ 3 = ?' },
+  });
+  ui.emit({
+    type:'event',
+    round:1,
+    sequenceNo:30,
+    kind:'action',
+    source:'a',
+    target:'b',
+    actionId:'basic',
+    correct:false,
+    correctAnswer:'4',
+  });
+
+  await ui.advance(70);
+  assert.match(ui.lastHtml(), /pvp-wrong-review-v5/);
+  assert.match(ui.lastHtml(), /<input value="4" readonly class="correct-answer-review"/);
+  await ui.advance(1_999);
+  assert.match(ui.lastHtml(), /pvp-wrong-review-v5/);
+  await ui.advance(1);
+  assert.doesNotMatch(ui.lastHtml(), /pvp-wrong-review-v5/);
 });
 
 test('the same realtime event is ignored when it is delivered twice', async () => {

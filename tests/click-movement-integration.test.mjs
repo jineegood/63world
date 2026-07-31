@@ -123,4 +123,6 @@ test('game connects the tested controller to input, update, rendering, and cance
   assert.match(gameSource, /nearest\.type === 'buildingShopDoor'\) \{ enterBuildingShopInterior\(\)/);
   assert.match(gameSource, /nearest\.type === 'equipmentShopExit'/);
   assert.match(gameSource, /nearest\.type === 'buildingShopExit'/);
+  assert.match(gameSource, /types:\[[^\]]*'petShopDoor'/);
+  assert.match(gameSource, /nearest\.type === 'petShopDoor'\) enterPetShopFromInteractionV35\(\)/);
 });

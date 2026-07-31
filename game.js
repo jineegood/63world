@@ -2841,7 +2841,7 @@ function enterBuildingShopInterior() {
   updateHud();
   savePlayer();
   playSfx('open');
-  appendChatMessage('system', '이동', '빌딩 화폐 상점 내부로 들어왔습니다.');
+  appendChatMessage('system', '이동', '특별 상점 내부로 들어왔습니다.');
 }
 
 window.enterForest = function enterForest() {
@@ -3863,7 +3863,7 @@ function bindEvents() {
       }
       if (k === 'c' && !typing && !isPaused()) { e.preventDefault(); openCharacterPanel(); return; }
       if (k === 'n' && !typing && !isPaused()) { e.preventDefault(); openSkillTreeModal(); return; }
-      if (e.code === 'Space') {
+      if (e.code === 'Space' && !typing) {
         e.preventDefault();
         if (!isPaused()) {
           game.attackTimer = 180;
@@ -4238,7 +4238,7 @@ function findBaseWorldInteractable() {
     if (distance(p, town.portal) < town.portal.r + 48) return { type: 'portal', label: 'E: 포탈 - 사냥터 선택' };
     if (distance(p, town.npc) < 110) return { type: 'npc', label: 'E: 퀘스트 받기' };
     if (distance(p, { x: town.shop.doorX, y: town.shop.doorY }) < 100) return { type: 'shopDoor', label: '빛나는 입구에 접근하면 장비상점으로 이동' };
-    if (distance(p, { x: town.buildingShop.doorX, y: town.buildingShop.doorY }) < 100) return { type: 'buildingShopDoor', label: '빛나는 입구에 접근하면 빌딩 화폐 상점으로 이동' };
+    if (distance(p, { x: town.buildingShop.doorX, y: town.buildingShop.doorY }) < 100) return { type: 'buildingShopDoor', label: '빛나는 입구에 접근하면 특별 상점으로 이동' };
     if (Math.abs(p.x - town.hall.x) < 200 && Math.abs(p.y - town.hall.y) < 140) return { type: 'hall', label: 'E: 명예의 전당 보기' };
   }
   if (['forest', 'desert', 'swamp'].includes(game.currentMap)) {
@@ -12779,6 +12779,21 @@ function updateQuestTracker() {
     // [수정] v35가 보스전 진입을 끊고 티저 대사만 남겨두었던 것을, 살아있는 v34 전투 함수로 다시 연결.
     openModal(`<div class="dialogue-box final-teacher-dialogue-v26"><div class="dialogue-speaker"><h2>LV.99 명진쌤 <span class="badge danger">최종 보스</span></h2><div class="badge">E키로 진행</div></div><div class="dialogue-text">여기까지 오다니… 정말 대단하구나!<br>하지만 이 모든 모험은 너희의 성장을 위한 것이었단다.<br>이제, 나를 뛰어넘어 보렴!</div><div class="dialogue-options"><button class="primary" onclick="startFinalTeacherBattleV34()">도전한다</button><button class="ghost" onclick="closeModal()">아직 준비가 안 됐습니다</button></div></div>`, { type:'dialogue', pause:true });
   }
+  function enterPetShopFromInteractionV35() {
+    if (game.transitionLock && Date.now() < game.transitionLock) return;
+    game.transitionLock = Date.now() + 700;
+    playSfx?.('door');
+    closeModal?.();
+    game.currentMap = 'petShopInterior';
+    game.player.map = 'petShopInterior';
+    game.player.x = worldDefs.petShopInterior.playerSpawn.x;
+    game.player.y = worldDefs.petShopInterior.playerSpawn.y;
+    $('returnTownBtn')?.classList.remove('hidden');
+    updateHud?.();
+    syncAudioFileBgm?.();
+    savePlayer?.();
+    appendChatMessage?.('system', '이동', '펫 상점 내부로 들어왔습니다.');
+  }
   function exitFinalBossRoomV35() {
     closeModal();
     hideTooltipV35();
@@ -12818,9 +12833,10 @@ function updateQuestTracker() {
   worldInteractionRegistry.registerAction({
     id:'final-world-actions-v35',
     priority:350,
-    types:['healingWell', 'petShopExit', 'upgradeShopExit', 'petOrbNpc', 'upgradeNpc', 'finalBossPortal', 'finalBossExitV35', 'finalTeacherNpcV35'],
+    types:['healingWell', 'petShopDoor', 'petShopExit', 'upgradeShopExit', 'petOrbNpc', 'upgradeNpc', 'finalBossPortal', 'finalBossExitV35', 'finalTeacherNpcV35'],
     handle:(nearest) => {
       if (nearest.type === 'healingWell') window.openHealingWellModal();
+      else if (nearest.type === 'petShopDoor') enterPetShopFromInteractionV35();
       else if (nearest.type === 'petOrbNpc') window.openPetShopModalV34();
       else if (nearest.type === 'upgradeNpc') {
         if (!window.openQuestNpcIntroV3?.('enhance', () => window.openUpgradeShopModalV33())) window.openUpgradeShopModalV33();

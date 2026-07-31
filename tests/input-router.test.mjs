@@ -64,6 +64,11 @@ test('production input handlers register through the router only', () => {
   assert.equal((source.match(/global\.addEventListener\('keyup'/g) || []).length, 1);
 });
 
+test('space remains ordinary text while the chat input has focus', () => {
+  assert.match(gameSource, /if \(e\.code === 'Space' && !typing\)/);
+  assert.doesNotMatch(gameSource, /if \(e\.code === 'Space'\) \{\s*e\.preventDefault\(\)/);
+});
+
 test('real browser routing keeps one owner per context and releases movement across contexts', { timeout:30000 }, () => {
   const script = join(root, 'tools', 'browser-smoke', 'try_input_router.js');
   const result = spawnSync(process.execPath, [script, root], { encoding:'utf8', timeout:25000 });
