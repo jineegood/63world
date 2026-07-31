@@ -87,6 +87,8 @@
       .raid-next-hint.warn{color:#fbbf24;font-weight:800}
       .raid-log{max-height:190px;overflow-y:auto;background:rgba(2,6,23,.55);border-radius:10px;
         padding:8px 10px;font-size:13px;line-height:1.55;margin-top:8px}
+      .raid-escape-row{margin-top:10px;text-align:right}
+      .raid-escape-row button{font-size:12px;opacity:.85}
       .raid-log div.crit{color:#fbbf24;font-weight:800}
       .raid-log div.miss{color:#94a3b8}
       .raid-log div.heal{color:#4ade80}
@@ -293,9 +295,7 @@
         };
       }
       const cancelBtn = global.document.getElementById('raidCancelBtn');
-      if (cancelBtn) {
-        cancelBtn.onclick = () => { active = null; call('closeModal'); leaveDungeonMap(); };
-      }
+      if (cancelBtn) cancelBtn.onclick = () => leaveDungeonNow();
     }
 
     render();
@@ -455,6 +455,7 @@
       }
       call('updateHud');
       call('syncAudioFileBgm');   // 던전 음악으로 갈아탄다
+      toggleReturnButton(true);   // 던전 안에서도 언제든 마을로 나갈 수 있게
     };
 
     if (typeof global.showLoadingTransition === 'function') {
@@ -486,6 +487,7 @@
       call('updateHud');
       call('savePlayer');
       call('syncAudioFileBgm');   // 마을 음악으로 되돌린다
+      toggleReturnButton(false);
     };
     if (typeof global.showLoadingTransition === 'function') {
       global.showLoadingTransition('마을로 돌아갑니다.', back);
@@ -621,12 +623,19 @@
           <h3>${esc(question?.q || '')}</h3>
           ${answerHtml()}
           <div class="raid-log">${logHtml()}</div>
+          <div class="raid-escape-row">
+            <button class="ghost" id="raidGiveUpBtn">🏳 포기하고 마을로</button>
+          </div>
         </div>
       </div>
     `, { type:'raidBattle', pause:true });
 
     paintAll('.raid-battle-face', (id) => snap.members.find((m) => m.id === id), 1.4);
     drawMonsterModel(global.document.getElementById('raidMonsterCanvas'), monster);
+
+    /* 포기 버튼은 연출 중에도 눌려야 한다. 던전에 갇히지 않기 위한 탈출구이기 때문이다. */
+    const giveUpBtn = global.document.getElementById('raidGiveUpBtn');
+    if (giveUpBtn) giveUpBtn.onclick = () => confirmGiveUp();
 
     if (busy) return;
     global.document.querySelectorAll('.raid-choice').forEach((button) => {
@@ -991,6 +1000,127 @@
     }
   }
 
+  /* ---------- 던전에 갇히지 않게 하는 안전장치 ----------
+
+     던전은 한 판 도는 동안만 머무는 곳이다. 그런데 던전 안에서 게임을 끄면
+     저장된 맵이 raidTower로 남아, 다시 접속했을 때 아무것도 할 수 없는 곳에
+     갇힌다. 아래 세 겹으로 막는다.
+       1) 애초에 raidTower를 저장하지 않는다 (근본 차단)
+       2) 그래도 던전에서 시작하게 되면 자동으로 마을로 내보낸다 (안전망)
+       3) 던전 안에서 언제든 마을로 나갈 수 있는 버튼을 둔다 (사용자 탈출구) */
+
+  function installStuckGuards() {
+    if (global.__RAID_STUCK_GUARD_V1__) return;
+    global.__RAID_STUCK_GUARD_V1__ = true;
+
+    // 1) 저장에는 던전이 아니라 돌아갈 곳을 남긴다.
+    if (typeof global.savePlayer === 'function') {
+      const previousSave = global.savePlayer;
+      global.savePlayer = function savePlayerWithoutRaidMap() {
+        const g = G();
+        const player = g?.player;
+        if (player && player.map === MAP_KEY) {
+          const safe = (returnMap && returnMap !== MAP_KEY) ? returnMap : 'town';
+          const spawn = (global.YuksamData?.worldDefs || {})[safe]?.playerSpawn;
+          player.map = safe;
+          if (returnPos) { player.x = returnPos.x; player.y = returnPos.y; }
+          else if (spawn) { player.x = spawn.x; player.y = spawn.y; }
+        }
+        return previousSave.apply(this, arguments);
+      };
+    }
+
+    // 2) 그래도 던전에서 시작했다면 조용히 마을로 되돌린다.
+    if (typeof global.showScreen === 'function') {
+      const previousShowScreen = global.showScreen;
+      global.showScreen = function showScreenWithRaidGuard(name) {
+        const result = previousShowScreen.apply(this, arguments);
+        if (name === 'game') global.setTimeout(rescueIfStranded, 0);
+        return result;
+      };
+    }
+
+    // 3) 마을 귀환 버튼이 눌렸을 때 던전 상태도 함께 정리한다.
+    if (typeof global.returnTown === 'function') {
+      const previousReturnTown = global.returnTown;
+      global.returnTown = function returnTownWithRaidCleanup() {
+        abandonRun();
+        return previousReturnTown.apply(this, arguments);
+      };
+    }
+  }
+
+  /* 한 판이 돌고 있지 않은데 던전에 서 있으면 갇힌 것이다. */
+  function rescueIfStranded() {
+    const g = G();
+    if (!g || g.currentMap !== MAP_KEY || active) return;
+    const worlds = global.YuksamData?.worldDefs || {};
+    g.currentMap = 'town';
+    if (g.player) {
+      g.player.map = 'town';
+      const spawn = worlds.town?.playerSpawn || { x:1190, y:1060 };
+      g.player.x = spawn.x;
+      g.player.y = spawn.y;
+    }
+    toggleReturnButton(false);
+    call('updateHud');
+    call('savePlayer');
+    call('syncAudioFileBgm');
+    call('appendChatMessage', 'system', '63빌딩 던전', '던전 밖으로 나와 마을에서 다시 시작합니다.');
+  }
+
+  /* 진행 중이던 판을 버린다(연출 중이어도 안전하게 멈춘다). */
+  function abandonRun() {
+    active = null;
+    question = null;
+    playingEvents = [];
+    busy = false;
+    walkProgress = 1;
+  }
+
+  function toggleReturnButton(show) {
+    const button = global.document.getElementById('returnTownBtn');
+    if (button) button.classList.toggle('hidden', !show);
+  }
+
+  /* 던전 화면 안에서 쓰는 탈출 버튼. */
+  function leaveDungeonNow() {
+    abandonRun();
+    call('closeModal');
+    leaveDungeonMap();
+  }
+
+  /* 실수로 눌러 판을 날리지 않도록 한 번 물어본다. */
+  function confirmGiveUp() {
+    const openModal = global.openModal;
+    if (typeof openModal !== 'function') { leaveDungeonNow(); return; }
+    const snapshot = active ? active.snapshot() : null;
+    openModal(`
+      <h2>던전에서 나가기</h2>
+      <div class="panel-card">
+        <p>지금 나가면 <strong>${esc(snapshot?.title || '이번 층')}</strong>의 진행이 사라집니다.</p>
+        <p class="raid-hint">보상은 받지 못하고 마을로 돌아갑니다.</p>
+        <div class="answer-row">
+          <button class="primary" id="raidGiveUpYes">나가기</button>
+          <button class="ghost" id="raidGiveUpNo">계속 싸우기</button>
+        </div>
+      </div>
+    `, { type:'raidGiveUp', pause:true });
+
+    const yes = global.document.getElementById('raidGiveUpYes');
+    const no = global.document.getElementById('raidGiveUpNo');
+    if (yes) yes.onclick = () => leaveDungeonNow();
+    if (no) {
+      no.onclick = () => {
+        // 전투로 되돌아간다. 연출이 멈춰 있어도 계속 진행할 수 있게 한다.
+        if (!active) { leaveDungeonNow(); return; }
+        busy = false;
+        if (!question) question = pickQuestion();
+        renderBattle();
+      };
+    }
+  }
+
   /* 던전 맵을 화면 전체 렌더러로 등록한다(마을이 아닌 완전히 다른 장소). */
   function installDungeonRenderer() {
     const pipeline = (typeof worldRenderPipeline !== 'undefined') ? worldRenderPipeline : null;
@@ -1023,12 +1153,16 @@
 
   installDungeonRenderer();
   installDungeonAudio();
+  installStuckGuards();
 
   global.YuksamRaidRunUi = Object.freeze({
     startRun,
     isRunning:() => !!active,
     /* 전투 로그를 재생하는 중인지. 재생 중에는 다음 답을 받지 않는다. */
     isBusy:() => busy,
+    /* 던전에서 나가기(진행 포기). 갇힘 방지용 탈출구. */
+    leaveNow:() => leaveDungeonNow(),
+    rescueIfStranded:() => rescueIfStranded(),
     /* 전투 로그 재생 속도(밀리초). 검사에서는 빠르게 돌린다. */
     setLogSpeed:(ms) => { eventDelayMs = Math.max(0, Number(ms) || 0); },
     /* 검사에서 쓰려고 지금 상태를 들여다볼 수 있게 열어 둔다. */

@@ -198,6 +198,51 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   await sleep(2600);
   check('끝나면 마을로 돌아간다', G.currentMap === 'town', `map=${G.currentMap}`);
 
+  // ===== 던전에 갇히지 않는지 =====
+  // (1) 저장에는 던전이 아니라 돌아갈 곳이 남아야 한다.
+  ui.startRun(1);
+  await sleep(2600);
+  check('던전 안에서는 마을 귀환 버튼이 보인다',
+    !$('returnTownBtn').classList.contains('hidden'));
+  G.player.map = 'raidTower';
+  window.eval('savePlayer()');
+  check('저장에는 던전이 아니라 마을이 남는다', G.player.map !== 'raidTower',
+    `저장된 map=${G.player.map}`);
+
+  // (2) 그래도 던전에서 시작하면 자동으로 마을로 나와야 한다.
+  window.YuksamRaidRunUi.leaveNow();
+  await sleep(2600);
+  G.currentMap = 'raidTower';
+  G.player.map = 'raidTower';
+  ui.rescueIfStranded();
+  await sleep(40);
+  check('진행 없이 던전에 있으면 자동으로 마을로 나온다', G.currentMap === 'town',
+    `map=${G.currentMap}`);
+  check('구조된 뒤에는 귀환 버튼이 숨는다', $('returnTownBtn').classList.contains('hidden'));
+
+  // (3) 전투 중에도 포기하고 나갈 수 있어야 한다.
+  ui.startRun(1);
+  await sleep(2600);
+  const ids2 = ui.peek().members.map((m) => m.id);
+  [['front', ids2[0]], ['middle', ids2[1]], ['back', ids2[2]]].forEach(() => {});
+  for (const [slot, id] of [['front', ids2[0]], ['middle', ids2[1]], ['back', ids2[2]]]) {
+    fire(window.document.querySelector(`.raid-bench-card[data-pick="${id}"]`));
+    await sleep(15);
+    fire(window.document.querySelector(`.raid-plus[data-slot="${slot}"]`));
+    await sleep(20);
+  }
+  fire(window.document.getElementById('raidStartBtn'));
+  await sleep(2400);
+  check('전투 화면에 포기 버튼이 있다', !!window.document.getElementById('raidGiveUpBtn'),
+    `modal=${G.modalState?.type}`);
+  fire(window.document.getElementById('raidGiveUpBtn'));
+  await sleep(40);
+  check('포기하면 한 번 물어본다', G.modalState?.type === 'raidGiveUp', `type=${G.modalState?.type}`);
+  fire(window.document.getElementById('raidGiveUpYes'));
+  await sleep(2600);
+  check('포기하면 마을로 돌아간다', G.currentMap === 'town' && !ui.isRunning(),
+    `map=${G.currentMap}, running=${ui.isRunning()}`);
+
   check('비동기 오류 없음', asyncErrors.length === 0, asyncErrors.slice(0, 3).join(' | '));
   console.log(`요약: PASS ${pass} / FAIL ${fail}`);
   process.exit(fail === 0 && asyncErrors.length === 0 ? 0 : 1);

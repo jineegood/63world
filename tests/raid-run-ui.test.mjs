@@ -89,6 +89,13 @@ test('브라우저에서 1층을 처음부터 끝까지 깬다', { timeout:18000
   assert.match(result.stdout, /PASS: Lv\.5 파티가 1층을 깬다/);
   assert.match(result.stdout, /PASS: 클리어 보상이 지급된다/);
   assert.match(result.stdout, /PASS: 끝나면 마을로 돌아간다/);
+  // 던전에 갇히지 않는지 (실제로 났던 버그)
+  assert.match(result.stdout, /PASS: 던전 안에서는 마을 귀환 버튼이 보인다/);
+  assert.match(result.stdout, /PASS: 저장에는 던전이 아니라 마을이 남는다/);
+  assert.match(result.stdout, /PASS: 진행 없이 던전에 있으면 자동으로 마을로 나온다/);
+  assert.match(result.stdout, /PASS: 전투 화면에 포기 버튼이 있다/);
+  assert.match(result.stdout, /PASS: 포기하면 한 번 물어본다/);
+  assert.match(result.stdout, /PASS: 포기하면 마을로 돌아간다/);
   assert.match(result.stdout, /PASS: 비동기 오류 없음/);
 });
 
@@ -139,6 +146,25 @@ test('아바타는 진행 엔진을 통과해도 살아남는다', () => {
   assert.match(runSource, /equipment:member\.equipment \|\| null/);
   // 던전 맵에서도 각자 아바타로 그린다.
   assert.match(uiSource, /member\.appearance \|\| \{\}/);
+});
+
+test('던전에 갇히지 않도록 세 겹으로 막는다', () => {
+  /* 던전 안에서 게임을 끄면 저장된 맵이 raidTower로 남아 다시 접속했을 때
+     아무것도 할 수 없는 곳에 갇힌다. 실제로 났던 버그다. */
+  // 1) 애초에 던전을 저장하지 않는다
+  assert.match(uiSource, /global\.savePlayer = function savePlayerWithoutRaidMap/);
+  assert.match(uiSource, /if \(player && player\.map === MAP_KEY\)/);
+  // 2) 그래도 던전에서 시작하면 자동으로 마을로 내보낸다
+  assert.match(uiSource, /function rescueIfStranded\(\)/);
+  assert.match(uiSource, /if \(!g \|\| g\.currentMap !== MAP_KEY \|\| active\) return;/);
+  assert.match(uiSource, /global\.showScreen = function showScreenWithRaidGuard/);
+  // 3) 던전 안에서 언제든 나갈 수 있다
+  assert.match(uiSource, /toggleReturnButton\(true\)/);
+  assert.match(uiSource, /id="raidGiveUpBtn"/);
+  assert.match(uiSource, /function confirmGiveUp\(\)/);
+  // 마을 귀환 버튼을 눌렀을 때도 던전 상태를 함께 정리한다
+  assert.match(uiSource, /global\.returnTown = function returnTownWithRaidCleanup/);
+  assert.match(uiSource, /function abandonRun\(\)/);
 });
 
 test('로딩 연출이 끝난 뒤에 창을 연다', () => {
