@@ -37,39 +37,61 @@
     const style = global.document.createElement('style');
     style.id = 'raidRunStylesV1';
     style.textContent = `
-      .raid-slots{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0}
-      .raid-slot-card{background:rgba(15,23,42,.72);border:1px solid rgba(148,163,184,.35);
-        border-radius:12px;padding:12px;text-align:center}
-      .raid-slot-card h4{margin:0 0 4px;font-size:15px}
-      .raid-slot-card .raid-role{font-size:12px;color:#9fb3cd;margin-bottom:8px}
-      .raid-slot-pick{display:flex;gap:4px;justify-content:center;flex-wrap:wrap}
-      .raid-slot-pick button{font-size:12px;padding:4px 8px;border-radius:8px;
-        border:1px solid rgba(148,163,184,.45);background:rgba(30,41,59,.9);color:#e2e8f0;cursor:pointer}
-      .raid-slot-pick button.on{background:#38bdf8;border-color:#7dd3fc;color:#06263a;font-weight:700}
       .raid-hint{font-size:12px;color:#9fb3cd;margin-top:2px}
-      .raid-travel{position:relative;height:130px;overflow:hidden;border-radius:12px;
-        background:linear-gradient(180deg,#111c2e,#1e293b);margin:14px 0}
-      .raid-travel .raid-walker{position:absolute;bottom:26px;font-size:26px;animation:raidWalk 1.6s linear forwards}
-      @keyframes raidWalk{from{left:-12%}to{left:104%}}
-      .raid-travel .raid-floorline{position:absolute;bottom:20px;left:0;right:0;height:2px;background:rgba(148,163,184,.4)}
-      .raid-monster-box{text-align:center;margin-bottom:10px}
-      .raid-monster-name{font-size:17px;font-weight:800;color:#fca5a5}
-      .raid-monster-name.boss{color:#fbbf24}
-      .raid-bar{position:relative;height:14px;border-radius:999px;background:rgba(2,6,23,.75);
-        border:1px solid rgba(148,163,184,.35);overflow:hidden;margin-top:4px}
-      .raid-bar span{display:block;height:100%;background:linear-gradient(90deg,#ef4444,#f97316);transition:width .25s}
-      .raid-bar.ally span{background:linear-gradient(90deg,#22c55e,#4ade80)}
-      .raid-bar em{position:absolute;inset:0;font-style:normal;font-size:11px;line-height:14px;
-        text-align:center;color:#f8fafc;text-shadow:0 1px 2px rgba(0,0,0,.8)}
-      .raid-party{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
-      .raid-party .raid-member{background:rgba(15,23,42,.7);border:1px solid rgba(148,163,184,.3);
-        border-radius:10px;padding:8px}
-      .raid-party .raid-member.down{opacity:.42}
-      .raid-party .raid-member.me{border-color:#38bdf8}
-      .raid-member-top{display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px}
-      .raid-member-slot{color:#9fb3cd}
-      .raid-log{max-height:120px;overflow-y:auto;background:rgba(2,6,23,.55);border-radius:10px;
-        padding:8px 10px;font-size:13px;line-height:1.5;margin-top:8px}
+      .raid-error{font-size:13px;color:#fca5a5;margin-top:6px}
+
+      /* 대형 화면 — 위 세 자리, 아래 대기칸 */
+      .raid-posts{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:12px 0 16px}
+      .raid-post{border-radius:14px;padding:10px 8px 12px;text-align:center;min-height:186px;
+        display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:4px}
+      .raid-post.empty{border:2px dashed rgba(125,211,252,.55);background:rgba(8,17,30,.55)}
+      .raid-post.filled{border:1px solid rgba(148,163,184,.4);background:rgba(15,23,42,.78)}
+      .raid-post.filled.on{border-color:#38bdf8;box-shadow:0 0 0 2px rgba(56,189,248,.35)}
+      .raid-post-title{font-size:13px;font-weight:800;color:#cbd5e1}
+      .raid-post-hint{font-size:11px;color:#8fa6c0;margin-top:auto}
+      .raid-post-empty-text{font-size:12px;color:#7dd3fc}
+      .raid-plus{width:52px;height:52px;border-radius:999px;font-size:26px;line-height:1;
+        border:1px solid rgba(125,211,252,.7);background:rgba(56,189,248,.16);color:#7dd3fc;cursor:pointer}
+      .raid-plus:hover{background:rgba(56,189,248,.34);color:#e0f2fe}
+      .raid-plus.small{width:28px;height:28px;font-size:17px}
+      .raid-figure{cursor:pointer;display:flex;flex-direction:column;align-items:center}
+      .raid-figure-name{font-size:13px;font-weight:700;margin-top:2px}
+      .raid-figure-sub{font-size:11px;color:#9fb3cd}
+      .raid-face{display:block}
+      .raid-bench-wrap{border-top:1px solid rgba(148,163,184,.28);padding-top:10px}
+      .raid-bench-head{display:flex;align-items:center;gap:8px;font-size:13px;color:#cbd5e1;margin-bottom:8px}
+      .raid-bench{display:flex;gap:10px;flex-wrap:wrap;min-height:110px}
+      .raid-bench-card{cursor:pointer;border:1px solid rgba(148,163,184,.35);border-radius:12px;
+        background:rgba(15,23,42,.7);padding:6px 10px 8px;text-align:center}
+      .raid-bench-card.on{border-color:#38bdf8;box-shadow:0 0 0 2px rgba(56,189,248,.35)}
+      .raid-bench-empty{font-size:12px;color:#8fa6c0;align-self:center}
+      /* 전투 — 일반 전투 무대를 그대로 쓰고 왼쪽에 세 명이 선다.
+         체력창은 무대 위쪽에 가로로 놓아 캐릭터를 가리지 않게 한다. */
+      .raid-stage{min-height:440px}
+      .raid-ally-sprite{width:150px;height:164px}
+      .raid-ally-0{bottom:16px;left:31%;z-index:4}
+      .raid-ally-1{bottom:78px;left:18%;z-index:3}
+      .raid-ally-2{bottom:140px;left:5%;z-index:2}
+      .raid-ally-sprite.down{opacity:.35;filter:grayscale(.8)}
+      .raid-monster-sprite{display:grid;place-items:center;right:5%;top:104px;width:236px;height:216px}
+      .raid-party-hp{position:absolute;left:10px;right:10px;top:10px;z-index:9;
+        display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+      .raid-ally-hp{background:rgba(6,13,24,.88);border:1px solid rgba(255,255,255,.10);
+        border-radius:12px;padding:5px 9px;font-size:12px}
+      .raid-ally-hp.me{border-color:rgba(56,189,248,.6)}
+      .raid-ally-hp.down{opacity:.45}
+      .raid-ally-slot{color:#9fb3cd;margin-left:5px;font-size:11px}
+      .raid-ally-num{font-size:11px;color:#cbd5e1;text-align:right}
+      .raid-combat .combat-hpbox.monster{right:5%;top:auto;bottom:16px;min-width:250px}
+      .raid-next-hint{font-size:11px;color:#9fb3cd;margin-top:3px}
+      .raid-next-hint.warn{color:#fbbf24;font-weight:800}
+      .raid-log{max-height:190px;overflow-y:auto;background:rgba(2,6,23,.55);border-radius:10px;
+        padding:8px 10px;font-size:13px;line-height:1.55;margin-top:8px}
+      .raid-log div.crit{color:#fbbf24;font-weight:800}
+      .raid-log div.miss{color:#94a3b8}
+      .raid-log div.heal{color:#4ade80}
+      .raid-log div.good{color:#7dd3fc;font-weight:700}
+      .raid-log div.bad{color:#fca5a5;font-weight:700}
       .raid-log div.hit{color:#fca5a5}
       .raid-log div.mine{color:#7dd3fc}
       .raid-log div.warn{color:#fbbf24;font-weight:700}
@@ -82,6 +104,12 @@
 
   /* 혼자 도는 버전이라 나머지 두 자리를 동료가 채운다.
      동료 능력치는 내 능력치를 기준으로 맞춰 레벨이 올라도 균형이 유지된다. */
+  /* 동료 외형은 매번 달라지면 어색하므로 고정해 둔다. */
+  const ALLY_LOOKS = {
+    ally_guard:{ shirt:'#b45309', pants:'#334155', hair:'#312116', hairStyle:'short', skin:'#ffe0c4', accessory:'none' },
+    ally_priest:{ shirt:'#4f46e5', pants:'#3f3f46', hair:'#5b3422', hairStyle:'curlyLong', skin:'#fff1df', accessory:'scarf' },
+  };
+
   function buildParty() {
     const g = G();
     const player = g?.player;
@@ -98,18 +126,50 @@
       {
         id:'me', name:player.name || '나', klass:player.class, spec:player.spec || '',
         slot:'front', maxHp, hp:maxHp, attack, isPlayer:true,
+        appearance:player.appearance,
+        equipment:player.equipment,
       },
       {
         id:'ally_guard', name:'훈련병 도윤', klass:'warrior', spec:'방어',
         slot:'middle', maxHp:Math.round(maxHp * 1.15), hp:Math.round(maxHp * 1.15),
         attack:Math.max(3, Math.round(attack * 0.85)),
+        appearance:ALLY_LOOKS.ally_guard,
       },
       {
         id:'ally_priest', name:'수련사제 하린', klass:'priest', spec:'신성',
         slot:'back', maxHp:Math.round(maxHp * 0.85), hp:Math.round(maxHp * 0.85),
         attack:Math.max(3, Math.round(attack * 0.8)),
+        appearance:ALLY_LOOKS.ally_priest,
       },
     ];
+  }
+
+  /* 캔버스 하나에 캐릭터 한 명을 그린다. 대형 화면과 전투 화면이 함께 쓴다. */
+  function paintMember(canvas, member, scale = 1.5) {
+    if (!canvas || !member) return;
+    const ctx = typeof canvas.getContext === 'function' ? canvas.getContext('2d') : null;
+    const draw = global.drawPlayerSprite;
+    if (!ctx || typeof draw !== 'function') return;
+    try {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      draw(
+        ctx,
+        canvas.width / 2,
+        canvas.height * 0.78,
+        member.appearance || {},
+        member.klass || 'warrior',
+        { attack:0, moving:false, equipment:member.equipment },
+        scale,
+        member.spec || null,
+      );
+    } catch (_) { /* 그리기 실패가 진행을 막지 않게 한다 */ }
+  }
+
+  function paintAll(selector, lookup, scale) {
+    global.document.querySelectorAll(selector).forEach((canvas) => {
+      const member = lookup(canvas.dataset.member);
+      if (member) paintMember(canvas, member, scale);
+    });
   }
 
   /* ---------- 문제 ---------- */
@@ -122,90 +182,344 @@
 
   /* ---------- 화면 1: 대형 배치 ---------- */
 
+  /* 대형 화면
+     - 위: 앞줄 / 중간 / 뒷줄 세 칸. 비어 있으면 큰 + 로 표시된다.
+     - 아래: 아직 자리를 못 잡은 캐릭터들이 서 있는 대기칸.
+     캐릭터를 먼저 고른 뒤 옮기고 싶은 칸의 + 를 누르면 그리로 간다.
+     이미 배치된 캐릭터도 다른 빈칸이나 대기칸으로 다시 보낼 수 있다. */
   function openFormationScreen() {
     ensureStyles();
     const R = rules();
-    const snap = active.snapshot();
-    const picks = Object.fromEntries(snap.members.map((m) => [m.id, m.slot]));
+    const roster = active.snapshot().members;
+    // 자리를 처음부터 다시 정하도록 전부 대기칸에서 시작한다.
+    const placement = Object.fromEntries(roster.map((m) => [m.id, null]));
+    let selected = roster[0]?.id || null;
+
+    const memberById = (id) => roster.find((m) => m.id === id) || null;
+    const inSlot = (slot) => roster.find((m) => placement[m.id] === slot) || null;
+    const waiting = () => roster.filter((m) => !placement[m.id]);
+
+    function moveSelectedTo(slot) {
+      if (!selected) return;
+      if (slot) {
+        const occupant = inSlot(slot);
+        // 이미 누가 서 있으면 서로 자리를 맞바꾼다(꽉 찼을 때도 바꿀 수 있게).
+        if (occupant && occupant.id !== selected) placement[occupant.id] = placement[selected];
+      }
+      placement[selected] = slot;
+      render();
+    }
+
+    function memberCanvasHtml(member, size) {
+      return `<canvas class="raid-face" data-member="${esc(member.id)}" width="${size}" height="${size}"></canvas>`;
+    }
+
+    function slotHtml(slot) {
+      const member = inSlot(slot);
+      const label = esc(R.slotLabel(slot));
+      const hint = slot === 'front' ? '피해 1.5배' : slot === 'middle' ? '피해 1.0배' : '피해 0.6배';
+      if (!member) {
+        return `
+          <div class="raid-post empty" data-slot="${slot}">
+            <div class="raid-post-title">${label}</div>
+            <button class="raid-plus" data-slot="${slot}" title="${label}에 세우기">+</button>
+            <div class="raid-post-empty-text">비어 있음</div>
+            <div class="raid-post-hint">${hint}</div>
+          </div>`;
+      }
+      return `
+        <div class="raid-post filled ${selected === member.id ? 'on' : ''}" data-slot="${slot}">
+          <div class="raid-post-title">${label}</div>
+          <div class="raid-figure" data-pick="${esc(member.id)}">
+            ${memberCanvasHtml(member, 96)}
+            <div class="raid-figure-name">${esc(member.name)}${member.isPlayer ? ' (나)' : ''}</div>
+            <div class="raid-figure-sub">${esc(member.spec || '전문화 없음')}</div>
+          </div>
+          <div class="raid-post-hint">${hint}</div>
+        </div>`;
+    }
 
     function render(message = '') {
-      const cards = snap.members.map((member) => `
-        <div class="raid-slot-card">
-          <h4>${esc(member.name)}${member.isPlayer ? ' (나)' : ''}</h4>
-          <div class="raid-role">${esc(member.spec || '전문화 없음')} · 공격 ${member.attack} · HP ${member.maxHp}</div>
-          <div class="raid-slot-pick">
-            ${R.SLOTS.map((slot) => `
-              <button data-member="${esc(member.id)}" data-slot="${slot}"
-                class="${picks[member.id] === slot ? 'on' : ''}">${esc(R.slotLabel(slot))}</button>
-            `).join('')}
-          </div>
-        </div>
-      `).join('');
+      const bench = waiting();
+      const benchHtml = bench.length
+        ? bench.map((member) => `
+            <div class="raid-bench-card ${selected === member.id ? 'on' : ''}" data-pick="${esc(member.id)}">
+              ${memberCanvasHtml(member, 84)}
+              <div class="raid-figure-name">${esc(member.name)}${member.isPlayer ? ' (나)' : ''}</div>
+              <div class="raid-figure-sub">${esc(member.spec || '전문화 없음')} · 공격 ${member.attack} · HP ${member.maxHp}</div>
+            </div>`).join('')
+        : '<div class="raid-bench-empty">모두 자리를 잡았습니다.</div>';
+
+      const ready = R.SLOTS.every((slot) => !!inSlot(slot));
 
       call('openModal', `
-        <h2>${esc(snap.title)}</h2>
-        <div class="panel-card">
-          <p>대형을 정하세요. <strong>앞줄은 1.5배로 맞고 뒷줄은 0.6배만 맞습니다.</strong></p>
-          <p class="raid-hint">몬스터는 앞줄부터 노립니다. 튼튼한 사람을 앞에 세우세요.</p>
-          <div class="raid-slots">${cards}</div>
-          ${message ? `<p class="raid-hint" style="color:#fca5a5">${esc(message)}</p>` : ''}
+        <h2>${esc(active.snapshot().title)} — 로비</h2>
+        <div class="panel-card raid-formation">
+          <p class="raid-hint">캐릭터를 고른 뒤 세우고 싶은 자리의 <strong>+</strong>를 누르세요. 이미 세운 캐릭터도 다시 옮길 수 있습니다.</p>
+          <div class="raid-posts">${R.SLOTS.map(slotHtml).join('')}</div>
+          <div class="raid-bench-wrap">
+            <div class="raid-bench-head">
+              <span>대기 중</span>
+              <button class="raid-plus small" data-slot="" title="대기칸으로 보내기">+</button>
+            </div>
+            <div class="raid-bench">${benchHtml}</div>
+          </div>
+          ${message ? `<p class="raid-error">${esc(message)}</p>` : ''}
           <div class="answer-row">
-            <button class="primary" id="raidStartBtn">출발</button>
+            <button class="primary" id="raidStartBtn" ${ready ? '' : 'disabled'}>${ready ? '출발' : '세 자리를 모두 채우세요'}</button>
             <button class="ghost" id="raidCancelBtn">돌아가기</button>
           </div>
         </div>
       `, { type:'raidFormation', pause:true });
 
-      global.document.querySelectorAll('.raid-slot-pick button').forEach((button) => {
+      paintAll('.raid-face', memberById, 1.35);
+
+      global.document.querySelectorAll('[data-pick]').forEach((node) => {
+        node.onclick = () => { selected = node.dataset.pick; render(); };
+      });
+      global.document.querySelectorAll('.raid-plus').forEach((button) => {
         button.onclick = () => {
-          picks[button.dataset.member] = button.dataset.slot;
-          render();
+          if (!selected) { render('먼저 옮길 캐릭터를 고르세요.'); return; }
+          moveSelectedTo(button.dataset.slot || null);
         };
       });
+
       const startBtn = global.document.getElementById('raidStartBtn');
       if (startBtn) {
         startBtn.onclick = () => {
-          const result = active.confirmFormation(picks);
+          const result = active.confirmFormation(placement);
           if (!result.ok) { render(result.reason); return; }
           playTravelScene();
         };
       }
       const cancelBtn = global.document.getElementById('raidCancelBtn');
-      if (cancelBtn) cancelBtn.onclick = () => { active = null; call('closeModal'); };
+      if (cancelBtn) {
+        cancelBtn.onclick = () => { active = null; call('closeModal'); leaveDungeonMap(); };
+      }
     }
 
     render();
   }
 
-  /* ---------- 화면 2: 이동 연출 ---------- */
+  /* ---------- 던전 맵 (화면 전체) ---------- */
+
+  const MAP_KEY = 'raidTower';
+  const LOADING_TAIL_MS = 820;   // 로딩 오버레이가 완전히 걷힐 때까지 기다리는 시간
+  let walkStartedAt = 0;   // 이동 연출 시작 시각
+  let walkProgress = 1;    // 0=출발 지점, 1=몬스터 앞
+  let returnMap = 'town';
+  let returnPos = null;
+
+  function ensureDungeonMap() {
+    const worlds = global.YuksamData && global.YuksamData.worldDefs;
+    if (!worlds || worlds[MAP_KEY]) return worlds;
+    worlds[MAP_KEY] = {
+      key:MAP_KEY,
+      label:'63빌딩 던전 1층',
+      width:1280,
+      height:720,
+      playerSpawn:{ x:200, y:520 },
+    };
+    return worlds;
+  }
+
+  /* 던전 내부를 화면 가득 그린다. 마을이 아니라 완전히 다른 장소로 보이게 한다. */
+  function drawDungeon() {
+    const g = G();
+    const ctx = g?.ctx;
+    if (!ctx) return;
+    const w = g.width;
+    const h = g.height;
+    const t = (global.performance ? performance.now() : Date.now()) / 1000;
+
+    // 바닥과 벽
+    const wall = ctx.createLinearGradient(0, 0, 0, h);
+    wall.addColorStop(0, '#0b1220');
+    wall.addColorStop(0.52, '#16233a');
+    wall.addColorStop(0.53, '#1f2a3c');
+    wall.addColorStop(1, '#0d1522');
+    ctx.fillStyle = wall;
+    ctx.fillRect(0, 0, w, h);
+
+    // 안쪽으로 뻗은 복도 (원근감)
+    ctx.strokeStyle = 'rgba(148,163,184,.16)';
+    ctx.lineWidth = 2;
+    for (let i = 1; i <= 7; i += 1) {
+      const y = h * 0.53 + (h * 0.47) * (i / 7) * (i / 7);
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+    }
+    for (let i = 0; i <= 10; i += 1) {
+      const x = (w / 10) * i;
+      ctx.beginPath();
+      ctx.moveTo(x, h);
+      ctx.lineTo(w / 2 + (x - w / 2) * 0.22, h * 0.53);
+      ctx.stroke();
+    }
+
+    // 벽면 창문 — 바깥 도시의 불빛
+    for (let i = 0; i < 9; i += 1) {
+      const x = 40 + i * (w - 80) / 9;
+      const lit = (i * 5) % 7 < 3;
+      ctx.fillStyle = lit
+        ? `rgba(255,214,120,${(0.35 + 0.25 * Math.sin(t * 1.1 + i)).toFixed(3)})`
+        : 'rgba(120,150,190,.12)';
+      ctx.fillRect(x, h * 0.16, 62, 108);
+      ctx.strokeStyle = 'rgba(10,16,26,.7)';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x, h * 0.16, 62, 108);
+    }
+
+    // 천장 형광등 (깜빡임)
+    for (let i = 0; i < 4; i += 1) {
+      const x = w * (0.18 + i * 0.22);
+      const flick = i === 2 ? (Math.sin(t * 14) > -0.2 ? 1 : 0.25) : 1;
+      const lamp = ctx.createRadialGradient(x, 40, 0, x, 40, 190);
+      lamp.addColorStop(0, `rgba(200,230,255,${(0.20 * flick).toFixed(3)})`);
+      lamp.addColorStop(1, 'rgba(200,230,255,0)');
+      ctx.fillStyle = lamp;
+      ctx.beginPath();
+      ctx.arc(x, 40, 190, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = `rgba(226,240,255,${(0.75 * flick).toFixed(3)})`;
+      ctx.fillRect(x - 46, 24, 92, 7);
+    }
+
+    // 층 표시
+    const snap = active ? active.snapshot() : null;
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.font = '600 15px Noto Sans KR, system-ui';
+    ctx.fillStyle = 'rgba(226,240,255,.7)';
+    if (snap) {
+      ctx.fillText(`${snap.title}   ·   ${Math.min(snap.encounterIndex + 1, snap.encounterTotal)} / ${snap.encounterTotal}`, w / 2, 78);
+    }
+    ctx.restore();
+
+    drawParty();
+  }
+
+  /* 파티 세 명을 대형 순서대로 그린다. 이동 중이면 걸어가는 것처럼 옮겨 준다. */
+  function drawParty() {
+    const g = G();
+    const ctx = g?.ctx;
+    const draw = global.drawPlayerSprite;
+    if (!ctx || !active || typeof draw !== 'function') return;
+    const R = rules();
+    const snap = active.snapshot();
+    const w = g.width;
+    const h = g.height;
+
+    const moving = walkProgress < 1;
+    const baseX = w * (0.16 + 0.46 * walkProgress);
+    const order = { front:0, middle:1, back:2 };
+
+    snap.members.forEach((member) => {
+      const index = order[member.slot] ?? 1;
+      // 앞줄이 가장 앞(오른쪽), 뒷줄이 뒤에 선다.
+      const x = baseX - index * 62;
+      const y = h * 0.80 + index * 10;
+      const step = moving ? Math.abs(Math.sin((walkProgress * 9) + index)) * 6 : 0;
+      ctx.save();
+      ctx.globalAlpha = member.hp > 0 ? 1 : 0.35;
+      try {
+        draw(ctx, x, y - step, member.appearance || {}, member.klass || 'warrior',
+          { attack:0, moving, equipment:member.equipment }, 1.5, member.spec || null);
+      } catch (_) { /* 그리기 실패가 진행을 막지 않게 한다 */ }
+      ctx.restore();
+
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.font = '600 12px Noto Sans KR, system-ui';
+      ctx.fillStyle = member.hp > 0 ? '#e2e8f0' : '#94a3b8';
+      ctx.fillText(`${member.name} (${R.slotLabel(member.slot)})`, x, y + 20);
+      ctx.restore();
+    });
+  }
+
+  function enterDungeonMap(onReady) {
+    const g = G();
+    const worlds = ensureDungeonMap();
+    if (!g || !worlds) { onReady?.(); return; }
+    returnMap = g.currentMap || 'town';
+    returnPos = g.player ? { x:g.player.x, y:g.player.y } : null;
+
+    const move = () => {
+      g.currentMap = MAP_KEY;
+      if (g.player) {
+        g.player.map = MAP_KEY;
+        g.player.x = worlds[MAP_KEY].playerSpawn.x;
+        g.player.y = worlds[MAP_KEY].playerSpawn.y;
+      }
+      call('updateHud');
+      call('syncAudioFileBgm');   // 던전 음악으로 갈아탄다
+    };
+
+    if (typeof global.showLoadingTransition === 'function') {
+      /* showLoadingTransition은 콜백이 끝난 뒤에도 modalState를 'loading'으로
+         다시 덮어쓰고, 약 720ms 뒤에야 되돌린다. 그 안에서 창을 열면
+         modalState가 지워지므로 로딩이 완전히 걷힌 뒤에 연다. */
+      global.showLoadingTransition('63빌딩 던전으로 들어갑니다.', () => {
+        move();
+        global.setTimeout(() => onReady?.(), LOADING_TAIL_MS);
+      });
+    } else {
+      move();
+      onReady?.();
+    }
+  }
+
+  function leaveDungeonMap() {
+    const g = G();
+    const worlds = global.YuksamData && global.YuksamData.worldDefs;
+    if (!g || !worlds) return;
+    const back = () => {
+      g.currentMap = returnMap || 'town';
+      if (g.player) {
+        g.player.map = g.currentMap;
+        const spawn = returnPos || worlds[g.currentMap]?.playerSpawn || { x:1200, y:1700 };
+        g.player.x = spawn.x;
+        g.player.y = spawn.y;
+      }
+      call('updateHud');
+      call('savePlayer');
+      call('syncAudioFileBgm');   // 마을 음악으로 되돌린다
+    };
+    if (typeof global.showLoadingTransition === 'function') {
+      global.showLoadingTransition('마을로 돌아갑니다.', back);
+    } else {
+      back();
+    }
+  }
+
+  /* ---------- 화면 2: 이동 (던전 맵 위에서) ---------- */
+
+  const WALK_MS = 1700;
 
   function playTravelScene() {
-    ensureStyles();
-    const snap = active.snapshot();
-    const step = snap.encounterIndex + 1;
-    const walkers = ['🧝', '🛡️', '✨'];
+    // 모달을 닫아 던전 맵이 화면을 가득 채우게 한다.
+    call('closeModal');
+    walkStartedAt = (global.performance ? performance.now() : Date.now());
+    walkProgress = 0;
 
-    call('openModal', `
-      <h2>${esc(snap.title)}</h2>
-      <div class="panel-card">
-        <p class="raid-progress">${step} / ${snap.encounterTotal} — 안쪽으로 이동 중…</p>
-        <div class="raid-travel">
-          <div class="raid-floorline"></div>
-          ${walkers.map((face, i) => `
-            <div class="raid-walker" style="animation-delay:${i * 0.16}s">${face}</div>
-          `).join('')}
-        </div>
-        <p class="raid-hint">셋이 함께 걸어갑니다.</p>
-      </div>
-    `, { type:'raidTravel', pause:true });
-
-    global.setTimeout(() => {
+    const tick = () => {
       if (!active) return;
+      const now = (global.performance ? performance.now() : Date.now());
+      walkProgress = Math.min(1, (now - walkStartedAt) / WALK_MS);
+      if (walkProgress < 1) {
+        global.requestAnimationFrame ? global.requestAnimationFrame(tick) : global.setTimeout(tick, 32);
+        return;
+      }
       const arrival = active.arriveAtEncounter();
       if (!arrival.ok) return;
       if (arrival.cleared) { finishRun(); return; }
       openBattleScreen();
-    }, 1750);
+    };
+
+    if (global.requestAnimationFrame) global.requestAnimationFrame(tick);
+    else global.setTimeout(tick, 32);
   }
 
   /* ---------- 화면 3: 전투 ---------- */
@@ -217,25 +531,45 @@
     renderBattle();
   }
 
-  function memberCard(member) {
-    const R = rules();
-    const percent = Math.max(0, Math.round((member.hp / member.maxHp) * 100));
-    return `
-      <div class="raid-member ${member.hp <= 0 ? 'down' : ''} ${member.isPlayer ? 'me' : ''}">
-        <div class="raid-member-top">
-          <strong>${esc(member.name)}</strong>
-          <span class="raid-member-slot">${esc(R.slotLabel(member.slot))}</span>
-        </div>
-        <div class="raid-bar ally"><span style="width:${percent}%"></span><em>${member.hp}/${member.maxHp}</em></div>
-      </div>
-    `;
+  /* 왼쪽에 세 명이 대형 순서대로 선다(앞줄이 가장 앞). */
+  function partySpriteHtml(members) {
+    const order = { front:0, middle:1, back:2 };
+    return [...members]
+      .sort((a, b) => (order[a.slot] ?? 1) - (order[b.slot] ?? 1))
+      .map((member, index) => `
+        <div class="combat-sprite raid-ally-sprite raid-ally-${index} ${member.hp <= 0 ? 'down' : ''}">
+          <canvas class="raid-battle-face" data-member="${esc(member.id)}" width="120" height="130"></canvas>
+        </div>`).join('');
   }
 
+  function partyHpHtml(members) {
+    const R = rules();
+    const order = { front:0, middle:1, back:2 };
+    return [...members]
+      .sort((a, b) => (order[a.slot] ?? 1) - (order[b.slot] ?? 1))
+      .map((member) => {
+        const percent = Math.max(0, Math.round((member.hp / member.maxHp) * 100));
+        return `
+          <div class="raid-ally-hp ${member.hp <= 0 ? 'down' : ''} ${member.isPlayer ? 'me' : ''}">
+            <b>${esc(member.name)}${member.isPlayer ? ' (나)' : ''}</b>
+            <span class="raid-ally-slot">${esc(R.slotLabel(member.slot))}</span>
+            <div class="hpbar"><div class="hpfill" style="width:${percent}%"></div></div>
+            <div class="raid-ally-num">${member.hp}/${member.maxHp}</div>
+          </div>`;
+      }).join('');
+  }
+
+  /* 재생 중일 때는 지금까지 나온 줄만 보여 준다(한 줄씩 쌓이는 느낌). */
   function logHtml() {
-    const recent = active.log.slice(-8);
-    return recent.map((entry) => {
-      const cls = entry.kind === 'monster-hit' ? 'hit'
+    const source = playingEvents.length ? playingEvents : active.log.slice(-9);
+    return source.slice(-9).map((entry) => {
+      const cls = entry.missed ? 'miss'
+        : entry.critical ? 'crit'
+        : entry.kind === 'monster-hit' ? 'hit'
         : entry.kind === 'party-hit' ? 'mine'
+        : entry.kind === 'party-heal' ? 'heal'
+        : entry.kind === 'answer-correct' ? 'good'
+        : entry.kind === 'answer-wrong' ? 'bad'
         : ['monster-windup', 'monster-down', 'member-down', 'wiped', 'encounter'].includes(entry.kind) ? 'warn'
         : '';
       return `<div class="${cls}">${esc(entry.text)}</div>`;
@@ -263,23 +597,36 @@
     const percent = Math.max(0, Math.round((monster.hp / monster.maxHp) * 100));
     const nextKind = rules().attackKindForRound(monster, snap.round);
 
+    // 일반 전투와 같은 무대(combat-stage)를 쓰되 왼쪽에 세 명이 선다.
     call('openModal', `
-      <h2>${esc(snap.title)}</h2>
-      <div class="panel-card">
-        <p class="raid-progress">${snap.encounterIndex + 1} / ${snap.encounterTotal}</p>
-        <div class="raid-monster-box">
-          <div class="raid-monster-name ${monster.isBoss ? 'boss' : ''}">
-            ${monster.isBoss ? '👑 ' : ''}Lv.${monster.level} ${esc(monster.name)}
+      <h2>전투 — ${esc(snap.title)}</h2>
+      <div class="combat-layout raid-combat">
+        <div class="combat-stage raid-stage">
+          <div class="combat-hpbox monster">
+            <b>${monster.isBoss ? '👑 ' : ''}Lv.${monster.level} ${esc(monster.name)}</b>
+            <div>HP ${monster.hp}/${monster.maxHp}</div>
+            <div class="hpbar"><div class="hpfill" style="width:${percent}%"></div></div>
+            <div class="raid-next-hint ${nextKind === 'all' ? 'warn' : ''}">
+              ${nextKind === 'all' ? '⚠ 다음은 전체 공격!' : '다음은 앞줄을 노립니다'}
+            </div>
           </div>
-          <div class="raid-bar"><span style="width:${percent}%"></span><em>${monster.hp}/${monster.maxHp}</em></div>
-          <p class="raid-hint">${nextKind === 'all' ? '⚠ 다음은 전체 공격입니다!' : '다음은 앞줄을 노립니다.'}</p>
+          <div class="raid-party-hp">${partyHpHtml(snap.members)}</div>
+          ${partySpriteHtml(snap.members)}
+          <div class="combat-sprite combat-monster raid-monster-sprite ${monster.isBoss ? 'boss' : ''}">
+            <canvas id="raidMonsterCanvas" width="230" height="210"></canvas>
+          </div>
         </div>
-        <div class="raid-party">${snap.members.map(memberCard).join('')}</div>
-        <h3>${esc(question?.q || '')}</h3>
-        ${answerHtml()}
-        <div class="raid-log">${logHtml()}</div>
+        <div class="panel-card">
+          <p class="raid-progress">${snap.encounterIndex + 1} / ${snap.encounterTotal}</p>
+          <h3>${esc(question?.q || '')}</h3>
+          ${answerHtml()}
+          <div class="raid-log">${logHtml()}</div>
+        </div>
       </div>
     `, { type:'raidBattle', pause:true });
+
+    paintAll('.raid-battle-face', (id) => snap.members.find((m) => m.id === id), 1.4);
+    drawMonsterModel(global.document.getElementById('raidMonsterCanvas'), monster);
 
     if (busy) return;
     global.document.querySelectorAll('.raid-choice').forEach((button) => {
@@ -294,6 +641,44 @@
     }
   }
 
+  /* 소리는 게임의 오디오 목록을 그대로 쓴다. 없으면 조용히 넘어간다. */
+  function playEventSound(event) {
+    if (!event) return;
+    if (event.audioId) {
+      if (typeof global.playAudioAssetV42 === 'function') {
+        try { global.playAudioAssetV42(event.audioId); return; } catch (_) { /* 아래로 */ }
+      }
+      // 목록 재생이 없으면 기본 효과음으로 대신한다.
+      call('playSfx', event.audioId === 'miss' ? 'miss' : 'hit');
+      return;
+    }
+    if (event.kind === 'party-hit') call('playSfx', 'hit');
+    else if (event.kind === 'monster-hit') call('playSfx', 'hit');
+    else if (event.kind === 'party-heal') call('playSfx', 'heal');
+    else if (event.kind === 'monster-down') call('playSfx', 'quest');
+  }
+
+  /* 한 라운드에서 일어난 일을 한 줄씩 차례로 보여 준다.
+     일반 전투가 이벤트를 순서대로 재생하는 것과 같은 흐름이다. */
+  let eventDelayMs = 620;
+  let playingEvents = [];
+
+  function playEvents(events, onDone) {
+    playingEvents = [];
+    let index = 0;
+    const step = () => {
+      if (!active) return;
+      if (index >= events.length) { onDone?.(); return; }
+      const event = events[index];
+      index += 1;
+      playingEvents.push(event);
+      playEventSound(event);
+      renderBattle();
+      global.setTimeout(step, eventDelayMs);
+    };
+    step();
+  }
+
   function submitAnswer(given) {
     if (busy || !active || active.phase !== 'battle') return;
     busy = true;
@@ -302,21 +687,24 @@
     const answers = active.rollAllyAnswers();
     answers.me = correct;
 
-    call('playSfx', correct ? 'hit' : 'miss');
     const result = active.resolveRound(answers);
-    renderBattle();
-
     if (!result.ok) { busy = false; return; }
 
-    global.setTimeout(() => {
+    // 정답/오답을 먼저 알려 준 뒤 공격이 이어진다.
+    const opening = {
+      kind:correct ? 'answer-correct' : 'answer-wrong',
+      text:correct ? '정답!' : `오답입니다! 정답은 ${question?.answer} (피해가 절반만 들어갑니다)`,
+    };
+
+    playEvents([opening, ...result.events], () => {
       if (!active) return;
-      if (result.wiped) { finishRun(); return; }
-      if (result.cleared) { finishRun(); return; }
+      if (result.wiped || result.cleared) { finishRun(); return; }
       if (result.monsterDown) { playTravelScene(); return; }
       question = pickQuestion();
+      playingEvents = [];
       busy = false;
       renderBattle();
-    }, 1100);
+    });
   }
 
   /* ---------- 끝맺음 ---------- */
@@ -352,10 +740,269 @@
       cleared ? '1층을 돌파했습니다!' : '1층에서 전멸했습니다.');
 
     const doneBtn = global.document.getElementById('raidDoneBtn');
-    if (doneBtn) doneBtn.onclick = () => { active = null; question = null; call('closeModal'); };
+    if (doneBtn) {
+      doneBtn.onclick = () => {
+        active = null;
+        question = null;
+        call('closeModal');
+        leaveDungeonMap();   // 던전에서 마을로 실제로 돌아간다
+      };
+    }
   }
 
   /* ---------- 밖에서 부르는 입구 ---------- */
+
+  /* ---------- 던전 몬스터 그림 ----------
+     이모티콘 대신 버섯돌이·스톰프처럼 직접 그린 모델을 쓴다.
+     캔버스 하나를 받아 가운데에 그린다. */
+
+  function drawMonsterModel(canvas, monster, hurt = false) {
+    if (!canvas || !monster) return;
+    const ctx = typeof canvas.getContext === 'function' ? canvas.getContext('2d') : null;
+    if (!ctx) return;
+    const cx = canvas.width / 2;
+    const cy = canvas.height * 0.62;
+    const t = (global.performance ? performance.now() : Date.now()) / 1000;
+    try {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.save();
+      if (hurt) ctx.globalAlpha = 0.75;
+      // 바닥 그림자
+      ctx.fillStyle = 'rgba(4,10,18,.35)';
+      ctx.beginPath();
+      ctx.ellipse(cx, cy + 62, 46, 13, 0, 0, Math.PI * 2);
+      ctx.fill();
+      const painter = MONSTER_PAINTERS[monster.id] || MONSTER_PAINTERS.guardBot;
+      painter(ctx, cx, cy, t, monster);
+      ctx.restore();
+    } catch (_) { /* 그리기 실패가 전투를 막지 않게 한다 */ }
+  }
+
+  const MONSTER_PAINTERS = {
+    /* 경비 로봇 — 네모난 몸통, 하나뿐인 붉은 눈, 회전하는 경광등 */
+    guardBot(ctx, cx, cy, t) {
+      const bob = Math.sin(t * 2.2) * 3;
+      ctx.save();
+      ctx.translate(cx, cy + bob);
+      // 다리(바퀴)
+      ctx.fillStyle = '#334155';
+      ctx.beginPath(); ctx.ellipse(0, 52, 30, 12, 0, 0, Math.PI * 2); ctx.fill();
+      // 몸통
+      const body = ctx.createLinearGradient(-34, -20, 34, 50);
+      body.addColorStop(0, '#8b9cb3'); body.addColorStop(1, '#4a5a70');
+      ctx.fillStyle = body;
+      ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-34, -18, 68, 66, 12) : ctx.rect(-34, -18, 68, 66);
+      ctx.fill();
+      // 가슴 표시등
+      ctx.fillStyle = `rgba(120,220,255,${(0.4 + 0.4 * Math.sin(t * 3)).toFixed(3)})`;
+      ctx.fillRect(-14, 4, 28, 8);
+      // 팔
+      ctx.strokeStyle = '#64748b'; ctx.lineWidth = 9; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(-34, -4); ctx.lineTo(-50, 20 + Math.sin(t * 2) * 4);
+      ctx.moveTo(34, -4); ctx.lineTo(50, 20 - Math.sin(t * 2) * 4);
+      ctx.stroke();
+      // 머리
+      ctx.fillStyle = '#94a3b8';
+      ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-24, -52, 48, 36, 10) : ctx.rect(-24, -52, 48, 36);
+      ctx.fill();
+      // 외눈
+      ctx.fillStyle = '#7f1d1d';
+      ctx.beginPath(); ctx.arc(0, -34, 12, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = `rgba(255,80,80,${(0.55 + 0.45 * Math.sin(t * 4)).toFixed(3)})`;
+      ctx.beginPath(); ctx.arc(0, -34, 7, 0, Math.PI * 2); ctx.fill();
+      // 경광등
+      ctx.fillStyle = `rgba(255,170,60,${(0.35 + 0.5 * Math.abs(Math.sin(t * 3.4))).toFixed(3)})`;
+      ctx.beginPath(); ctx.arc(0, -58, 7, Math.PI, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    },
+
+    /* 사무실 유령 — 반투명한 몸, 흩날리는 서류, 넥타이 */
+    officeGhost(ctx, cx, cy, t) {
+      const float = Math.sin(t * 1.6) * 7;
+      ctx.save();
+      ctx.translate(cx, cy + float);
+      // 흩날리는 서류
+      for (let i = 0; i < 5; i += 1) {
+        const a = t * 1.1 + i * 1.26;
+        ctx.save();
+        ctx.translate(Math.cos(a) * 56, Math.sin(a * 1.3) * 34 - 6);
+        ctx.rotate(a);
+        ctx.fillStyle = 'rgba(240,246,255,.75)';
+        ctx.fillRect(-8, -10, 16, 20);
+        ctx.strokeStyle = 'rgba(120,140,170,.6)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(-5, -4); ctx.lineTo(5, -4); ctx.moveTo(-5, 1); ctx.lineTo(5, 1); ctx.stroke();
+        ctx.restore();
+      }
+      // 몸통(아래가 흩어지는 유령 형태)
+      const g = ctx.createLinearGradient(0, -46, 0, 54);
+      g.addColorStop(0, 'rgba(214,232,255,.95)');
+      g.addColorStop(1, 'rgba(150,180,220,.25)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(-30, 20);
+      ctx.quadraticCurveTo(-34, -46, 0, -46);
+      ctx.quadraticCurveTo(34, -46, 30, 20);
+      for (let i = 0; i < 4; i += 1) {
+        const x0 = 30 - i * 15;
+        ctx.quadraticCurveTo(x0 - 7, 44 + Math.sin(t * 3 + i) * 7, x0 - 15, 22);
+      }
+      ctx.closePath(); ctx.fill();
+      // 눈
+      ctx.fillStyle = '#1e293b';
+      ctx.beginPath(); ctx.ellipse(-10, -24, 4.5, 7, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(10, -24, 4.5, 7, 0, 0, Math.PI * 2); ctx.fill();
+      // 넥타이
+      ctx.fillStyle = '#b91c1c';
+      ctx.beginPath();
+      ctx.moveTo(0, -8); ctx.lineTo(-6, 0); ctx.lineTo(0, 26); ctx.lineTo(6, 0);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+    },
+
+    /* 정전 그림자 — 검은 덩어리에서 번지는 어둠과 번쩍이는 눈 */
+    blackoutShade(ctx, cx, cy, t) {
+      ctx.save();
+      ctx.translate(cx, cy);
+      // 퍼지는 어둠
+      const dark = ctx.createRadialGradient(0, 0, 6, 0, 0, 76);
+      dark.addColorStop(0, 'rgba(10,12,20,.95)');
+      dark.addColorStop(1, 'rgba(10,12,20,0)');
+      ctx.fillStyle = dark;
+      ctx.beginPath(); ctx.arc(0, 0, 76, 0, Math.PI * 2); ctx.fill();
+      // 일렁이는 몸
+      ctx.fillStyle = '#0b1020';
+      ctx.beginPath();
+      for (let i = 0; i <= 24; i += 1) {
+        const a = (i / 24) * Math.PI * 2;
+        const r = 40 + Math.sin(a * 3 + t * 2.6) * 8 + Math.cos(a * 5 - t * 1.7) * 5;
+        const px = Math.cos(a) * r;
+        const py = Math.sin(a) * r * 0.92;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath(); ctx.fill();
+      // 번쩍이는 눈 두 쌍
+      const flash = Math.sin(t * 7) > 0.1 ? 1 : 0.25;
+      ctx.fillStyle = `rgba(180,230,255,${(0.85 * flash).toFixed(3)})`;
+      [[-14, -10], [14, -10], [-8, 8], [8, 8]].forEach(([ex, ey], i) => {
+        const s = i < 2 ? 5 : 3;
+        ctx.beginPath(); ctx.ellipse(ex, ey, s, s * 0.6, 0, 0, Math.PI * 2); ctx.fill();
+      });
+      ctx.restore();
+    },
+
+    /* 63빌딩 관리자 — 커다란 몸에 왕관, 빌딩 모양 지팡이 */
+    towerWarden(ctx, cx, cy, t) {
+      const bob = Math.sin(t * 1.4) * 4;
+      ctx.save();
+      ctx.translate(cx, cy + bob);
+      ctx.scale(1.18, 1.18);
+      // 망토
+      ctx.fillStyle = '#3b1d4d';
+      ctx.beginPath();
+      ctx.moveTo(-26, -20);
+      ctx.quadraticCurveTo(-58, 20, -40, 54);
+      ctx.lineTo(40, 54);
+      ctx.quadraticCurveTo(58, 20, 26, -20);
+      ctx.closePath(); ctx.fill();
+      // 몸통
+      const body = ctx.createLinearGradient(0, -26, 0, 50);
+      body.addColorStop(0, '#6d5b8f'); body.addColorStop(1, '#332748');
+      ctx.fillStyle = body;
+      ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-26, -22, 52, 72, 14) : ctx.rect(-26, -22, 52, 72);
+      ctx.fill();
+      // 가슴의 63
+      ctx.fillStyle = '#fbbf24';
+      ctx.font = 'bold 17px Jua, Noto Sans KR, system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText('63', 0, 14);
+      // 얼굴
+      ctx.fillStyle = '#1f1730';
+      ctx.beginPath(); ctx.arc(0, -40, 19, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = `rgba(251,191,36,${(0.6 + 0.4 * Math.sin(t * 3.2)).toFixed(3)})`;
+      ctx.beginPath(); ctx.ellipse(-7, -42, 4.5, 6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(7, -42, 4.5, 6, 0, 0, Math.PI * 2); ctx.fill();
+      // 왕관
+      ctx.fillStyle = '#fbbf24';
+      ctx.beginPath();
+      ctx.moveTo(-18, -56); ctx.lineTo(-12, -70); ctx.lineTo(-6, -58);
+      ctx.lineTo(0, -74); ctx.lineTo(6, -58); ctx.lineTo(12, -70); ctx.lineTo(18, -56);
+      ctx.closePath(); ctx.fill();
+      // 빌딩 모양 지팡이
+      ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(38, 50); ctx.lineTo(38, -30); ctx.stroke();
+      ctx.fillStyle = '#64748b';
+      ctx.fillRect(30, -54, 16, 26);
+      ctx.fillStyle = `rgba(255,214,120,${(0.5 + 0.4 * Math.sin(t * 2.5)).toFixed(3)})`;
+      for (let r = 0; r < 3; r += 1) {
+        for (let c = 0; c < 2; c += 1) ctx.fillRect(33 + c * 6, -50 + r * 8, 4, 5);
+      }
+      ctx.restore();
+    },
+  };
+
+  /* ---------- 던전 음악 ---------- */
+
+  /* 던전 안에 있는 동안 전용 음악을 반복 재생한다.
+     기존 BGM 선택기(getDesiredAudioFile)를 감싸서, 던전 맵일 때만 우리 파일을 고르게 한다.
+     syncAudioFileBgm도 감싸야 나머지 곡이 제대로 멈춘다. */
+  function ensureDungeonAudio() {
+    const g = G();
+    if (!g || !g.audio) return null;
+    if (!g.audio.raidDungeonFile) {
+      const src = global.getAudioAsset?.('dungeonBgm')?.src || '';
+      if (!src || typeof global.Audio !== 'function') return null;
+      const file = new global.Audio(src);
+      file.loop = true;
+      file.preload = 'auto';
+      file.volume = g.settings?.bgmEnabled ? Math.min(1, Math.max(0, g.settings.bgmVolume)) : 0;
+      g.audio.raidDungeonFile = file;
+    }
+    return g.audio.raidDungeonFile;
+  }
+
+  function installDungeonAudio() {
+    if (typeof global.getDesiredAudioFile === 'function' && !global.__RAID_BGM_V1__) {
+      global.__RAID_BGM_V1__ = true;
+      const previousDesired = global.getDesiredAudioFile;
+      global.getDesiredAudioFile = function getDesiredAudioFileWithRaid() {
+        const g = G();
+        if (g && g.currentMap === MAP_KEY) {
+          if (!g.settings?.bgmEnabled) return null;
+          const file = ensureDungeonAudio();
+          if (file) return file;
+        }
+        return previousDesired();
+      };
+
+      const previousSync = global.syncAudioFileBgm;
+      if (typeof previousSync === 'function') {
+        global.syncAudioFileBgm = function syncAudioFileBgmWithRaid() {
+          previousSync();
+          const g = G();
+          const file = g?.audio?.raidDungeonFile;
+          if (!file) return;
+          const desired = global.getDesiredAudioFile();
+          file.volume = g.settings?.bgmEnabled ? Math.min(1, Math.max(0, g.settings.bgmVolume)) : 0;
+          if (file === desired) file.play?.().catch?.(() => {});
+          else file.pause?.();
+        };
+      }
+    }
+  }
+
+  /* 던전 맵을 화면 전체 렌더러로 등록한다(마을이 아닌 완전히 다른 장소). */
+  function installDungeonRenderer() {
+    const pipeline = (typeof worldRenderPipeline !== 'undefined') ? worldRenderPipeline : null;
+    if (!pipeline || typeof pipeline.registerOwner !== 'function') return;
+    ensureDungeonMap();
+    pipeline.registerOwner({
+      id:'raid-tower-map-v1',
+      priority:420,
+      owns:({ map }) => map === MAP_KEY,
+      render:() => drawDungeon(),
+    });
+  }
 
   function startRun(floor = 1) {
     const members = buildParty();
@@ -368,13 +1015,22 @@
     }
     question = null;
     busy = false;
-    openFormationScreen();
+    walkProgress = 1;
+    // 먼저 던전 안으로 실제로 이동한 뒤, 로비에서 대형을 짠다.
+    enterDungeonMap(() => openFormationScreen());
     return true;
   }
+
+  installDungeonRenderer();
+  installDungeonAudio();
 
   global.YuksamRaidRunUi = Object.freeze({
     startRun,
     isRunning:() => !!active,
+    /* 전투 로그를 재생하는 중인지. 재생 중에는 다음 답을 받지 않는다. */
+    isBusy:() => busy,
+    /* 전투 로그 재생 속도(밀리초). 검사에서는 빠르게 돌린다. */
+    setLogSpeed:(ms) => { eventDelayMs = Math.max(0, Number(ms) || 0); },
     /* 검사에서 쓰려고 지금 상태를 들여다볼 수 있게 열어 둔다. */
     peek:() => (active ? active.snapshot() : null),
     currentQuestion:() => question,

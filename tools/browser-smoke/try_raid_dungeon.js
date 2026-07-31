@@ -1,5 +1,5 @@
 /* 63빌딩 던전 1단계 스모크
-   - 마을에 빌딩과 원로 명진이 실제로 붙었는지
+   - 마을에 빌딩과 명진도사가 실제로 붙었는지
    - 느낌표가 Lv.5부터만 뜨는지
    - 입장 조건(Lv.5 + 전문화 + 이야기 청취)이 제대로 막고 열리는지
    - 빌딩과 NPC가 통과되지 않는지
@@ -64,7 +64,7 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
     `type=${atDoor?.type || 'null'}`);
 
   const atElder = nearest({ x: ELDER.x, y: ELDER.y });
-  check('원로 명진 옆에 서면 대화가 잡힌다', atElder?.type === 'raidElderNpc',
+  check('명진도사 옆에 서면 대화가 잡힌다', atElder?.type === 'raidElderNpc',
     `type=${atElder?.type || 'null'}`);
 
   const farAway = nearest({ x: 300, y: 300 });
@@ -97,8 +97,8 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
     /전문화/.test(raid.entryBlockReason() || ''), raid.entryBlockReason());
 
   G.player.spec = '방어';
-  check('이야기를 안 들었으면 원로 명진 때문에 막힌다',
-    /원로 명진/.test(raid.entryBlockReason() || ''), raid.entryBlockReason());
+  check('이야기를 안 들었으면 명진도사 때문에 막힌다',
+    /명진도사/.test(raid.entryBlockReason() || ''), raid.entryBlockReason());
 
   check('조건이 하나라도 모자라면 입장 불가', raid.canEnter() === false);
 
@@ -147,7 +147,7 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   const hitsElder = colliders.some((c) => c.type === 'circle'
     && Math.abs(c.x - ELDER.x) < 8 && Math.abs(c.y - ELDER.y) < 8);
   check('빌딩이 통과되지 않는다', hitsTower, `충돌체 ${colliders.length}개`);
-  check('원로 명진이 통과되지 않는다', hitsElder);
+  check('명진도사가 통과되지 않는다', hitsElder);
   // 기존 마을 건물 충돌이 사라지지 않았는지 함께 본다.
   const worlds = window.YuksamData.worldDefs;
   const keepsPetShop = colliders.some((c) => c.type === 'rect'

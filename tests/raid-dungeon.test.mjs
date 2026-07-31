@@ -52,7 +52,7 @@ test('빌딩은 마을 남쪽 길 끝에 서 있고 입구가 길과 만난다',
   assert.match(tower, /name: '63빌딩 던전'/);
 });
 
-test('입장 조건은 Lv.5 + 전문화 + 원로 명진 이야기 세 가지다', () => {
+test('입장 조건은 Lv.5 + 전문화 + 명진도사 이야기 세 가지다', () => {
   const reason = raidSource.match(/function entryBlockReason\(\) \{[\s\S]*?\n  \}/)?.[0] || '';
   assert.notEqual(reason, '');
   assert.match(reason, /\(p\.level \|\| 1\) < REQUIRED_LEVEL/);
@@ -63,18 +63,50 @@ test('입장 조건은 Lv.5 + 전문화 + 원로 명진 이야기 세 가지다'
   assert.match(raidSource, /function canEnter\(\) \{\s*\n\s*return entryBlockReason\(\) === null;/);
 });
 
-test('원로 명진의 느낌표는 Lv.5부터, 이야기를 들은 뒤에는 사라진다', () => {
+test('명진도사의 느낌표는 Lv.5부터, 이야기를 들은 뒤에는 사라진다', () => {
   const available = raidSource.match(/function questAvailable\(\) \{[\s\S]*?\n  \}/)?.[0] || '';
   assert.notEqual(available, '');
   assert.match(available, /\(p\.level \|\| 1\) >= REQUIRED_LEVEL/);
   assert.match(available, /&& !heardTheStory\(\)/);
-  // 느낌표는 기존 NPC 그리기의 hasQuest 인자로 전달한다.
-  assert.match(raidSource, /call\('drawNpcWorld', ELDER\.x, ELDER\.y, ELDER\.name, questAvailable\(\)/);
+  // 느낌표는 직접 그리는 스프라이트에 hasQuest로 전달된다.
+  assert.match(raidSource, /drawElderSprite\(ctx, p\.x, p\.y, scale, isPlayerNearElder\(\), questAvailable\(\)\)/);
+});
+
+test('명진도사는 신선 차림(흰 도포·긴 수염·지팡이)으로 직접 그린다', () => {
+  const sprite = raidSource.match(/function drawElderSprite\([\s\S]*?\n  \}/)?.[0] || '';
+  assert.notEqual(sprite, '');
+  assert.match(sprite, /흰 도포/);
+  assert.match(sprite, /긴 흰 수염/);
+  assert.match(sprite, /지팡이/);
+  // 기본 NPC 그림에 기대지 않는다(신선 느낌을 내기 위해 직접 그린다).
+  assert.doesNotMatch(raidSource, /drawNpcWorld/);
+});
+
+test('명진도사의 안내는 알림이 아니라 대화창으로 나온다', () => {
+  /* 레벨업 같은 화면 가운데 알림(showCinematicMessage)이 아니라
+     NPC 대화창으로 보여 줘야 한다. */
+  assert.doesNotMatch(raidSource, /showCinematicMessage/);
+  assert.match(raidSource, /function showElderSay\(/);
+  assert.match(raidSource, /type: 'raidElderSay'/);
+  // 퀘스트 완료도 대화창으로 이어진다.
+  const finish = raidSource.match(/function finishStory\(\) \{[\s\S]*?\n  \}/)?.[0] || '';
+  assert.match(finish, /showElderSay\(/);
+});
+
+test('가만히 있을 때 여러 대사를 돌려 쓴다', () => {
+  // "어서 와!" 하나만 반복되면 안 된다.
+  const lines = raidSource.match(/const IDLE_LINES = \[[\s\S]*?\n  \];/)?.[0] || '';
+  assert.notEqual(lines, '');
+  const count = (lines.match(/'/g) || []).length / 2;
+  assert.ok(count >= 5, `혼잣말이 여러 개여야 한다 (현재 ${count}개)`);
+  assert.doesNotMatch(raidSource, /'어서 와!'/);
+  // 같은 대사가 연달아 나오지 않도록 다음 대사를 건너뛴다.
+  assert.match(raidSource, /bubbleState\.idx = \(bubbleState\.idx \+ 1 \+ Math\.floor/);
 });
 
 test('던전 퀘스트는 명진쌤의 퀘스트 순서를 건드리지 않는다', () => {
   /* QUEST_ORDER에 끼워 넣으면 명진쌤의 튜토리얼 체인이 밀린다.
-     원로 명진의 퀘스트는 독립적으로 관리해야 한다. */
+     명진도사의 퀘스트는 독립적으로 관리해야 한다. */
   const questData = readFileSync(join(root, 'src', 'quest-data.js'), 'utf8');
   assert.doesNotMatch(questData, /raid_tower_intro/);
   assert.match(raidSource, /const QUEST_ID = 'raid_tower_intro';/);
@@ -96,7 +128,7 @@ test('브라우저 스모크가 던전 1단계를 통과한다', { timeout:60000
   const result = spawnSync(process.execPath, [script, root], { encoding:'utf8', timeout:55000 });
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   assert.match(result.stdout, /PASS: 입구에 서면 던전 들어가기가 잡힌다/);
-  assert.match(result.stdout, /PASS: 원로 명진 옆에 서면 대화가 잡힌다/);
+  assert.match(result.stdout, /PASS: 명진도사 옆에 서면 대화가 잡힌다/);
   assert.match(result.stdout, /PASS: Lv\.4에도 아직 느낌표가 없다/);
   assert.match(result.stdout, /PASS: Lv\.5가 되면 느낌표가 뜬다/);
   assert.match(result.stdout, /PASS: 전문화가 없으면 전문화 때문에 막힌다/);

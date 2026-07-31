@@ -41,6 +41,10 @@
       hp:Math.max(1, Math.floor(Number(member.hp ?? member.maxHp) || 1)),
       attack:Math.max(1, Math.floor(Number(member.attack) || 1)),
       isPlayer:member.isPlayer === true,
+      /* 겉모습은 계산에 쓰이지 않지만 화면이 실제 아바타를 그리려면 반드시 함께 넘겨야 한다.
+         예전에 여기서 빠뜨려 셋이 모두 같은 기본 차림으로 보였다. */
+      appearance:member.appearance || null,
+      equipment:member.equipment || null,
     }));
 
     const state = {
@@ -142,19 +146,25 @@
 
       const events = [];
 
-      // 1) 파티가 때린다.
-      const attack = R.resolvePartyAttack({ members:state.members, answers });
+      // 1) 파티가 때린다. 각자 빗나감·치명타가 따로 판정된다.
+      const attack = R.resolvePartyAttack({ members:state.members, answers, rng });
       attack.hits.forEach((hit) => {
         const member = state.members.find((m) => m.id === hit.memberId);
+        const who = member?.name || '동료';
         state.monster.hp = Math.max(0, state.monster.hp - hit.damage);
         events.push({
           kind:'party-hit',
           memberId:hit.memberId,
-          memberName:member?.name || '',
+          memberName:who,
           correct:hit.correct,
+          critical:hit.critical === true,
+          missed:hit.missed === true,
           damage:hit.damage,
           monsterHp:state.monster.hp,
-          text:`${member?.name || '동료'}${hit.correct ? '' : '(오답)'}이(가) ${hit.damage}의 피해를 주었다!`,
+          audioId:hit.missed ? 'miss' : (hit.critical ? 'critical' : null),
+          text:hit.missed
+            ? `${who}의 공격이 빗나갔다!`
+            : `${hit.critical ? '💥 치명타! ' : ''}${who}${hit.correct ? '' : '(오답)'}이(가) ${hit.damage}의 피해를 주었다!`,
         });
       });
 
@@ -192,10 +202,16 @@
         members:state.members,
         attack:state.monster.attack,
         kind,
+        rng,
       });
-      if (kind === 'all') {
-        events.push({ kind:'monster-windup', text:`${state.monster.name}이(가) 전체 공격을 준비한다!`, all:true });
-      }
+      events.push({
+        kind:'monster-windup',
+        all:kind === 'all',
+        audioId:'enemyAttack',
+        text:kind === 'all'
+          ? `${state.monster.name}이(가) 전체 공격을 준비한다!`
+          : `${state.monster.name}의 공격!`,
+      });
       counter.hits.forEach((hit) => {
         const member = state.members.find((m) => m.id === hit.memberId);
         if (!member) return;
@@ -206,9 +222,14 @@
           memberName:member.name,
           slot:hit.slot,
           multiplier:hit.multiplier,
+          critical:hit.critical === true,
+          missed:hit.missed === true,
           damage:hit.damage,
           memberHp:member.hp,
-          text:`${member.name}이(가) ${hit.damage}의 피해를 받았다! (${R.slotLabel(hit.slot)})`,
+          audioId:hit.missed ? 'miss' : (hit.critical ? 'critical' : null),
+          text:hit.missed
+            ? `${member.name}이(가) 공격을 피했다!`
+            : `${hit.critical ? '💥 치명타! ' : ''}${member.name}이(가) ${hit.damage}의 피해를 받았다! (${R.slotLabel(hit.slot)})`,
         });
         if (member.hp <= 0) {
           events.push({ kind:'member-down', memberId:member.id, text:`${member.name}이(가) 쓰러졌다!` });

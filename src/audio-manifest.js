@@ -10,6 +10,7 @@
     swampBgm: { src:'assets/1. 늪 음악.mp3', volume:1, channel:'bgm' },
     bossBgm: { src:'assets/1. 보스전 음악.mp3', volume:1, channel:'bgm' },
     battleBgm: { src:'assets/1. 전투씬 음악.mp3', volume:1, channel:'bgm' },
+    dungeonBgm: { src:'assets/1. 던전 음악.mp3', volume:1, channel:'bgm' },
     upgradeCharge: { src:'assets/2. 강화 음악.mp3', volume:1, channel:'sfx' },
     upgradeSuccess: { src:'assets/2. 강화 성공.mp3', volume:1, channel:'sfx' },
     upgradeFail: { src:'assets/2. 강화 실패.mp3', volume:1, channel:'sfx' },

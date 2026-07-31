@@ -71,22 +71,29 @@
 
   /* 한 번의 몬스터 공격을 계산한다. 실제 체력을 깎지는 않고 결과만 돌려준다.
      kind: 'single' 이면 한 명, 'all' 이면 전체 공격. */
-  function resolveMonsterAttack({ members, attack, kind = 'single' }) {
+  function resolveMonsterAttack({ members, attack, kind = 'single', rng }) {
     const base = Math.max(0, Math.floor(Number(attack) || 0));
     const alive = (members || []).filter((m) => m && m.hp > 0);
     if (!alive.length || base <= 0) return { kind, hits:[] };
+    const roll = typeof rng === 'function' ? rng : Math.random;
 
     const targets = kind === 'all' ? alive : [pickTarget(alive)].filter(Boolean);
     const hits = targets.map((member) => {
       const multiplier = damageMultiplier(member.slot);
+      if (roll() < MISS_CHANCE) {
+        return { memberId:member.id, slot:member.slot, multiplier, damage:0, missed:true, critical:false, lethal:false };
+      }
+      const critical = roll() < CRIT_CHANCE;
       // 배율을 곱해도 최소 1은 들어간다. 뒷줄이라고 0이 되면 안 된다.
-      const damage = Math.max(1, Math.round(base * multiplier));
+      const raw = Math.max(1, Math.round(base * multiplier * (critical ? CRIT_MULTIPLIER : 1)));
       return {
         memberId: member.id,
         slot: member.slot,
         multiplier,
-        damage: Math.min(damage, member.hp),
-        lethal: damage >= member.hp,
+        critical,
+        missed: false,
+        damage: Math.min(raw, member.hp),
+        lethal: raw >= member.hp,
       };
     });
     return { kind, hits };
@@ -94,18 +101,33 @@
 
   /* ---------- 플레이어 쪽 공격 ---------- */
 
+  /* 일반 전투와 같은 감각을 내기 위한 치명타·빗나감.
+     rng는 밖에서 받아 서버가 같은 결과를 재현할 수 있게 한다. */
+  const CRIT_CHANCE = 0.15;
+  const CRIT_MULTIPLIER = 1.5;
+  const MISS_CHANCE = 0.10;
+
   /* 셋이 같은 문제를 동시에 푼다. 맞힌 사람만 제 몫의 피해를 넣고,
-     틀린 사람은 절반만 들어간다(일반 전투와 같은 규칙). */
-  function resolvePartyAttack({ members, answers }) {
+     틀린 사람은 절반만 들어간다(일반 전투와 같은 규칙).
+     여기에 더해 빗나감과 치명타가 각자 따로 판정된다. */
+  function resolvePartyAttack({ members, answers, rng }) {
     const list = Array.isArray(members) ? members : [];
     const given = answers && typeof answers === 'object' ? answers : {};
+    const roll = typeof rng === 'function' ? rng : Math.random;
     const hits = list
       .filter((m) => m && m.hp > 0)
       .map((member) => {
         const correct = given[member.id] === true;
         const power = Math.max(1, Math.floor(Number(member.attack) || 1));
-        const damage = correct ? power : Math.max(1, Math.floor(power / 2));
-        return { memberId:member.id, correct, damage };
+        const base = correct ? power : Math.max(1, Math.floor(power / 2));
+
+        // 빗나가면 피해가 없다.
+        if (roll() < MISS_CHANCE) {
+          return { memberId:member.id, correct, damage:0, missed:true, critical:false };
+        }
+        const critical = roll() < CRIT_CHANCE;
+        const damage = critical ? Math.max(1, Math.round(base * CRIT_MULTIPLIER)) : base;
+        return { memberId:member.id, correct, damage, missed:false, critical };
       });
     const total = hits.reduce((sum, hit) => sum + hit.damage, 0);
     return { hits, total };
@@ -117,7 +139,7 @@
      앞줄이 1.5배로 맞는 만큼 누군가 뒤에서 채워 주지 않으면 층을 넘길 수 없다.
      그래서 탱커(앞)와 힐러(뒤)가 함께 있어야 굴러가는 구조가 된다. */
   const HEAL_SPECS = Object.freeze(['신성']);
-  const HEAL_RATIO = 0.9;
+  const HEAL_RATIO = 1.6;
 
   function isHealer(member) {
     return !!member && HEAL_SPECS.includes(member.spec);
@@ -150,7 +172,7 @@
 
   /* 다음 몬스터에게 걸어가는 동안 숨을 고른다.
      한 층을 네 번 싸워 넘기려면 전투 사이 회복이 반드시 필요하다. */
-  const TRAVEL_RECOVERY = 0.25;
+  const TRAVEL_RECOVERY = 0.5;
 
   function travelRecovery(members) {
     return (members || [])
@@ -170,24 +192,25 @@
      1층부터 열고 10층·20층 식으로 천천히 늘린다. */
   const MONSTERS = Object.freeze({
     /* 수치 기준: Lv.5 셋이 힐러를 데리고 가면 넘길 수 있는 선.
-       한 마리를 4~6라운드에 정리하고, 그동안 앞줄이 버티도록 잡았다. */
+       셋이 동시에 때리므로 피해가 대략 3배다. 그만큼 체력을 두껍게 잡아
+       한 마리를 여러 라운드에 걸쳐 잡도록 했다. */
     guardBot: {
-      id:'guardBot', name:'경비 로봇', level:5, hp:84, attack:5,
+      id:'guardBot', name:'경비 로봇', level:5, hp:168, attack:4,
       pattern:['single', 'single', 'all'],
       desc:'1층 로비를 지키는 낡은 경비 로봇. 가끔 사방으로 경보를 터뜨린다.',
     },
     officeGhost: {
-      id:'officeGhost', name:'사무실 유령', level:5, hp:96, attack:6,
+      id:'officeGhost', name:'사무실 유령', level:5, hp:192, attack:5,
       pattern:['single', 'all', 'single'],
       desc:'야근하다 사라진 직원의 그림자. 서류를 흩뿌려 모두를 덮친다.',
     },
     blackoutShade: {
-      id:'blackoutShade', name:'정전 그림자', level:6, hp:104, attack:5,
+      id:'blackoutShade', name:'정전 그림자', level:6, hp:208, attack:4,
       pattern:['all', 'all', 'single'],
       desc:'정전된 층에 고인 어둠. 전체를 한꺼번에 노린다.',
     },
     towerWarden: {
-      id:'towerWarden', name:'63빌딩 관리자', level:7, hp:190, attack:8,
+      id:'towerWarden', name:'63빌딩 관리자', level:7, hp:380, attack:6,
       pattern:['single', 'single', 'all', 'single', 'all'],
       boss:true,
       desc:'빌딩의 모든 층을 관리해 온 존재. 1층의 마지막 관문이다.',
@@ -266,6 +289,9 @@
     MONSTERS,
     FLOORS,
     ALLY_CORRECT_RATE,
+    CRIT_CHANCE,
+    CRIT_MULTIPLIER,
+    MISS_CHANCE,
     HEAL_SPECS,
     HEAL_RATIO,
     TRAVEL_RECOVERY,

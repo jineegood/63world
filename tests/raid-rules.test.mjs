@@ -13,6 +13,9 @@ new Script(readFileSync(join(root, 'src', 'raid-rules.js'), 'utf8'), { filename:
   .runInContext(context);
 const rules = context.window.YuksamRaidRules;
 
+/* 빗나감(10%)에도 치명타(15%)에도 걸리지 않는 평범한 굴림 */
+const PLAIN = () => 0.5;
+
 const party = (overrides = {}) => [
   { id:'a', slot:'front', hp:40, attack:12, ...(overrides.a || {}) },
   { id:'b', slot:'middle', hp:30, attack:11, ...(overrides.b || {}) },
@@ -59,7 +62,7 @@ test('몬스터는 앞줄부터 노리고, 앞이 쓰러지면 다음 줄로 넘
 });
 
 test('단일 공격은 앞줄 한 명만, 배율이 곱해져 들어간다', () => {
-  const result = rules.resolveMonsterAttack({ members:party(), attack:10, kind:'single' });
+  const result = rules.resolveMonsterAttack({ members:party(), attack:10, kind:'single', rng:PLAIN });
   assert.equal(result.kind, 'single');
   assert.equal(result.hits.length, 1);
   assert.equal(result.hits[0].memberId, 'a');
@@ -67,7 +70,7 @@ test('단일 공격은 앞줄 한 명만, 배율이 곱해져 들어간다', () 
 });
 
 test('전체 공격은 살아 있는 모두가 각자 배율로 맞는다', () => {
-  const result = rules.resolveMonsterAttack({ members:party(), attack:10, kind:'all' });
+  const result = rules.resolveMonsterAttack({ members:party(), attack:10, kind:'all', rng:PLAIN });
   assert.equal(result.kind, 'all');
   assert.equal(result.hits.length, 3);
   const byId = Object.fromEntries(result.hits.map((h) => [h.memberId, h.damage]));
@@ -79,19 +82,19 @@ test('전체 공격은 살아 있는 모두가 각자 배율로 맞는다', () =
 });
 
 test('쓰러진 사람은 전체 공격에도 맞지 않는다', () => {
-  const result = rules.resolveMonsterAttack({ members:party({ a:{ hp:0 } }), attack:10, kind:'all' });
+  const result = rules.resolveMonsterAttack({ members:party({ a:{ hp:0 } }), attack:10, kind:'all', rng:PLAIN });
   assert.equal(result.hits.length, 2);
   assert.ok(!result.hits.some((h) => h.memberId === 'a'));
 });
 
 test('뒷줄이라도 피해가 0이 되지는 않는다', () => {
-  const result = rules.resolveMonsterAttack({ members:party({ a:{ hp:0 }, b:{ hp:0 } }), attack:1, kind:'single' });
+  const result = rules.resolveMonsterAttack({ members:party({ a:{ hp:0 }, b:{ hp:0 } }), attack:1, kind:'single', rng:PLAIN });
   assert.equal(result.hits[0].memberId, 'c');
   assert.ok(result.hits[0].damage >= 1, '최소 1은 들어가야 한다');
 });
 
 test('남은 체력보다 큰 피해는 남은 체력까지만 기록된다', () => {
-  const result = rules.resolveMonsterAttack({ members:party({ a:{ hp:5 } }), attack:100, kind:'single' });
+  const result = rules.resolveMonsterAttack({ members:party({ a:{ hp:5 } }), attack:100, kind:'single', rng:PLAIN });
   assert.equal(result.hits[0].damage, 5);
   assert.equal(result.hits[0].lethal, true);
 });
@@ -99,7 +102,7 @@ test('남은 체력보다 큰 피해는 남은 체력까지만 기록된다', ()
 test('맞힌 사람은 제 몫을, 틀린 사람은 절반을 넣는다', () => {
   const result = rules.resolvePartyAttack({
     members:party(),
-    answers:{ a:true, b:false, c:true },
+    answers:{ a:true, b:false, c:true }, rng:PLAIN,
   });
   const byId = Object.fromEntries(result.hits.map((h) => [h.memberId, h.damage]));
   assert.equal(byId.a, 12);       // 정답 그대로
@@ -111,10 +114,43 @@ test('맞힌 사람은 제 몫을, 틀린 사람은 절반을 넣는다', () => 
 test('쓰러진 사람은 공격에 참여하지 않는다', () => {
   const result = rules.resolvePartyAttack({
     members:party({ b:{ hp:0 } }),
-    answers:{ a:true, b:true, c:true },
+    answers:{ a:true, b:true, c:true }, rng:PLAIN,
   });
   assert.equal(result.hits.length, 2);
   assert.ok(!result.hits.some((h) => h.memberId === 'b'));
+});
+
+test('빗나가면 피해가 없고, 치명타면 더 아프다 (파티 쪽)', () => {
+  const ALWAYS_MISS = () => 0;                 // 0 < 0.10 → 빗나감
+  const ALWAYS_CRIT = (() => { let n = 0; return () => (n++ % 2 === 0 ? 0.5 : 0); })(); // 빗나감X, 치명타O
+
+  const missed = rules.resolvePartyAttack({ members:party(), answers:{ a:true }, rng:ALWAYS_MISS });
+  assert.ok(missed.hits.every((h) => h.missed === true));
+  assert.equal(missed.total, 0, '빗나가면 피해가 없어야 한다');
+
+  const crit = rules.resolvePartyAttack({ members:party(), answers:{ a:true, b:true, c:true }, rng:ALWAYS_CRIT });
+  assert.ok(crit.hits.every((h) => h.critical === true));
+  const plain = rules.resolvePartyAttack({ members:party(), answers:{ a:true, b:true, c:true }, rng:PLAIN });
+  assert.ok(crit.total > plain.total, `치명타가 더 아파야 한다: ${crit.total} vs ${plain.total}`);
+});
+
+test('빗나가면 피해가 없고, 치명타면 더 아프다 (몬스터 쪽)', () => {
+  const ALWAYS_MISS = () => 0;
+  const ALWAYS_CRIT = (() => { let n = 0; return () => (n++ % 2 === 0 ? 0.5 : 0); })();
+
+  const missed = rules.resolveMonsterAttack({ members:party(), attack:10, kind:'single', rng:ALWAYS_MISS });
+  assert.equal(missed.hits[0].missed, true);
+  assert.equal(missed.hits[0].damage, 0);
+
+  const crit = rules.resolveMonsterAttack({ members:party(), attack:10, kind:'single', rng:ALWAYS_CRIT });
+  assert.equal(crit.hits[0].critical, true);
+  assert.ok(crit.hits[0].damage > 15, `치명타는 평소(15)보다 커야 한다: ${crit.hits[0].damage}`);
+});
+
+test('치명타·빗나감 확률은 일반 전투와 비슷한 범위다', () => {
+  assert.ok(rules.MISS_CHANCE > 0 && rules.MISS_CHANCE <= 0.2, `빗나감 ${rules.MISS_CHANCE}`);
+  assert.ok(rules.CRIT_CHANCE > 0 && rules.CRIT_CHANCE <= 0.3, `치명타 ${rules.CRIT_CHANCE}`);
+  assert.ok(rules.CRIT_MULTIPLIER > 1, '치명타는 평타보다 세야 한다');
 });
 
 test('신성 전문화만 힐러로 인정된다', () => {
@@ -133,7 +169,7 @@ test('문제를 맞힌 힐러가 가장 많이 다친 동료를 회복시킨다'
   const { heals } = rules.resolvePartyHeal({ members, answers:{ healer:true } });
   assert.equal(heals.length, 1);
   assert.equal(heals[0].memberId, 'tank', '비율상 가장 다친 사람을 골라야 한다');
-  assert.equal(heals[0].amount, 9); // 10 * 0.9
+  assert.equal(heals[0].amount, 16); // 10 * 1.6
 });
 
 test('힐러가 문제를 틀리거나 쓰러지면 회복이 없다', () => {

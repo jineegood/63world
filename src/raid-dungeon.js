@@ -2,13 +2,13 @@
    raid-dungeon.js — 63빌딩 던전 (1단계: 월드 · NPC · 퀘스트 · 입장 조건)
 
    마을 남쪽 길 끝에 높은 빌딩을 세우고, 그 앞에 퀘스트를 주는
-   '원로 명진' 할아버지를 배치한다.
+   '명진도사' 할아버지(신선)를 배치한다.
 
    이 파일이 맡는 것
-   - 63빌딩 건물과 원로 명진을 마을에 그리기
+   - 63빌딩 건물과 명진도사를 마을에 그리기
    - 건물·NPC 충돌(통과 방지)
    - E키 / 마우스 이동 도착 시 상호작용 연결
-   - 원로 명진의 퀘스트(Lv.5부터 느낌표)
+   - 명진도사의 퀘스트(Lv.5부터 느낌표)
    - 입장 조건 검사: Lv.5 이상 + 전문화 선택 완료
 
    아직 없는 것(다음 단계)
@@ -44,8 +44,19 @@
     x: 1010,
     y: 1636,
     r: 30,
-    name: '원로 명진',
+    name: '명진도사',
   };
+
+  /* 가만히 있을 때 띄우는 혼잣말. 신선 컨셉으로 여러 개를 돌려 쓴다. */
+  const IDLE_LINES = [
+    '허허… 오늘도 바람이 서늘하구나.',
+    '저 빌딩은 예순세 층이라 하였지. 끝을 본 자가 없다네.',
+    '혼자 가면 죽고, 셋이 가면 산다. 잊지 말거라.',
+    '앞에 선 자가 가장 많이 맞는 법이니라.',
+    '뒤에 선 자는 동료를 살피거라. 그것이 도리지.',
+    '조급함이 화를 부른다. 숨을 고르고 가거라.',
+    '문제를 풀어야 힘이 실린다. 머리도 무기니라.',
+  ];
 
   const QUEST_PAGES = [
     '허허… 젊은이, 저 높은 건물이 보이는가? 63층짜리 낡은 빌딩이라네.',
@@ -54,11 +65,19 @@
     '앞에 선 자는 매를 더 맞고, 뒤에 선 자는 덜 맞는 법. 누가 앞에 설지 잘 정하거라.',
   ];
 
+  /* 이야기를 이미 들은 뒤 다시 말을 걸었을 때 (여러 개를 돌려 쓴다) */
+  const AFTER_LINES = [
+    '준비가 되면 언제든 저 문을 두드리게. 동료 셋과 함께라면 말이야.',
+    '조급해 말거라. 대형만 잘 갖추면 1층은 넘을 수 있느니라.',
+    '앞에는 튼튼한 자를, 뒤에는 동료를 돌볼 자를 세우거라.',
+    '허허, 또 왔는가. 몸은 성한가?',
+  ];
+
   const QUEST_DEF = {
     id: QUEST_ID,
     title: '63빌딩의 기척',
     target: 1,
-    desc: '원로 명진에게 63빌딩 던전 이야기를 듣기',
+    desc: '명진도사에게 63빌딩 던전 이야기를 듣기',
     reward: { exp: 10, gold: 60, building: 5 },
     pages: QUEST_PAGES,
     done: '준비가 되면 언제든 저 문을 두드리게. 동료 셋과 함께라면 말이야.',
@@ -95,7 +114,7 @@
     return state?.status === 'completed' || state?.status === 'done';
   }
 
-  /* 원로 명진의 이야기는 Lv.5부터 열린다. 그 전에는 느낌표도 뜨지 않는다. */
+  /* 명진도사의 이야기는 Lv.5부터 열린다. 그 전에는 느낌표도 뜨지 않는다. */
   function questAvailable() {
     const p = player();
     return !!p && (p.level || 1) >= REQUIRED_LEVEL && !heardTheStory();
@@ -109,7 +128,7 @@
     if (!p) return '먼저 캐릭터를 만들어 주세요.';
     if ((p.level || 1) < REQUIRED_LEVEL) return `63빌딩 던전은 Lv.${REQUIRED_LEVEL}부터 들어갈 수 있어요.`;
     if (!p.spec) return '전문화를 먼저 선택해야 63빌딩 던전에 들어갈 수 있어요.';
-    if (!heardTheStory()) return '원로 명진에게 먼저 이야기를 들어야 해요.';
+    if (!heardTheStory()) return '명진도사에게 먼저 이야기를 들어야 해요.';
     return null;
   }
 
@@ -212,9 +231,216 @@
     ctx.restore();
   }
 
+  /* 명진도사는 기본 NPC 그림 대신 직접 그린다.
+     흰 도포, 긴 수염, 지팡이 — 신선 느낌을 내기 위해서다. */
   function drawElderWorld() {
-    // 할아버지는 기존 NPC 그리기를 그대로 쓰고, 느낌표만 조건부로 붙인다.
-    call('drawNpcWorld', ELDER.x, ELDER.y, ELDER.name, questAvailable(), isPlayerNearElder(), 'priest');
+    const toScreen = global.worldToScreen;
+    const ctx = G()?.ctx;
+    if (typeof toScreen !== 'function' || !ctx) return;
+    const p = toScreen(ELDER.x, ELDER.y);
+    const scale = (global.YuksamData && global.YuksamData.NPC_WORLD_SCALE) || 1.26;
+    drawElderSprite(ctx, p.x, p.y, scale, isPlayerNearElder(), questAvailable());
+    drawElderBubble(ctx, p.x, p.y, scale);
+  }
+
+  function drawElderSprite(ctx, x, y, scale, highlighted, hasQuest) {
+    const t = (global.performance ? performance.now() : Date.now()) / 1000;
+    const bob = Math.sin(t * 1.1) * 2 * scale;   // 천천히 숨쉬듯 위아래
+    const s = (value) => value * scale;
+
+    ctx.save();
+    ctx.translate(x, y + bob);
+
+    // 가까이 가면 발밑이 은은하게 빛난다
+    if (highlighted) {
+      const glow = ctx.createRadialGradient(0, s(34), 0, 0, s(34), s(56));
+      glow.addColorStop(0, 'rgba(190,240,255,.45)');
+      glow.addColorStop(1, 'rgba(190,240,255,0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.ellipse(0, s(34), s(56), s(20), 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 그림자
+    ctx.fillStyle = 'rgba(6,12,22,.28)';
+    ctx.beginPath();
+    ctx.ellipse(0, s(36), s(26), s(8), 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 지팡이 — 옹이진 나무 막대에 구슬이 달려 있다
+    ctx.strokeStyle = '#8b5e34';
+    ctx.lineWidth = s(4);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(s(26), s(34));
+    ctx.quadraticCurveTo(s(31), s(2), s(27), s(-40));
+    ctx.stroke();
+    const orb = 0.5 + 0.5 * Math.sin(t * 2.2);
+    ctx.fillStyle = `rgba(150,235,255,${(0.55 + orb * 0.4).toFixed(3)})`;
+    ctx.beginPath();
+    ctx.arc(s(27), s(-44), s(6), 0, Math.PI * 2);
+    ctx.fill();
+
+    // 흰 도포 — 아래로 갈수록 넓어진다
+    const robe = ctx.createLinearGradient(0, s(-16), 0, s(36));
+    robe.addColorStop(0, '#ffffff');
+    robe.addColorStop(1, '#d8e4f0');
+    ctx.fillStyle = robe;
+    ctx.beginPath();
+    ctx.moveTo(s(-12), s(-14));
+    ctx.lineTo(s(12), s(-14));
+    ctx.quadraticCurveTo(s(24), s(14), s(22), s(34));
+    ctx.lineTo(s(-22), s(34));
+    ctx.quadraticCurveTo(s(-24), s(14), s(-12), s(-14));
+    ctx.closePath();
+    ctx.fill();
+
+    // 옷깃과 허리끈
+    ctx.strokeStyle = '#9db4cc';
+    ctx.lineWidth = s(1.6);
+    ctx.beginPath();
+    ctx.moveTo(0, s(-14));
+    ctx.lineTo(0, s(8));
+    ctx.stroke();
+    ctx.fillStyle = '#7f9bb8';
+    ctx.fillRect(s(-16), s(4), s(32), s(4));
+
+    // 소매
+    ctx.fillStyle = '#eef4fb';
+    ctx.beginPath();
+    ctx.ellipse(s(-18), s(2), s(7), s(12), -0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(s(18), s(2), s(7), s(12), 0.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 얼굴
+    ctx.fillStyle = '#ffe8d2';
+    ctx.beginPath();
+    ctx.arc(0, s(-26), s(11), 0, Math.PI * 2);
+    ctx.fill();
+
+    // 눈 (지그시 감은 눈)
+    ctx.strokeStyle = '#4a3b2f';
+    ctx.lineWidth = s(1.4);
+    ctx.beginPath();
+    ctx.moveTo(s(-6), s(-28)); ctx.quadraticCurveTo(s(-4), s(-26), s(-2), s(-28));
+    ctx.moveTo(s(2), s(-28)); ctx.quadraticCurveTo(s(4), s(-26), s(6), s(-28));
+    ctx.stroke();
+
+    // 흰 눈썹
+    ctx.strokeStyle = '#f4f7fb';
+    ctx.lineWidth = s(2.2);
+    ctx.beginPath();
+    ctx.moveTo(s(-8), s(-33)); ctx.lineTo(s(-2), s(-32));
+    ctx.moveTo(s(2), s(-32)); ctx.lineTo(s(8), s(-33));
+    ctx.stroke();
+
+    // 긴 흰 수염 — 가슴까지 내려온다
+    const beard = ctx.createLinearGradient(0, s(-20), 0, s(8));
+    beard.addColorStop(0, '#ffffff');
+    beard.addColorStop(1, '#e6eef7');
+    ctx.fillStyle = beard;
+    ctx.beginPath();
+    ctx.moveTo(s(-8), s(-20));
+    ctx.quadraticCurveTo(s(-10), s(-4), s(-3), s(8));
+    ctx.quadraticCurveTo(0, s(12), s(3), s(8));
+    ctx.quadraticCurveTo(s(10), s(-4), s(8), s(-20));
+    ctx.quadraticCurveTo(0, s(-14), s(-8), s(-20));
+    ctx.closePath();
+    ctx.fill();
+
+    // 상투와 머리띠
+    ctx.fillStyle = '#f2f6fb';
+    ctx.beginPath();
+    ctx.arc(0, s(-36), s(9), Math.PI, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(0, s(-42), s(4), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#6f8bab';
+    ctx.fillRect(s(-9), s(-38), s(18), s(3));
+
+    ctx.restore();
+
+    // 느낌표 (Lv.5부터)
+    ctx.save();
+    ctx.textAlign = 'center';
+    if (hasQuest) {
+      const mark = Math.sin(t * 4.4) * 3 * scale;
+      ctx.font = `${Math.round(32 * scale)}px Jua, Noto Sans KR, system-ui`;
+      ctx.lineWidth = 5 * scale;
+      ctx.strokeStyle = 'rgba(20,20,20,.85)';
+      ctx.strokeText('!', x, y - 62 * scale + mark);
+      ctx.fillStyle = '#ffd84d';
+      ctx.fillText('!', x, y - 62 * scale + mark);
+    }
+    // 이름표
+    ctx.font = `${Math.round(14 * scale)}px Noto Sans KR, Jua, system-ui`;
+    const nameW = ctx.measureText(ELDER.name).width + 22 * scale;
+    ctx.fillStyle = 'rgba(7,16,27,.74)';
+    ctx.beginPath();
+    const bx = x - nameW / 2;
+    const by = y + 45 * scale;
+    const rr = 13 * scale;
+    ctx.moveTo(bx + rr, by);
+    ctx.arcTo(bx + nameW, by, bx + nameW, by + 26 * scale, rr);
+    ctx.arcTo(bx + nameW, by + 26 * scale, bx, by + 26 * scale, rr);
+    ctx.arcTo(bx, by + 26 * scale, bx, by, rr);
+    ctx.arcTo(bx, by, bx + nameW, by, rr);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#edf5ff';
+    ctx.fillText(ELDER.name, x, y + 63 * scale);
+    ctx.restore();
+  }
+
+  /* 가만히 있을 때 여러 대사를 번갈아 띄운다. */
+  const bubbleState = { idx: Math.floor(Math.random() * IDLE_LINES.length), nextAt: 0, visibleUntil: 0 };
+
+  function drawElderBubble(ctx, x, y, scale) {
+    const now = Date.now();
+    if (!bubbleState.nextAt) bubbleState.nextAt = now + 1200;
+    if (now >= bubbleState.nextAt && now >= bubbleState.visibleUntil) {
+      // 같은 대사가 연달아 나오지 않도록 한 칸 이상 건너뛴다.
+      bubbleState.idx = (bubbleState.idx + 1 + Math.floor(Math.random() * (IDLE_LINES.length - 1))) % IDLE_LINES.length;
+      bubbleState.visibleUntil = now + 5200;
+      bubbleState.nextAt = bubbleState.visibleUntil + 2600 + Math.random() * 2200;
+    }
+    if (now > bubbleState.visibleUntil) return;
+
+    const text = IDLE_LINES[bubbleState.idx % IDLE_LINES.length];
+    const phase = now - (bubbleState.visibleUntil - 5200);
+    const alpha = Math.min(1, phase / 450) * Math.min(1, (bubbleState.visibleUntil - now) / 450);
+
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.font = `${Math.round(13 * scale)}px Jua, Noto Sans KR, system-ui`;
+    const w = Math.min(260 * scale, ctx.measureText(text).width + 30 * scale);
+    const bx = x - w / 2;
+    const by = y - 110 * scale;
+    const h = 30 * scale;
+    const rr = 12 * scale;
+    ctx.globalAlpha = Math.max(0, alpha);
+    ctx.fillStyle = 'rgba(255,255,255,.95)';
+    ctx.beginPath();
+    ctx.moveTo(bx + rr, by);
+    ctx.arcTo(bx + w, by, bx + w, by + h, rr);
+    ctx.arcTo(bx + w, by + h, bx, by + h, rr);
+    ctx.arcTo(bx, by + h, bx, by, rr);
+    ctx.arcTo(bx, by, bx + w, by, rr);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x - 7 * scale, by + 27 * scale);
+    ctx.lineTo(x, by + 38 * scale);
+    ctx.lineTo(x + 7 * scale, by + 27 * scale);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#102033';
+    ctx.fillText(text, x, by + 20 * scale);
+    ctx.restore();
   }
 
   function isPlayerNearDoor() {
@@ -231,19 +457,42 @@
     const p = player();
     if (!p) return;
 
+    /* 안내는 화면 가운데 뜨는 알림(레벨업 같은 연출)이 아니라
+       전부 대화창으로 보여 준다. NPC와 이야기하는 느낌을 유지하기 위해서다. */
     if (!questAvailable() && !heardTheStory()) {
-      call('showCinematicMessage', '원로 명진',
-        `허허, 아직은 이르구나. Lv.${REQUIRED_LEVEL}이 되거든 다시 오게.`, 1800);
+      showElderSay(`허허, 아직은 이르구나. Lv.${REQUIRED_LEVEL}이 되거든 다시 오게.`);
       return;
     }
 
     if (heardTheStory()) {
-      call('showCinematicMessage', '원로 명진', QUEST_DEF.done, 2000);
+      showElderSay(AFTER_LINES[Math.floor(Math.random() * AFTER_LINES.length)]);
       return;
     }
 
     // 처음 듣는 이야기: 여러 장을 순서대로 보여 주고 마지막에 완료 처리한다.
     showStoryPage(0);
+  }
+
+  /* 명진도사가 한 마디 하는 대화창. */
+  function showElderSay(text, options = {}) {
+    const openModal = global.openModal;
+    if (typeof openModal !== 'function') return;
+    openModal(`
+      <h2>${escape(ELDER.name)}</h2>
+      <div class="panel-card">
+        ${options.lead ? `<p><strong>${escape(options.lead)}</strong></p>` : ''}
+        <p>${escape(text)}</p>
+        ${options.note ? `<p class="muted">${escape(options.note)}</p>` : ''}
+        <div class="answer-row">
+          <button class="primary" id="raidSayCloseBtn">${escape(options.button || '알겠습니다')}</button>
+        </div>
+      </div>
+    `, { type: 'raidElderSay', pause: true });
+    const btn = global.document.getElementById('raidSayCloseBtn');
+    if (btn) {
+      btn.onclick = () => call('closeModal');
+      btn.focus();
+    }
   }
 
   function showStoryPage(index) {
@@ -289,10 +538,12 @@
 
     call('savePlayer');
     call('updateHud');
-    call('closeModal');
     call('playSfx', 'quest');
-    call('showCinematicMessage', '63빌딩 던전 개방',
-      '원로 명진의 이야기를 들었습니다. 동료 셋을 모아 문을 두드려 보세요.', 2200);
+    // 완료도 알림이 아니라 대화창으로 이어서 보여 준다.
+    showElderSay('이제 저 문은 자네에게 열려 있네. 동료 셋을 모아 오르거라.', {
+      lead: `「${QUEST_DEF.title}」 완료!`,
+      note: `EXP +${reward.exp} · Gold +${reward.gold} · 빌딩 +${reward.building}`,
+    });
     call('appendChatMessage', 'system', '퀘스트', `${QUEST_DEF.title} 완료! 63빌딩 던전 입구가 열렸습니다.`);
   }
 

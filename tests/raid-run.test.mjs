@@ -23,6 +23,9 @@ const member = (id, slot, extra = {}) => ({
   id, name:id, slot, klass:'warrior', maxHp:60, hp:60, attack:12, ...extra,
 });
 
+/* 빗나감(10%)·치명타(15%)에 걸리지 않고 동료는 정답을 맞히는(70% 미만) 평범한 굴림 */
+const PLAIN = () => 0.5;
+
 const makeRun = (overrides = {}) => api.YuksamRaidRun.createRun({
   floor:1,
   members:[
@@ -30,7 +33,7 @@ const makeRun = (overrides = {}) => api.YuksamRaidRun.createRun({
     member('ally1', 'middle'),
     member('ally2', 'back'),
   ],
-  rng:() => 0, // 동료가 항상 정답
+  rng:PLAIN, // 동료가 항상 정답
   ...overrides,
 });
 
@@ -213,7 +216,7 @@ test('쓰러진 동료는 다음 라운드에 때리지도 맞지도 않는다',
 });
 
 test('동료 정답은 밖에서 준 무작위 값으로 정해지고 나만 빠진다', () => {
-  const always = makeRun({ rng:() => 0 });
+  const always = makeRun({ rng:PLAIN });
   const answers = always.rollAllyAnswers();
   assert.deepEqual(Object.keys(answers).sort(), ['ally1', 'ally2']);
   assert.equal(answers.ally1, true);
@@ -229,9 +232,10 @@ test('동료 정답은 밖에서 준 무작위 값으로 정해지고 나만 빠
 test('힐러가 있으면 라운드마다 가장 다친 동료가 회복된다', () => {
   const run = api.YuksamRaidRun.createRun({
     floor:1,
-    rng:() => 0,
+    rng:PLAIN,
     members:[
-      member('me', 'front', { isPlayer:true, spec:'방어', maxHp:60, hp:20 }),
+      // 이동 중 회복(최대 체력의 절반)이 먼저 들어가므로, 그러고도 크게 다쳐 있도록 낮게 잡는다.
+      member('me', 'front', { isPlayer:true, spec:'방어', maxHp:60, hp:2 }),
       member('ally1', 'middle', { spec:'화염' }),
       member('ally2', 'back', { spec:'신성', attack:10 }),
     ],
@@ -242,7 +246,7 @@ test('힐러가 있으면 라운드마다 가장 다친 동료가 회복된다',
   const heal = result.events.find((e) => e.kind === 'party-heal');
   assert.ok(heal, '힐러가 회복시켜야 한다');
   assert.equal(heal.memberId, 'me');
-  assert.equal(heal.amount, 9); // 10 * 0.9
+  assert.equal(heal.amount, 16); // 공격 10 × HEAL_RATIO 1.6
 });
 
 test('전투 사이 이동에서 체력을 회복한다', () => {
@@ -269,13 +273,16 @@ test('전투 사이 이동에서 체력을 회복한다', () => {
 function playFloorOne(members) {
   const run = api.YuksamRaidRun.createRun({
     floor:1,
-    rng:() => 0,
+    rng:PLAIN,
     members:members.map((m) => ({ ...m })),
   });
   run.confirmFormation(Object.fromEntries(members.map((m) => [m.id, m.slot])));
 
   let guard = 0;
   let round = 0;
+  // 이동 중 회복이 크기 때문에 "끝났을 때 체력"만 보면 대형 차이가 가려진다.
+  // 전투 도중 가장 위험했던 순간(최저 체력 비율)을 함께 기록한다.
+  let lowestRatio = 1;
   while (run.phase !== 'cleared' && run.phase !== 'wiped' && guard < 400) {
     if (run.phase === 'travel') {
       run.arriveAtEncounter();
@@ -283,10 +290,13 @@ function playFloorOne(members) {
       const correct = round % 4 !== 3; // 네 번에 세 번 정답
       run.resolveRound(Object.fromEntries(members.map((m) => [m.id, correct])));
       round += 1;
+      run.snapshot().members.forEach((m) => {
+        lowestRatio = Math.min(lowestRatio, m.hp / m.maxHp);
+      });
     }
     guard += 1;
   }
-  return { phase:run.phase, round, members:run.snapshot().members };
+  return { phase:run.phase, round, lowestRatio, members:run.snapshot().members };
 }
 
 test('Lv.5 세 명(탱커·딜러·힐러)이면 1층을 깰 수 있다', () => {
@@ -326,10 +336,10 @@ test('대형을 거꾸로 세우면(약한 사람이 앞) 훨씬 위험해진다
     ...m, slot:m.id === 'healer' ? 'front' : m.id === 'dps' ? 'middle' : 'back',
   })));
 
-  const remaining = (result) => result.members.reduce((sum, m) => sum + m.hp, 0);
   assert.equal(good.phase, 'cleared');
-  assert.ok(remaining(good) > remaining(bad),
-    `튼튼한 사람을 앞에 세운 쪽이 더 많이 살아남아야 한다: 올바른 대형 ${remaining(good)} vs 거꾸로 ${remaining(bad)}`);
+  // 약한 사람을 앞에 세우면 전투 도중 훨씬 더 위험한 순간을 겪어야 한다.
+  assert.ok(bad.lowestRatio < good.lowestRatio,
+    `약한 사람을 앞에 세운 쪽이 더 위험해야 한다: 올바른 대형 최저 ${good.lowestRatio.toFixed(2)} vs 거꾸로 ${bad.lowestRatio.toFixed(2)}`);
 });
 
 test('현재 상태를 화면이 읽을 수 있는 형태로 알려 준다', () => {
