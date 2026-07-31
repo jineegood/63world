@@ -8,7 +8,8 @@ import { Script, createContext } from 'node:vm';
 import { fileURLToPath } from 'node:url';
 
 const root = dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
-const read = (file) => readFileSync(join(root, file), 'utf8');
+/* 소스는 CRLF로 저장돼 있고 아래 검사들의 슬라이스 정규식은 \n 기준이므로 읽을 때 LF로 맞춘다. */
+const read = (file) => readFileSync(join(root, file), 'utf8').replace(/\r\n/g, '\n');
 const require = createRequire(import.meta.url);
 const { JSDOM } = require(join(root, '.codex_work', 'browser-smoke', 'node_modules', 'jsdom'));
 

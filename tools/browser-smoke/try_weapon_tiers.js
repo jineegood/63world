@@ -135,6 +135,12 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   const auraStateRestored = [worldCanvas, combatCanvas].every((tracker) => tracker.stack.length === 0);
   check(auraStateRestored, 'weapon aura canvas state is restored after drawing');
 
+  /* 치트는 이제 교사 서버 인증(requireTeacherCheatAccessV3)을 통과해야만 동작한다.
+     여기서 검사하려는 것은 "인증을 통과한 교사가 썼을 때 즉시 강화가 제대로 되는가"이므로
+     인증 자체는 통과한 것으로 두고 강화 동작만 본다.
+     (인증을 반드시 거치는지는 tests/combat-flow.test.mjs가 소스에서 따로 확인한다.) */
+  window.requireTeacherCheatAccessV3 = async () => true;
+
   player.weaponUpgrades[uiWeaponId] = 0;
   const buildingBefore = player.building;
   const questHookBefore = window.recordQuestActionV38;
@@ -180,19 +186,21 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   combatHost.innerHTML = '<canvas id="combatPlayerCanvas" width="230" height="190"></canvas><canvas id="combatMonsterCanvas" width="230" height="190"></canvas>';
   $('combatPlayerCanvas').getContext = () => combatCanvas.ctx;
   $('combatMonsterCanvas').getContext = () => combatCanvas.ctx;
-  const combatCheatApplied = window.cheatUpgradeEquippedWeapon();
-  check(combatCheatApplied && hasTierOutlineStroke(combatCanvas, expectedTiers[1].color)
+  const combatCheatApplied = await window.cheatUpgradeEquippedWeapon();
+  check(combatCheatApplied === true && hasTierOutlineStroke(combatCanvas, expectedTiers[1].color)
     && hasTierAura(combatCanvas, expectedTiers[1].color),
   'instant cheat redraws the active combat canvas with the next tier');
 
   player.weaponUpgrades[uiWeaponId] = 4;
   click('cheatUpgradeWeaponBtn');
+  await sleep(20);
   check(player.weaponUpgrades[uiWeaponId] === 4 && $('toast').textContent.length > 0,
     'legendary tier cap is preserved and explained after consecutive upgrades');
   window.recordQuestActionV38 = questHookBefore;
 
   player.equipment.weapon = null;
   click('cheatUpgradeWeaponBtn');
+  await sleep(20);
   check($('toast').textContent.length > 0, 'instant cheat requires an equipped weapon');
 
   check(asyncErrors.length === 0, 'no asynchronous browser errors', asyncErrors.slice(0, 3).join(' | '));

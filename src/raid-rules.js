@@ -1,0 +1,289 @@
+/* =========================================================
+   raid-rules.js — 63빌딩 던전의 규칙 (순수 계산만)
+
+   화면도 소리도 저장도 건드리지 않는다. 값을 넣으면 값이 나온다.
+   그래서 검사하기 쉽고, 나중에 서버(Edge Function)가 이 파일을 그대로
+   다시 쓸 수 있다. 서버와 브라우저의 계산이 갈라지면 안 되기 때문이다.
+
+   무작위가 필요한 곳은 전부 rng를 밖에서 받는다.
+   서버가 같은 rng로 같은 결과를 다시 만들 수 있어야 하기 때문이다.
+   ========================================================= */
+(function initYuksamRaidRules(global) {
+  'use strict';
+
+  /* ---------- 대형(앞줄·중간·뒷줄) ---------- */
+
+  const SLOTS = Object.freeze(['front', 'middle', 'back']);
+
+  const SLOT_LABEL = Object.freeze({
+    front: '앞줄',
+    middle: '중간',
+    back: '뒷줄',
+  });
+
+  /* 앞에 설수록 많이 맞고 뒤에 설수록 덜 맞는다.
+     이 숫자가 탱커와 힐러의 역할을 갈라 준다. */
+  const DAMAGE_TAKEN = Object.freeze({
+    front: 1.5,
+    middle: 1.0,
+    back: 0.6,
+  });
+
+  const PARTY_SIZE = 3;
+
+  function slotLabel(slot) {
+    return SLOT_LABEL[slot] || String(slot || '');
+  }
+
+  function damageMultiplier(slot) {
+    const value = DAMAGE_TAKEN[slot];
+    return typeof value === 'number' ? value : 1;
+  }
+
+  /* 세 명이 앞·중간·뒤에 하나씩 서 있어야 올바른 대형이다. */
+  function validateFormation(members) {
+    if (!Array.isArray(members) || members.length !== PARTY_SIZE) {
+      return { ok:false, reason:`파티는 ${PARTY_SIZE}명이어야 합니다.` };
+    }
+    const used = members.map((m) => m && m.slot);
+    for (const slot of used) {
+      if (!SLOTS.includes(slot)) return { ok:false, reason:'앞줄·중간·뒷줄 중에서 골라 주세요.' };
+    }
+    if (new Set(used).size !== PARTY_SIZE) {
+      return { ok:false, reason:'같은 자리에 두 명이 설 수 없습니다.' };
+    }
+    return { ok:true };
+  }
+
+  /* ---------- 몬스터가 누구를 때리는가 ---------- */
+
+  /* 몬스터는 앞줄부터 노린다. 앞이 쓰러졌으면 중간, 그 다음 뒷줄.
+     그래서 앞에 선 사람이 진짜로 막아 주는 역할이 된다. */
+  function pickTarget(members) {
+    const alive = (members || []).filter((m) => m && m.hp > 0);
+    if (!alive.length) return null;
+    for (const slot of SLOTS) {
+      const found = alive.find((m) => m.slot === slot);
+      if (found) return found;
+    }
+    return alive[0];
+  }
+
+  /* 한 번의 몬스터 공격을 계산한다. 실제 체력을 깎지는 않고 결과만 돌려준다.
+     kind: 'single' 이면 한 명, 'all' 이면 전체 공격. */
+  function resolveMonsterAttack({ members, attack, kind = 'single' }) {
+    const base = Math.max(0, Math.floor(Number(attack) || 0));
+    const alive = (members || []).filter((m) => m && m.hp > 0);
+    if (!alive.length || base <= 0) return { kind, hits:[] };
+
+    const targets = kind === 'all' ? alive : [pickTarget(alive)].filter(Boolean);
+    const hits = targets.map((member) => {
+      const multiplier = damageMultiplier(member.slot);
+      // 배율을 곱해도 최소 1은 들어간다. 뒷줄이라고 0이 되면 안 된다.
+      const damage = Math.max(1, Math.round(base * multiplier));
+      return {
+        memberId: member.id,
+        slot: member.slot,
+        multiplier,
+        damage: Math.min(damage, member.hp),
+        lethal: damage >= member.hp,
+      };
+    });
+    return { kind, hits };
+  }
+
+  /* ---------- 플레이어 쪽 공격 ---------- */
+
+  /* 셋이 같은 문제를 동시에 푼다. 맞힌 사람만 제 몫의 피해를 넣고,
+     틀린 사람은 절반만 들어간다(일반 전투와 같은 규칙). */
+  function resolvePartyAttack({ members, answers }) {
+    const list = Array.isArray(members) ? members : [];
+    const given = answers && typeof answers === 'object' ? answers : {};
+    const hits = list
+      .filter((m) => m && m.hp > 0)
+      .map((member) => {
+        const correct = given[member.id] === true;
+        const power = Math.max(1, Math.floor(Number(member.attack) || 1));
+        const damage = correct ? power : Math.max(1, Math.floor(power / 2));
+        return { memberId:member.id, correct, damage };
+      });
+    const total = hits.reduce((sum, hit) => sum + hit.damage, 0);
+    return { hits, total };
+  }
+
+  /* ---------- 회복 (힐러 역할) ---------- */
+
+  /* 신성 전문화는 던전에서 회복을 맡는다.
+     앞줄이 1.5배로 맞는 만큼 누군가 뒤에서 채워 주지 않으면 층을 넘길 수 없다.
+     그래서 탱커(앞)와 힐러(뒤)가 함께 있어야 굴러가는 구조가 된다. */
+  const HEAL_SPECS = Object.freeze(['신성']);
+  const HEAL_RATIO = 0.9;
+
+  function isHealer(member) {
+    return !!member && HEAL_SPECS.includes(member.spec);
+  }
+
+  /* 문제를 맞힌 힐러가 가장 많이 다친 동료를 회복시킨다.
+     실제 체력을 바꾸지 않고 결과만 돌려준다. */
+  function resolvePartyHeal({ members, answers }) {
+    const list = Array.isArray(members) ? members : [];
+    const given = answers && typeof answers === 'object' ? answers : {};
+    const healers = list.filter((m) => m && m.hp > 0 && isHealer(m) && given[m.id] === true);
+    if (!healers.length) return { heals:[] };
+
+    // 회복량은 미리 정해 두고, 대상은 그때그때 가장 다친 사람으로 고른다.
+    const pending = list.map((m) => ({ ...m }));
+    const heals = [];
+    healers.forEach((healer) => {
+      const wounded = pending
+        .filter((m) => m.hp > 0 && m.hp < m.maxHp)
+        .sort((a, b) => (a.hp / a.maxHp) - (b.hp / b.maxHp))[0];
+      if (!wounded) return;
+      const power = Math.max(1, Math.round((Number(healer.attack) || 1) * HEAL_RATIO));
+      const amount = Math.min(power, wounded.maxHp - wounded.hp);
+      if (amount <= 0) return;
+      wounded.hp += amount;
+      heals.push({ healerId:healer.id, memberId:wounded.id, amount });
+    });
+    return { heals };
+  }
+
+  /* 다음 몬스터에게 걸어가는 동안 숨을 고른다.
+     한 층을 네 번 싸워 넘기려면 전투 사이 회복이 반드시 필요하다. */
+  const TRAVEL_RECOVERY = 0.25;
+
+  function travelRecovery(members) {
+    return (members || [])
+      .filter((m) => m && m.hp > 0 && m.hp < m.maxHp)
+      .map((member) => ({
+        memberId:member.id,
+        amount:Math.min(
+          Math.max(1, Math.round(member.maxHp * TRAVEL_RECOVERY)),
+          member.maxHp - member.hp,
+        ),
+      }));
+  }
+
+  /* ---------- 층 구성 ---------- */
+
+  /* 63층 컨셉이지만 한 번에 다 만들지 않는다.
+     1층부터 열고 10층·20층 식으로 천천히 늘린다. */
+  const MONSTERS = Object.freeze({
+    /* 수치 기준: Lv.5 셋이 힐러를 데리고 가면 넘길 수 있는 선.
+       한 마리를 4~6라운드에 정리하고, 그동안 앞줄이 버티도록 잡았다. */
+    guardBot: {
+      id:'guardBot', name:'경비 로봇', level:5, hp:84, attack:5,
+      pattern:['single', 'single', 'all'],
+      desc:'1층 로비를 지키는 낡은 경비 로봇. 가끔 사방으로 경보를 터뜨린다.',
+    },
+    officeGhost: {
+      id:'officeGhost', name:'사무실 유령', level:5, hp:96, attack:6,
+      pattern:['single', 'all', 'single'],
+      desc:'야근하다 사라진 직원의 그림자. 서류를 흩뿌려 모두를 덮친다.',
+    },
+    blackoutShade: {
+      id:'blackoutShade', name:'정전 그림자', level:6, hp:104, attack:5,
+      pattern:['all', 'all', 'single'],
+      desc:'정전된 층에 고인 어둠. 전체를 한꺼번에 노린다.',
+    },
+    towerWarden: {
+      id:'towerWarden', name:'63빌딩 관리자', level:7, hp:190, attack:8,
+      pattern:['single', 'single', 'all', 'single', 'all'],
+      boss:true,
+      desc:'빌딩의 모든 층을 관리해 온 존재. 1층의 마지막 관문이다.',
+    },
+  });
+
+  const FLOORS = Object.freeze({
+    1: Object.freeze({
+      floor:1,
+      title:'63빌딩 1층 — 로비',
+      recommendedLevel:5,
+      stages:Object.freeze(['guardBot', 'officeGhost', 'blackoutShade']),
+      boss:'towerWarden',
+      reward:Object.freeze({ exp:40, gold:180, building:20 }),
+    }),
+  });
+
+  function getFloor(floor) {
+    return FLOORS[Number(floor)] || null;
+  }
+
+  function availableFloors() {
+    return Object.keys(FLOORS).map(Number).sort((a, b) => a - b);
+  }
+
+  /* 한 층에서 순서대로 만나는 몬스터들. 마지막이 레이드 보스다. */
+  function floorEncounters(floor) {
+    const def = getFloor(floor);
+    if (!def) return [];
+    return [...def.stages, def.boss]
+      .map((id) => MONSTERS[id])
+      .filter(Boolean)
+      .map((monster, index, all) => ({
+        ...monster,
+        index,
+        isBoss: index === all.length - 1,
+      }));
+  }
+
+  /* 몬스터가 이번 라운드에 단일 공격을 하는지 전체 공격을 하는지.
+     정해진 순서를 반복하므로 학생이 패턴을 외워 대비할 수 있다. */
+  function attackKindForRound(monster, round) {
+    const pattern = Array.isArray(monster?.pattern) && monster.pattern.length
+      ? monster.pattern
+      : ['single'];
+    const index = Math.max(0, Math.floor(Number(round) || 0));
+    return pattern[index % pattern.length] === 'all' ? 'all' : 'single';
+  }
+
+  /* ---------- 혼자 도는 버전의 동료 ---------- */
+
+  /* 3명이 모이기 전에도 던전을 돌아 볼 수 있도록 동료 둘을 붙인다.
+     동료는 정해진 확률로 정답을 맞힌다. rng는 밖에서 받는다. */
+  const ALLY_CORRECT_RATE = 0.7;
+
+  function allyAnswersCorrectly(rng) {
+    const roll = typeof rng === 'function' ? Number(rng()) : Math.random();
+    return roll < ALLY_CORRECT_RATE;
+  }
+
+  /* ---------- 승패 판정 ---------- */
+
+  function isPartyWiped(members) {
+    return (members || []).every((m) => !m || m.hp <= 0);
+  }
+
+  function isMonsterDown(monster) {
+    return !monster || Number(monster.hp) <= 0;
+  }
+
+  global.YuksamRaidRules = Object.freeze({
+    SLOTS,
+    SLOT_LABEL,
+    DAMAGE_TAKEN,
+    PARTY_SIZE,
+    MONSTERS,
+    FLOORS,
+    ALLY_CORRECT_RATE,
+    HEAL_SPECS,
+    HEAL_RATIO,
+    TRAVEL_RECOVERY,
+    slotLabel,
+    damageMultiplier,
+    validateFormation,
+    pickTarget,
+    resolveMonsterAttack,
+    resolvePartyAttack,
+    isHealer,
+    resolvePartyHeal,
+    travelRecovery,
+    getFloor,
+    availableFloors,
+    floorEncounters,
+    attackKindForRound,
+    allyAnswersCorrectly,
+    isPartyWiped,
+    isMonsterDown,
+  });
+})(typeof window !== 'undefined' ? window : globalThis);

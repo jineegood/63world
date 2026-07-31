@@ -77,11 +77,15 @@ test('real browser preserves collider, movement, and transition behavior', { tim
   const script = join(root, 'tools', 'browser-smoke', 'try_world_navigation.js');
   const result = spawnSync(process.execPath, [script, root], { encoding:'utf8', timeout:25000 });
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
-  assert.match(result.stdout, /PASS: town keeps nineteen unique collision shapes/);
+  // 63빌딩 던전이 빌딩 본체와 원로 명진 충돌을 더해 19개 → 21개가 되었다.
+  assert.match(result.stdout, /PASS: town keeps twenty-one unique collision shapes/);
+  assert.match(result.stdout, /PASS: town includes 63 tower collider/);
+  assert.match(result.stdout, /PASS: town includes raid elder collider/);
   assert.match(result.stdout, /PASS: boss ellipse rejects outside movement/);
   assert.match(result.stdout, /PASS: equipment exit returns beside its town door/);
   assert.match(result.stdout, /PASS: final room suppresses all automatic transitions/);
-  assert.match(result.stdout, /RESULT: PASS 30 \/ FAIL 0/);
+  // 63빌딩 던전 충돌 검사 2개가 늘어 30개 → 32개가 되었다.
+  assert.match(result.stdout, /RESULT: PASS 32 \/ FAIL 0/);
 });
 
 test('production uses one navigation boundary without versioned wrappers', () => {

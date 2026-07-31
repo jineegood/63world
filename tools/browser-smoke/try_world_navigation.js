@@ -51,9 +51,15 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
     return { map:G.currentMap, x:G.player.x, y:G.player.y };
   }
 
+  // 기존 19개 + 63빌딩 던전에서 더한 2개(빌딩 본체, 원로 명진) = 21개
   const townUnique = uniqueSignatures('town');
-  check('town keeps nineteen unique collision shapes', townUnique.length === 19, `unique=${townUnique.length}, raw=${colliders('town').length}`);
+  check('town keeps twenty-one unique collision shapes', townUnique.length === 21, `unique=${townUnique.length}, raw=${colliders('town').length}`);
   check('town includes healing well collider', townUnique.includes(signature({ type:'circle', x:worlds.town.healingWell.x, y:worlds.town.healingWell.y, r:44 })));
+  const raid = window.YuksamRaidDungeon;
+  check('town includes 63 tower collider',
+    townUnique.includes(signature({ type:'rect', x:raid.TOWER.x, y:raid.TOWER.y - 16, w:raid.TOWER.w * .92, h:raid.TOWER.h * .80 })));
+  check('town includes raid elder collider',
+    townUnique.includes(signature({ type:'circle', x:raid.ELDER.x, y:raid.ELDER.y, r:32 })));
   check('town includes final pet building collider', townUnique.includes(signature({ type:'rect', x:worlds.town.petShop.x, y:worlds.town.petShop.y + 18, w:worlds.town.petShop.w * .9, h:worlds.town.petShop.h * .82 })));
   check('town includes final upgrade building collider', townUnique.includes(signature({ type:'rect', x:worlds.town.upgradeShop.x, y:worlds.town.upgradeShop.y + 18, w:worlds.town.upgradeShop.w * .9, h:worlds.town.upgradeShop.h * .82 })));
   check('forest keeps twenty-eight colliders including two healing wells', colliders('forest').length === 28);

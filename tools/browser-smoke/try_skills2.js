@@ -59,6 +59,10 @@ run(root, async ({ window, $, sleep, click, asyncErrors }) => {
 
   // (a) 다중 랭크
   g.player.class = 'warrior'; g.player.spec = null; g.player.skills = {}; g.player.level = 10;
+  /* 스킬 포인트는 명진쌤의 스킬 퀘스트(tut_skill)를 받은 뒤에만 쓸 수 있다.
+     여기서 보려는 것은 "퀘스트를 마친 학생이 랭크를 올릴 때" 규칙이므로 퀘스트를 완료 상태로 둔다. */
+  g.player.quests = g.player.quests || {};
+  g.player.quests.tut_skill = { id:'tut_skill', status:'done', progress:1, target:1, acceptedAt:Date.now() };
   window.updateHud();
   const baseHp = window.computeTotalStats().체력;
   const learn = (id) => window.learnSkill(id);

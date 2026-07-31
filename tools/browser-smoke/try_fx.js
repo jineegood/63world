@@ -38,11 +38,17 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   G().player.spec = '방어';
 
   // ===== (b1) 치트 패널 토글로 버튼 9개 노출 =====
+  /* 치트 패널과 각 치트 버튼은 이제 교사 서버 인증(requireTeacherCheatAccessV3)을 통과해야 열리고,
+     그래서 모든 처리가 async가 되었다. 여기서는 "인증을 통과한 교사"를 가정하고 치트 동작만 본다.
+     인증을 반드시 거치는지는 tests/combat-flow.test.mjs가 소스에서 따로 확인한다. */
+  window.requireTeacherCheatAccessV3 = async () => true;
+
   const toggle = window.document.getElementById('cheatToggleBtn');
   chk(!!toggle, '치트 토글 버튼 존재');
   const panel = window.document.getElementById('cheatPanel');
   chk(panel && panel.classList.contains('hidden'), '초기 패널 접힘');
   toggle.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await sleep(20); // 교사 인증 확인이 async라 한 틱 기다린다
   chk(panel && !panel.classList.contains('hidden'), '토글 후 패널 펼침');
   const btnCount = panel ? panel.querySelectorAll('.cheat-panel-grid button').length : 0;
   chk(btnCount === 11, '치트 버튼 11개 노출', 'n=' + btnCount);
@@ -52,6 +58,7 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   G().player.quests = G().player.quests || {};
   G().player.quests[qid] = { id: qid, status: 'accepted', progress: 0, target: 3, acceptedAt: Date.now() };
   window.document.getElementById('cheatCompleteQuestBtn').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
   chk(G().player.quests[qid].status === 'ready', '퀘스트 즉시완료 accepted→ready', 'status=' + G().player.quests[qid].status);
 
   // ===== 전투 진입 =====
@@ -69,6 +76,7 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   const cm = window.currentCombatMonster ? window.currentCombatMonster() : null;
   chk(!!cm, '현재 전투 몬스터 접근');
   window.document.getElementById('cheatKillMonsterBtn').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
   chk(cm && (cm.dying === true || cm.hp === 0), '몬스터 즉시 처치(죽음 처리)', cm ? 'dying=' + cm.dying + ' hp=' + cm.hp : '');
   await sleep(3300); // 처치 시퀀스 정리 대기
 

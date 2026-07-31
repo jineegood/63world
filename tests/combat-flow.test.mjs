@@ -1,12 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync as readFileRaw } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { Script, createContext } from 'node:vm';
 import { fileURLToPath } from 'node:url';
 
 const root = dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
+/* 소스 파일은 CRLF(\r\n)로 저장돼 있는데, 아래 검사들이 함수 덩어리를 잘라낼 때 쓰는
+   정규식은 \n 기준이다. 읽는 시점에 줄바꿈을 LF로 맞춰야 슬라이스가 빈 문자열이 되지 않는다.
+   (빈 문자열이 되면 assert.match는 실패하고 assert.doesNotMatch는 가짜로 통과한다.) */
+const readFileSync = (path, options) => readFileRaw(path, options).replace(/\r\n/g, '\n');
 const gameSource = readFileSync(join(root, 'game.js'), 'utf8');
 const harnessSource = readFileSync(join(root, 'tools', 'browser-smoke', 'harness.js'), 'utf8');
 const htmlSource = readFileSync(join(root, 'index.html'), 'utf8');
@@ -275,12 +279,16 @@ test('all equipped weapon render paths use the shared tier style', () => {
   assert.match(gameSource, /weaponTierStyle\.tier > 0/);
 });
 
+/* 치트는 교사 서버 인증(requireTeacherCheatAccessV3)을 거치도록 바뀌면서 async 함수가 되었다.
+   즉시 강화라는 성격(무작위·비용·퀘스트 진행 없음)은 그대로 지켜야 하고,
+   교사 인증을 먼저 통과해야 한다는 점이 새로 지켜야 할 규칙이다. */
 test('instant weapon upgrade cheat is wired without the normal enhancement resolver', () => {
-  assert.match(gameSource, /window\.cheatUpgradeEquippedWeapon\s*=\s*function/);
+  assert.match(gameSource, /window\.cheatUpgradeEquippedWeapon\s*=\s*async function/);
   assert.match(cheatPanelSource, /cheatUpgradeWeaponBtn/);
   assert.match(cheatPanelSource, /cheatUpgradeEquippedWeapon/);
   assert.match(htmlSource, /id="cheatUpgradeWeaponBtn"/);
-  const cheatResolver = gameSource.match(/window\.cheatUpgradeEquippedWeapon\s*=\s*function[\s\S]*?\n};/)?.[0] || '';
+  const cheatResolver = gameSource.match(/window\.cheatUpgradeEquippedWeapon\s*=\s*async function[\s\S]*?\n};/)?.[0] || '';
+  assert.match(cheatResolver, /if \(!\(await window\.requireTeacherCheatAccessV3\?\.\(\)\)\) return false;/);
   assert.notEqual(cheatResolver, '');
   assert.doesNotMatch(cheatResolver, /Math\.random|rollEnhancement|recordQuestAction|building\s*[-+]=/);
   const normalizer = gameSource.match(/function normalizePlayer\(p\)[\s\S]*?\n}/)?.[0] || '';
@@ -323,15 +331,24 @@ test('BGM synchronization selects and starts the desired file only once', () => 
   assert.equal((syncV21.match(/file\.play\(\)/g) || []).length, 1);
 });
 
-test('normal combat uses battle BGM while boss rooms keep boss BGM', () => {
+/* 제작자 방향(복구본): 일반 몬스터 전투는 전투 BGM으로 갈아타지 않고 그 맵의 음악을 그대로 유지한다.
+   전투 BGM(battleFile)은 이제 PVP 전용이고, 보스방만 보스 음악을 쓴다.
+   누가 실수로 예전처럼 "일반 전투 → 전투 BGM"을 되살리면 이 검사가 잡아낸다. */
+test('normal combat keeps the map BGM while boss rooms use boss BGM and battle BGM is PvP-only', () => {
   const desiredV21 = gameSource.match(/getDesiredAudioFile = function getDesiredAudioFileV21\(\) \{[\s\S]*?\n  };/)?.[0] || '';
   const syncV21 = gameSource.match(/syncAudioFileBgm = function syncAudioFileBgmV21\(\) \{[\s\S]*?\n  };/)?.[0] || '';
   const enterCombat = gameSource.match(/function enterBaseCombat\(monster\) \{[\s\S]*?\n}/)?.[0] || '';
   const finishDefeat = gameSource.match(/function finishMonsterDefeatV25\([\s\S]*?\n  }/)?.[0] || '';
+  assert.notEqual(desiredV21, '');
   assert.match(audioManifestSource, /battleBgm:\s*\{\s*src:'assets\/1\. 전투씬 음악\.mp3'/);
-  assert.ok(desiredV21.indexOf("game.currentMap === 'bossRoom'") < desiredV21.indexOf('game.currentCombatMonsterId'));
-  assert.match(desiredV21, /game\.currentCombatMonsterId[\s\S]*?game\.audio\.battleFile/);
+  // 전투 BGM은 오직 PVP가 진행 중일 때만 고른다.
+  assert.match(desiredV21, /getActivePvpMatchV1[\s\S]*?game\.audio\.battleFile/);
+  // 일반 전투 중이라는 이유로 음악을 바꾸지 않는다.
+  assert.doesNotMatch(desiredV21, /game\.currentCombatMonsterId/);
+  // 보스방은 보스 음악을 유지한다.
+  assert.match(desiredV21, /game\.currentMap === 'bossRoom'[\s\S]*?game\.audio\.bossFile/);
   assert.match(syncV21, /game\.audio\.battleFile/);
+  // 전투 진입·종료 시 음악 상태를 다시 맞춰 준다(맵 음악이 계속 이어지도록).
   assert.match(enterCombat, /game\.currentCombatMonsterId = monster\.id;[\s\S]*?syncAudioFileBgm\(\)/);
   assert.match(finishDefeat, /game\.currentCombatMonsterId = null;[\s\S]*?syncAudioFileBgm\(\)/);
 });
@@ -426,7 +443,10 @@ test('only the synthesized player-hit path doubles the original hit gain and cla
 
 test('quest completion uses its manifest sound while quest acceptance keeps the synthesized cue', () => {
   const reward = gameSource.match(/window\.claimQuestReward = function claimQuestRewardV21\(id\) \{[\s\S]*?\n  };/)?.[0] || '';
-  const accept = gameSource.match(/window\.acceptCurrentQuest = function acceptCurrentQuestV21\(id\) \{[^\n]*/)?.[0] || '';
+  /* 치유의 우물 퀘스트가 들어오면서 acceptCurrentQuestV21이 여러 줄로 길어졌다.
+     예전처럼 첫 줄만 잘라보면 안 되고 함수 전체를 봐야 한다. */
+  const accept = gameSource.match(/window\.acceptCurrentQuest = function acceptCurrentQuestV21\(id\) \{[\s\S]*?\n  };/)?.[0] || '';
+  assert.notEqual(accept, '');
   assert.match(reward, /playQuestCompletionSoundV42/);
   assert.match(reward, /playSfx\('quest'\)/);
   assert.match(accept, /playSfx\('quest'\)/);
@@ -440,7 +460,11 @@ test('legacy direct counterattacks use the doubled player-hit sound after wrong 
   const v25Counter = gameSource.match(/monsterCounterAttack = function monsterCounterAttackV25[\s\S]*?\n  };\n  window\.submitCombatAnswer/)?.[0] || '';
   assert.match(legacyCounter, /playPlayerHitSfx\(\)/);
   assert.doesNotMatch(legacyCounter, /playSfx\('hit'\)/);
-  assert.match(submitAnswer, /resolveWrongAnswerV2\(monster\)/);
+  /* 오답이면 곧바로 반격하지 않는다. 정답을 초록색으로 2초 보여 준 뒤(YuksamWrongAnswerReview.reveal)
+     그 사이 전투가 바뀌지 않았는지 다시 확인하고(fresh) 반격을 재생한다. */
+  assert.match(submitAnswer, /game\.wrongAnswerReviewing = true;/);
+  assert.match(submitAnswer, /const fresh = currentCombatMonster\(\);[\s\S]*?fresh\.id !== monster\.id/);
+  assert.match(submitAnswer, /YuksamWrongAnswerReview\.reveal\(\{[\s\S]*?onComplete:\(\) => \{[\s\S]*?resolveWrongAnswerV2\(fresh\);/);
   assert.match(wrongAnswer, /type:'answer-wrong'[\s\S]*?monsterCounterAttack\(''\)/);
   assert.match(v25Counter, /playerAilments\?\.stunTurns > 0[\s\S]*?monsterCounterAttack\(''\)/);
 });
