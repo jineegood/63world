@@ -26,6 +26,14 @@
   const esc = (value) => (core().escapeHtml ? core().escapeHtml(value) : String(value == null ? '' : value));
   const norm = (value) => (core().normalize ? core().normalize(value) : String(value == null ? '' : value).trim());
 
+  /* 혼자 도는 버전에서는 동료 자리도 내가 배치한다.
+     나중에 셋이 실제로 함께할 때는 false가 되어 자기 캐릭터만 옮길 수 있다. */
+  let soloMode = true;
+
+  /* 셋 다 준비되면 세는 시간(초)과 한 칸의 길이(밀리초). 검사에서는 짧게 줄인다. */
+  let READY_COUNTDOWN = 5;
+  let COUNTDOWN_STEP_MS = 1000;
+
   let active = null;      // 지금 돌고 있는 판
   let question = null;    // 지금 화면에 뜬 문제
   let busy = false;       // 연출 재생 중에는 입력을 막는다
@@ -42,18 +50,27 @@
 
       /* 대형 화면 — 위 세 자리, 아래 대기칸 */
       .raid-posts{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:12px 0 16px}
-      .raid-post{border-radius:14px;padding:10px 8px 12px;text-align:center;min-height:186px;
-        display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:4px}
-      .raid-post.empty{border:2px dashed rgba(125,211,252,.55);background:rgba(8,17,30,.55)}
-      .raid-post.filled{border:1px solid rgba(148,163,184,.4);background:rgba(15,23,42,.78)}
+      .raid-post{border-radius:14px;padding:10px 8px 12px;text-align:center;min-height:210px;
+        display:flex;flex-direction:column;align-items:center;gap:6px;position:relative}
+      /* 빈 자리는 + 버튼이 칸 한가운데에 오도록 남는 공간을 나눠 준다 */
+      .raid-post.empty{border:2px dashed rgba(125,211,252,.55);background:rgba(8,17,30,.55);
+        justify-content:center}
+      .raid-post.empty .raid-post-title{position:absolute;top:10px;left:0;right:0}
+      .raid-post.filled{border:1px solid rgba(148,163,184,.4);background:rgba(15,23,42,.78);
+        justify-content:flex-start}
       .raid-post.filled.on{border-color:#38bdf8;box-shadow:0 0 0 2px rgba(56,189,248,.35)}
-      .raid-post-title{font-size:13px;font-weight:800;color:#cbd5e1}
-      .raid-post-hint{font-size:11px;color:#8fa6c0;margin-top:auto}
-      .raid-post-empty-text{font-size:12px;color:#7dd3fc}
-      .raid-plus{width:52px;height:52px;border-radius:999px;font-size:26px;line-height:1;
-        border:1px solid rgba(125,211,252,.7);background:rgba(56,189,248,.16);color:#7dd3fc;cursor:pointer}
+      .raid-post.ready{border-color:#4ade80;box-shadow:0 0 0 2px rgba(74,222,128,.35)}
+      /* 자리 이름은 크게 — 한눈에 앞/가운데/뒤를 알 수 있게 */
+      .raid-post-title{font-size:39px;font-weight:900;color:#e2e8f0;line-height:1.1}
+      .raid-ready-badge{margin-top:auto;font-size:20px;font-weight:900;color:#4ade80;
+        text-shadow:0 2px 6px rgba(0,0,0,.6)}
+      .raid-plus{width:88px;height:88px;border-radius:999px;font-size:46px;line-height:1;
+        border:2px solid rgba(125,211,252,.75);background:rgba(56,189,248,.16);color:#7dd3fc;cursor:pointer}
       .raid-plus:hover{background:rgba(56,189,248,.34);color:#e0f2fe}
-      .raid-plus.small{width:28px;height:28px;font-size:17px}
+      .raid-plus.small{width:34px;height:34px;font-size:20px;border-width:1px}
+      .raid-countdown{text-align:center;font-size:30px;font-weight:900;color:#fbbf24;
+        margin:10px 0;text-shadow:0 2px 8px rgba(0,0,0,.6)}
+      .raid-actions{display:flex;gap:10px;justify-content:center;margin-top:12px}
       .raid-figure{cursor:pointer;display:flex;flex-direction:column;align-items:center}
       .raid-figure-name{font-size:13px;font-weight:700;margin-top:2px}
       .raid-figure-sub{font-size:11px;color:#9fb3cd}
@@ -64,7 +81,9 @@
       .raid-bench-card{cursor:pointer;border:1px solid rgba(148,163,184,.35);border-radius:12px;
         background:rgba(15,23,42,.7);padding:6px 10px 8px;text-align:center}
       .raid-bench-card.on{border-color:#38bdf8;box-shadow:0 0 0 2px rgba(56,189,248,.35)}
-      .raid-bench-empty{font-size:12px;color:#8fa6c0;align-self:center}
+      /* "준비를 눌러주세요!" 는 대기칸 한가운데에 크게 */
+      .raid-bench-empty{font-size:30px;font-weight:900;color:#7dd3fc;
+        flex:1;display:flex;align-items:center;justify-content:center;text-align:center}
       /* 전투 — 일반 전투 무대를 그대로 쓰고 왼쪽에 세 명이 선다.
          체력창은 무대 위쪽에 가로로 놓아 캐릭터를 가리지 않게 한다. */
       .raid-stage{min-height:440px}
@@ -231,6 +250,47 @@
     const inSlot = (slot) => roster.find((m) => placement[m.id] === slot) || null;
     const waiting = () => roster.filter((m) => !placement[m.id]);
 
+    /* 준비를 누른 사람들. 셋 다 준비되면 카운트다운이 시작된다. */
+    const readyIds = new Set();
+    let countdown = 0;
+    let countdownTimer = null;
+
+    /* 실제로 셋이 함께 할 때는 자기 캐릭터만 옮길 수 있어야 한다.
+       지금은 혼자 도는 버전이라 동료도 내가 배치한다. */
+    function canControl(id) {
+      if (soloMode) return true;
+      return !!memberById(id)?.isPlayer;
+    }
+
+    /* 준비 버튼. 내가 맡은 캐릭터를 준비 상태로 표시한다. */
+    function markReady() {
+      const mine = soloMode ? roster : roster.filter((m) => m.isPlayer);
+      mine.forEach((m) => readyIds.add(m.id));
+      render();
+      if (roster.every((m) => readyIds.has(m.id))) startCountdown();
+    }
+
+    /* 셋 다 준비되면 5초를 세고 출발한다. */
+    function startCountdown() {
+      if (countdownTimer) return;
+      countdown = READY_COUNTDOWN;
+      render();
+      const tick = () => {
+        countdown -= 1;
+        if (countdown <= 0) {
+          countdownTimer = null;
+          countdown = 0;
+          const result = active.confirmFormation(placement);
+          if (!result.ok) { render(result.reason); return; }
+          playTravelScene();
+          return;
+        }
+        render();
+        countdownTimer = global.setTimeout(tick, COUNTDOWN_STEP_MS);
+      };
+      countdownTimer = global.setTimeout(tick, COUNTDOWN_STEP_MS);
+    }
+
     function moveSelectedTo(slot) {
       if (!selected) return;
       if (slot) {
@@ -249,25 +309,23 @@
     function slotHtml(slot) {
       const member = inSlot(slot);
       const label = esc(R.slotLabel(slot));
-      const hint = slot === 'front' ? '피해 1.5배' : slot === 'middle' ? '피해 1.0배' : '피해 0.6배';
       if (!member) {
         return `
           <div class="raid-post empty" data-slot="${slot}">
             <div class="raid-post-title">${label}</div>
             <button class="raid-plus" data-slot="${slot}" title="${label}에 세우기">+</button>
-            <div class="raid-post-empty-text">비어 있음</div>
-            <div class="raid-post-hint">${hint}</div>
           </div>`;
       }
+      const ready = readyIds.has(member.id);
       return `
-        <div class="raid-post filled ${selected === member.id ? 'on' : ''}" data-slot="${slot}">
+        <div class="raid-post filled ${selected === member.id ? 'on' : ''} ${ready ? 'ready' : ''}" data-slot="${slot}">
           <div class="raid-post-title">${label}</div>
           <div class="raid-figure" data-pick="${esc(member.id)}">
             ${memberCanvasHtml(member, 132)}
             <div class="raid-figure-name">${esc(member.name)}${member.isPlayer ? ' (나)' : ''}</div>
             <div class="raid-figure-sub">${esc(member.spec || '전문화 없음')}</div>
           </div>
-          <div class="raid-post-hint">${hint}</div>
+          ${ready ? '<div class="raid-ready-badge">Ready!</div>' : ''}
         </div>`;
     }
 
@@ -280,12 +338,13 @@
               <div class="raid-figure-name">${esc(member.name)}${member.isPlayer ? ' (나)' : ''}</div>
               <div class="raid-figure-sub">${esc(member.spec || '전문화 없음')} · 공격 ${member.attack} · HP ${member.maxHp}</div>
             </div>`).join('')
-        : '<div class="raid-bench-empty">모두 자리를 잡았습니다.</div>';
+        : '<div class="raid-bench-empty">준비를 눌러주세요!</div>';
 
-      const ready = R.SLOTS.every((slot) => !!inSlot(slot));
+      const seated = R.SLOTS.every((slot) => !!inSlot(slot));
+      const allReady = seated && roster.every((m) => readyIds.has(m.id));
 
       call('openModal', `
-        <h2>${esc(active.snapshot().title)} — 로비</h2>
+        <h2>${esc(active.snapshot().title)}</h2>
         <div class="panel-card raid-formation">
           <p class="raid-hint">캐릭터를 고른 뒤 세우고 싶은 자리의 <strong>+</strong>를 누르세요. 이미 세운 캐릭터도 다시 옮길 수 있습니다.</p>
           <!-- 전투 배치와 같은 순서로 보여 준다: 왼쪽이 뒤, 오른쪽이 앞 -->
@@ -297,9 +356,12 @@
             </div>
             <div class="raid-bench">${benchHtml}</div>
           </div>
+          ${countdown > 0 ? `<div class="raid-countdown">${countdown}초 뒤 출발!</div>` : ''}
           ${message ? `<p class="raid-error">${esc(message)}</p>` : ''}
-          <div class="answer-row">
-            <button class="primary" id="raidStartBtn" ${ready ? '' : 'disabled'}>${ready ? '출발' : '세 자리를 모두 채우세요'}</button>
+          <div class="raid-actions">
+            <button class="primary" id="raidStartBtn" ${seated && !allReady ? '' : 'disabled'}>${
+              allReady ? '출발 준비 완료' : (seated ? '준비' : '세 자리를 모두 채우세요')
+            }</button>
             <button class="ghost" id="raidCancelBtn">돌아가기</button>
           </div>
         </div>
@@ -308,11 +370,20 @@
       paintAll('.raid-face', memberById, 1.35);
 
       global.document.querySelectorAll('[data-pick]').forEach((node) => {
-        node.onclick = () => { selected = node.dataset.pick; render(); };
+        node.onclick = () => {
+          const id = node.dataset.pick;
+          if (!canControl(id)) { render('다른 사람의 캐릭터는 옮길 수 없습니다.'); return; }
+          selected = id;
+          render();
+        };
       });
       global.document.querySelectorAll('.raid-plus').forEach((button) => {
         button.onclick = () => {
+          if (countdown > 0) return;   // 카운트다운 중에는 자리를 바꿀 수 없다
           if (!selected) { render('먼저 옮길 캐릭터를 고르세요.'); return; }
+          if (!canControl(selected)) { render('다른 사람의 캐릭터는 옮길 수 없습니다.'); return; }
+          // 자리를 바꾸면 준비를 다시 눌러야 한다.
+          readyIds.clear();
           moveSelectedTo(button.dataset.slot || null);
         };
       });
@@ -320,13 +391,21 @@
       const startBtn = global.document.getElementById('raidStartBtn');
       if (startBtn) {
         startBtn.onclick = () => {
-          const result = active.confirmFormation(placement);
-          if (!result.ok) { render(result.reason); return; }
-          playTravelScene();
+          /* 여기서는 '확인만' 한다. confirmFormation은 진행 상태를 바꾸므로
+             카운트다운이 끝난 뒤 딱 한 번만 부른다. */
+          const seatedMembers = roster.map((m) => ({ ...m, slot:placement[m.id] }));
+          const check = R.validateFormation(seatedMembers);
+          if (!check.ok) { render(check.reason); return; }
+          markReady();
         };
       }
       const cancelBtn = global.document.getElementById('raidCancelBtn');
-      if (cancelBtn) cancelBtn.onclick = () => leaveDungeonNow();
+      if (cancelBtn) {
+        cancelBtn.onclick = () => {
+          if (countdownTimer) { global.clearInterval(countdownTimer); countdownTimer = null; }
+          leaveDungeonNow();
+        };
+      }
     }
 
     render();
@@ -542,7 +621,8 @@
       ctx.textAlign = 'center';
       ctx.font = '600 12px Noto Sans KR, system-ui';
       ctx.fillStyle = member.hp > 0 ? '#e2e8f0' : '#94a3b8';
-      ctx.fillText(`${member.name} (${R.slotLabel(member.slot)})`, x, y + 20);
+      // 이동 중에는 이름만 보여 준다(자리 이름은 로비와 전투에서 확인한다).
+      ctx.fillText(member.name, x, y + 20);
       ctx.restore();
     });
   }
@@ -609,7 +689,9 @@
   /* 걷는 시간과 조우 연출 시간.
      복도를 지나는 느낌이 나도록 넉넉히 잡는다. */
   let WALK_MS = 4200;          // 배경이 흘러가는 구간
-  let ENCOUNTER_MS = 1900;     // 몬스터가 나타나 "적 등장!"이 뜨는 구간
+  /* 조우 효과음은 부저가 세 번 울린다. 세 번째 부저까지 들은 뒤 전투가 시작되도록
+     연출을 넉넉히 잡는다(예전에는 두 번째 부저에서 전투가 시작됐다). */
+  let ENCOUNTER_MS = 3400;     // 몬스터가 나타나 "적 등장!"이 뜨는 구간
   const SCROLL_SPEED = 240;    // 초당 흘러가는 픽셀
 
   let encounterMonster = null;
@@ -696,7 +778,7 @@
     ensureStyles();
     question = null;          // 문제는 공격/스킬을 고른 뒤에 나온다
     chosenAction = null;
-    playingEvents = [];
+    currentLine = null;
     busy = false;
     panelMode = 'menu';
     panelMessage = '무엇을 할까?';
@@ -731,21 +813,23 @@
       }).join('');
   }
 
-  /* 재생 중일 때는 지금까지 나온 줄만 보여 준다(한 줄씩 쌓이는 느낌). */
+  /* 일반 몬스터 전투와 똑같이 "지금 이 한 줄"만 보여 준다.
+     예전 기록을 쌓아 두지 않는다(제작자 요구). */
+  let currentLine = null;
+
   function logHtml() {
-    const source = playingEvents.length ? playingEvents : active.log.slice(-9);
-    return source.slice(-9).map((entry) => {
-      const cls = entry.missed ? 'miss'
-        : entry.critical ? 'crit'
-        : entry.kind === 'monster-hit' ? 'hit'
-        : entry.kind === 'party-hit' ? 'mine'
-        : entry.kind === 'party-heal' ? 'heal'
-        : entry.kind === 'answer-correct' ? 'good'
-        : entry.kind === 'answer-wrong' ? 'bad'
-        : ['monster-windup', 'monster-down', 'member-down', 'wiped', 'encounter'].includes(entry.kind) ? 'warn'
-        : '';
-      return `<div class="${cls}">${esc(entry.text)}</div>`;
-    }).join('');
+    if (!currentLine) return '';
+    const entry = currentLine;
+    const cls = entry.missed ? 'miss'
+      : entry.critical ? 'crit'
+      : entry.kind === 'monster-hit' ? 'hit'
+      : entry.kind === 'party-hit' ? 'mine'
+      : entry.kind === 'party-heal' ? 'heal'
+      : entry.kind === 'answer-correct' ? 'good'
+      : entry.kind === 'answer-wrong' ? 'bad'
+      : ['monster-windup', 'monster-down', 'member-down', 'wiped', 'encounter'].includes(entry.kind) ? 'warn'
+      : '';
+    return `<div class="${cls}">${esc(entry.text)}</div>`;
   }
 
   /* ---------- 아래 패널: 일반 전투와 같은 3단계 ----------
@@ -971,19 +1055,19 @@
   }
 
   /* 한 라운드에서 일어난 일을 한 줄씩 차례로 보여 준다.
-     일반 전투가 이벤트를 순서대로 재생하는 것과 같은 흐름이다. */
-  let eventDelayMs = 620;
-  let playingEvents = [];
+     한 줄이 나오면 이전 줄은 지워진다(일반 전투와 같다).
+     각 줄은 최소 1.5초씩 보여 준다 — 학생이 읽을 시간이 필요하다. */
+  let eventDelayMs = 1500;
 
   function playEvents(events, onDone) {
-    playingEvents = [];
+    currentLine = null;
     let index = 0;
     const step = () => {
       if (!active) return;
       if (index >= events.length) { onDone?.(); return; }
       const event = events[index];
       index += 1;
-      playingEvents.push(event);
+      currentLine = event;      // 이전 줄을 지우고 이 줄만 보여 준다
       playEventSound(event);
       renderBattle();
       showEventEffect(event);   // 숫자와 흔들림은 그린 뒤에 얹는다
@@ -1048,7 +1132,7 @@
       }
       question = pickQuestion();
       chosenAction = null;
-      playingEvents = [];
+      currentLine = null;
       busy = false;
       panelMode = 'menu';
       panelMessage = '무엇을 할까?';
@@ -1413,7 +1497,7 @@
   function abandonRun() {
     active = null;
     question = null;
-    playingEvents = [];
+    currentLine = null;
     busy = false;
     walkProgress = 1;
   }
@@ -1510,6 +1594,11 @@
     travelScrollForTest:() => travelScroll(),
     encounterProgressForTest:() => encounterProgress(),
     /* 이동 연출 길이(밀리초). 검사에서는 짧게 줄여 빠르게 돌린다. */
+    /* 준비 카운트다운 길이(검사에서 짧게 줄이려고 연다). */
+    setCountdownSpeed:(seconds, stepMs) => {
+      READY_COUNTDOWN = Math.max(1, Number(seconds) || 1);
+      COUNTDOWN_STEP_MS = Math.max(1, Number(stepMs) || 1);
+    },
     setTravelSpeed:(walkMs, encounterMs) => {
       WALK_MS = Math.max(1, Number(walkMs) || 1);
       ENCOUNTER_MS = Math.max(1, Number(encounterMs) || 1);

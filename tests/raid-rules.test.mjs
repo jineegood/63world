@@ -121,7 +121,7 @@ test('맞힌 사람은 제 몫을, 틀린 사람은 절반을 넣는다', () => 
   assert.equal(byId.b, Math.floor(power(11) / 2));       // 오답이라 절반
   assert.equal(byId.c, power(10));
   assert.equal(result.total, byId.a + byId.b + byId.c);
-  assert.ok(rules.PARTY_POWER > 1, '레이드에서는 평소보다 세게 때린다');
+  assert.equal(rules.PARTY_POWER, 1, '던전 피해는 일반 전투와 똑같아야 한다');
 });
 
 test('쓰러진 사람은 공격에 참여하지 않는다', () => {

@@ -69,7 +69,12 @@ test('브라우저에서 1층을 처음부터 끝까지 깬다', { timeout:18000
   assert.match(result.stdout, /PASS: 캐릭터 그림이 실제로 그려진다/);
   assert.match(result.stdout, /PASS: 고른 캐릭터가 앞줄에 선다/);
   assert.match(result.stdout, /PASS: 배치한 캐릭터를 대기칸으로 되돌릴 수 있다/);
-  assert.match(result.stdout, /PASS: 세 자리를 채우기 전에는 출발할 수 없다/);
+  assert.match(result.stdout, /PASS: 세 자리를 채우기 전에는 준비할 수 없다/);
+  // 준비 → Ready 표시 → 5초 카운트다운 → 출발
+  assert.match(result.stdout, /PASS: 버튼 이름이 준비다/);
+  assert.match(result.stdout, /PASS: 준비를 누르면 각 칸에 Ready 표시가 뜬다/);
+  assert.match(result.stdout, /PASS: 셋 다 준비되면 카운트다운이 시작된다/);
+  assert.match(result.stdout, /PASS: 카운트다운은 5초부터 센다/);
   // 전투 — 일반 전투 무대 + 왼쪽 3명
   assert.match(result.stdout, /PASS: 이동이 끝나면 전투가 시작된다/);
   assert.match(result.stdout, /PASS: 일반 전투와 같은 무대를 쓴다/);
@@ -81,7 +86,7 @@ test('브라우저에서 1층을 처음부터 끝까지 깬다', { timeout:18000
   assert.match(result.stdout, /PASS: 공격 \/ 스킬 \/ 포기 메뉴가 나온다/);
   assert.match(result.stdout, /PASS: 행동을 고르기 전에는 문제가 나오지 않는다/);
   assert.match(result.stdout, /PASS: 공격을 고르면 문제가 나온다/);
-  assert.match(result.stdout, /PASS: 전투 로그가 한 줄씩 쌓인다/);
+  assert.match(result.stdout, /PASS: 전투 로그는 항상 한 줄만 보인다/);
   assert.match(result.stdout, /PASS: 전투 로그에 공격·피격이 모두 나온다/);
   assert.match(result.stdout, /PASS: 치명타와 빗나감이 실제로 발동한다/);
   assert.match(result.stdout, /PASS: 힐러 회복 로그가 나온다/);

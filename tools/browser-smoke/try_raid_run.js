@@ -61,7 +61,7 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
     window.document.querySelectorAll('.raid-face').length === 3,
     `캔버스=${window.document.querySelectorAll('.raid-face').length}`);
   check('자리마다 + 버튼이 있다', plusButtons().length >= 4, `+버튼=${plusButtons().length}`);
-  check('세 자리를 채우기 전에는 출발할 수 없다',
+  check('세 자리를 채우기 전에는 준비할 수 없다',
     window.document.getElementById('raidStartBtn').disabled === true);
 
   // 첫 캐릭터를 골라 앞줄에 세운다.
@@ -83,8 +83,11 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   fire(window.document.querySelector('.raid-plus[data-slot="back"]'));
   await sleep(30);
   check('세 자리가 모두 찬다', filledPosts().length === 3 && emptyPosts().length === 0);
-  check('다 채우면 출발 버튼이 열린다',
+  check('다 채우면 준비 버튼이 열린다',
     window.document.getElementById('raidStartBtn').disabled === false);
+  check('버튼 이름이 준비다',
+    /준비/.test(window.document.getElementById('raidStartBtn').textContent || ''),
+    window.document.getElementById('raidStartBtn').textContent);
 
   // 배치된 캐릭터를 대기칸으로 되돌릴 수 있어야 한다.
   fire(window.document.querySelector('.raid-post.filled .raid-figure'));
@@ -103,8 +106,19 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   check('빈칸에 다시 세울 수 있다', emptyPosts().length === 0);
 
   fire(window.document.getElementById('raidStartBtn'));
-  await sleep(60);
-  check('출발하면 창이 닫히고 던전 맵이 화면을 채운다',
+  await sleep(80);
+  check('준비를 누르면 각 칸에 Ready 표시가 뜬다',
+    window.document.querySelectorAll('.raid-ready-badge').length === 3,
+    'Ready=' + window.document.querySelectorAll('.raid-ready-badge').length);
+  check('셋 다 준비되면 카운트다운이 시작된다',
+    !!window.document.querySelector('.raid-countdown'),
+    window.document.querySelector('.raid-countdown')?.textContent);
+  check('카운트다운은 5초부터 센다',
+    /5초/.test(window.document.querySelector('.raid-countdown')?.textContent || ''));
+  // 카운트다운이 끝날 때까지 기다린다(기본 5초).
+  let cdWait = 0;
+  while (G.modalState?.type === 'raidFormation' && cdWait < 120) { await sleep(100); cdWait += 1; }
+  check('카운트다운이 끝나면 창이 닫히고 던전 맵이 화면을 채운다',
     G.modalState?.type !== 'raidFormation' && G.currentMap === 'raidTower',
     `type=${G.modalState?.type}`);
 
@@ -113,7 +127,7 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   await sleep(3000);
   check('걷는 동안 배경이 실제로 흘러간다', ui.travelScrollForTest() > 0,
     `scroll=${Math.round(ui.travelScrollForTest())}`);
-  await sleep(1600);
+  await sleep(2000);
   check('복도 끝에서 몬스터가 나타나며 적 등장 연출이 뜬다',
     ui.encounterProgressForTest() > 0, `p=${ui.encounterProgressForTest().toFixed(2)}`);
 
@@ -157,17 +171,25 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
     if (q) ui.submitAnswerForTest(q.answer);
   };
 
-  // 전투 로그를 한 줄씩 재생하므로 재생이 끝날 때까지 기다린다.
-  const waitIdle = async (limit = 300) => {
+  /* 전투 로그는 한 줄씩만 나오고 이전 줄은 지워진다.
+     그래서 어떤 종류가 나왔는지는 재생 '도중'에 모아야 한다. */
+  const sawKind = new Set();
+  const collectLine = () => {
+    const node = window.document.querySelector('.raid-log div');
+    if (node && node.className) sawKind.add(node.className);
+  };
+  const waitIdle = async (limit = 400) => {
     let n = 0;
-    while (ui.isRunning() && ui.isBusy() && n < limit) { await sleep(25); n += 1; }
+    while (ui.isRunning() && ui.isBusy() && n < limit) { collectLine(); await sleep(20); n += 1; }
+    collectLine();
   };
 
   const hpBefore = ui.peek().monster.hp;
   ui.submitAnswerForTest(ui.currentQuestion().answer);
   await sleep(80);
-  check('전투 로그가 한 줄씩 쌓인다',
-    window.document.querySelectorAll('.raid-log div').length > 0,
+  // 일반 전투처럼 지금 이 한 줄만 보여야 한다(예전 기록을 쌓지 않는다).
+  check('전투 로그는 항상 한 줄만 보인다',
+    window.document.querySelectorAll('.raid-log div').length === 1,
     `줄=${window.document.querySelectorAll('.raid-log div').length}`);
   await waitIdle();
   check('정답을 넣으면 몬스터 체력이 줄어든다', ui.peek().monster.hp < hpBefore,
@@ -193,7 +215,6 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   ui.setLogSpeed(0);            // 검사에서는 연출을 기다리지 않는다
   ui.setTravelSpeed(120, 80);   // 이동 연출도 짧게 줄인다
   const seen = new Set();
-  const sawKind = new Set();
   let sawBoss = false;
   let guard = 0;
   while (ui.isRunning() && !['cleared', 'wiped'].includes(ui.peek().phase) && guard < 400) {
@@ -202,11 +223,7 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
       seen.add(snap.monster.name);
       if (snap.monster.isBoss) sawBoss = true;
       await attackOnce();
-      await waitIdle();
-      // 한 판 동안 치명타·빗나감·회복이 실제로 나오는지 로그 색으로 확인한다.
-      window.document.querySelectorAll('.raid-log div').forEach((node) => {
-        if (node.className) sawKind.add(node.className);
-      });
+      await waitIdle();   // 재생 중에 로그 종류를 모은다
       await sleep(20);
     } else {
       await sleep(200);
@@ -256,10 +273,10 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   check('구조된 뒤에는 귀환 버튼이 숨는다', $('returnTownBtn').classList.contains('hidden'));
 
   // (3) 전투 중에도 포기하고 나갈 수 있어야 한다.
+  ui.setCountdownSpeed(1, 40);   // 검사에서는 카운트다운을 짧게
   ui.startRun(1);
   await sleep(2600);
   const ids2 = ui.peek().members.map((m) => m.id);
-  [['front', ids2[0]], ['middle', ids2[1]], ['back', ids2[2]]].forEach(() => {});
   for (const [slot, id] of [['front', ids2[0]], ['middle', ids2[1]], ['back', ids2[2]]]) {
     fire(window.document.querySelector(`.raid-bench-card[data-pick="${id}"]`));
     await sleep(15);
@@ -267,7 +284,8 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
     await sleep(20);
   }
   fire(window.document.getElementById('raidStartBtn'));
-  await sleep(2400);
+  let waitBattle = 0;
+  while (G.modalState?.type !== 'raidBattle' && waitBattle < 120) { await sleep(50); waitBattle += 1; }
   check('전투 화면에 포기 버튼이 있다', !!window.document.querySelector('[data-raid-menu="giveup"]'),
     `modal=${G.modalState?.type}`);
   fire(window.document.querySelector('[data-raid-menu="giveup"]'));

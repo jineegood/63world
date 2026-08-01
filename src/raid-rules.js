@@ -108,9 +108,9 @@
   /* 한 명만 노리는 공격은 전체 공격보다 한 방이 더 아프다. */
   const SINGLE_TARGET_BONUS = 1.35;
 
-  /* 레이드에서는 캐릭터가 평소보다 제 실력을 발휘한다.
-     몬스터 체력이 두꺼워진 만큼 이 배수로 전투 길이를 맞춘다. */
-  const PARTY_POWER = 3.2;
+  /* 던전이라고 캐릭터가 더 세지지 않는다.
+     일반 몬스터 전투와 완전히 같은 피해가 나와야 한다(제작자 요구). */
+  const PARTY_POWER = 1;
 
   const CRIT_CHANCE = 0.15;
   const CRIT_MULTIPLIER = 1.5;
@@ -204,22 +204,22 @@
        셋이 동시에 때리므로 피해가 대략 3배다. 그만큼 체력을 두껍게 잡아
        한 마리를 여러 라운드에 걸쳐 잡도록 했다. */
     guardBot: {
-      id:'guardBot', name:'경비 로봇', level:5, hp:252, attack:8,
+      id:'guardBot', name:'경비 로봇', level:5, hp:96, attack:8,
       pattern:['single', 'single', 'all'],
       desc:'1층 로비를 지키는 낡은 경비 로봇. 가끔 사방으로 경보를 터뜨린다.',
     },
     officeGhost: {
-      id:'officeGhost', name:'사무실 유령', level:5, hp:288, attack:10,
+      id:'officeGhost', name:'사무실 유령', level:5, hp:112, attack:10,
       pattern:['single', 'all', 'single'],
       desc:'야근하다 사라진 직원의 그림자. 서류를 흩뿌려 모두를 덮친다.',
     },
     blackoutShade: {
-      id:'blackoutShade', name:'정전 그림자', level:6, hp:312, attack:8,
+      id:'blackoutShade', name:'정전 그림자', level:6, hp:124, attack:8,
       pattern:['all', 'all', 'single'],
       desc:'정전된 층에 고인 어둠. 전체를 한꺼번에 노린다.',
     },
     towerWarden: {
-      id:'towerWarden', name:'63빌딩 관리자', level:7, hp:570, attack:12,
+      id:'towerWarden', name:'63빌딩 관리자', level:7, hp:230, attack:12,
       pattern:['single', 'single', 'all', 'single', 'all'],
       boss:true,
       desc:'빌딩의 모든 층을 관리해 온 존재. 1층의 마지막 관문이다.',
