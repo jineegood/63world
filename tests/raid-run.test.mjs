@@ -257,7 +257,7 @@ test('힐러가 있으면 라운드마다 가장 다친 동료가 회복된다',
   assert.ok(heal.amount > 0 && heal.amount <= want, 'amount=' + heal.amount + ' want<=' + want);
 });
 
-test('전투 사이 이동에서 체력을 회복한다', () => {
+test('다음 몬스터 전투에서 쓰러진 사람은 HP 1로 부활하고 생존자는 현재 HP를 유지한다', () => {
   const run = makeRun({
     members:[
       member('me', 'front', { isPlayer:true, attack:500, maxHp:60, hp:20 }),
@@ -269,14 +269,30 @@ test('전투 사이 이동에서 체력을 회복한다', () => {
   run.arriveAtEncounter();
   run.resolveRound({ me:true, ally1:true, ally2:true }); // 한 방에 처치 → travel
 
-  // 다음 몬스터로 걸어가기 직전에 다쳐 있으면, 도착할 때 회복되어 있어야 한다.
+  // 다음 몬스터로 걸어가기 직전에 한 명은 쓰러지고 한 명은 다친 상태다.
   const me = run.members.find((m) => m.id === 'me');
-  me.hp = 12;
-  const before = me.hp;
+  const ally = run.members.find((m) => m.id === 'ally1');
+  me.hp = 0;
+  ally.hp = 12;
   run.arriveAtEncounter();
-  const after = run.members.find((m) => m.id === 'me').hp;
-  assert.ok(after > before, `이동하며 회복해야 한다: ${before} -> ${after}`);
-  assert.ok(run.log.some((e) => e.kind === 'travel-recovery'));
+  assert.equal(run.members.find((m) => m.id === 'me').hp, 1);
+  assert.equal(run.members.find((m) => m.id === 'ally1').hp, 12);
+  const revival = run.log.find((e) => e.kind === 'travel-recovery');
+  assert.ok(revival);
+  assert.equal(revival.recovered[0].memberId, 'me');
+  assert.equal(revival.recovered[0].revived, true);
+});
+
+test('진행 중 전투를 다시 연결해도 HP 0인 학생은 즉시 부활하지 않는다', () => {
+  const run = makeRun({
+    members:[
+      member('me', 'front', { isPlayer:true, hp:0 }),
+      member('ally1', 'middle'),
+      member('ally2', 'back'),
+    ],
+  });
+
+  assert.equal(run.members.find((entry) => entry.id === 'me').hp, 0);
 });
 
 /* 1층을 끝까지 돌려 결과를 돌려준다.

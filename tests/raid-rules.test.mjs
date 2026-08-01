@@ -79,10 +79,12 @@ test('한 명만 노리는 공격이 전체 공격보다 한 방이 더 아프�
   assert.ok(rules.SINGLE_TARGET_BONUS > 1);
 });
 
-test('전체 공격은 살아 있는 모두가 각자 배율로 맞는다', () => {
-  const result = rules.resolveMonsterAttack({ members:party(), attack:10, kind:'all', rng:PLAIN });
+test('전체 공격은 입력 순서와 무관하게 앞→가운데→뒤로 살아 있는 모두가 맞는다', () => {
+  const shuffled = party();
+  const result = rules.resolveMonsterAttack({ members:[shuffled[2], shuffled[0], shuffled[1]], attack:10, kind:'all', rng:PLAIN });
   assert.equal(result.kind, 'all');
   assert.equal(result.hits.length, 3);
+  assert.deepEqual(Array.from(result.hits, (hit) => hit.memberId), ['a', 'b', 'c']);
   const byId = Object.fromEntries(result.hits.map((h) => [h.memberId, h.damage]));
   assert.equal(byId.a, 15); // 앞줄 10 * 1.5
   assert.equal(byId.b, 10); // 중간 10 * 1.0
@@ -209,18 +211,19 @@ test('회복은 최대 체력을 넘지 않고, 멀쩡하면 회복하지 않는
   assert.equal(rules.resolvePartyHeal({ members:allFull, answers:{ healer:true } }).heals.length, 0);
 });
 
-test('전투 사이 이동에서 최대 체력의 일부를 회복한다', () => {
+test('다음 전투 전에는 쓰러진 사람만 HP 1로 부활하고 생존자는 회복하지 않는다', () => {
   const members = [
     { id:'a', hp:20, maxHp:60 },
-    { id:'b', hp:60, maxHp:60 },   // 멀쩡한 사람은 빠진다
-    { id:'c', hp:0, maxHp:60 },    // 쓰러진 사람은 못 일어난다
+    { id:'b', hp:60, maxHp:60 },
+    { id:'c', hp:0, maxHp:60 },
   ];
   const recovery = rules.travelRecovery(members);
   assert.equal(recovery.length, 1);
-  assert.equal(recovery[0].memberId, 'a');
-  // 회복량은 최대 체력 기준이지만 모자란 만큼을 넘지는 않는다.
-  assert.equal(recovery[0].amount,
-    Math.min(Math.round(60 * rules.TRAVEL_RECOVERY), 60 - 20));
+  assert.equal(recovery[0].memberId, 'c');
+  assert.equal(recovery[0].amount, 1);
+  assert.equal(recovery[0].revived, true);
+  assert.equal(rules.TRAVEL_RECOVERY, 0);
+  assert.equal(rules.NEXT_ENCOUNTER_REVIVE_HP, 1);
 });
 
 test('1층은 일반 전투 3회 뒤에 레이드 보스가 나온다', () => {

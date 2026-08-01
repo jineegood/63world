@@ -68,7 +68,9 @@
       spec:member.spec === '분노' ? '무기' : (member.spec || ''),
       maxHp,
       hp,
-      attack:Math.max(1, number(member.attack, 1)),
+      /* 일반 사냥터가 힘/지능/정신 원값을 공격 굴림에 쓰므로, 서버 프로필의
+         primaryStat이 있으면 절반으로 가공된 옛 attack 값보다 우선한다. */
+      attack:Math.max(1, number(member.primaryStat ?? member.attack, 1)),
       skills:copyNumberMap(member.skills),
       cooldowns:copyNumberMap(member.cooldowns || member.skillCooldowns),
       shield:Math.max(0, integer(member.shield)),
@@ -156,7 +158,7 @@
     };
   }
 
-  function getAttackPower(member, rng) {
+  function rollAttackPower(member, rng) {
     const stat = Math.max(1, number(member.attack, 1));
     let minimumBonus = -stat * 0.20;
     let maximumBonus = stat * 0.20;
@@ -165,10 +167,20 @@
       maximumBonus = stat * 0.15;
     }
     let power = stat / 2 + minimumBonus + roll(rng) * (maximumBonus - minimumBonus);
+    let maximumPower = stat / 2 + maximumBonus;
     if (member.klass === 'mage' && member.buffs?.intBuffTurns > 0) {
-      power *= 1 + number(member.buffs.intBuffPct, 0.30);
+      const multiplier = 1 + number(member.buffs.intBuffPct, 0.30);
+      power *= multiplier;
+      maximumPower *= multiplier;
     }
-    return Math.max(1, Math.round(power));
+    return {
+      power:Math.max(1, Math.round(power)),
+      maximumPower:Math.max(1, Math.round(maximumPower)),
+    };
+  }
+
+  function getAttackPower(member, rng) {
+    return rollAttackPower(member, rng).power;
   }
 
   function playerCritChance(member, defsOverride) {
@@ -248,6 +260,8 @@
 
   function tickCooldowns(members) {
     (members || []).forEach((member) => {
+      /* 쓰러진 사람은 현재 몬스터 전투에서 턴 자체가 진행되지 않는다. */
+      if (!member || member.hp <= 0) return;
       Object.keys(member.cooldowns || {}).forEach((id) => {
         member.cooldowns[id] = Math.max(0, integer(member.cooldowns[id]) - 1);
       });
@@ -399,17 +413,18 @@
     const damagingActive = ['damage', 'damageHeal', 'shadowDot', 'shieldBash'].includes(active.type);
     const hitCount = damagingActive ? Math.max(1, integer(active.hits, 1)) : 1;
     for (let hitIndex = 0; hitIndex < hitCount; hitIndex += 1) {
-      let raw;
       if (active.type === 'shieldBash') {
         const cappedShield = Math.min(100, Math.max(0, integer(member.shield)));
-        raw = cappedShield;
+        hitPlans.push({ raw:cappedShield, label:active.name || action.name || '공격', hitIndex, canCrit:true });
       } else if (isSkill && damagingActive) {
         const multiplier = hitCount > 1 ? number(active.hitMult, 1) : number(active.multiplier, 1);
-        raw = getAttackPower(member, rng) * multiplier;
+        /* multiplier 0인 적대 기술은 사냥터처럼 공격력 난수를 굴리지 않는다. */
+        hitPlans.push(multiplier === 0
+          ? { raw:0, label:active.name || action.name || '공격', hitIndex, canCrit:false }
+          : { attackMultiplier:multiplier, label:active.name || action.name || '공격', hitIndex, canCrit:true });
       } else {
-        raw = getAttackPower(member, rng);
+        hitPlans.push({ attackMultiplier:1, label:active.name || action.name || '공격', hitIndex, canCrit:true });
       }
-      hitPlans.push({ raw, label:active.name || action.name || '공격', hitIndex, canCrit:true });
     }
 
     if (!isSkill) {
@@ -425,28 +440,29 @@
       if (doubleRank > 0) {
         const rate = number(defs.warrior_weapon_breaker?.doubleAttackPct?.[doubleRank]);
         hitPlans.push({
-          raw:getAttackPower(member, rng) * rate,
+          attackMultiplier:rate,
           label:'더블 어택', hitIndex:hitPlans.length, canCrit:true, doubleAttack:true,
         });
       }
     }
 
-    const chargePending = member.chargeActive && hitPlans.some((hit) => hit.raw > 0);
-    if (chargePending) {
-      const multiplier = number(defs.warrior_weapon_judgment?.active?.chargeMult, 2.8);
-      hitPlans.forEach((hit) => { if (hit.raw > 0) hit.raw *= multiplier; });
-    }
-
-    const chillPending = member.statuses.chillTurns > 0 && hitPlans.some((hit) => hit.raw > 0);
-    if (chillPending) {
-      hitPlans.forEach((hit) => { hit.raw = Math.ceil(Math.max(0, hit.raw) * 0.5); });
-    }
+    const hasDamagePlan = hitPlans.some((hit) => number(hit.raw) > 0 || number(hit.attackMultiplier) > 0);
+    const chargePending = member.chargeActive && hasDamagePlan;
+    const chargeMultiplier = number(defs.warrior_weapon_judgment?.active?.chargeMult, 2.8);
+    const chillPending = member.statuses.chillTurns > 0 && hasDamagePlan;
 
     let landedAction = false;
     let totalHpDamage = 0;
     let totalDamage = 0;
     for (const hit of hitPlans) {
       if (monster.hp <= 0) break;
+      let raw = number(hit.raw);
+      let maximumRaw = 0;
+      if (number(hit.attackMultiplier) > 0) {
+        const attackRoll = rollAttackPower(member, rng);
+        raw = attackRoll.power * number(hit.attackMultiplier);
+        maximumRaw = attackRoll.maximumPower * number(hit.attackMultiplier);
+      }
       const missed = roll(rng) < BASE_MISS_CHANCE;
       if (missed) {
         events.push(eventBase(member, action, {
@@ -458,8 +474,16 @@
       }
       landedAction = true;
       const critical = hit.canCrit && roll(rng) < playerCritChance(member, defs);
-      let amount = hit.raw > 0 ? Math.max(1, Math.ceil(hit.raw)) : 0;
-      if (critical) amount = Math.max(1, Math.ceil(amount * playerCritMultiplier(member, isSkill, defs)));
+      let amount = raw > 0 ? Math.max(1, Math.ceil(raw)) : 0;
+      if (critical) {
+        amount = Math.max(1, Math.ceil(amount * playerCritMultiplier(member, isSkill, defs)));
+        /* 사냥터 v50 규칙: 낮은 공격력 난수에서 나온 치명타도 같은 행동의
+           최대 일반 피해보다 작아지지 않는다. */
+        if (maximumRaw > raw) amount = Math.max(amount, Math.ceil(maximumRaw));
+      }
+      /* 사냥터와 동일하게 치명타 보정 뒤 차지, 그 뒤 냉기를 적용한다. */
+      if (amount > 0 && chargePending) amount = Math.max(1, Math.ceil(amount * chargeMultiplier));
+      if (amount > 0 && chillPending) amount = Math.ceil(amount * 0.5);
       const applied = applyDamageToMonster(monster, amount, active.ignoreShield === true);
       totalHpDamage += applied.hpDamage;
       totalDamage += applied.totalDamage;
@@ -680,7 +704,9 @@
       return;
     }
 
-    const living = members.filter((member) => member.hp > 0);
+    const living = members
+      .filter((member) => member.hp > 0)
+      .sort((a, b) => (ATTACK_ORDER[a?.slot] ?? 1) - (ATTACK_ORDER[b?.slot] ?? 1));
     const targets = attackKind === 'all' ? living : [pickTarget(living, raidRules)].filter(Boolean);
     if (!targets.length) return;
     events.push({
@@ -754,7 +780,14 @@
         }
       }
 
-      applyRevive(member, defs, events);
+      const revived = applyRevive(member, defs, events);
+      if (member.hp <= 0 && !revived) {
+        events.push({
+          kind:'member-down', memberId:member.id, targetMemberId:member.id,
+          memberName:member.name, memberHp:0,
+          text:`${member.name}이(가) 쓰러졌습니다!`,
+        });
+      }
     });
     if (chillConsumed) monster.chillTurns = Math.max(0, monster.chillTurns - 1);
 

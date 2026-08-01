@@ -60,7 +60,9 @@
   /* 몬스터는 앞부터 노린다. 앞이 쓰러졌으면 가운데, 그 다음 뒤.
      그래서 앞에 선 사람이 진짜로 막아 주는 역할이 된다. */
   function pickTarget(members) {
-    const alive = (members || []).filter((m) => m && m.hp > 0);
+    const alive = (members || [])
+      .filter((m) => m && m.hp > 0)
+      .sort((a, b) => (ATTACK_ORDER[a?.slot] ?? 1) - (ATTACK_ORDER[b?.slot] ?? 1));
     if (!alive.length) return null;
     for (const slot of SLOTS) {
       const found = alive.find((m) => m.slot === slot);
@@ -73,7 +75,9 @@
      kind: 'single' 이면 한 명, 'all' 이면 전체 공격. */
   function resolveMonsterAttack({ members, attack, kind = 'single', rng }) {
     const base = Math.max(0, Math.floor(Number(attack) || 0));
-    const alive = (members || []).filter((m) => m && m.hp > 0);
+    const alive = (members || [])
+      .filter((m) => m && m.hp > 0)
+      .sort((a, b) => (ATTACK_ORDER[a?.slot] ?? 1) - (ATTACK_ORDER[b?.slot] ?? 1));
     if (!alive.length || base <= 0) return { kind, hits:[] };
     const roll = typeof rng === 'function' ? rng : Math.random;
 
@@ -183,19 +187,19 @@
     return { heals };
   }
 
-  /* 다음 몬스터에게 걸어가는 동안 숨을 고른다.
-     한 층을 네 번 싸워 넘기려면 전투 사이 회복이 반드시 필요하다. */
-  const TRAVEL_RECOVERY = 1;
+  /* 몬스터 하나와 싸우는 동안 쓰러진 파티원은 그 전투에서 빠진다.
+     파티가 살아남아 다음 몬스터를 만나면 쓰러졌던 사람만 HP 1로 돌아온다.
+     생존자의 HP는 그대로 유지해 전투 사이 무료 회복과 섞이지 않게 한다. */
+  const TRAVEL_RECOVERY = 0;
+  const NEXT_ENCOUNTER_REVIVE_HP = 1;
 
   function travelRecovery(members) {
     return (members || [])
-      .filter((m) => m && m.hp > 0 && m.hp < m.maxHp)
+      .filter((m) => m && m.hp <= 0)
       .map((member) => ({
         memberId:member.id,
-        amount:Math.min(
-          Math.max(1, Math.round(member.maxHp * TRAVEL_RECOVERY)),
-          member.maxHp - member.hp,
-        ),
+        amount:NEXT_ENCOUNTER_REVIVE_HP,
+        revived:true,
       }));
   }
 
@@ -324,6 +328,7 @@
     HEAL_SPECS,
     HEAL_RATIO,
     TRAVEL_RECOVERY,
+    NEXT_ENCOUNTER_REVIVE_HP,
     slotLabel,
     damageMultiplier,
     validateFormation,

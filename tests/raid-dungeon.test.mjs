@@ -168,3 +168,13 @@ test('검사 러너와 package.json에 던전 검사가 등록되어 있다', ()
     'powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 raid-dungeon',
   );
 });
+
+test('명진도사 던전 퀘스트 보상은 골드만 지급한다', () => {
+  const questDef = raidSource.match(/const QUEST_DEF = \{[\s\S]*?\n  \};/)?.[0] || '';
+  const finish = raidSource.match(/function finishStory\(\) \{[\s\S]*?\n  \}/)?.[0] || '';
+
+  assert.match(questDef, /reward: \{ gold: 60 \}/);
+  assert.match(finish, /call\('addGold', reward\.gold\)/);
+  assert.doesNotMatch(finish, /addExp|reward\.building|addBuilding/);
+  assert.match(finish, /Gold \+\$\{reward\.gold\}/);
+});

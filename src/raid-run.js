@@ -92,8 +92,11 @@
       slot:member.slot || 'middle',
       level:Math.max(1, Math.floor(Number(member.level) || 1)),
       maxHp:Math.max(1, Math.floor(Number(member.maxHp) || 1)),
-      hp:Math.max(1, Math.floor(Number(member.hp ?? member.maxHp) || 1)),
-      attack:Math.max(1, Math.floor(Number(member.attack) || 1)),
+      /* 진행 중 전투를 다시 연결할 때 HP 0을 1로 바꾸면 같은 몬스터에게
+         즉시 부활해 버린다. 부활은 다음 조우의 arriveAtEncounter에서만 한다. */
+      hp:Math.max(0, Math.floor(Number(member.hp ?? member.maxHp ?? 1) || 0)),
+      /* 일반 사냥터와 같은 주 능력치 원값으로 공격력을 굴린다. */
+      attack:Math.max(1, Math.floor(Number(member.primaryStat) || Number(member.attack) || 1)),
       defense:Math.max(0, Math.floor(Number(member.defense) || 0)),
       isPlayer:member.isPlayer === true,
       /* 겉모습은 계산에 쓰이지 않지만 화면이 실제 아바타를 그리려면 반드시 함께 넘겨야 한다.
@@ -102,6 +105,7 @@
       equipment:member.equipment || null,
       costume:member.costume || null,
       activePet:member.activePet || '',
+      weaponTier:Math.max(0, Math.min(4, Math.trunc(Number(member.weaponTier) || 0))),
       skills:member.skills,
       cooldowns:member.cooldowns || member.skillCooldowns,
       shield:member.shield,
@@ -180,16 +184,24 @@
     function arriveAtEncounter() {
       if (state.phase !== 'travel') return { ok:false, reason:'지금은 이동 중이 아닙니다.' };
 
-      /* 걸어오는 동안 숨을 고른다. 이게 없으면 네 번을 연달아 싸울 수 없다. */
+      /* 직전 몬스터에게 쓰러진 사람만 다음 전투 시작 직전에 HP 1로 돌아온다.
+         살아 있던 사람은 이동 중에도 현재 HP를 그대로 유지한다. */
       const recovered = [];
       R.travelRecovery(state.members).forEach((entry) => {
         const member = state.members.find((m) => m.id === entry.memberId);
         if (!member) return;
-        member.hp = Math.min(member.maxHp, member.hp + entry.amount);
-        recovered.push({ memberId:member.id, amount:entry.amount, memberHp:member.hp });
+        member.hp = entry.revived
+          ? Math.min(member.maxHp, Math.max(1, Number(entry.amount) || 1))
+          : Math.min(member.maxHp, member.hp + entry.amount);
+        recovered.push({
+          memberId:member.id,
+          amount:entry.amount,
+          memberHp:member.hp,
+          revived:entry.revived === true,
+        });
       });
       if (recovered.length) {
-        push('travel-recovery', '이동하며 숨을 고릅니다. 체력을 조금 회복했습니다.', { recovered });
+        push('travel-recovery', '쓰러졌던 파티원이 HP 1로 다시 일어났습니다.', { recovered });
       }
 
       const monster = spawnMonster();

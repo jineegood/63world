@@ -102,6 +102,44 @@ test('member normalization preserves independent skill, cooldown, shield, status
   assert.equal(normalized.skills.warrior_weapon_breaker, 2);
 });
 
+test('server primaryStat takes priority over the obsolete half-sized attack field', () => {
+  const normalized = combat.normalizeMember({
+    id:'stat', maxHp:20, hp:20, primaryStat:40, attack:20,
+  });
+  assert.equal(normalized.attack, 40);
+});
+
+test('basic attack matches the hunting v50 low-roll critical floor exactly', () => {
+  const fighter = member('fighter', { attack:100 });
+  const result = resolve({
+    members:[fighter],
+    submissions:{ fighter:{ correct:true, actionId:'basic' } },
+    /* 사냥터 순서: 공격력 난수 0 → 명중 0.5 → 치명타 0. */
+    rng:sequence([0, 0.5, 0]),
+  });
+  const hit = result.events.find((event) => event.kind === 'party-hit');
+  /* 주 능력치 100: 굴림 30, 최대 일반 피해 70, 치명타 45 → v50 하한 70. */
+  assert.equal(hit.damage, 70);
+  assert.equal(hit.critical, true);
+});
+
+test('basic attack applies hunting order: critical floor, then charge, then chill', () => {
+  const fighter = member('fighter', {
+    attack:100,
+    chargeActive:true,
+    statuses:{ chillTurns:1 },
+  });
+  const result = resolve({
+    members:[fighter],
+    submissions:{ fighter:{ correct:true, actionId:'basic' } },
+    rng:sequence([0, 0.5, 0]),
+  });
+  const hit = result.events.find((event) => event.kind === 'party-hit');
+  assert.equal(hit.damage, 98, '치명타 하한 70 × 차지 2.8 × 냉기 0.5');
+  assert.equal(fighter.chargeActive, false);
+  assert.equal(fighter.statuses.chillTurns, 0);
+});
+
 test('double attack adds the learned percentage as a separate basic hit', () => {
   const fighter = member('fighter', { skills:{ warrior_weapon_breaker:3 } });
   const result = resolve({
@@ -361,6 +399,87 @@ test('guardian oath revives a defeated warrior once per encounter', () => {
   });
   assert.ok(!second.events.some((event) => event.kind === 'member-revive'));
   assert.equal(tank.hp, 0);
+  assert.ok(second.events.some((event) => event.kind === 'member-down' && event.memberId === 'tank'));
+});
+
+test('a downed member takes no later turn, cannot be targeted, and has no cooldown progress', () => {
+  const front = member('front', {
+    slot:'front', maxHp:1, hp:1, attack:1,
+    cooldowns:{ warrior_weapon_slash:3 },
+  });
+  const middle = member('middle', { slot:'middle', maxHp:100, hp:100, attack:1 });
+  const back = member('back', { slot:'back', maxHp:100, hp:100, attack:1 });
+  const target = monster({ attack:10 });
+  const submissions = {
+    front:{ correct:true, actionId:'basic' },
+    middle:{ correct:true, actionId:'basic' },
+    back:{ correct:true, actionId:'basic' },
+  };
+
+  const first = resolve({ members:[back, front, middle], target, submissions });
+  assert.equal(front.hp, 0);
+  assert.ok(first.events.some((event) => event.kind === 'member-down' && event.memberId === 'front'));
+  assert.equal(front.cooldowns.warrior_weapon_slash, 3, '죽은 턴에는 쿨타임도 진행하지 않는다');
+
+  const second = resolve({ members:[back, front, middle], target, submissions });
+  assert.ok(!second.events.some((event) => event.kind === 'party-action' && event.memberId === 'front'));
+  assert.ok(!second.events.some((event) => event.kind === 'party-hit' && event.memberId === 'front'));
+  assert.ok(!second.events.some((event) => event.kind === 'monster-hit' && event.memberId === 'front'));
+  assert.equal(front.cooldowns.warrior_weapon_slash, 3);
+});
+
+test('structured whole-party damage events are always front, middle, back', () => {
+  const front = member('front', { slot:'front', attack:1 });
+  const middle = member('middle', { slot:'middle', attack:1 });
+  const back = member('back', { slot:'back', attack:1 });
+  const target = monster({ attack:10 });
+  const result = resolve({
+    members:[back, front, middle],
+    target,
+    attackKind:'all',
+    submissions:{
+      front:{ correct:true, actionId:'basic' },
+      middle:{ correct:true, actionId:'basic' },
+      back:{ correct:true, actionId:'basic' },
+    },
+  });
+  const targetOrder = Array.from(
+    result.events.filter((event) => event.kind === 'monster-hit'),
+    (event) => event.memberId,
+  );
+  assert.deepEqual(targetOrder, ['front', 'middle', 'back']);
+});
+
+test('raid-run revives a genuinely downed structured-combat member at exactly 1 HP for the next monster', () => {
+  const run = api.YuksamRaidRun.createRun({
+    floor:1,
+    rng:constant(),
+    members:[
+      member('front', { slot:'front', maxHp:1, hp:1, attack:1 }),
+      member('middle', { slot:'middle', maxHp:100, hp:100, attack:1 }),
+      member('back', { slot:'back', maxHp:100, hp:100, attack:1 }),
+    ],
+  });
+  run.confirmFormation({ front:'front', middle:'middle', back:'back' });
+  run.arriveAtEncounter();
+  const submissions = {
+    front:{ correct:true, actionId:'basic' },
+    middle:{ correct:true, actionId:'basic' },
+    back:{ correct:true, actionId:'basic' },
+  };
+  run.resolveRound(submissions);
+  assert.equal(run.members.find((entry) => entry.id === 'front').hp, 0);
+
+  run.members.find((entry) => entry.id === 'middle').attack = 500;
+  run.members.find((entry) => entry.id === 'back').attack = 500;
+  const defeated = run.resolveRound(submissions);
+  assert.equal(defeated.monsterDown, true);
+  assert.equal(run.phase, 'travel');
+
+  run.members.find((entry) => entry.id === 'middle').hp = 77;
+  run.arriveAtEncounter();
+  assert.equal(run.members.find((entry) => entry.id === 'front').hp, 1);
+  assert.equal(run.members.find((entry) => entry.id === 'middle').hp, 77);
 });
 
 test('raid-run accepts structured submissions and snapshots nested combat state defensively', () => {

@@ -7,6 +7,7 @@
 
   const cfg = window.YUKSAM_CLOUD || {};
   const multiplayerCore = window.YuksamMultiplayerCore;
+  const avatarVisualSync = window.YuksamAvatarVisualSync;
   const enabled = typeof cfg.url === 'string' && cfg.url.startsWith('http')
     && typeof cfg.anonKey === 'string' && cfg.anonKey.length > 20
     && typeof multiplayerCore?.realtimeWebSocketUrl === 'function';
@@ -98,6 +99,11 @@
     remotes.forEach((v, k) => { if (now - (v.at || 0) > STALE_MS) forgetRemote(k); });
     if (G?.player && now - lastSent >= SEND_MS && document.querySelector('#game.active')) {
       lastSent = now;
+      const weaponId = G.player.equipment?.weapon || null;
+      const petSide = avatarVisualSync?.petSideFromFacing(G.player._petSide, G.lastMove)
+        || G.player._petSide
+        || 'left';
+      G.player._petSide = petSide;
       const payload = {
         type: 'pos',
         userId:window.getPvpIdentityV1?.()?.userId || null,
@@ -108,6 +114,10 @@
         equipment: G.player.equipment || {}, appearance: G.player.appearance || {},
         costume: G.player.costume || {},
         activePet:typeof G.player.activePet === 'string' ? G.player.activePet : null,
+        petSide,
+        weaponTier:avatarVisualSync?.normalizeTier(
+          weaponId ? G.player.weaponUpgrades?.[weaponId] : 0,
+        ) || 0,
         facing:{
           x:Number(G.lastMove?.x) || 0,
           y:Number(G.lastMove?.y) || 1,
@@ -117,7 +127,7 @@
         dance: Number(G.danceTimer || 0) > 0,
       };
       // 달라진 게 없으면 굳이 보내지 않는다. 대신 사라지지 않도록 가끔은 알린다.
-      const key = `${payload.userId || ''}|${payload.map}|${payload.x}|${payload.y}|${payload.moving}|${payload.dance}|${payload.pvpAvailable}|${payload.level}|${payload.activePet || ''}|${payload.facing.x},${payload.facing.y}`;
+      const key = `${payload.userId || ''}|${payload.map}|${payload.x}|${payload.y}|${payload.moving}|${payload.dance}|${payload.pvpAvailable}|${payload.level}|${payload.activePet || ''}|${payload.petSide}|${payload.weaponTier}|${payload.facing.x},${payload.facing.y}`;
       if (key !== lastPayloadKey || now - lastKeepaliveAt >= IDLE_KEEPALIVE_MS) {
         lastPayloadKey = key;
         lastKeepaliveAt = now;
@@ -136,35 +146,63 @@
   function drawRemotePet(ctx, remote, worldX, worldY, toScreen, now, moving) {
     const pet = window.PET_DEFS_V27?.[String(remote?.activePet || '')];
     if (!pet) return;
-    const directionX = Number(remote?.facing?.x) || 0;
-    const directionY = Number(remote?.facing?.y) || 1;
-    const backX = Math.abs(directionX) > 0.1 ? -Math.sign(directionX) * 58 : -48;
-    const backY = Math.abs(directionY) > 0.1 ? -Math.sign(directionY) * 38 : 38;
-    const bob = Number(pet.bob) || 0;
-    const hop = moving
-      ? Math.abs(Math.sin(now / 115 + bob)) * 10
-      : Math.sin(now / 330 + bob) * 3;
     const dancing = remote.dance === true;
-    const danceX = dancing ? Math.sin(now / 80 + bob) * 16 : 0;
-    const point = toScreen(worldX + backX + danceX, worldY + backY - hop);
+    const side = avatarVisualSync?.petSideFromFacing(remote?.petSide, remote?.facing)
+      || remote?.petSide
+      || 'left';
+    const worldPoint = avatarVisualSync?.petWorldPosition({
+      ownerX:worldX,
+      ownerY:worldY,
+      side,
+      moving,
+      dancing,
+      bob:pet.bob,
+      now,
+    }) || { x:worldX - 54, y:worldY + 8 };
+    const point = toScreen(worldPoint.x, worldPoint.y);
     ctx.save();
+    ctx.globalAlpha = 0.16;
+    ctx.fillStyle = '#020617';
+    ctx.beginPath();
+    ctx.ellipse(point.x, point.y + 24, 18, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
     ctx.globalAlpha = 0.94;
-    ctx.font = '900 30px "Noto Sans KR", "Apple Color Emoji", "Segoe UI Emoji", system-ui';
+    ctx.translate(point.x, point.y);
+    ctx.rotate(dancing
+      ? Math.sin(now / 95 + Number(pet.bob || 0)) * 0.2
+      : Math.sin(now / 500 + Number(pet.bob || 0)) * 0.03);
+    const bounce = dancing
+      ? 1.08 + Math.sin(now / 70) * 0.06
+      : 1 + Math.sin(now / 460 + Number(pet.bob || 0)) * 0.02;
+    ctx.scale(bounce, bounce);
+    ctx.font = `900 ${pet.legendary ? 36 : 33}px "Noto Sans KR", "Apple Color Emoji", "Segoe UI Emoji", system-ui`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.lineWidth = 4;
     ctx.strokeStyle = 'rgba(15,23,42,.55)';
-    ctx.strokeText?.(pet.icon, point.x, point.y);
-    ctx.fillText(pet.icon, point.x, point.y);
-    if (dancing) {
-      ctx.font = '900 14px "Noto Sans KR", system-ui';
-      ctx.fillStyle = pet.color || '#fde68a';
-      ctx.fillText('♪', point.x - 24, point.y - 23);
-      ctx.fillText('♬', point.x + 24, point.y - 28);
+    ctx.strokeText?.(pet.icon, 0, 0);
+    ctx.fillText(pet.icon, 0, 0);
+    if (pet.legendary) {
+      ctx.globalAlpha = 0.85;
+      ctx.strokeStyle = 'rgba(251,191,36,.65)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 25 + Math.sin(now / 240) * 3, 0, Math.PI * 2);
+      ctx.stroke();
     }
-    ctx.font = '900 9px "Noto Sans KR", system-ui';
-    ctx.fillStyle = 'rgba(15,23,42,.78)';
-    ctx.fillText(pet.name, point.x, point.y - 29);
+    if (moving) {
+      ctx.fillStyle = pet.color || '#fde68a';
+      ctx.globalAlpha = 0.74;
+      ctx.beginPath(); ctx.ellipse(-8, 20, 5, 3, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(8, 20, 5, 3, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    if (dancing) {
+      ctx.globalAlpha = 0.92;
+      ctx.font = '900 15px "Noto Sans KR", system-ui';
+      ctx.fillStyle = pet.color || '#fde68a';
+      ctx.fillText('♪', -22, -24);
+      ctx.fillText('♬', 22, -30);
+    }
     ctx.restore();
   }
 
@@ -189,8 +227,24 @@
       ctx.save();
       ctx.globalAlpha = 0.96;
       try {
+        const spriteState = avatarVisualSync?.spriteStateFor({
+          klass:p.class,
+          equipment:p.equipment || {},
+          costume:p.costume || {},
+          weaponTier:p.weaponTier,
+        }, {
+          attack:0,
+          moving:!!p.moving || !!eased?.moving,
+          dance:p.dance ? 1 : 0,
+        }) || {
+          attack:0,
+          moving:!!p.moving || !!eased?.moving,
+          dance:p.dance ? 1 : 0,
+          equipment:p.equipment || {},
+          costume:p.costume || {},
+        };
         draw(ctx, s.x, s.y, p.appearance || {}, p.class || 'warrior',
-          { attack: 0, moving: !!p.moving || !!eased?.moving, dance: p.dance ? 1 : 0, equipment: p.equipment || {}, costume:p.costume || {} },
+          spriteState,
           (typeof PLAYER_WORLD_SCALE !== 'undefined' ? PLAYER_WORLD_SCALE : 1.26), p.spec || null);
       } catch {}
       ctx.restore();

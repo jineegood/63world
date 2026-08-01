@@ -77,7 +77,7 @@
     title: '63빌딩의 기척',
     target: 1,
     desc: '명진도사에게 63빌딩 던전 이야기를 듣기',
-    reward: { exp: 10, gold: 60, building: 5 },
+    reward: { gold: 60 },
     pages: QUEST_PAGES,
     done: '준비가 되면 언제든 저 문을 두드리게. 동료 셋과 함께라면 말이야.',
   };
@@ -597,9 +597,7 @@
     };
 
     const reward = QUEST_DEF.reward;
-    call('addExp', reward.exp);
     call('addGold', reward.gold);
-    if (reward.building) p.building = (p.building || 0) + reward.building;
 
     call('savePlayer');
     call('updateHud');
@@ -609,7 +607,7 @@
     dialogueState.selected = 0;
     renderElderDialogue({
       text: `이제 저 문은 자네에게 열려 있네. 동료 셋을 모아 오르거라.\n`
-        + `EXP +${reward.exp} · Gold +${reward.gold} · 빌딩 +${reward.building}`,
+        + `Gold +${reward.gold}`,
       options: [{ label: '고맙습니다!', run: () => call('closeModal') }],
     });
     call('appendChatMessage', 'system', '퀘스트', `${QUEST_DEF.title} 완료! 63빌딩 던전 입구가 열렸습니다.`);

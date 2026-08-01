@@ -146,6 +146,37 @@ test('openNetworkLobby는 방 생성과 참가를 서버 클라이언트에 연�
   assert.equal(joinCall?.[1]?.code, '0427');
 });
 
+test('자리 미정인 실제 세 명은 모두 대기칸에 보이고 같은 가운데 칸에 겹치지 않는다', async () => {
+  const lobby = networkUiHarness();
+  lobby.members.push(
+    {
+      roomId:'room-1', userId:'bob', joinOrder:2, slot:null, ready:false, active:true,
+      profile:{ userId:'bob', name:'보라', className:'mage', spec:'원소', level:6, maxHp:38, attack:11 },
+      state:{ hp:38, maxHp:38, shield:0, cooldowns:{}, statuses:{} },
+    },
+    {
+      roomId:'room-1', userId:'carol', joinOrder:3, slot:null, ready:false, active:true,
+      profile:{ userId:'carol', name:'초록', className:'priest', spec:'신성', level:5, maxHp:40, attack:8 },
+      state:{ hp:40, maxHp:40, shield:0, cooldowns:{}, statuses:{} },
+    },
+  );
+
+  assert.equal(await lobby.context.YuksamRaidRunUi.openNetworkLobby({ mode:'create', floorGroup:1 }), true);
+  const rendered = lobby.html();
+  assert.equal((rendered.match(/class="raid-bench-card/g) || []).length, 3);
+  assert.match(rendered, /앨리스 \(나\)/);
+  assert.match(rendered, /보라/);
+  assert.match(rendered, /초록/);
+  assert.doesNotMatch(rendered, /모두 자리를 정했습니다/);
+  assert.match(rendered, /id="raidSaveFormationBtn" disabled/);
+});
+
+test('던전 모달은 공용 X를 숨기고 방 나가기·포기 버튼을 사용한다', () => {
+  assert.match(uiSource, /#modal:has\(#modalContent \[class\*="raid-"\]\)[\s\S]*?#modalClose\{display:none!important\}/);
+  assert.match(uiSource, /id="raidNetworkLeaveBtn">방 나가기/);
+  assert.match(uiSource, /data-raid-menu="giveup">포기/);
+});
+
 test('온라인 대기실은 정확히 세 명·대형 저장·전원 준비 후에만 출발 버튼을 연다', () => {
   const block = uiSource.match(/function renderNetworkLobby\([\s\S]*?\n  \}\n\n  function isNetworkHost/)?.[0] || '';
   assert.notEqual(block, '');
@@ -200,6 +231,17 @@ test('서버 라운드는 같은 문제를 세 명에게 주고 세 답을 모�
   assert.match(uiSource, /events:\[\.\.\.answerEvents, \.\.\.\(result\.events \|\| \[\]\)\]/);
 });
 
+test('쓰러진 학생은 문제를 받지 않고 서버 제출만 자동 처리한다', () => {
+  const autoSkip = uiSource.match(/function maybeAutoSubmitDeadNetworkTurn\(\) \{[\s\S]*?\n  \}/)?.[0] || '';
+  assert.notEqual(autoSkip, '');
+  assert.match(autoSkip, /member\.hp > 0/);
+  assert.match(autoSkip, /session\.deadSubmittedRounds\.has\(round\)/);
+  assert.match(autoSkip, /session\.client\.submit\(session\.room\.id, round, 'basic', ''\)/);
+  assert.match(autoSkip, /이번 전투에서는 행동하지 않습니다/);
+  assert.match(uiSource, /skipped:skipped \|\| entry\.correct === true|correct:skipped \|\| entry\.correct === true/);
+  assert.match(uiSource, /answerEvent\?\.skipped !== true/);
+});
+
 test('1–10층 복도는 1→3→5→8→10층 조우 진행을 표시한다', () => {
   const h = networkUiHarness();
   const floor = h.context.YuksamRaidRunUi.displayFloorForTest;
@@ -226,7 +268,8 @@ test('던전은 마을과 분리된 전체 화면 맵이고 복도에 세 명을
 test('복도 이름표와 각 학생의 펫은 같은 파티 좌표를 따른다', () => {
   assert.match(uiSource, /drawNameTag\(ctx, x, y \+ 58, member\.name/);
   assert.match(uiSource, /function drawRaidPet\(ctx, ownerX, ownerY, moving, owner = null\)/);
-  assert.match(uiSource, /const petId = owner\?\.activePet \|\| \(isMine\(owner\) \? g\?\.player\?\.activePet : ''\)/);
+  assert.match(uiSource, /const petId = owner\?\.activePet \|\| ''/);
+  assert.match(uiSource, /const now = Date\.now\(\)/);
   assert.match(uiSource, /positioned\.forEach\(\(\{ member, x, y \}\) => drawRaidPet\(ctx, x, y, moving, member\)\)/);
   assert.match(uiSource, /const x = ownerX - 46/);
   assert.match(gameSource, /\['petShopInterior', 'upgradeShopInterior', 'finalBossRoom', 'raidTower'\]/);

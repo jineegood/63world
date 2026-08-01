@@ -8,6 +8,7 @@ const root = path.resolve(import.meta.dirname, '..');
 const coreSource = () => fs.readFileSync(path.join(root, 'src/multiplayer-core.js'), 'utf8');
 const multiplayerSource = () => fs.readFileSync(path.join(root, 'src/multiplayer.js'), 'utf8');
 const remoteMotionSource = () => fs.readFileSync(path.join(root, 'src/remote-motion.js'), 'utf8');
+const avatarVisualSyncSource = () => fs.readFileSync(path.join(root, 'src/avatar-visual-sync.js'), 'utf8');
 
 test('Supabase REST configuration normalizes to one Realtime websocket endpoint', () => {
   const window = {};
@@ -72,7 +73,8 @@ test('two mocked browser sessions exchange positions and chat', async () => {
       },
     };
     const game = {
-      player:{ name, x, y:200, level:1, class:'warrior', equipment:{}, appearance:{}, costume:{ hat:'blue-cap' }, activePet:'chick' },
+      player:{ name, x, y:200, level:1, class:'warrior', equipment:{ weapon:'sword_1' },
+        weaponUpgrades:{ sword_1:3 }, appearance:{}, costume:{ hat:'blue-cap' }, activePet:'chick' },
       lastMove:{ x:1, y:0 },
       currentMap:'town',
       isMoving:false,
@@ -86,7 +88,8 @@ test('two mocked browser sessions exchange positions and chat', async () => {
       width:800, height:450,
       ctx:{
         save() {}, restore() {}, measureText:() => ({ width:50 }),
-        beginPath() {}, roundRect() {}, fill() {},
+        beginPath() {}, roundRect() {}, fill() {}, ellipse() {}, arc() {}, stroke() {},
+        translate() {}, rotate() {}, scale() {},
         fillText(text) { paintedText.push(String(text)); },
         strokeText(text) { paintedText.push(String(text)); },
       },
@@ -106,13 +109,15 @@ test('two mocked browser sessions exchange positions and chat', async () => {
       clearTimeout() {},
       worldRenderPipeline:{ registerLayer(layer) { layers.push(layer); } },
       drawPlayerSprite:(ctx, sx, sy, appearance, cls, state) => {
-        drawn.push({ x:sx, y:sy, moving:state?.moving, dance:Boolean(state?.dance) });
+        drawn.push({ x:sx, y:sy, moving:state?.moving, dance:Boolean(state?.dance),
+          weaponTier:state?.weaponTierStyle?.tier });
       },
       worldToScreen:(px, py) => ({ x:px, y:py }),
       PLAYER_WORLD_SCALE:1.26,
     };
     vm.runInNewContext(coreSource(), context);
     vm.runInNewContext(remoteMotionSource(), context);
+    vm.runInNewContext(avatarVisualSyncSource(), context);
     vm.runInNewContext(multiplayerSource(), context);
     return { window, game, intervals, chats, canvasListeners, layers, drawn, paintedText };
   }
@@ -132,6 +137,7 @@ test('two mocked browser sessions exchange positions and chat', async () => {
   assert.equal(first.window.__remotePlayersV53.get('둘째').userId, 'id-둘째');
   assert.equal(first.window.__remotePlayersV53.get('둘째').costume.hat, 'blue-cap');
   assert.equal(first.window.__remotePlayersV53.get('둘째').activePet, 'chick');
+  assert.equal(first.window.__remotePlayersV53.get('둘째').weaponTier, 3);
   assert.equal(first.window.__remotePlayersV53.get('둘째').pvpAvailable, true);
 
   first.window.__mpBroadcastChatV53('안녕!');
@@ -140,9 +146,9 @@ test('two mocked browser sessions exchange positions and chat', async () => {
 
   first.layers[0].render();
   // 처음 보이는 학생은 미끄러져 들어오지 않고 받은 좌표 그대로 그려져야 한다
-  assert.deepEqual(first.drawn.at(-1), { x:300, y:200, moving:false, dance:false });
+  assert.deepEqual(first.drawn.at(-1), { x:300, y:200, moving:false, dance:false, weaponTier:3 });
   assert.equal(first.paintedText.includes('🐤'), true);
-  assert.equal(first.paintedText.includes('삐약이'), true);
+  assert.equal(first.paintedText.includes('삐약이'), false);
 
   second.game.danceTimer = 3000;
   await new Promise((resolve) => setTimeout(resolve, 230));

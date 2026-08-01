@@ -12064,7 +12064,7 @@ function updateQuestTracker() {
     const petDefs = window.PET_DEFS_V27 || {};
     const pet = petDefs[game.player.activePet];
     if (!pet) return;
-    const now = performance.now();
+    const now = Date.now();
     const dir = game.lastMove || { x: 1, y: 0 };
     if (Math.abs(dir.x) > 0.1) game.player._petSide = dir.x > 0 ? 'left' : 'right';
     const side = game.player._petSide || 'left';

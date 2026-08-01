@@ -1,5 +1,5 @@
 param(
-  [ValidateSet('all', 'check', 'baseline', 'core-utils', 'player-store', 'input-router', 'world-interaction-registry', 'raid-dungeon', 'raid-rules', 'raid-run', 'raid-run-ui', 'raid-combat-rules', 'raid-entry-ui', 'raid-party-client', 'raid-room-backend', 'raid-multiplayer-integration', 'hall-of-fame-gear', 'world-navigation-registry', 'click-movement', 'click-movement-integration', 'world-render-pipeline', 'hud-update-pipeline', 'total-stats-pipeline', 'combat-entry-pipeline', 'combat-frame-pipeline', 'audio-volume-pipeline', 'combat-rules', 'combat-sequence-controller', 'combat-flow', 'combat-fx', 'sfx-map', 'audio-manifest', 'audio-dispatcher', 'weapon-tier', 'game-data', 'quest-data', 'quest-text', 'patch-data', 'gameplay-polish-v2', 'early-game-polish-v2', 'wrong-answer-polish-v2', 'world-healing-polish-v2', 'reward-presentation-v2', 'tutorial-quests-polish-v2', 'tutorial-highlight-v1', 'multiplayer', 'pvp-rules', 'pvp-policy-v1', 'pvp-function-v1', 'pvp-client', 'pvp-profile-ui', 'pvp-battle-ui', 'pvp-reconnect-v1', 'supabase-security-v2', 'cloud-sync-v2', 'student-access-v2', 'secure-student-login-v2', 'secure-shared-student-v2', 'admin-auth-v2', 'teacher-reset-function', 'secure-teacher-auth-v2', 'secure-shared-teacher-v2', 'admin-data-v2', 'student-reward-grants-v2', 'teacher-delete-function', 'secure-cloud-student-admin-v2', 'shared-state-policy-v2', 'shared-state-v2', 'refactor-health', 'current-data', 'safety-net', 'extract-data', 'build-workbook')]
+  [ValidateSet('all', 'check', 'baseline', 'core-utils', 'player-store', 'input-router', 'world-interaction-registry', 'raid-dungeon', 'raid-rules', 'raid-run', 'raid-run-ui', 'raid-combat-rules', 'raid-entry-ui', 'raid-party-client', 'raid-room-backend', 'raid-multiplayer-integration', 'hall-of-fame-gear', 'world-navigation-registry', 'click-movement', 'click-movement-integration', 'world-render-pipeline', 'hud-update-pipeline', 'total-stats-pipeline', 'combat-entry-pipeline', 'combat-frame-pipeline', 'audio-volume-pipeline', 'combat-rules', 'combat-sequence-controller', 'combat-flow', 'combat-fx', 'sfx-map', 'audio-manifest', 'audio-dispatcher', 'weapon-tier', 'game-data', 'quest-data', 'quest-text', 'patch-data', 'gameplay-polish-v2', 'early-game-polish-v2', 'wrong-answer-polish-v2', 'world-healing-polish-v2', 'reward-presentation-v2', 'tutorial-quests-polish-v2', 'tutorial-highlight-v1', 'multiplayer', 'avatar-visual-sync', 'pvp-rules', 'pvp-policy-v1', 'pvp-function-v1', 'pvp-client', 'pvp-profile-ui', 'pvp-battle-ui', 'pvp-reconnect-v1', 'supabase-security-v2', 'cloud-sync-v2', 'student-access-v2', 'secure-student-login-v2', 'secure-shared-student-v2', 'admin-auth-v2', 'teacher-reset-function', 'secure-teacher-auth-v2', 'secure-shared-teacher-v2', 'admin-data-v2', 'student-reward-grants-v2', 'teacher-delete-function', 'secure-cloud-student-admin-v2', 'shared-state-policy-v2', 'shared-state-v2', 'refactor-health', 'current-data', 'safety-net', 'extract-data', 'build-workbook')]
   [string]$Mode = 'all'
 )
 
@@ -97,6 +97,7 @@ if ($Mode -eq 'all' -or $Mode -eq 'check') {
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/audio-manifest.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/audio-dispatcher.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'game.js')
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/avatar-visual-sync.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/admin-dashboard.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/combat-keys.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/ui-tooltip.js')
@@ -311,6 +312,10 @@ if ($Mode -eq 'all' -or $Mode -eq 'tutorial-highlight-v1') {
 
 if ($Mode -eq 'all' -or $Mode -eq 'multiplayer') {
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', 'tests/multiplayer.test.mjs')
+}
+
+if ($Mode -eq 'all' -or $Mode -eq 'avatar-visual-sync') {
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', 'tests/avatar-visual-sync.test.mjs')
 }
 
 if ($Mode -eq 'all' -or $Mode -eq 'pvp-rules') {
