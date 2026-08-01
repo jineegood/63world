@@ -61,12 +61,22 @@ test('몬스터는 앞줄부터 노리고, 앞이 쓰러지면 다음 줄로 넘
   assert.equal(rules.pickTarget(party({ a:{ hp:0 }, b:{ hp:0 }, c:{ hp:0 } })), null);
 });
 
-test('단일 공격은 앞줄 한 명만, 배율이 곱해져 들어간다', () => {
+test('단일 공격은 앞 한 명만, 배율이 곱해져 들어간다', () => {
   const result = rules.resolveMonsterAttack({ members:party(), attack:10, kind:'single', rng:PLAIN });
   assert.equal(result.kind, 'single');
   assert.equal(result.hits.length, 1);
   assert.equal(result.hits[0].memberId, 'a');
-  assert.equal(result.hits[0].damage, 15); // 10 * 1.5
+  // 앞자리 1.5배 + 한 명만 노리는 집중 보정
+  assert.equal(result.hits[0].damage, Math.round(10 * 1.5 * rules.SINGLE_TARGET_BONUS));
+});
+
+test('한 명만 노리는 공격이 전체 공격보다 한 방이 더 아프다', () => {
+  const single = rules.resolveMonsterAttack({ members:party(), attack:10, kind:'single', rng:PLAIN });
+  const all = rules.resolveMonsterAttack({ members:party(), attack:10, kind:'all', rng:PLAIN });
+  const frontInAll = all.hits.find((h) => h.memberId === 'a');
+  assert.ok(single.hits[0].damage > frontInAll.damage,
+    `집중 공격이 더 아파야 한다: ${single.hits[0].damage} vs ${frontInAll.damage}`);
+  assert.ok(rules.SINGLE_TARGET_BONUS > 1);
 });
 
 test('전체 공격은 살아 있는 모두가 각자 배율로 맞는다', () => {
@@ -105,10 +115,13 @@ test('맞힌 사람은 제 몫을, 틀린 사람은 절반을 넣는다', () => 
     answers:{ a:true, b:false, c:true }, rng:PLAIN,
   });
   const byId = Object.fromEntries(result.hits.map((h) => [h.memberId, h.damage]));
-  assert.equal(byId.a, 12);       // 정답 그대로
-  assert.equal(byId.b, 5);        // 오답이라 11의 절반
-  assert.equal(byId.c, 10);
-  assert.equal(result.total, 27);
+  // 레이드에서는 PARTY_POWER 만큼 세게 때린다.
+  const power = (attack) => Math.max(1, Math.floor(attack * rules.PARTY_POWER));
+  assert.equal(byId.a, power(12));                       // 정답 그대로
+  assert.equal(byId.b, Math.floor(power(11) / 2));       // 오답이라 절반
+  assert.equal(byId.c, power(10));
+  assert.equal(result.total, byId.a + byId.b + byId.c);
+  assert.ok(rules.PARTY_POWER > 1, '레이드에서는 평소보다 세게 때린다');
 });
 
 test('쓰러진 사람은 공격에 참여하지 않는다', () => {
@@ -169,7 +182,7 @@ test('문제를 맞힌 힐러가 가장 많이 다친 동료를 회복시킨다'
   const { heals } = rules.resolvePartyHeal({ members, answers:{ healer:true } });
   assert.equal(heals.length, 1);
   assert.equal(heals[0].memberId, 'tank', '비율상 가장 다친 사람을 골라야 한다');
-  assert.equal(heals[0].amount, 16); // 10 * 1.6
+  assert.equal(heals[0].amount, Math.round(10 * rules.HEAL_RATIO));
 });
 
 test('힐러가 문제를 틀리거나 쓰러지면 회복이 없다', () => {

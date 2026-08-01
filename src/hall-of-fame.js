@@ -85,6 +85,7 @@
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         try {
+          drawPetBeside(ctx, canvas, p, rank, performance.now());
           draw(ctx, canvas.width / 2, canvas.height - 58, p.appearance, p.class, {
             attack: 0,
             moving: true, // 걷기 모션으로 살아있는 느낌
@@ -98,6 +99,44 @@
       rafId = requestAnimationFrame(loop);
     };
     rafId = requestAnimationFrame(loop);
+  }
+
+  /* 장착한 펫을 캐릭터 옆에 함께 띄운다.
+     서버가 activePet을 내려 주지 않으면 조용히 건너뛴다. */
+  function drawPetBeside(ctx, canvas, player, rank, now) {
+    const petId = player?.activePet;
+    if (!petId) return;
+    const defs = window.YuksamPatchData?.PET_DEFS_V27 || window.PET_DEFS_V27 || {};
+    const pet = defs[petId];
+    if (!pet) return;
+
+    const scale = rank === 0 ? 1.25 : 1.1;
+    const bob = Math.sin(now / 320 + (pet.bob || 0)) * 4;
+    const x = canvas.width / 2 - (rank === 0 ? 58 : 52);
+    const y = canvas.height - 66 + bob;
+
+    ctx.save();
+    // 발밑 그림자
+    ctx.fillStyle = 'rgba(6,12,22,.28)';
+    ctx.beginPath();
+    ctx.ellipse(x, canvas.height - 46, 13 * scale, 4.5 * scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // 전설 펫은 은은하게 빛난다
+    if (pet.legendary) {
+      const glow = ctx.createRadialGradient(x, y, 0, x, y, 26 * scale);
+      glow.addColorStop(0, 'rgba(251,191,36,.45)');
+      glow.addColorStop(1, 'rgba(251,191,36,0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(x, y, 26 * scale, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // 펫 본체는 아이콘으로 표현한다(월드와 같은 방식)
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `${Math.round(26 * scale)}px Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, system-ui`;
+    ctx.fillText(pet.icon || '🐾', x, y);
+    ctx.restore();
   }
 
   function stopAnim() {

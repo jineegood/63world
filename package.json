@@ -16,6 +16,7 @@
     "test:raid-rules": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 raid-rules",
     "test:raid-run": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 raid-run",
     "test:raid-run-ui": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 raid-run-ui",
+    "test:hall-of-fame-gear": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 hall-of-fame-gear",
     "test:click-movement": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 click-movement",
     "test:click-movement-integration": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 click-movement-integration",
     "test:world-render-pipeline": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 world-render-pipeline",

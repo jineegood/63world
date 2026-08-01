@@ -464,16 +464,14 @@
       return;
     }
 
-    if (heardTheStory()) {
-      showElderSay(AFTER_LINES[Math.floor(Math.random() * AFTER_LINES.length)]);
-      return;
-    }
-
-    // 처음 듣는 이야기: 여러 장을 순서대로 보여 주고 마지막에 완료 처리한다.
-    showStoryPage(0);
+    // 명진쌤과 같은 흐름: 기본 대화 → 이야기 듣기 → 수락
+    openBaseDialogue();
   }
 
-  /* 명진도사가 한 마디 하는 대화창. */
+  /* 대화 진행 상태(명진쌤의 game.dialogue와 같은 역할). */
+  const dialogueState = { page: 0, selected: 0, mode: 'base' };
+
+  /* 명진도사가 한 마디 하는 대화창(조건 미달 안내 등 짧은 말). */
   function showElderSay(text, options = {}) {
     const openModal = global.openModal;
     if (typeof openModal !== 'function') return;
@@ -495,27 +493,92 @@
     }
   }
 
-  function showStoryPage(index) {
+  /* 명진쌤 대화창과 똑같은 형식으로 그린다.
+     같은 dialogue-box 뼈대, 같은 말머리·E키 배지, 같은 선택지 버튼을 쓴다.
+     학생이 두 NPC를 오갈 때 이질감이 없어야 하기 때문이다. */
+  function renderElderDialogue({ text, options, marker = '' }) {
     const openModal = global.openModal;
     if (typeof openModal !== 'function') return;
-    const page = QUEST_PAGES[index];
-    const last = index >= QUEST_PAGES.length - 1;
-    openModal(`
-      <h2>${escape(ELDER.name)}</h2>
-      <div class="panel-card">
-        <p>${escape(page)}</p>
-        <p class="muted">${index + 1} / ${QUEST_PAGES.length}</p>
-        <div class="answer-row">
-          <button class="primary" id="raidStoryNextBtn">${last ? '알겠습니다' : '다음'}</button>
-        </div>
-      </div>
-    `, { type: 'raidElderStory', pause: true });
+    const emphasize = global.YuksamQuestText?.emphasize
+      ? (value) => global.YuksamQuestText.emphasize(value)
+      : (value) => escape(value);
+    const theme = global.YuksamQuestDialogueTheme?.classSuffix?.({
+      mode: dialogueState.mode,
+      questStatus: questState()?.status,
+      hasQuest: true,
+    }) || '';
 
-    const btn = global.document.getElementById('raidStoryNextBtn');
-    if (btn) {
-      btn.onclick = () => (last ? finishStory() : showStoryPage(index + 1));
-      btn.focus();
+    dialogueState.selected = Math.min(
+      Math.max(0, dialogueState.selected || 0),
+      Math.max(0, options.length - 1),
+    );
+
+    openModal(
+      `<div class="dialogue-box${theme}">`
+      + `<div class="dialogue-speaker"><h2>${escape(ELDER.name)} `
+      + `${marker ? `<span class="badge quest-marker-badge">${escape(marker)}</span>` : ''}</h2>`
+      + '<div class="badge">E키로 진행</div></div>'
+      + `<div class="dialogue-text">${emphasize(text)}</div>`
+      + `<div class="dialogue-options">${options.map((opt, i) => (
+        `<button class="${i === dialogueState.selected ? 'selected' : ''}" data-raid-opt="${i}">`
+        + `${emphasize(opt.label)}</button>`
+      )).join('')}</div></div>`,
+      { type: 'dialogue', pause: true },
+    );
+
+    global.document.querySelectorAll('[data-raid-opt]').forEach((button) => {
+      button.onclick = () => {
+        dialogueState.selected = Number(button.dataset.raidOpt) || 0;
+        options[dialogueState.selected]?.run?.();
+      };
+    });
+  }
+
+  function showStoryPage(index) {
+    dialogueState.mode = 'quest';
+    dialogueState.page = index;
+    dialogueState.selected = 0;
+    const last = index >= QUEST_PAGES.length - 1;
+    renderElderDialogue({
+      marker: '!',
+      text: QUEST_PAGES[index],
+      options: last
+        ? [
+          { label: '퀘스트 수락', run: () => finishStory() },
+          { label: '기본 대화로 돌아가기', run: () => openBaseDialogue() },
+        ]
+        : [
+          { label: '다음 이야기', run: () => showStoryPage(index + 1) },
+          { label: '기본 대화로 돌아가기', run: () => openBaseDialogue() },
+        ],
+    });
+  }
+
+  /* 명진쌤의 기본 대화와 같은 구성(이야기 듣기 / 대화 종료). */
+  function openBaseDialogue() {
+    dialogueState.mode = 'base';
+    dialogueState.page = 0;
+    dialogueState.selected = 0;
+
+    if (heardTheStory()) {
+      renderElderDialogue({
+        text: AFTER_LINES[Math.floor(Math.random() * AFTER_LINES.length)],
+        options: [
+          { label: '완료한 퀘스트 다시 보기', run: () => showStoryPage(0) },
+          { label: '대화 종료', run: () => call('closeModal') },
+        ],
+      });
+      return;
     }
+
+    renderElderDialogue({
+      marker: '!',
+      text: '허허, 젊은이. 저 빌딩 이야기를 들어 보겠는가?',
+      options: [
+        { label: `! ${QUEST_DEF.title} 이야기 듣기`, run: () => showStoryPage(0) },
+        { label: '대화 종료', run: () => call('closeModal') },
+      ],
+    });
   }
 
   function finishStory() {
@@ -539,10 +602,13 @@
     call('savePlayer');
     call('updateHud');
     call('playSfx', 'quest');
-    // 완료도 알림이 아니라 대화창으로 이어서 보여 준다.
-    showElderSay('이제 저 문은 자네에게 열려 있네. 동료 셋을 모아 오르거라.', {
-      lead: `「${QUEST_DEF.title}」 완료!`,
-      note: `EXP +${reward.exp} · Gold +${reward.gold} · 빌딩 +${reward.building}`,
+    // 완료도 명진쌤과 같은 대화창 형식으로 이어서 보여 준다.
+    dialogueState.mode = 'base';
+    dialogueState.selected = 0;
+    renderElderDialogue({
+      text: `이제 저 문은 자네에게 열려 있네. 동료 셋을 모아 오르거라.\n`
+        + `EXP +${reward.exp} · Gold +${reward.gold} · 빌딩 +${reward.building}`,
+      options: [{ label: '고맙습니다!', run: () => call('closeModal') }],
     });
     call('appendChatMessage', 'system', '퀘스트', `${QUEST_DEF.title} 완료! 63빌딩 던전 입구가 열렸습니다.`);
   }

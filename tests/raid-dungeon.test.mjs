@@ -82,6 +82,23 @@ test('명진도사는 신선 차림(흰 도포·긴 수염·지팡이)으로 직
   assert.doesNotMatch(raidSource, /drawNpcWorld/);
 });
 
+test('명진도사 퀘스트는 명진쌤과 똑같은 대화창 형식을 쓴다', () => {
+  /* 두 NPC를 오갈 때 이질감이 없어야 한다. 같은 뼈대·같은 배지·같은 선택지 방식. */
+  assert.match(raidSource, /<div class="dialogue-box\$\{theme\}">/);
+  assert.match(raidSource, /class="dialogue-speaker"/);
+  assert.match(raidSource, /E키로 진행/);
+  assert.match(raidSource, /class="dialogue-text"/);
+  assert.match(raidSource, /class="dialogue-options"/);
+  assert.match(raidSource, /\{ type: 'dialogue', pause: true \}/);
+  // 명진쌤과 같은 강조·테마 도우미를 그대로 쓴다.
+  assert.match(raidSource, /YuksamQuestText\?\.emphasize/);
+  assert.match(raidSource, /YuksamQuestDialogueTheme\?\.classSuffix/);
+  // 기본 대화 → 이야기 듣기 → 수락 흐름
+  assert.match(raidSource, /function openBaseDialogue\(\)/);
+  assert.match(raidSource, /label: '퀘스트 수락'/);
+  assert.match(raidSource, /label: '대화 종료'/);
+});
+
 test('명진도사의 안내는 알림이 아니라 대화창으로 나온다', () => {
   /* 레벨업 같은 화면 가운데 알림(showCinematicMessage)이 아니라
      NPC 대화창으로 보여 줘야 한다. */
@@ -90,7 +107,8 @@ test('명진도사의 안내는 알림이 아니라 대화창으로 나온다', 
   assert.match(raidSource, /type: 'raidElderSay'/);
   // 퀘스트 완료도 대화창으로 이어진다.
   const finish = raidSource.match(/function finishStory\(\) \{[\s\S]*?\n  \}/)?.[0] || '';
-  assert.match(finish, /showElderSay\(/);
+  assert.notEqual(finish, '');
+  assert.match(finish, /renderElderDialogue\(/);
 });
 
 test('가만히 있을 때 여러 대사를 돌려 쓴다', () => {
@@ -129,6 +147,8 @@ test('브라우저 스모크가 던전 1단계를 통과한다', { timeout:60000
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   assert.match(result.stdout, /PASS: 입구에 서면 던전 들어가기가 잡힌다/);
   assert.match(result.stdout, /PASS: 명진도사 옆에 서면 대화가 잡힌다/);
+  assert.match(result.stdout, /PASS: 명진쌤과 같은 대화창 형식을 쓴다/);
+  assert.match(result.stdout, /PASS: 말머리와 E키 배지가 명진쌤과 같다/);
   assert.match(result.stdout, /PASS: Lv\.4에도 아직 느낌표가 없다/);
   assert.match(result.stdout, /PASS: Lv\.5가 되면 느낌표가 뜬다/);
   assert.match(result.stdout, /PASS: 전문화가 없으면 전문화 때문에 막힌다/);

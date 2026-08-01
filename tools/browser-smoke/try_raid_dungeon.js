@@ -104,15 +104,37 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
 
   // ===== 이야기를 끝까지 듣는다 =====
   raid.openElderDialogue();
-  await sleep(30);
+  await sleep(40);
+  // 명진쌤과 같은 dialogue-box 형식이어야 한다.
+  check('명진쌤과 같은 대화창 형식을 쓴다',
+    G.modalState?.type === 'dialogue' && !!window.document.querySelector('.dialogue-box'),
+    `type=${G.modalState?.type}`);
+  check('말머리와 E키 배지가 명진쌤과 같다',
+    !!window.document.querySelector('.dialogue-speaker')
+    && /E키로 진행/.test(window.document.querySelector('.dialogue-speaker')?.textContent || ''));
+  check('첫 화면에 이야기 듣기 선택지가 있다',
+    /이야기 듣기/.test(window.document.querySelector('.dialogue-options')?.textContent || ''),
+    window.document.querySelector('.dialogue-options')?.textContent?.trim());
+
+  // 첫 선택지(이야기 듣기)를 누르고, 마지막 장까지 '다음 이야기'를 눌러 나간다.
+  const firstOption = () => window.document.querySelector('.dialogue-options button');
+  firstOption().dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await sleep(40);
+
   let guard = 0;
-  while (window.document.getElementById('raidStoryNextBtn') && guard < 12) {
-    window.document.getElementById('raidStoryNextBtn')
-      .dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
-    await sleep(30);
+  while (guard < 12) {
+    const label = firstOption()?.textContent || '';
+    if (/퀘스트 수락/.test(label)) {
+      firstOption().dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await sleep(40);
+      break;
+    }
+    if (!/다음 이야기/.test(label)) break;
+    firstOption().dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await sleep(40);
     guard += 1;
   }
-  check('여러 장의 이야기를 끝까지 볼 수 있다', guard >= 2 && guard <= 10, `클릭 ${guard}회`);
+  check('여러 장의 이야기를 끝까지 볼 수 있다', guard >= 2 && guard <= 10, `넘김 ${guard}회`);
   check('이야기를 들으면 퀘스트가 완료로 남는다', raid.heardTheStory() === true,
     `status=${G.player.quests[raid.QUEST_ID]?.status}`);
   check('이야기를 들은 뒤에는 느낌표가 사라진다', raid.questAvailable() === false);

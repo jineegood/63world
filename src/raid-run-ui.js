@@ -78,7 +78,11 @@
         display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
       .raid-ally-hp{background:rgba(6,13,24,.88);border:1px solid rgba(255,255,255,.10);
         border-radius:12px;padding:5px 9px;font-size:12px}
-      .raid-ally-hp.me{border-color:rgba(56,189,248,.6)}
+      /* 내 체력은 한눈에 찾을 수 있게 배경과 테두리를 다르게 준다 */
+      .raid-ally-hp.me{border-color:rgba(56,189,248,.85);
+        background:linear-gradient(180deg, rgba(14,58,86,.95), rgba(8,25,42,.95));
+        box-shadow:0 0 0 2px rgba(56,189,248,.28), 0 6px 18px rgba(0,0,0,.35)}
+      .raid-ally-hp.me b{color:#a5e9ff}
       .raid-ally-hp.down{opacity:.45}
       .raid-ally-slot{color:#9fb3cd;margin-left:5px;font-size:11px}
       .raid-ally-num{font-size:11px;color:#cbd5e1;text-align:right}
@@ -87,6 +91,30 @@
       .raid-next-hint.warn{color:#fbbf24;font-weight:800}
       .raid-log{max-height:190px;overflow-y:auto;background:rgba(2,6,23,.55);border-radius:10px;
         padding:8px 10px;font-size:13px;line-height:1.55;margin-top:8px}
+      /* 피해 숫자와 피격 연출 — 일반 전투와 같은 감각 */
+      .raid-float-layer{position:absolute;inset:0;pointer-events:none;z-index:12}
+      .raid-float{position:absolute;transform:translate(-50%,0);font-weight:900;
+        font-size:23px;text-shadow:0 2px 6px rgba(0,0,0,.85);animation:raidFloatUp .95s ease-out forwards}
+      .raid-float.damage{color:#fb7185}
+      .raid-float.crit{color:#fbbf24;font-size:30px}
+      .raid-float.heal{color:#4ade80}
+      .raid-float.miss{color:#cbd5e1;font-size:19px}
+      @keyframes raidFloatUp{
+        0%{opacity:0;transform:translate(-50%,6px) scale(.7)}
+        18%{opacity:1;transform:translate(-50%,-6px) scale(1.12)}
+        100%{opacity:0;transform:translate(-50%,-52px) scale(1)}
+      }
+      .raid-shake{animation:raidShake .42s ease-in-out both}
+      @keyframes raidShake{
+        0%,100%{transform:translateX(0)}
+        20%{transform:translateX(-7px)} 40%{transform:translateX(6px)}
+        60%{transform:translateX(-4px)} 80%{transform:translateX(3px)}
+      }
+      .raid-lunge{animation:raidLunge .36s ease-out both}
+      @keyframes raidLunge{
+        0%{transform:translateX(0)} 45%{transform:translateX(16px)} 100%{transform:translateX(0)}
+      }
+      .raid-stage.raid-danger{box-shadow:inset 0 0 0 3px rgba(251,191,36,.75)}
       .raid-escape-row{margin-top:10px;text-align:right}
       .raid-escape-row button{font-size:12px;opacity:.85}
       .raid-log div.crit{color:#fbbf24;font-weight:800}
@@ -154,10 +182,12 @@
     if (!ctx || typeof draw !== 'function') return;
     try {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      /* 스프라이트는 기준점 아래로 발이 더 그려진다.
+         0.78에 두면 발끝이 잘리므로 조금 더 위에서 시작한다. */
       draw(
         ctx,
         canvas.width / 2,
-        canvas.height * 0.78,
+        canvas.height * 0.62,
         member.appearance || {},
         member.klass || 'warrior',
         { attack:0, moving:false, equipment:member.equipment },
@@ -233,7 +263,7 @@
         <div class="raid-post filled ${selected === member.id ? 'on' : ''}" data-slot="${slot}">
           <div class="raid-post-title">${label}</div>
           <div class="raid-figure" data-pick="${esc(member.id)}">
-            ${memberCanvasHtml(member, 96)}
+            ${memberCanvasHtml(member, 132)}
             <div class="raid-figure-name">${esc(member.name)}${member.isPlayer ? ' (나)' : ''}</div>
             <div class="raid-figure-sub">${esc(member.spec || '전문화 없음')}</div>
           </div>
@@ -246,7 +276,7 @@
       const benchHtml = bench.length
         ? bench.map((member) => `
             <div class="raid-bench-card ${selected === member.id ? 'on' : ''}" data-pick="${esc(member.id)}">
-              ${memberCanvasHtml(member, 84)}
+              ${memberCanvasHtml(member, 120)}
               <div class="raid-figure-name">${esc(member.name)}${member.isPlayer ? ' (나)' : ''}</div>
               <div class="raid-figure-sub">${esc(member.spec || '전문화 없음')} · 공격 ${member.attack} · HP ${member.maxHp}</div>
             </div>`).join('')
@@ -258,7 +288,8 @@
         <h2>${esc(active.snapshot().title)} — 로비</h2>
         <div class="panel-card raid-formation">
           <p class="raid-hint">캐릭터를 고른 뒤 세우고 싶은 자리의 <strong>+</strong>를 누르세요. 이미 세운 캐릭터도 다시 옮길 수 있습니다.</p>
-          <div class="raid-posts">${R.SLOTS.map(slotHtml).join('')}</div>
+          <!-- 전투 배치와 같은 순서로 보여 준다: 왼쪽이 뒤, 오른쪽이 앞 -->
+          <div class="raid-posts">${[...R.SLOTS].reverse().map(slotHtml).join('')}</div>
           <div class="raid-bench-wrap">
             <div class="raid-bench-head">
               <span>대기 중</span>
@@ -341,7 +372,12 @@
     ctx.fillStyle = wall;
     ctx.fillRect(0, 0, w, h);
 
-    // 안쪽으로 뻗은 복도 (원근감)
+    /* 파티는 화면 왼쪽에 서 있고, 배경이 오른쪽에서 왼쪽으로 흘러간다.
+       그래야 "복도를 따라 실제로 나아간다"는 느낌이 난다.
+       scroll은 지금까지 지나온 거리(픽셀)다. */
+    const scroll = travelScroll();
+
+    // 안쪽으로 뻗은 복도 (원근감) — 가로선은 고정, 세로선만 흘러간다
     ctx.strokeStyle = 'rgba(148,163,184,.16)';
     ctx.lineWidth = 2;
     for (let i = 1; i <= 7; i += 1) {
@@ -351,20 +387,23 @@
       ctx.lineTo(w, y);
       ctx.stroke();
     }
-    for (let i = 0; i <= 10; i += 1) {
-      const x = (w / 10) * i;
+    const tileW = w / 10;
+    for (let i = -1; i <= 11; i += 1) {
+      const x = i * tileW - (scroll % tileW);
       ctx.beginPath();
       ctx.moveTo(x, h);
       ctx.lineTo(w / 2 + (x - w / 2) * 0.22, h * 0.53);
       ctx.stroke();
     }
 
-    // 벽면 창문 — 바깥 도시의 불빛
-    for (let i = 0; i < 9; i += 1) {
-      const x = 40 + i * (w - 80) / 9;
-      const lit = (i * 5) % 7 < 3;
+    // 벽면 창문 — 바깥 도시의 불빛. 함께 흘러간다.
+    const winGap = (w - 80) / 9;
+    for (let i = -1; i < 11; i += 1) {
+      const x = 40 + i * winGap - (scroll * 0.82) % winGap - (Math.floor((scroll * 0.82) / winGap) % 1);
+      const seed = ((i + Math.floor((scroll * 0.82) / winGap)) % 7 + 7) % 7;
+      const lit = seed < 3;
       ctx.fillStyle = lit
-        ? `rgba(255,214,120,${(0.35 + 0.25 * Math.sin(t * 1.1 + i)).toFixed(3)})`
+        ? `rgba(255,214,120,${(0.35 + 0.25 * Math.sin(t * 1.1 + seed)).toFixed(3)})`
         : 'rgba(120,150,190,.12)';
       ctx.fillRect(x, h * 0.16, 62, 108);
       ctx.strokeStyle = 'rgba(10,16,26,.7)';
@@ -372,10 +411,12 @@
       ctx.strokeRect(x, h * 0.16, 62, 108);
     }
 
-    // 천장 형광등 (깜빡임)
-    for (let i = 0; i < 4; i += 1) {
-      const x = w * (0.18 + i * 0.22);
-      const flick = i === 2 ? (Math.sin(t * 14) > -0.2 ? 1 : 0.25) : 1;
+    // 천장 형광등 (깜빡임) — 역시 흘러간다
+    const lampGap = w * 0.22;
+    for (let i = -1; i < 6; i += 1) {
+      const x = w * 0.18 + i * lampGap - (scroll * 0.9) % lampGap;
+      const seed = ((i + Math.floor((scroll * 0.9) / lampGap)) % 4 + 4) % 4;
+      const flick = seed === 2 ? (Math.sin(t * 14) > -0.2 ? 1 : 0.25) : 1;
       const lamp = ctx.createRadialGradient(x, 40, 0, x, 40, 190);
       lamp.addColorStop(0, `rgba(200,230,255,${(0.20 * flick).toFixed(3)})`);
       lamp.addColorStop(1, 'rgba(200,230,255,0)');
@@ -399,6 +440,71 @@
     ctx.restore();
 
     drawParty();
+    drawApproachingMonster();
+    drawEncounterBanner();
+  }
+
+  /* 이동이 끝날 무렵 오른쪽 복도 끝에서 몬스터가 걸어 나온다. */
+  function drawApproachingMonster() {
+    const g = G();
+    const ctx = g?.ctx;
+    if (!ctx || !active || !encounterMonster) return;
+    const p = encounterProgress();
+    if (p <= 0) return;
+    const w = g.width;
+    const h = g.height;
+    // 복도 끝(오른쪽 밖)에서 화면 안쪽으로 들어온다.
+    const x = w * (1.06 - 0.24 * p);
+    const y = h * 0.74;
+    const scale = 0.55 + 0.45 * p;
+
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, p * 1.6);
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+    ctx.translate(-x, -y);
+    const painter = MONSTER_PAINTERS[encounterMonster.id] || MONSTER_PAINTERS.guardBot;
+    // 바닥 그림자
+    ctx.fillStyle = 'rgba(4,10,18,.35)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + 62, 46, 13, 0, 0, Math.PI * 2);
+    ctx.fill();
+    try {
+      painter(ctx, x, y, (global.performance ? performance.now() : Date.now()) / 1000, encounterMonster);
+    } catch (_) { /* 그리기 실패가 진행을 막지 않게 한다 */ }
+    ctx.restore();
+  }
+
+  /* "적 등장!" 경고 문구 */
+  function drawEncounterBanner() {
+    const g = G();
+    const ctx = g?.ctx;
+    if (!ctx || !encounterMonster) return;
+    const p = encounterProgress();
+    if (p < 0.35) return;
+    const w = g.width;
+    const h = g.height;
+    const alpha = Math.min(1, (p - 0.35) / 0.25);
+    const pulse = 1 + 0.06 * Math.sin((global.performance ? performance.now() : Date.now()) / 90);
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.textAlign = 'center';
+    ctx.translate(w / 2, h * 0.34);
+    ctx.scale(pulse, pulse);
+    ctx.font = '900 46px Jua, Noto Sans KR, system-ui';
+    ctx.lineWidth = 9;
+    ctx.strokeStyle = 'rgba(8,12,20,.9)';
+    ctx.strokeText('적 등장!', 0, 0);
+    ctx.fillStyle = '#fb7185';
+    ctx.fillText('적 등장!', 0, 0);
+    ctx.font = '700 20px Noto Sans KR, system-ui';
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = 'rgba(8,12,20,.9)';
+    ctx.strokeText(encounterMonster.name, 0, 38);
+    ctx.fillStyle = '#ffe6a3';
+    ctx.fillText(encounterMonster.name, 0, 38);
+    ctx.restore();
   }
 
   /* 파티 세 명을 대형 순서대로 그린다. 이동 중이면 걸어가는 것처럼 옮겨 준다. */
@@ -412,8 +518,10 @@
     const w = g.width;
     const h = g.height;
 
+    /* 파티는 화면 왼쪽에 서 있다(배경이 흘러가며 나아가는 느낌).
+       조우 연출 동안에는 몬스터 쪽을 향해 조금 더 앞으로 나선다. */
     const moving = walkProgress < 1;
-    const baseX = w * (0.16 + 0.46 * walkProgress);
+    const baseX = w * (0.20 + 0.06 * encounterProgress());
     const order = { front:0, middle:1, back:2 };
 
     snap.members.forEach((member) => {
@@ -498,30 +606,78 @@
 
   /* ---------- 화면 2: 이동 (던전 맵 위에서) ---------- */
 
-  const WALK_MS = 1700;
+  /* 걷는 시간과 조우 연출 시간.
+     복도를 지나는 느낌이 나도록 넉넉히 잡는다. */
+  let WALK_MS = 4200;          // 배경이 흘러가는 구간
+  let ENCOUNTER_MS = 1900;     // 몬스터가 나타나 "적 등장!"이 뜨는 구간
+  const SCROLL_SPEED = 240;    // 초당 흘러가는 픽셀
+
+  let encounterMonster = null;
+  let encounterStartedAt = 0;
+
+  /* 지금까지 흘러온 배경 거리(픽셀). */
+  function travelScroll() {
+    return walkProgress * (WALK_MS / 1000) * SCROLL_SPEED;
+  }
+
+  /* 조우 연출 진행도 0~1. */
+  function encounterProgress() {
+    if (!encounterMonster || !encounterStartedAt) return 0;
+    const now = (global.performance ? performance.now() : Date.now());
+    return Math.max(0, Math.min(1, (now - encounterStartedAt) / ENCOUNTER_MS));
+  }
 
   function playTravelScene() {
     // 모달을 닫아 던전 맵이 화면을 가득 채우게 한다.
     call('closeModal');
     walkStartedAt = (global.performance ? performance.now() : Date.now());
     walkProgress = 0;
+    encounterMonster = null;
+    encounterStartedAt = 0;
+
+    // 다음에 만날 몬스터를 미리 알아 둔다(등장 연출에 필요).
+    const R = rules();
+    const snap = active.snapshot();
+    const upcoming = R.floorEncounters(snap.floor)[snap.encounterIndex] || null;
 
     const tick = () => {
       if (!active) return;
       const now = (global.performance ? performance.now() : Date.now());
       walkProgress = Math.min(1, (now - walkStartedAt) / WALK_MS);
-      if (walkProgress < 1) {
-        global.requestAnimationFrame ? global.requestAnimationFrame(tick) : global.setTimeout(tick, 32);
-        return;
+
+      // 걷기가 끝나면 몬스터가 복도 끝에서 나타난다.
+      if (walkProgress >= 1 && !encounterStartedAt) {
+        if (!upcoming) { finishTravel(); return; }
+        encounterMonster = upcoming;
+        encounterStartedAt = now;
+        playEncounterSound();
       }
-      const arrival = active.arriveAtEncounter();
-      if (!arrival.ok) return;
-      if (arrival.cleared) { finishRun(); return; }
-      openBattleScreen();
+
+      if (encounterStartedAt && encounterProgress() >= 1) { finishTravel(); return; }
+
+      if (global.requestAnimationFrame) global.requestAnimationFrame(tick);
+      else global.setTimeout(tick, 32);
     };
 
     if (global.requestAnimationFrame) global.requestAnimationFrame(tick);
     else global.setTimeout(tick, 32);
+  }
+
+  function finishTravel() {
+    encounterMonster = null;
+    encounterStartedAt = 0;
+    const arrival = active.arriveAtEncounter();
+    if (!arrival.ok) return;
+    if (arrival.cleared) { finishRun(); return; }
+    openBattleScreen();
+  }
+
+  /* 몬스터를 만나는 순간의 효과음. */
+  function playEncounterSound() {
+    if (typeof global.playAudioAssetV42 === 'function') {
+      try { global.playAudioAssetV42('dungeonEncounter'); return; } catch (_) { /* 아래로 */ }
+    }
+    call('playSfx', 'hit');
   }
 
   /* ---------- 화면 3: 전투 ---------- */
@@ -540,7 +696,7 @@
       .sort((a, b) => (order[a.slot] ?? 1) - (order[b.slot] ?? 1))
       .map((member, index) => `
         <div class="combat-sprite raid-ally-sprite raid-ally-${index} ${member.hp <= 0 ? 'down' : ''}">
-          <canvas class="raid-battle-face" data-member="${esc(member.id)}" width="120" height="130"></canvas>
+          <canvas class="raid-battle-face" data-member="${esc(member.id)}" width="132" height="172"></canvas>
         </div>`).join('');
   }
 
@@ -609,7 +765,7 @@
             <div>HP ${monster.hp}/${monster.maxHp}</div>
             <div class="hpbar"><div class="hpfill" style="width:${percent}%"></div></div>
             <div class="raid-next-hint ${nextKind === 'all' ? 'warn' : ''}">
-              ${nextKind === 'all' ? '⚠ 다음은 전체 공격!' : '다음은 앞줄을 노립니다'}
+              ${nextKind === 'all' ? '⚠ 다음은 전체 공격!' : '다음은 앞을 노립니다'}
             </div>
           </div>
           <div class="raid-party-hp">${partyHpHtml(snap.members)}</div>
@@ -617,12 +773,14 @@
           <div class="combat-sprite combat-monster raid-monster-sprite ${monster.isBoss ? 'boss' : ''}">
             <canvas id="raidMonsterCanvas" width="230" height="210"></canvas>
           </div>
+          <div id="raidFloatLayer" class="raid-float-layer"></div>
         </div>
         <div class="panel-card">
           <p class="raid-progress">${snap.encounterIndex + 1} / ${snap.encounterTotal}</p>
+          <!-- 일반 전투와 같은 순서: 전투 기록이 문제보다 위에 온다 -->
+          <div class="raid-log">${logHtml()}</div>
           <h3>${esc(question?.q || '')}</h3>
           ${answerHtml()}
-          <div class="raid-log">${logHtml()}</div>
           <div class="raid-escape-row">
             <button class="ghost" id="raidGiveUpBtn">🏳 포기하고 마을로</button>
           </div>
@@ -667,6 +825,79 @@
     else if (event.kind === 'monster-down') call('playSfx', 'quest');
   }
 
+  /* 일반 전투처럼 피해 숫자를 대상 위에 띄우고 맞은 쪽을 흔든다.
+     학생이 자기 몫의 피해를 눈으로 확인할 수 있어야 하기 때문이다. */
+  function floatNumber(anchor, text, kind) {
+    const layer = global.document.getElementById('raidFloatLayer');
+    const stage = global.document.querySelector('.raid-stage');
+    if (!layer || !stage || !anchor) return;
+    const box = anchor.getBoundingClientRect?.();
+    const base = stage.getBoundingClientRect?.();
+    if (!box || !base || !box.width) return;
+    const node = global.document.createElement('div');
+    node.className = `raid-float ${kind}`;
+    node.textContent = text;
+    node.style.left = `${box.left - base.left + box.width / 2}px`;
+    node.style.top = `${box.top - base.top + box.height * 0.28}px`;
+    layer.appendChild(node);
+    global.setTimeout(() => { try { node.remove(); } catch (_) {} }, 1000);
+  }
+
+  function shake(node) {
+    if (!node || !node.classList) return;
+    node.classList.remove('raid-shake');
+    // 클래스를 다시 붙여야 애니메이션이 재생된다.
+    void (node.offsetWidth);
+    node.classList.add('raid-shake');
+    global.setTimeout(() => { try { node.classList.remove('raid-shake'); } catch (_) {} }, 450);
+  }
+
+  function memberSpriteNode(memberId) {
+    const canvas = global.document.querySelector(`.raid-battle-face[data-member="${memberId}"]`);
+    return canvas ? canvas.parentNode : null;
+  }
+
+  function showEventEffect(event) {
+    if (!event) return;
+    const monsterNode = global.document.querySelector('.raid-monster-sprite');
+
+    if (event.kind === 'party-hit') {
+      if (event.missed) floatNumber(monsterNode, 'MISS', 'miss');
+      else {
+        floatNumber(monsterNode, `-${event.damage}`, event.critical ? 'crit' : 'damage');
+        shake(monsterNode);
+      }
+      // 때린 사람도 살짝 앞으로 튀어나오게 한다.
+      const attacker = memberSpriteNode(event.memberId);
+      if (attacker && !event.missed) {
+        attacker.classList.add('raid-lunge');
+        global.setTimeout(() => { try { attacker.classList.remove('raid-lunge'); } catch (_) {} }, 380);
+      }
+      return;
+    }
+
+    if (event.kind === 'monster-hit') {
+      const target = memberSpriteNode(event.memberId);
+      if (event.missed) { floatNumber(target, 'MISS', 'miss'); return; }
+      floatNumber(target, `-${event.damage}`, event.critical ? 'crit' : 'damage');
+      shake(target);
+      return;
+    }
+
+    if (event.kind === 'party-heal') {
+      floatNumber(memberSpriteNode(event.memberId), `+${event.amount}`, 'heal');
+      return;
+    }
+
+    if (event.kind === 'monster-windup' && event.all) {
+      const stage = global.document.querySelector('.raid-stage');
+      if (stage) {
+        stage.classList.add('raid-danger');
+        global.setTimeout(() => { try { stage.classList.remove('raid-danger'); } catch (_) {} }, 620);
+      }
+    }
+  }
+
   /* 한 라운드에서 일어난 일을 한 줄씩 차례로 보여 준다.
      일반 전투가 이벤트를 순서대로 재생하는 것과 같은 흐름이다. */
   let eventDelayMs = 620;
@@ -683,6 +914,7 @@
       playingEvents.push(event);
       playEventSound(event);
       renderBattle();
+      showEventEffect(event);   // 숫자와 흔들림은 그린 뒤에 얹는다
       global.setTimeout(step, eventDelayMs);
     };
     step();
@@ -1165,6 +1397,14 @@
     rescueIfStranded:() => rescueIfStranded(),
     /* 전투 로그 재생 속도(밀리초). 검사에서는 빠르게 돌린다. */
     setLogSpeed:(ms) => { eventDelayMs = Math.max(0, Number(ms) || 0); },
+    /* 이동 연출 상태(검사용) — 배경이 얼마나 흘렀는지, 조우 연출이 어디까지 왔는지 */
+    travelScrollForTest:() => travelScroll(),
+    encounterProgressForTest:() => encounterProgress(),
+    /* 이동 연출 길이(밀리초). 검사에서는 짧게 줄여 빠르게 돌린다. */
+    setTravelSpeed:(walkMs, encounterMs) => {
+      WALK_MS = Math.max(1, Number(walkMs) || 1);
+      ENCOUNTER_MS = Math.max(1, Number(encounterMs) || 1);
+    },
     /* 검사에서 쓰려고 지금 상태를 들여다볼 수 있게 열어 둔다. */
     peek:() => (active ? active.snapshot() : null),
     currentQuestion:() => question,

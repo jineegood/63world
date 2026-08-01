@@ -93,14 +93,16 @@ test('맞히면 몬스터 체력이 줄고, 오답이면 절반만 들어간다'
 
   const result = run.resolveRound({ me:true, ally1:true, ally2:false });
   assert.equal(result.ok, true);
-  // 12 + 12 + 6(오답 절반) = 30
-  assert.equal(before - run.monster.hp, 30);
+  const R = api.YuksamRaidRules;
+  const power = Math.max(1, Math.floor(12 * R.PARTY_POWER));
+  // 정답 둘은 제 몫, 오답 하나는 절반
+  assert.equal(before - run.monster.hp, power + power + Math.floor(power / 2));
   const wrong = result.events.find((e) => e.memberId === 'ally2' && e.kind === 'party-hit');
   assert.equal(wrong.correct, false);
-  assert.equal(wrong.damage, 6);
+  assert.equal(wrong.damage, Math.floor(power / 2));
 });
 
-test('몬스터 반격은 대형에 따라 앞줄이 가장 아프다', () => {
+test('몬스터 반격은 대형에 따라 앞에 선 사람이 가장 아프다', () => {
   const run = makeRun();
   run.confirmFormation({ me:'front', ally1:'middle', ally2:'back' });
   run.arriveAtEncounter();
@@ -111,7 +113,9 @@ test('몬스터 반격은 대형에 따라 앞줄이 가장 아프다', () => {
   assert.equal(first.attackKind, 'single');
   assert.equal(hits.length, 1);
   assert.equal(hits[0].memberId, 'me');
-  assert.equal(hits[0].damage, Math.round(monsterAttack * 1.5)); // 앞줄은 1.5배
+  // 앞자리 1.5배 + 한 명만 노리는 집중 보정
+  const R = api.YuksamRaidRules;
+  assert.equal(hits[0].damage, Math.round(monsterAttack * 1.5 * R.SINGLE_TARGET_BONUS));
 });
 
 test('전체 공격 라운드에는 셋 다 각자 배율로 맞는다', () => {
@@ -234,8 +238,8 @@ test('힐러가 있으면 라운드마다 가장 다친 동료가 회복된다',
     floor:1,
     rng:PLAIN,
     members:[
-      // 이동 중 회복(최대 체력의 절반)이 먼저 들어가므로, 그러고도 크게 다쳐 있도록 낮게 잡는다.
-      member('me', 'front', { isPlayer:true, spec:'방어', maxHp:60, hp:2 }),
+      // 이동 중 회복이 먼저 들어가므로, 그러고도 회복 상한에 걸리지 않게 넉넉히 다쳐 둔다.
+      member('me', 'front', { isPlayer:true, spec:'방어', maxHp:300, hp:2 }),
       member('ally1', 'middle', { spec:'화염' }),
       member('ally2', 'back', { spec:'신성', attack:10 }),
     ],
@@ -246,7 +250,7 @@ test('힐러가 있으면 라운드마다 가장 다친 동료가 회복된다',
   const heal = result.events.find((e) => e.kind === 'party-heal');
   assert.ok(heal, '힐러가 회복시켜야 한다');
   assert.equal(heal.memberId, 'me');
-  assert.equal(heal.amount, 16); // 공격 10 × HEAL_RATIO 1.6
+  assert.equal(heal.amount, Math.round(10 * api.YuksamRaidRules.HEAL_RATIO));
 });
 
 test('전투 사이 이동에서 체력을 회복한다', () => {
@@ -283,6 +287,7 @@ function playFloorOne(members) {
   // 이동 중 회복이 크기 때문에 "끝났을 때 체력"만 보면 대형 차이가 가려진다.
   // 전투 도중 가장 위험했던 순간(최저 체력 비율)을 함께 기록한다.
   let lowestRatio = 1;
+  let firstDownRound = Infinity;   // 처음으로 누가 쓰러진 라운드
   while (run.phase !== 'cleared' && run.phase !== 'wiped' && guard < 400) {
     if (run.phase === 'travel') {
       run.arriveAtEncounter();
@@ -292,11 +297,12 @@ function playFloorOne(members) {
       round += 1;
       run.snapshot().members.forEach((m) => {
         lowestRatio = Math.min(lowestRatio, m.hp / m.maxHp);
+        if (m.hp <= 0 && firstDownRound === Infinity) firstDownRound = round;
       });
     }
     guard += 1;
   }
-  return { phase:run.phase, round, lowestRatio, members:run.snapshot().members };
+  return { phase:run.phase, round, lowestRatio, firstDownRound, members:run.snapshot().members };
 }
 
 test('Lv.5 세 명(탱커·딜러·힐러)이면 1층을 깰 수 있다', () => {
@@ -337,9 +343,10 @@ test('대형을 거꾸로 세우면(약한 사람이 앞) 훨씬 위험해진다
   })));
 
   assert.equal(good.phase, 'cleared');
-  // 약한 사람을 앞에 세우면 전투 도중 훨씬 더 위험한 순간을 겪어야 한다.
-  assert.ok(bad.lowestRatio < good.lowestRatio,
-    `약한 사람을 앞에 세운 쪽이 더 위험해야 한다: 올바른 대형 최저 ${good.lowestRatio.toFixed(2)} vs 거꾸로 ${bad.lowestRatio.toFixed(2)}`);
+  /* 앞에 선 사람이 1.5배로 맞으므로, 약한 사람을 앞에 세우면 더 일찍 쓰러져야 한다.
+     (난이도가 높아 양쪽 모두 누군가는 쓰러지므로 "언제" 쓰러지는지로 본다.) */
+  assert.ok(bad.firstDownRound < good.firstDownRound,
+    `약한 사람을 앞에 세우면 더 일찍 쓰러져야 한다: 올바른 대형 ${good.firstDownRound}라운드 vs 거꾸로 ${bad.firstDownRound}라운드`);
 });
 
 test('현재 상태를 화면이 읽을 수 있는 형태로 알려 준다', () => {

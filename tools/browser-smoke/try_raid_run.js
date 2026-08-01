@@ -109,7 +109,19 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
     `type=${G.modalState?.type}`);
 
   // ===== 전투 =====
-  await sleep(2200);
+  // 복도를 걷는 연출(약 4.2초) + 몬스터 등장 연출(약 1.9초)이 끝날 때까지 기다린다.
+  await sleep(3000);
+  check('걷는 동안 배경이 실제로 흘러간다', ui.travelScrollForTest() > 0,
+    `scroll=${Math.round(ui.travelScrollForTest())}`);
+  await sleep(1600);
+  check('복도 끝에서 몬스터가 나타나며 적 등장 연출이 뜬다',
+    ui.encounterProgressForTest() > 0, `p=${ui.encounterProgressForTest().toFixed(2)}`);
+
+  const travelWait = async (limit = 200) => {
+    let n = 0;
+    while (ui.isRunning() && G.modalState?.type !== 'raidBattle' && n < limit) { await sleep(60); n += 1; }
+  };
+  await travelWait();
   check('이동이 끝나면 전투가 시작된다', G.modalState?.type === 'raidBattle', `type=${G.modalState?.type}`);
   check('첫 몬스터는 경비 로봇', ui.peek().monster?.name === '경비 로봇', ui.peek().monster?.name);
   check('일반 전투와 같은 무대를 쓴다', !!window.document.querySelector('.combat-stage'));
@@ -155,7 +167,8 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
     `${frontNow.name} ${frontNow.hp}/${frontNow.maxHp}`);
 
   // ===== 보스까지 끝까지 =====
-  ui.setLogSpeed(0);   // 검사에서는 연출을 기다리지 않는다
+  ui.setLogSpeed(0);            // 검사에서는 연출을 기다리지 않는다
+  ui.setTravelSpeed(120, 80);   // 이동 연출도 짧게 줄인다
   const seen = new Set();
   const sawKind = new Set();
   let sawBoss = false;
