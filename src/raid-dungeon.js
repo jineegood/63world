@@ -11,9 +11,8 @@
    - 명진도사의 퀘스트(Lv.5부터 느낌표)
    - 입장 조건 검사: Lv.5 이상 + 전문화 선택 완료
 
-   아직 없는 것(다음 단계)
-   - 파티 방 만들기 / 3명 모집 / 준비 완료 / 출발
-   - 던전 내부 진행, 전투, 대형(앞줄·뒷줄) 피해 배율, 레이드 보스
+   방 생성·3명 모집·던전 내부 진행과 전투는 뒤에서 로드되는
+   raid-entry-ui.js / raid-run-ui.js가 맡는다.
 
    game.js와의 연결은 전부 호출 시점 참조(늦은 바인딩)로만 한다.
    ========================================================= */
@@ -623,32 +622,14 @@
       call('appendChatMessage', 'system', '63빌딩 던전', reason);
       return;
     }
-    const openModal = global.openModal;
-    if (typeof openModal !== 'function') return;
-    openModal(`
-      <h2>63빌딩 던전</h2>
-      <div class="panel-card">
-        <p>총 ${TOWER.floors}층. 지금은 <strong>1층</strong>까지 준비되어 있습니다.</p>
-        <p class="muted">셋이 함께 오르는 곳입니다. 지금은 동료 둘이 함께 가 줍니다.</p>
-        <div class="answer-row">
-          <button class="primary" id="raidEnterFloor1Btn">1층 도전</button>
-          <button class="ghost" onclick="closeModal()">닫기</button>
-        </div>
-      </div>
-    `, { type: 'raidTowerEntrance', pause: true });
-
-    const enterBtn = global.document.getElementById('raidEnterFloor1Btn');
-    if (enterBtn) {
-      // 화면 모듈은 뒤에 로드되므로 누르는 시점에 찾는다(늦은 바인딩).
-      enterBtn.onclick = () => {
-        const ui = global.YuksamRaidRunUi;
-        if (!ui || typeof ui.startRun !== 'function') {
-          call('toast', '던전 화면을 불러오지 못했습니다.');
-          return;
-        }
-        ui.startRun(1);
-      };
+    // 방 생성·초대 코드 입력은 별도 화면 모듈이 맡는다. 실제 던전 진행은
+    // 그 화면이 세 명을 모은 뒤 YuksamRaidRunUi에 넘긴다.
+    const entryUi = global.YuksamRaidEntryUi;
+    if (!entryUi || typeof entryUi.open !== 'function') {
+      call('toast', '던전 입장 화면을 불러오지 못했습니다.');
+      return;
     }
+    entryUi.open();
   }
 
   /* ---------- game.js에 붙이기 ---------- */

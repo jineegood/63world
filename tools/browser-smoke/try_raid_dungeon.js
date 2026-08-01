@@ -148,7 +148,7 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
 
   raid.openTowerEntrance();
   await sleep(30);
-  check('입장하면 던전 안내창이 열린다', G.modalState?.type === 'raidTowerEntrance',
+  check('입장하면 던전 안내창이 열린다', G.modalState?.type === 'raidEntryHome',
     `type=${G.modalState?.type}`);
   window.closeModal();
   await sleep(20);
@@ -158,7 +158,7 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   G.modalState = { type: null, pause: false };
   raid.openTowerEntrance();
   await sleep(20);
-  check('조건 미달이면 던전 안내창이 열리지 않는다', G.modalState?.type !== 'raidTowerEntrance',
+  check('조건 미달이면 던전 안내창이 열리지 않는다', G.modalState?.type !== 'raidEntryHome',
     `type=${G.modalState?.type}`);
   setLevel(5);
 

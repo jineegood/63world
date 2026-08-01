@@ -7,5 +7,8 @@ verify_jwt = true
 [functions.pvp-match-v1]
 verify_jwt = true
 
+[functions.raid-room-v1]
+verify_jwt = true
+
 [functions.teacher-apply-cheat]
 verify_jwt = true

@@ -193,6 +193,7 @@ export function buildAuthoritativePvpProfile({ userId, displayName, data:rawData
     maxHp,
     hp:maxHp,
     shield:0,
+    primaryStat:Math.max(1, Math.round(Number(primaryStat) || 1)),
     attack:Math.max(1, Math.round((Number(primaryStat) || 1) / 2)),
     defense:Math.max(0, Math.round(Number(total.방어) || 0)),
     activePet,

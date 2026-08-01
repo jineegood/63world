@@ -1,190 +1,268 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import vm from 'node:vm';
 import { readFileSync as readFileRaw } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
-const readFileSync = (path, options) => readFileRaw(path, options).replace(/\r\n/g, '\n');
-const uiSource = readFileSync(join(root, 'src', 'raid-run-ui.js'), 'utf8');
-const htmlSource = readFileSync(join(root, 'index.html'), 'utf8');
-const styleSource = readFileSync(join(root, 'style.css'), 'utf8');
-const dungeonSource = readFileSync(join(root, 'src', 'raid-dungeon.js'), 'utf8');
-const gameSource = readFileSync(join(root, 'game.js'), 'utf8');
-const multiplayerSource = readFileSync(join(root, 'src', 'multiplayer.js'), 'utf8');
+const read = (name) => readFileRaw(join(root, name), 'utf8').replace(/\r\n/g, '\n');
+const uiSource = read('src/raid-run-ui.js');
+const entrySource = read('src/raid-entry-ui.js');
+const dungeonSource = read('src/raid-dungeon.js');
+const rulesSource = read('src/raid-rules.js');
+const runSource = read('src/raid-run.js');
+const combatSource = read('src/raid-combat-rules.js');
+const htmlSource = read('index.html');
+const styleSource = read('style.css');
+const gameSource = read('game.js');
+const multiplayerSource = read('src/multiplayer.js');
 
-test('화면 모듈은 규칙과 진행 뒤에 로드된다', () => {
-  const order = ['src/raid-rules.js', 'src/raid-run.js', 'src/raid-run-ui.js', 'src/raid-dungeon.js']
-    .map((name) => htmlSource.indexOf(`<script src="${name}"></script>`));
-  assert.ok(order.every((index) => index > -1), '네 모듈이 모두 로드되어야 한다');
-  for (let i = 1; i < order.length; i += 1) {
-    assert.ok(order[i] > order[i - 1], `${i}번째 모듈 순서가 뒤집혔다`);
+function networkUiHarness({ mode = 'create' } = {}) {
+  const calls = [];
+  const styles = new Map();
+  let html = '';
+  const room = {
+    id:'room-1', code:'0427', hostId:'alice', floorGroup:1, phase:'lobby',
+    encounterIndex:0, currentFloor:1, round:0,
+  };
+  const members = [{
+    roomId:'room-1', userId:'alice', joinOrder:1, slot:null, ready:false, active:true,
+    profile:{ userId:'alice', name:'앨리스', className:'warrior', spec:'무기', level:5, maxHp:42, attack:9 },
+    state:{ hp:42, maxHp:42, shield:0, cooldowns:{}, statuses:{} },
+  }];
+  const response = { room, members, events:[] };
+  const partyClient = {
+    async create(options) { calls.push(['create', options]); return structuredClone(response); },
+    async join(options) { calls.push(['join', options]); return structuredClone(response); },
+    subscribe(roomId, listener, onReady) {
+      calls.push(['subscribe', roomId, listener, onReady]);
+      return () => calls.push(['unsubscribe', roomId]);
+    },
+    async heartbeat() { return structuredClone(response); },
+    async leave() { calls.push(['leave']); return { left:true }; },
+  };
+  const game = { modalState:null, player:{ name:'앨리스' } };
+  const document = {
+    head:{ appendChild(node) { styles.set(node.id, node); } },
+    createElement() { return { id:'', textContent:'' }; },
+    getElementById(id) { return styles.get(id) || null; },
+    querySelectorAll() { return []; },
+    querySelector() { return null; },
+  };
+  const context = {
+    console,
+    game,
+    document,
+    performance:{ now:() => 100 },
+    setTimeout,
+    clearTimeout,
+    setInterval(callback, milliseconds) { calls.push(['interval', milliseconds, callback]); return 11; },
+    clearInterval(id) { calls.push(['clearInterval', id]); },
+    openModal(nextHtml, options) {
+      html = nextHtml;
+      game.modalState = { type:options?.type || '', pause:options?.pause === true };
+      calls.push(['modal', options?.type]);
+    },
+    closeModal() { calls.push(['closeModal']); },
+    async flushLocalPlayerForPvpV1() { calls.push(['flush']); },
+    getPvpIdentityV1:() => ({ userId:'alice', displayName:'앨리스', role:'student' }),
+    secureStudentAccessV2:{ getClient:() => ({ fake:true }) },
+    YuksamRaidPartyClient:{ create:() => partyClient },
+    YuksamRaidRules:{
+      SLOTS:Object.freeze(['front', 'middle', 'back']),
+      slotLabel:(slot) => ({ front:'앞', middle:'가운데', back:'뒤' })[slot] || slot,
+    },
+    YuksamRaidRun:{},
+    YuksamCore:{ escapeHtml:(value) => String(value), normalize:(value) => String(value ?? '').trim() },
+  };
+  context.window = context;
+  context.globalThis = context;
+  vm.runInNewContext(uiSource, context, { filename:'raid-run-ui.js' });
+  return { context, calls, partyClient, room, members, html:() => html, mode };
+}
+
+test('온라인 던전 모듈은 의존 순서대로 로드된다', () => {
+  const files = [
+    'src/raid-party-client.js',
+    'src/raid-combat-rules.js',
+    'src/raid-rules.js',
+    'src/raid-run.js',
+    'src/raid-run-ui.js',
+    'src/raid-entry-ui.js',
+    'src/raid-dungeon.js',
+  ];
+  const positions = files.map((name) => htmlSource.indexOf(`<script src="${name}"></script>`));
+  assert.ok(positions.every((position) => position >= 0), '온라인 던전 스크립트가 모두 index.html에 있어야 한다');
+  for (let index = 1; index < positions.length; index += 1) {
+    assert.ok(positions[index] > positions[index - 1], `${files[index]}의 로드 순서가 잘못됐다`);
   }
 });
 
-test('화면은 계산을 직접 하지 않고 규칙·진행에 맡긴다', () => {
-  /* 나중에 서버가 진행을 대신 굴려도 이 화면을 그대로 쓰려면
-     피해·회복 계산이 화면 쪽에 새로 생기면 안 된다. */
-  /* 규칙 값을 화면이 다시 정의하면 서버로 옮길 때 계산이 갈라진다.
-     (그림 좌표에 쓰이는 숫자까지 막으면 안 되므로 규칙 이름으로만 확인한다.) */
+test('화면은 피해 판정을 재정의하지 않고 진행·전투 규칙에 맡긴다', () => {
   assert.doesNotMatch(uiSource, /DAMAGE_TAKEN\s*=/);
   assert.doesNotMatch(uiSource, /CRIT_CHANCE\s*=|CRIT_MULTIPLIER\s*=|MISS_CHANCE\s*=/);
   assert.doesNotMatch(uiSource, /HEAL_RATIO\s*=|TRAVEL_RECOVERY\s*=/);
-  assert.match(uiSource, /rules\(\)\.attackKindForRound/);
+  assert.match(uiSource, /active\.resolveRound\(submissions\)/);
   assert.match(uiSource, /active\.resolveRound\(answers\)/);
-  assert.match(uiSource, /active\.rollAllyAnswers\(\)/);
+  assert.match(runSource, /R\.resolvePartyCombatRound\(/);
+  assert.match(rulesSource, /global\.YuksamRaidCombatRules/);
 });
 
-test('style.css를 건드리지 않고 자기 스타일만 넣는다', () => {
-  assert.doesNotMatch(styleSource, /raid-slot-card|raid-monster-box|raid-party/);
-  assert.match(uiSource, /id = 'raidRunStylesV1'/);
+test('던전 스타일은 전용 style 태그로만 추가한다', () => {
+  assert.doesNotMatch(styleSource, /raid-room-member|raid-party-hp|raid-status-badge/);
+  assert.match(uiSource, /style\.id = 'raidRunStylesV1'/);
+  assert.match(entrySource, /style\.id = 'raidEntryStylesV1'/);
 });
 
-test('던전 입구가 화면 모듈을 늦은 바인딩으로 부른다', () => {
-  // 화면 모듈이 뒤에 로드되므로 누르는 시점에 찾아야 한다.
-  assert.match(dungeonSource, /raidEnterFloor1Btn/);
-  assert.match(dungeonSource, /const ui = global\.YuksamRaidRunUi;/);
+test('던전 문은 예전 1층 연습 버튼이 아니라 방 생성·코드 입력 화면을 연다', () => {
+  const block = dungeonSource.match(/function openTowerEntrance\(\) \{[\s\S]*?\n  \}/)?.[0] || '';
+  assert.notEqual(block, '');
+  assert.match(block, /global\.YuksamRaidEntryUi/);
+  assert.match(block, /entryUi\.open\(\)/);
+  assert.doesNotMatch(block, /startRun|raidEnterFloor1Btn|혼자/);
+  assert.match(entrySource, /mode:'create'/);
+  assert.match(entrySource, /mode:'join'/);
 });
 
-test('동료 능력치는 내 능력치를 기준으로 만들어진다', () => {
-  // 레벨이 올라도 동료가 뒤처지거나 앞서지 않아야 한다.
-  const build = uiSource.match(/function buildParty\(\) \{[\s\S]*?\n  \}/)?.[0] || '';
-  assert.notEqual(build, '');
-  assert.match(build, /maxHpForPlayer/);
-  assert.match(build, /computeTotalStats/);
-  assert.match(build, /Math\.round\(maxHp \* [\d.]+\)/);
-  assert.match(build, /spec:'신성'/, '동료 중 한 명은 힐러여야 1층을 깰 수 있다');
+test('openNetworkLobby는 방 생성과 참가를 서버 클라이언트에 연결한다', async () => {
+  const created = networkUiHarness();
+  assert.equal(typeof created.context.YuksamRaidRunUi.openNetworkLobby, 'function');
+  assert.equal(await created.context.YuksamRaidRunUi.openNetworkLobby({ mode:'create', floorGroup:1 }), true);
+  const createCall = created.calls.find(([kind]) => kind === 'create');
+  assert.equal(createCall?.[0], 'create');
+  assert.equal(createCall?.[1]?.floorGroup, 1);
+  assert.ok(created.calls.some(([kind, roomId]) => kind === 'subscribe' && roomId === 'room-1'));
+  assert.match(created.html(), /초대 코드/);
+  assert.match(created.html(), /0427/);
+  assert.match(created.html(), /1 \/ 3명/);
+  assert.equal((created.html().match(/친구를 기다리는 중/g) || []).length, 2);
+
+  const joined = networkUiHarness({ mode:'join' });
+  assert.equal(await joined.context.YuksamRaidRunUi.openNetworkLobby({ mode:'join', code:'0427' }), true);
+  const joinCall = joined.calls.find(([kind]) => kind === 'join');
+  assert.equal(joinCall?.[0], 'join');
+  assert.equal(joinCall?.[1]?.code, '0427');
 });
 
-test('브라우저에서 1층을 처음부터 끝까지 깬다', { timeout:180000 }, () => {
-  const script = join(root, 'tools', 'browser-smoke', 'try_raid_run.js');
-  const result = spawnSync(process.execPath, [script, root], { encoding:'utf8', timeout:170000 });
+test('온라인 대기실은 정확히 세 명·대형 저장·전원 준비 후에만 출발 버튼을 연다', () => {
+  const block = uiSource.match(/function renderNetworkLobby\([\s\S]*?\n  \}\n\n  function isNetworkHost/)?.[0] || '';
+  assert.notEqual(block, '');
+  assert.match(block, /roster\.length === 3 && R\.SLOTS\.every/);
+  assert.match(block, /roster\.length === 3 && roster\.every\(\(member\) => rowById\(member\.id\)\?\.ready === true\)/);
+  assert.match(block, /id="raidSaveFormationBtn"/);
+  assert.match(block, /networkSession\.client\.setFormation/);
+  assert.match(block, /networkSession\.client\.ready/);
+  assert.match(block, /host && allReady \? '<button class="primary" id="raidNetworkStartBtn"/);
+  assert.match(block, /networkSession\.client\.start/);
+});
+
+test('대기 캐릭터 카드에서 근거가 불분명한 공격 숫자를 보여주지 않는다', () => {
+  const block = uiSource.match(/function renderNetworkLobby\([\s\S]*?\n  \}\n\n  function isNetworkHost/)?.[0] || '';
+  assert.match(block, /Lv\.\$\{member\.level\}/);
+  assert.match(block, /HP \$\{member\.maxHp\}/);
+  assert.doesNotMatch(block, /공격\s*\$\{member\.attack\}|ATK\s*\$\{member\.attack\}/);
+});
+
+test('Realtime 알림과 heartbeat는 모두 같은 sync 경로로 방 상태를 갱신한다', () => {
+  assert.match(uiSource, /session\.client\.subscribe\(session\.room\.id, \(\) => refreshNetworkRoom\(\), refreshNetworkRoom\)/);
+  assert.match(uiSource, /session\.client\.sync\(session\.room\.id, session\.lastSequence \|\| 0\)/);
+  assert.match(uiSource, /session\.client\.heartbeat\(session\.room\.id, session\.lastSequence \|\| 0\)/);
+  assert.match(uiSource, /global\.setInterval\([\s\S]*?, 3000\)/);
+  assert.match(uiSource, /stopNetworkTransport\(\)/);
+});
+
+test('새로고침 뒤에는 진행 중인 방과 현재 전투 장면을 이어서 복원한다', () => {
+  assert.match(uiSource, /create:\(\{ floorGroup = 1 \} = \{\}\) => enterOrResume|client\.create/);
+  assert.match(uiSource, /\['question', 'waiting', 'resolving', 'effects'\]\.includes\(roomPhase\)/);
+  assert.match(uiSource, /active\.importSnapshot\(\{[\s\S]*?encounterIndex:Number\(networkSession\.room\?\.encounterIndex\)/);
+  assert.match(uiSource, /active\.arriveAtEncounter\(\)/);
+  assert.match(uiSource, /openBattleScreen\(\{ resumed:true \}\)/);
+  assert.match(uiSource, /if \(options\.resumed && networkSession\)/);
+  assert.match(uiSource, /if \(resolving\) global\.setTimeout\(\(\) => maybeResolveNetworkRound\(\), 0\)/);
+});
+
+test('가짜 인증 계정 3개의 전체 방·라운드 계약이 통과한다', { timeout:15000 }, () => {
+  const path = join(root, 'tests', 'raid-multiplayer-integration.test.mjs');
+  const result = spawnSync(process.execPath, ['--test', path], { encoding:'utf8', timeout:10000 });
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
-  // 던전 맵으로 실제 이동
-  assert.match(result.stdout, /PASS: 마을이 아니라 던전 맵으로 이동한다/);
-  assert.match(result.stdout, /PASS: 던전 맵이 월드에 등록되어 있다/);
-  // 로비 대형 배치 — 대기칸과 + 버튼
-  assert.match(result.stdout, /PASS: 로비 대형 화면이 열린다/);
-  assert.match(result.stdout, /PASS: 처음에는 세 자리가 모두 비어 있다/);
-  assert.match(result.stdout, /PASS: 세 명이 모두 대기칸에 서 있다/);
-  assert.match(result.stdout, /PASS: 캐릭터 그림이 실제로 그려진다/);
-  assert.match(result.stdout, /PASS: 로비 캐릭터가 멈추지 않고 계속 움직인다/);
-  assert.match(result.stdout, /PASS: 고른 캐릭터가 앞줄에 선다/);
-  assert.match(result.stdout, /PASS: 배치한 캐릭터를 대기칸으로 되돌릴 수 있다/);
-  assert.match(result.stdout, /PASS: 세 자리를 채우기 전에는 준비할 수 없다/);
-  // 준비 → Ready 표시 → 5초 카운트다운 → 출발
-  assert.match(result.stdout, /PASS: 버튼 이름이 준비다/);
-  assert.match(result.stdout, /PASS: 준비를 누르면 각 칸에 Ready 표시가 뜬다/);
-  assert.match(result.stdout, /PASS: 셋 다 준비되면 카운트다운이 시작된다/);
-  assert.match(result.stdout, /PASS: 카운트다운은 5초부터 센다/);
-  // 전투 — 일반 전투 무대 + 왼쪽 3명
-  assert.match(result.stdout, /PASS: 이동이 끝나면 전투가 시작된다/);
-  assert.match(result.stdout, /PASS: 복도에서 펫이 주인 옆을 따라 걷는다/);
-  assert.match(result.stdout, /PASS: 일반 전투와 같은 무대를 쓴다/);
-  assert.match(result.stdout, /PASS: 왼쪽에 캐릭터 셋이 보인다/);
-  assert.match(result.stdout, /PASS: 셋의 체력창이 각각 보인다/);
-  assert.match(result.stdout, /PASS: 정답을 넣으면 몬스터 체력이 줄어든다/);
-  assert.match(result.stdout, /PASS: 앞줄에 선 캐릭터가 반격을 맞는다/);
-  // 전투 흐름 — 로그가 한 줄씩 쌓이고 치명타·빗나감·회복이 실제로 나온다
-  assert.match(result.stdout, /PASS: 공격 \/ 스킬 \/ 포기 메뉴가 나온다/);
-  assert.match(result.stdout, /PASS: 행동을 고르기 전에는 문제가 나오지 않는다/);
-  assert.match(result.stdout, /PASS: 공격을 고르면 문제가 나온다/);
-  assert.match(result.stdout, /PASS: 정답을 제출하면 입력칸과 공격 버튼이 즉시 사라진다/);
-  assert.match(result.stdout, /PASS: 입력 UI를 지워도 전투 무대는 새로 만들지 않는다/);
-  assert.match(result.stdout, /PASS: 전투 기록은 따로 상자를 두지 않는다/);
-  assert.match(result.stdout, /PASS: 적이 나타났다는 문구가 먼저 뜬다/);
-  assert.match(result.stdout, /PASS: 전투 로그에 공격·피격이 모두 나온다/);
-  assert.match(result.stdout, /PASS: 치명타와 빗나감이 실제로 발동한다/);
-  assert.match(result.stdout, /PASS: 힐러 회복 로그가 나온다/);
-  assert.match(result.stdout, /PASS: 몬스터가 그림으로 그려진다/);
-  assert.match(result.stdout, /PASS: 파티원이 공격할 때 앞으로 나갔다 돌아온다/);
-  assert.match(result.stdout, /PASS: 몬스터가 반격할 때 앞으로 나갔다 돌아온다/);
-  // 끝까지
-  assert.match(result.stdout, /PASS: 일반 몬스터 3종을 모두 만난다/);
-  assert.match(result.stdout, /PASS: 레이드 보스까지 도달한다/);
-  assert.match(result.stdout, /PASS: Lv\.5 파티가 1층을 깬다/);
-  assert.match(result.stdout, /PASS: 클리어 보상이 지급된다/);
-  assert.match(result.stdout, /PASS: 끝나면 마을로 돌아간다/);
-  // 던전에 갇히지 않는지 (실제로 났던 버그)
-  assert.match(result.stdout, /PASS: 던전 안에서는 마을 귀환 버튼이 보인다/);
-  assert.match(result.stdout, /PASS: 저장에는 던전이 아니라 마을이 남는다/);
-  assert.match(result.stdout, /PASS: 진행 없이 던전에 있으면 자동으로 마을로 나온다/);
-  assert.match(result.stdout, /PASS: 전투 화면에 포기 버튼이 있다/);
-  assert.match(result.stdout, /PASS: 포기하면 한 번 물어본다/);
-  assert.match(result.stdout, /PASS: 포기하면 마을로 돌아간다/);
-  assert.match(result.stdout, /PASS: 비동기 오류 없음/);
 });
 
-test('던전은 마을이 아니라 전용 맵을 화면 전체로 쓴다', () => {
-  /* 이동이 작은 이모티콘 연출이 아니라 실제 장소 이동이어야 한다. */
-  assert.match(uiSource, /const MAP_KEY = 'raidTower';/);
+test('서버 라운드는 같은 문제를 세 명에게 주고 세 답을 모아 한 번만 발행한다', () => {
+  assert.match(uiSource, /session\.client\.beginRound\([\s\S]*?publicRaidQuestion\(selected\)[\s\S]*?String\(selected\.answer \?\? ''\)/);
+  assert.match(uiSource, /session\.client\.submit\(session\.room\.id, Number\(session\.room\.round\), actionId/);
+  assert.match(uiSource, /session\.room\?\.phase !== 'resolving'/);
+  assert.match(uiSource, /inputs\.length !== 3/);
+  assert.match(uiSource, /session\.resolvingRounds\.add\(round\)/);
+  assert.match(uiSource, /session\.client\.publishRound/);
+  assert.match(uiSource, /memberStates:publishMemberStates\(snapshot\)/);
+  assert.match(uiSource, /events:\[\.\.\.answerEvents, \.\.\.\(result\.events \|\| \[\]\)\]/);
+});
+
+test('1–10층 복도는 1→3→5→8→10층 조우 진행을 표시한다', () => {
+  const h = networkUiHarness();
+  const floor = h.context.YuksamRaidRunUi.displayFloorForTest;
+  assert.equal(typeof floor, 'function');
+  assert.equal(floor({ encounterIndex:0, phase:'travel' }, 0), 1);
+  assert.equal(floor({ encounterIndex:0, phase:'battle' }, 0), 3);
+  assert.equal(floor({ encounterIndex:1, phase:'travel' }, 0), 3);
+  assert.equal(floor({ encounterIndex:1, phase:'battle' }, 0), 5);
+  assert.equal(floor({ encounterIndex:2, phase:'battle' }, 0), 8);
+  assert.equal(floor({ encounterIndex:3, phase:'battle' }, 0), 10);
+  assert.match(uiSource, /strokeText\(`현재 \$\{floor\}층`/);
+  assert.match(uiSource, /fillText\(`현재 \$\{floor\}층`/);
+});
+
+test('던전은 마을과 분리된 전체 화면 맵이고 복도에 세 명을 직접 그린다', () => {
+  assert.match(uiSource, /const MAP_KEY = 'raidTower'/);
   assert.match(uiSource, /owns:\(\{ map \}\) => map === MAP_KEY/);
-  assert.match(uiSource, /showLoadingTransition\('63빌딩 던전으로 들어갑니다\.'/);
   assert.match(uiSource, /function drawDungeon\(\)/);
-  // 던전 안에서 파티 세 명을 직접 그린다.
   assert.match(uiSource, /function drawParty\(\)/);
-  // 끝나면 마을로 되돌아간다.
   assert.match(uiSource, /function leaveDungeonMap\(\)/);
+  assert.match(uiSource, /positioned\.forEach\(\(\{ member, index, x, y \}\) =>/);
 });
 
-test('던전 전용 음악이 등록되고 던전 안에서만 재생된다', () => {
-  const manifest = readFileSync(join(root, 'src', 'audio-manifest.js'), 'utf8');
-  assert.match(manifest, /dungeonBgm: \{ src:'assets\/1\. 던전 음악\.mp3'/);
-  // 던전 맵일 때만 우리 곡을 고른다.
-  assert.match(uiSource, /if \(g && g\.currentMap === MAP_KEY\) \{[\s\S]*?ensureDungeonAudio\(\)/);
-  // 나머지 곡이 멈추도록 동기화도 함께 감싼다.
-  assert.match(uiSource, /global\.syncAudioFileBgm = function syncAudioFileBgmWithRaid/);
+test('복도 이름표와 각 학생의 펫은 같은 파티 좌표를 따른다', () => {
+  assert.match(uiSource, /drawNameTag\(ctx, x, y \+ 58, member\.name/);
+  assert.match(uiSource, /function drawRaidPet\(ctx, ownerX, ownerY, moving, owner = null\)/);
+  assert.match(uiSource, /const petId = owner\?\.activePet \|\| \(isMine\(owner\) \? g\?\.player\?\.activePet : ''\)/);
+  assert.match(uiSource, /positioned\.forEach\(\(\{ member, x, y \}\) => drawRaidPet\(ctx, x, y, moving, member\)\)/);
+  assert.match(uiSource, /const x = ownerX - 46/);
+  assert.match(gameSource, /\['petShopInterior', 'upgradeShopInterior', 'finalBossRoom', 'raidTower'\]/);
+  assert.match(multiplayerSource, /\['petShopInterior', 'upgradeShopInterior', 'raidTower'\]/);
 });
 
-test('몬스터는 이모티콘이 아니라 직접 그린 모델을 쓴다', () => {
-  assert.doesNotMatch(uiSource, /raid-monster-face/);
-  assert.match(uiSource, /id="raidMonsterCanvas"/);
-  assert.match(uiSource, /const MONSTER_PAINTERS = \{/);
-  // 1층에 나오는 네 마리 모두 그림이 있어야 한다.
-  ['guardBot', 'officeGhost', 'blackoutShade', 'towerWarden'].forEach((id) => {
-    assert.match(uiSource, new RegExp(`${id}\\(ctx, cx, cy, t`), `${id} 그림이 없다`);
-  });
-});
-
-test('전투 아래 패널이 일반 전투와 같은 구성이다', () => {
-  /* 공격 / 스킬 / 포기 세 가지. 도망 자리에 포기가 들어간다.
-     행동을 고른 뒤에야 문제가 나오는 것도 일반 전투와 같다. */
-  assert.match(uiSource, /data-raid-menu="attack"[\s\S]*?>공격</);
-  assert.match(uiSource, /data-raid-menu="skill"[\s\S]*?>스킬</);
-  assert.match(uiSource, /data-raid-menu="giveup"[\s\S]*?>포기</);
-  assert.match(uiSource, /class="combat-menu"/);
-  // 배운 액티브 스킬을 그대로 쓴다.
-  assert.match(uiSource, /call\('getLearnedActiveSkills'\)/);
-  assert.match(uiSource, /call\('getSkillCooldown', skill\.id\)/);
-  // 전투가 시작되면 문제가 아니라 행동 메뉴부터 나온다.
-  assert.match(uiSource, /question = null;\s*\/\/ 문제는 공격\/스킬을 고른 뒤에 나온다/);
-  // 포기는 한 번만 확인한다.
-  assert.match(uiSource, /정말로 포기하시겠습니까\?/);
-});
-
-test('로비 캐릭터는 배치 중에도 계속 제자리걸음을 한다', () => {
+test('대기실 캐릭터는 온라인 로비에서도 계속 제자리걸음한다', () => {
   assert.match(uiSource, /function startFormationAnimation\(memberById\)/);
-  assert.match(uiSource, /G\(\)\?\.modalState\?\.type !== 'raidFormation'/);
+  assert.match(uiSource, /\['raidFormation', 'raidNetworkLobby'\]\.includes\(modalType\)/);
   assert.match(uiSource, /paintAll\('\.raid-face', memberById, 1\.35, \{ moving:true \}\)/);
   assert.match(uiSource, /function stopFormationAnimation\(\)/);
   assert.match(uiSource, /function playTravelScene\(\) \{[\s\S]*?stopFormationAnimation\(\)/);
 });
 
-test('복도 이름표와 펫은 파티 캐릭터 좌표를 함께 쓴다', () => {
-  assert.match(uiSource, /drawNameTag\(ctx, x, y \+ 58, member\.name/);
-  assert.match(uiSource, /function drawRaidPet\(ctx, ownerX, ownerY, moving\)/);
-  assert.match(uiSource, /x = ownerX - 46/);
-  assert.match(uiSource, /playerPosition = positioned\.find\(\(\{ member \}\) => member\.isPlayer\)/);
-  assert.match(uiSource, /drawRaidPet\(ctx, playerPosition\.x, playerPosition\.y, moving\)/);
-
-  // 월드 좌표를 쓰는 공용 펫·원격 학생 레이어가 던전 위에 겹치면 안 된다.
-  assert.match(gameSource, /\['petShopInterior', 'upgradeShopInterior', 'finalBossRoom', 'raidTower'\]/);
-  assert.match(gameSource, /\['finalBossRoom', 'raidTower'\]/);
-  assert.match(multiplayerSource, /\['petShopInterior', 'upgradeShopInterior', 'raidTower'\]/);
+test('전투 패널은 일반 사냥처럼 공격·스킬·포기 뒤에 문제를 보여준다', () => {
+  assert.match(uiSource, /data-raid-menu="attack">공격</);
+  assert.match(uiSource, /data-raid-menu="skill">스킬</);
+  assert.match(uiSource, /data-raid-menu="giveup">포기</);
+  assert.match(uiSource, /class="combat-menu"/);
+  assert.match(uiSource, /call\('getLearnedActiveSkills'\)/);
+  assert.match(uiSource, /function raidSkillCooldown\(skillId\)/);
+  assert.match(uiSource, /question = null;\s*\/\/ 문제는 공격\/스킬을 고른 뒤에 나온다/);
+  assert.match(uiSource, /if \(networkSession\) \{[\s\S]*?publicRaidQuestion\(networkSession\.room\?\.question \|\| networkSession\.lastQuestion\)/);
+  assert.match(uiSource, /정말로 포기하시겠습니까\?/);
 });
 
-test('아군과 몬스터 모두 공격할 때 대기 모션을 끊고 전진한다', () => {
+test('답 제출 직후 입력 UI를 없애고 세 명의 결과를 기다린다', () => {
+  assert.match(uiSource, /function showPlaybackPanel\(message = '전투 중…'\)/);
+  assert.match(uiSource, /querySelector\('\.raid-combat > \.panel-card'\)/);
+  assert.match(uiSource, /panel\.innerHTML = `<h3>/);
+  assert.match(uiSource, /showPlaybackPanel\('답을 제출했습니다\. 다른 친구들의 답을 기다리는 중…'\)/);
+  assert.match(uiSource, /id="combatAnswer"/);
+  assert.match(uiSource, /data-answer-key=/);
+});
+
+test('아군과 몬스터는 공격할 때 앞으로 나가고 맞으면 흔들린다', () => {
   assert.match(uiSource, /\.raid-ally-sprite\.raid-party-lunge/);
   assert.match(uiSource, /\.raid-monster-sprite\.raid-monster-lunge/);
   assert.match(uiSource, /\.raid-ally-sprite\.raid-shake,\.raid-monster-sprite\.raid-shake/);
@@ -193,95 +271,86 @@ test('아군과 몬스터 모두 공격할 때 대기 모션을 끊고 전진한
   assert.match(uiSource, /lunge\(monsterNode, 'monster'\)/);
 });
 
-test('답 제출 뒤에는 전투 무대를 유지한 채 문제 입력 UI만 없앤다', () => {
-  assert.match(uiSource, /function showPlaybackPanel\(message = '전투 중…'\)/);
-  assert.match(uiSource, /querySelector\('\.raid-combat > \.panel-card'\)/);
-  assert.match(uiSource, /panel\.innerHTML = `<h3>/);
-  assert.match(uiSource, /showPlaybackPanel\('전투 중…'\);\s*\n\s*runRound/);
-  // 공용 2초 오답 복습기가 객관식·주관식 정답을 실제로 표시할 수 있는 마크업이다.
-  assert.match(uiSource, /data-answer-key=/);
-  assert.match(uiSource, /id="combatAnswer"/);
+test('던전 전투 규칙은 기절·더블 어택·힐·보호막·쿨타임을 실제 결과에 반영한다', () => {
+  assert.match(combatSource, /label:'더블 어택'/);
+  assert.match(combatSource, /doubleAttack:true/);
+  assert.match(combatSource, /addMonsterStatus\(monster, member, action, 'stun'/);
+  assert.match(combatSource, /monster\.stunTurns > 0/);
+  assert.match(combatSource, /kind:'party-heal'/);
+  assert.match(combatSource, /kind:'party-shield'/);
+  assert.match(combatSource, /member\.cooldowns\[action\.id\]/);
+  assert.match(uiSource, /\.raid-status-badge\.stun/);
+  assert.match(uiSource, /event\.kind === 'party-heal'/);
+  assert.match(uiSource, /event\.kind === 'party-shield'/);
 });
 
-test('공격 소리는 각자의 직업 소리를 쓴다', () => {
+test('직업 공격·스킬·회복 효과음은 매니페스트와 실제 재생 API를 쓴다', () => {
   assert.match(uiSource, /function attackAudioIdFor\(member\)/);
   assert.match(uiSource, /manifest\.classBasicSounds\?\.\[member\?\.klass\]/);
-  // 스킬을 골랐으면 그 스킬 소리를 쓴다.
   assert.match(uiSource, /manifest\.skillSounds\?\.\[skillId\]/);
-});
-
-test('효과음은 실제 API 이름(playMappedAudio)을 쓴다', () => {
-  /* 예전에 없는 이름(playAudioAssetV42)을 불러 소리가 나지 않았다. */
-  assert.doesNotMatch(uiSource, /playAudioAssetV42/);
   assert.match(uiSource, /global\.playMappedAudio === 'function'/);
+  assert.doesNotMatch(uiSource, /playAudioAssetV42/);
   assert.match(uiSource, /playAsset\('dungeonEncounter', 'hit'\)/);
+  assert.match(combatSource, /audioId:actionAudioId/);
 });
 
-test('몬스터를 쓰러뜨리면 문제와 행동 버튼이 사라진다', () => {
-  /* 마지막 일격 뒤에도 정답 버튼이 남아 있던 버그를 막는다. */
-  const submit = uiSource.match(/if \(result\.monsterDown\) \{[\s\S]*?\n      \}/)?.[0] || '';
-  assert.notEqual(submit, '');
-  assert.match(submit, /question = null;/);
-  assert.match(submit, /chosenAction = null;/);
-  assert.match(submit, /panelMode = 'playing';/);
-});
-
-test('전투 기록은 사냥터처럼 별도 상자 없이 h3 자리에서 바뀐다', () => {
-  // 사냥터 전투처럼 별도 로그 상자를 두지 않는다.
+test('몬스터와 세 캐릭터의 체력·보호막·상태를 전투 로그 한 줄씩 갱신한다', () => {
   assert.doesNotMatch(uiSource, /raid-log/);
-  assert.match(uiSource, /panelMessage = event\.text/);
-  // 체력은 이벤트마다 조금씩 따라간다(한 번에 확 줄지 않는다).
+  assert.match(uiSource, /panelMessage = event\.text \|\| ''/);
   assert.match(uiSource, /function applyEventToView\(event\)/);
-  assert.match(uiSource, /view\.monsterHp = Math\.max\(0, view\.monsterHp - \(event\.damage \|\| 0\)\)/);
-  // 진행 숫자(1/4 같은 표시)도 없앴다.
-  assert.doesNotMatch(uiSource, /raid-progress/);
-});
-
-test('전투 로그를 한 줄씩 순서대로 재생한다', () => {
-  /* 결과를 한 번에 보여 주지 않고, 일반 전투처럼 한 줄씩 쌓으며 소리를 낸다. */
+  assert.match(uiSource, /view\.monsterShield = Math\.max/);
+  assert.match(uiSource, /view\.monsterHp = Math\.max/);
+  assert.match(uiSource, /view\.memberShields\[event\.memberId\] = Math\.max/);
   assert.match(uiSource, /function playEvents\(events, onDone\)/);
-  /* 재생 중에는 창을 다시 열지 않고 값만 고친다.
-     창을 새로 열면 체력바가 매번 새로 만들어져 스르륵 줄어드는 연출이 죽는다. */
   assert.match(uiSource, /playEventSound\(event\);\s*\n\s*updateBattleView\(\);/);
-  assert.match(uiSource, /function updateBattleView\(\)/);
-  // 정답/오답을 먼저 알리고, 그 뒤에 각자의 공격이 순서대로 재생된다.
-  assert.match(uiSource, /playEvents\(\[opening, \.\.\.withSounds\]/);
-  // 재생 중에는 다음 답을 받지 않는다.
-  assert.match(uiSource, /isBusy:\(\) => busy/);
+  assert.match(uiSource, /let eventDelayMs = 1500/);
 });
 
-test('아바타는 진행 엔진을 통과해도 살아남는다', () => {
-  /* 예전에 createRun에서 appearance를 빠뜨려 셋이 모두 같은 차림으로 보였다. */
-  const runSource = readFileSync(join(root, 'src', 'raid-run.js'), 'utf8');
+test('오답은 정답을 보여준 뒤 절반 피해 로그와 함께 진행한다', () => {
+  assert.match(uiSource, /YuksamWrongAnswerReview\?\.reveal/);
+  assert.match(uiSource, /correctAnswer:answerEvent\.correctAnswer/);
+  assert.match(uiSource, /오답입니다! 정답은 \$\{correctAnswer \|\| '확인 중'\} \(피해가 절반만 들어갑니다\)/);
+  assert.match(uiSource, /correct:entry\.correct === true/);
+});
+
+test('몬스터는 이모티콘 대신 네 종류의 직접 그린 모델을 쓴다', () => {
+  assert.doesNotMatch(uiSource, /raid-monster-face/);
+  assert.match(uiSource, /id="raidMonsterCanvas"/);
+  assert.match(uiSource, /const MONSTER_PAINTERS = \{/);
+  for (const id of ['guardBot', 'officeGhost', 'blackoutShade', 'towerWarden']) {
+    assert.match(uiSource, new RegExp(`${id}\\(ctx, cx, cy, t`), `${id} 그림 함수가 필요하다`);
+  }
+});
+
+test('던전 전용 음악은 던전 맵에서만 재생된다', () => {
+  const manifest = read('src/audio-manifest.js');
+  assert.match(manifest, /dungeonBgm: \{ src:'assets\/1\. 던전 음악\.mp3'/);
+  assert.match(uiSource, /if \(g && g\.currentMap === MAP_KEY\) \{[\s\S]*?ensureDungeonAudio\(\)/);
+  assert.match(uiSource, /global\.syncAudioFileBgm = function syncAudioFileBgmWithRaid/);
+});
+
+test('아바타·장비·코스튬·펫·쿨타임 상태는 진행 엔진과 서버 스냅샷을 통과한다', () => {
   assert.match(runSource, /appearance:member\.appearance \|\| null/);
   assert.match(runSource, /equipment:member\.equipment \|\| null/);
-  // 던전 맵에서도 각자 아바타로 그린다.
-  assert.match(uiSource, /member\.appearance \|\| \{\}/);
+  assert.match(runSource, /costume:member\.costume \|\| null/);
+  assert.match(runSource, /activePet:member\.activePet \|\| ''/);
+  assert.match(runSource, /cooldowns:copyNumberMap/);
+  assert.match(uiSource, /appearance:\{ \.\.\.\(profile\.appearance \|\| \{\}\) \}/);
+  assert.match(uiSource, /activePet:profile\.activePet \|\| ''/);
 });
 
-test('던전에 갇히지 않도록 세 겹으로 막는다', () => {
-  /* 던전 안에서 게임을 끄면 저장된 맵이 raidTower로 남아 다시 접속했을 때
-     아무것도 할 수 없는 곳에 갇힌다. 실제로 났던 버그다. */
-  // 1) 애초에 던전을 저장하지 않는다
+test('온라인 세션도 포함해 던전 갇힘과 이탈을 정리한다', () => {
   assert.match(uiSource, /global\.savePlayer = function savePlayerWithoutRaidMap/);
   assert.match(uiSource, /if \(player && player\.map === MAP_KEY\)/);
-  // 2) 그래도 던전에서 시작하면 자동으로 마을로 내보낸다
-  assert.match(uiSource, /function rescueIfStranded\(\)/);
-  assert.match(uiSource, /if \(!g \|\| g\.currentMap !== MAP_KEY \|\| active\) return;/);
+  assert.match(uiSource, /if \(!g \|\| g\.currentMap !== MAP_KEY \|\| active \|\| networkSession\) return/);
   assert.match(uiSource, /global\.showScreen = function showScreenWithRaidGuard/);
-  // 3) 던전 안에서 언제든 나갈 수 있다
-  assert.match(uiSource, /toggleReturnButton\(true\)/);
-  // 전투 중에는 행동 메뉴의 '포기'가 탈출구다(모달이 화면을 덮기 때문).
-  assert.match(uiSource, /data-raid-menu="giveup"/);
-  assert.match(uiSource, /function confirmGiveUp\(\)/);
-  // 마을 귀환 버튼을 눌렀을 때도 던전 상태를 함께 정리한다
   assert.match(uiSource, /global\.returnTown = function returnTownWithRaidCleanup/);
+  assert.match(uiSource, /session\.client\.leave\(session\.room\.id\)/);
   assert.match(uiSource, /function abandonRun\(\)/);
+  assert.match(uiSource, /toggleReturnButton\(true\)/);
 });
 
-test('로딩 연출이 끝난 뒤에 창을 연다', () => {
-  /* showLoadingTransition은 콜백 뒤에도 modalState를 'loading'으로 덮어쓴다.
-     그 안에서 창을 열면 modalState가 지워져 조작이 먹히지 않는다. */
-  assert.match(uiSource, /const LOADING_TAIL_MS = \d+;/);
+test('로딩 전환이 끝난 뒤에만 다음 던전 화면을 연다', () => {
+  assert.match(uiSource, /const LOADING_TAIL_MS = \d+/);
   assert.match(uiSource, /global\.setTimeout\(\(\) => onReady\?\.\(\), LOADING_TAIL_MS\)/);
 });

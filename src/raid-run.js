@@ -14,6 +14,59 @@
   'use strict';
 
   const rules = () => global.YuksamRaidRules;
+  const combatRules = () => global.YuksamRaidCombatRules;
+
+  function copyNumberMap(source) {
+    const result = {};
+    if (!source || typeof source !== 'object' || Array.isArray(source)) return result;
+    Object.entries(source).forEach(([key, value]) => {
+      const safe = Math.max(0, Math.trunc(Number(value) || 0));
+      if (safe > 0) result[String(key)] = safe;
+    });
+    return result;
+  }
+
+  function cloneMemberState(member) {
+    const engine = combatRules();
+    const normalized = engine?.normalizeMember ? engine.normalizeMember(member) : {
+        ...member,
+        skills:copyNumberMap(member?.skills),
+        cooldowns:copyNumberMap(member?.cooldowns || member?.skillCooldowns),
+        shield:Math.max(0, Math.trunc(Number(member?.shield) || 0)),
+        statuses:{ ...(member?.statuses || member?.ailments || {}) },
+        buffs:{ ...(member?.buffs || member?.combatBuffs || {}) },
+        chargeActive:member?.chargeActive === true,
+        bastionUsed:member?.bastionUsed === true,
+      };
+    return {
+      ...normalized,
+      appearance:normalized.appearance ? { ...normalized.appearance } : normalized.appearance,
+      equipment:normalized.equipment ? { ...normalized.equipment } : normalized.equipment,
+      costume:normalized.costume ? { ...normalized.costume } : normalized.costume,
+    };
+  }
+
+  function snapshotMember(member) {
+    return {
+      ...member,
+      appearance:member.appearance ? { ...member.appearance } : member.appearance,
+      equipment:member.equipment ? { ...member.equipment } : member.equipment,
+      costume:member.costume ? { ...member.costume } : member.costume,
+      skills:{ ...(member.skills || {}) },
+      cooldowns:{ ...(member.cooldowns || {}) },
+      statuses:{ ...(member.statuses || {}) },
+      buffs:{ ...(member.buffs || {}) },
+    };
+  }
+
+  function snapshotMonster(monster) {
+    if (!monster) return null;
+    return {
+      ...monster,
+      shadowBySource:{ ...(monster.shadowBySource || {}) },
+      pattern:Array.isArray(monster.pattern) ? [...monster.pattern] : monster.pattern,
+    };
+  }
 
   /* 장면(phase)
      - formation : 대형을 정하는 중
@@ -31,20 +84,31 @@
     if (!floorDef) throw new Error(`아직 열리지 않은 층입니다: ${floor}`);
 
     const encounters = R.floorEncounters(floor);
-    const roster = members.map((member) => ({
+    const roster = members.map((member) => cloneMemberState({
       id:String(member.id),
       name:String(member.name || '동료'),
       klass:member.klass || 'warrior',
       spec:member.spec || '',
       slot:member.slot || 'middle',
+      level:Math.max(1, Math.floor(Number(member.level) || 1)),
       maxHp:Math.max(1, Math.floor(Number(member.maxHp) || 1)),
       hp:Math.max(1, Math.floor(Number(member.hp ?? member.maxHp) || 1)),
       attack:Math.max(1, Math.floor(Number(member.attack) || 1)),
+      defense:Math.max(0, Math.floor(Number(member.defense) || 0)),
       isPlayer:member.isPlayer === true,
       /* 겉모습은 계산에 쓰이지 않지만 화면이 실제 아바타를 그리려면 반드시 함께 넘겨야 한다.
          예전에 여기서 빠뜨려 셋이 모두 같은 기본 차림으로 보였다. */
       appearance:member.appearance || null,
       equipment:member.equipment || null,
+      costume:member.costume || null,
+      activePet:member.activePet || '',
+      skills:member.skills,
+      cooldowns:member.cooldowns || member.skillCooldowns,
+      shield:member.shield,
+      statuses:member.statuses || member.ailments,
+      buffs:member.buffs || member.combatBuffs,
+      chargeActive:member.chargeActive,
+      bastionUsed:member.bastionUsed,
     }));
 
     const state = {
@@ -74,7 +138,7 @@
     function spawnMonster() {
       const def = currentEncounter();
       if (!def) return null;
-      state.monster = {
+      const monsterState = {
         id:def.id,
         name:def.name,
         level:def.level,
@@ -85,6 +149,10 @@
         isBoss:def.isBoss === true,
         desc:def.desc,
       };
+      const engine = combatRules();
+      state.monster = engine?.normalizeMonster ? engine.normalizeMonster(monsterState) : monsterState;
+      if (engine?.resetMonsterForEncounter) engine.resetMonsterForEncounter(state.monster);
+      if (engine?.resetMemberForEncounter) state.members.forEach((member) => engine.resetMemberForEncounter(member));
       state.round = 0;
       return state.monster;
     }
@@ -145,6 +213,51 @@
       }
 
       const events = [];
+
+      /* 예전 혼자 연습 모드는 { id:true/false }를 보냈다. 실제 3인 방은
+         { id:{ correct, actionId } }를 보내며, 이때부터 각 학생의 스킬과
+         상태를 서로 섞이지 않게 독립적으로 계산한다. */
+      const structured = Object.values(answers || {}).some((entry) => (
+        entry && typeof entry === 'object' && !Array.isArray(entry)
+      ));
+      if (structured) {
+        const kind = R.attackKindForRound(state.monster, state.round);
+        const resolved = R.resolvePartyCombatRound({
+          members:state.members,
+          monster:state.monster,
+          submissions:answers,
+          attackKind:kind,
+          monsterAttack:state.monster.attack,
+          rng,
+        });
+        if (!resolved.ok) return resolved;
+        events.push(...(resolved.events || []));
+
+        if (resolved.monsterDown || R.isMonsterDown(state.monster)) {
+          if (!events.some((event) => event.kind === 'monster-down')) {
+            events.push({ kind:'monster-down', text:`${state.monster.name}을(를) 쓰러뜨렸습니다!` });
+          }
+          state.log.push(...events);
+          state.encounterIndex += 1;
+          const more = state.encounterIndex < encounters.length;
+          state.monster.dying = true;
+          state.phase = more ? 'travel' : 'cleared';
+          if (!more) state.finishedAt = Date.now();
+          return { ok:true, events, monsterDown:true, cleared:!more };
+        }
+
+        state.round += 1;
+        const wiped = resolved.partyWiped || R.isPartyWiped(state.members);
+        if (wiped) {
+          state.phase = 'wiped';
+          state.finishedAt = Date.now();
+          if (!events.some((event) => event.kind === 'wiped')) {
+            events.push({ kind:'wiped', text:'파티가 전멸했습니다...' });
+          }
+        }
+        state.log.push(...events);
+        return wiped ? { ok:true, events, wiped:true } : { ok:true, events, attackKind:kind };
+      }
 
       // 1) 파티가 때린다. 각자 빗나감·치명타가 따로 판정된다.
       const attack = R.resolvePartyAttack({ members:state.members, answers, rng });
@@ -269,11 +382,109 @@
         round:state.round,
         encounterIndex:state.encounterIndex,
         encounterTotal:encounters.length,
-        members:state.members.map((m) => ({ ...m })),
-        monster:state.monster ? { ...state.monster } : null,
-        reward:state.reward,
+        members:state.members.map(snapshotMember),
+        monster:snapshotMonster(state.monster),
+        reward:state.reward ? { ...state.reward } : state.reward,
         aliveCount:livingMembers().length,
+        finishedAt:state.finishedAt,
       };
+    }
+
+    /* 방장이 보낸 전투 스냅샷을 참가자의 로컬 진행 엔진에 반영한다.
+       네트워크는 일부 필드만 보내기도 하므로 빠진 값은 현재 값을 유지한다.
+       특히 isPlayer는 각 브라우저마다 다르고, 외형 자료는 메시지를 가볍게
+       만들기 위해 생략될 수 있으므로 함부로 지우지 않는다. */
+    function importSnapshot(next = {}) {
+      if (!next || typeof next !== 'object' || Array.isArray(next)) {
+        return { ok:false, reason:'올바르지 않은 던전 상태입니다.' };
+      }
+      if (Object.prototype.hasOwnProperty.call(next, 'floor') && Number(next.floor) !== state.floor) {
+        return { ok:false, reason:'다른 층의 던전 상태는 불러올 수 없습니다.' };
+      }
+      if (Object.prototype.hasOwnProperty.call(next, 'phase') && !PHASES.includes(next.phase)) {
+        return { ok:false, reason:'알 수 없는 던전 진행 상태입니다.' };
+      }
+      if (Object.prototype.hasOwnProperty.call(next, 'members') && !Array.isArray(next.members)) {
+        return { ok:false, reason:'파티원 상태가 올바르지 않습니다.' };
+      }
+      if (Object.prototype.hasOwnProperty.call(next, 'monster')
+        && next.monster !== null
+        && (typeof next.monster !== 'object' || Array.isArray(next.monster))) {
+        return { ok:false, reason:'몬스터 상태가 올바르지 않습니다.' };
+      }
+
+      let importedMembers = state.members;
+      if (Array.isArray(next.members)) {
+        const currentById = new Map(state.members.map((member) => [String(member.id), member]));
+        const incomingIds = new Set();
+        const updates = [];
+        for (const incoming of next.members) {
+          if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) {
+            return { ok:false, reason:'파티원 상태가 올바르지 않습니다.' };
+          }
+          const id = String(incoming.id || '');
+          if (!id || incomingIds.has(id)) {
+            return { ok:false, reason:'파티원 식별 정보가 올바르지 않습니다.' };
+          }
+          incomingIds.add(id);
+          const current = currentById.get(id);
+          const merged = { ...(current || {}), ...incoming, id };
+          for (const key of ['appearance', 'equipment', 'costume', 'activePet']) {
+            if (!Object.prototype.hasOwnProperty.call(incoming, key) && current) merged[key] = current[key];
+          }
+          if (current) merged.isPlayer = current.isPlayer === true;
+          updates.push(cloneMemberState(merged));
+        }
+
+        /* 일반 스냅샷은 세 명 전부를 보내므로 방장의 순서를 따른다.
+           일부만 온 갱신은 기존 파티원을 남겨 둔 채 해당 학생만 교체한다. */
+        if (updates.length === R.PARTY_SIZE || next.replaceMembers === true) {
+          importedMembers = updates.slice(0, R.PARTY_SIZE);
+        } else {
+          const updateById = new Map(updates.map((member) => [member.id, member]));
+          importedMembers = state.members.map((member) => updateById.get(member.id) || member);
+          updates.forEach((member) => {
+            if (!currentById.has(member.id) && importedMembers.length < R.PARTY_SIZE) importedMembers.push(member);
+          });
+        }
+      }
+
+      let importedMonster = state.monster;
+      if (Object.prototype.hasOwnProperty.call(next, 'monster')) {
+        if (next.monster === null) {
+          importedMonster = null;
+        } else {
+          const merged = { ...(state.monster || {}), ...next.monster };
+          if (!Object.prototype.hasOwnProperty.call(next.monster, 'shadowBySource') && state.monster) {
+            merged.shadowBySource = state.monster.shadowBySource;
+          }
+          const engine = combatRules();
+          importedMonster = engine?.normalizeMonster
+            ? engine.normalizeMonster(merged)
+            : snapshotMonster(merged);
+        }
+      }
+
+      const importedRound = Object.prototype.hasOwnProperty.call(next, 'round')
+        ? Math.max(0, Math.floor(Number(next.round) || 0))
+        : state.round;
+      const importedEncounterIndex = Object.prototype.hasOwnProperty.call(next, 'encounterIndex')
+        ? Math.max(0, Math.min(encounters.length, Math.floor(Number(next.encounterIndex) || 0)))
+        : state.encounterIndex;
+
+      state.members = importedMembers;
+      state.monster = importedMonster;
+      state.round = importedRound;
+      state.encounterIndex = importedEncounterIndex;
+      if (Object.prototype.hasOwnProperty.call(next, 'phase')) state.phase = next.phase;
+      if (typeof next.title === 'string' && next.title) state.title = next.title;
+      if (next.reward && typeof next.reward === 'object' && !Array.isArray(next.reward)) {
+        state.reward = { ...next.reward };
+      }
+      if (Object.prototype.hasOwnProperty.call(next, 'finishedAt')) {
+        state.finishedAt = next.finishedAt == null ? null : Number(next.finishedAt) || null;
+      }
+      return { ok:true, snapshot:snapshot() };
     }
 
     return Object.freeze({
@@ -283,6 +494,7 @@
       resolveRound,
       rollAllyAnswers,
       snapshot,
+      importSnapshot,
       get phase() { return state.phase; },
       get log() { return state.log.slice(); },
       get members() { return state.members; },

@@ -294,6 +294,20 @@
     return !monster || Number(monster.hp) <= 0;
   }
 
+  /* 스킬이 포함된 실제 3인 전투는 별도의 순수 계산 모듈에 맡긴다.
+     raid-rules의 자리 배율과 표적 선택 규칙은 주입해서 한 벌만 유지한다. */
+  function resolvePartyCombatRound(options = {}) {
+    const engine = global.YuksamRaidCombatRules;
+    if (!engine || typeof engine.resolveRound !== 'function') {
+      return { ok:false, reason:'던전 전투 규칙을 불러오지 못했습니다.', events:[] };
+    }
+    const result = engine.resolveRound({
+      ...options,
+      raidRules:{ damageMultiplier, pickTarget, SINGLE_TARGET_BONUS },
+    });
+    return { ok:true, ...result };
+  }
+
   global.YuksamRaidRules = Object.freeze({
     SLOTS,
     SLOT_LABEL,
@@ -326,5 +340,6 @@
     allyAnswersCorrectly,
     isPartyWiped,
     isMonsterDown,
+    resolvePartyCombatRound,
   });
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -723,6 +723,7 @@ window.getLocalPvpProfileV1 = function getLocalPvpProfileV1() {
     maxHp:maxHpForPlayer(player),
     hp:maxHpForPlayer(player),
     shield:0,
+    primaryStat:Math.max(1, Math.round(Number(attackStat) || 1)),
     attack:Math.max(1, Math.round((Number(attackStat) || 1) / 2)),
     defense:Math.max(0, Math.round(Number(stats.방어) || 0)),
     map:game.currentMap,

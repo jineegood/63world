@@ -40,6 +40,35 @@
   let formationAnimationFrame = null;
   let formationAnimationToken = 0;
   let raidPetAnchor = null;
+  let networkSession = null;
+  let raidPartyClient = null;
+  let networkUnsubscribe = null;
+  let networkHeartbeatTimer = null;
+  let networkRefreshPending = false;
+  let networkDraftPlacement = {};
+  let networkSelectedMemberId = null;
+  let networkStarting = false;
+
+  function raidIdentity() {
+    return global.getPvpIdentityV1?.() || global.secureStudentAccessV2?.getIdentity?.() || null;
+  }
+
+  function isMine(member) {
+    const userId = networkSession ? String(raidIdentity()?.userId || '') : '';
+    return userId ? String(member?.id || '') === userId : member?.isPlayer === true;
+  }
+
+  function getRaidPartyClient() {
+    if (raidPartyClient) return raidPartyClient;
+    const access = global.secureStudentAccessV2;
+    const client = access?.getClient?.();
+    if (!client || !raidIdentity() || typeof global.YuksamRaidPartyClient?.create !== 'function') return null;
+    raidPartyClient = global.YuksamRaidPartyClient.create({
+      client,
+      getIdentity:() => raidIdentity(),
+    });
+    return raidPartyClient;
+  }
 
   /* ---------- 스타일 ---------- */
 
@@ -50,6 +79,22 @@
     style.textContent = `
       .raid-hint{font-size:12px;color:#9fb3cd;margin-top:2px}
       .raid-error{font-size:13px;color:#fca5a5;margin-top:6px}
+      .raid-room-head{display:flex;align-items:center;justify-content:space-between;gap:12px;
+        margin-bottom:10px;padding:10px 14px;border-radius:13px;background:rgba(14,36,61,.86);
+        border:1px solid rgba(125,211,252,.28)}
+      .raid-room-code{display:inline-flex;align-items:center;gap:9px;color:#bae6fd;font-size:14px}
+      .raid-room-code strong{font-size:30px;letter-spacing:7px;color:#fde68a;font-variant-numeric:tabular-nums}
+      .raid-room-count{font-size:18px;font-weight:900;color:#e0f2fe}
+      .raid-room-wait{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0}
+      .raid-room-member{min-height:170px;border:1px solid rgba(148,163,184,.35);border-radius:14px;
+        padding:8px;text-align:center;background:rgba(15,23,42,.78);display:flex;flex-direction:column;
+        align-items:center;justify-content:center;gap:4px}
+      .raid-room-member.empty{border-style:dashed;color:#64748b;font-weight:800;font-size:15px}
+      .raid-room-member.ready{border-color:#4ade80;box-shadow:0 0 0 2px rgba(74,222,128,.2)}
+      .raid-room-member canvas{display:block}
+      .raid-room-status{text-align:center;min-height:24px;color:#cbd5e1;font-weight:700;margin:8px 0}
+      .raid-room-status.good{color:#86efac}.raid-room-status.warn{color:#fde68a}
+      .raid-room-actions{display:flex;align-items:center;justify-content:center;gap:9px;flex-wrap:wrap}
 
       /* 대형 화면 — 위 세 자리, 아래 대기칸 */
       .raid-posts{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:12px 0 16px}
@@ -111,6 +156,13 @@
       .raid-combat .combat-hpbox.monster{right:5%;top:auto;bottom:16px;min-width:250px}
       .raid-next-hint{font-size:11px;color:#9fb3cd;margin-top:3px}
       .raid-next-hint.warn{color:#fbbf24;font-weight:800}
+      .raid-status-row{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+      .raid-status-badge{display:inline-flex;padding:2px 6px;border-radius:999px;font-size:10px;
+        font-weight:900;background:rgba(30,41,59,.92);border:1px solid rgba(148,163,184,.45);color:#e2e8f0}
+      .raid-status-badge.stun{border-color:#fde047;color:#fef08a}
+      .raid-status-badge.chill{border-color:#67e8f9;color:#a5f3fc}
+      .raid-status-badge.shadow{border-color:#c084fc;color:#e9d5ff}
+      .raid-shield-text{color:#93c5fd;font-weight:900;margin-left:5px}
 
       /* 피해 숫자와 피격 연출 — 사냥터 전투와 같은 감각 */
       .raid-float-layer{position:absolute;inset:0;pointer-events:none;z-index:12}
@@ -119,6 +171,7 @@
       .raid-float.damage{color:#fb7185}
       .raid-float.crit{color:#fbbf24;font-size:34px}
       .raid-float.heal{color:#4ade80}
+      .raid-float.shield{color:#93c5fd}
       .raid-float.miss{color:#cbd5e1;font-size:20px}
       @keyframes raidFloatUp{
         0%{opacity:0;transform:translate(-50%,8px) scale(.7)}
@@ -193,20 +246,65 @@
         slot:'front', maxHp, hp:maxHp, attack, isPlayer:true,
         appearance:player.appearance,
         equipment:player.equipment,
+        costume:player.costume,
+        skills:{ ...(player.skills || {}) },
+        cooldowns:{ ...(player.skillCooldowns || {}) },
+        activePet:player.activePet || '',
       },
       {
         id:'ally_guard', name:'훈련병 도윤', klass:'warrior', spec:'방어',
         slot:'middle', maxHp:Math.round(maxHp * 1.15), hp:Math.round(maxHp * 1.15),
         attack:Math.max(3, Math.round(attack * 0.85)),
+        skills:{ warrior_basic_guard:1 },
         appearance:ALLY_LOOKS.ally_guard,
       },
       {
         id:'ally_priest', name:'수련사제 하린', klass:'priest', spec:'신성',
         slot:'back', maxHp:Math.round(maxHp * 0.85), hp:Math.round(maxHp * 0.85),
         attack:Math.max(3, Math.round(attack * 0.8)),
+        skills:{ priest_holy_absorb_v24:1 },
         appearance:ALLY_LOOKS.ally_priest,
       },
     ];
+  }
+
+  function roomMemberToCombatMember(row) {
+    const profile = row?.profile || row?.profile_snapshot || {};
+    const state = row?.state || row?.combat_state || {};
+    const id = String(row?.userId || row?.user_id || profile.userId || '');
+    const maxHp = Math.max(1, Math.floor(Number(state.maxHp ?? profile.maxHp) || 1));
+    const hp = Math.max(0, Math.min(maxHp, Math.floor(Number(state.hp ?? profile.hp ?? maxHp) || 0)));
+    return {
+      id,
+      name:String(profile.name || '학생'),
+      klass:profile.className || profile.klass || 'warrior',
+      spec:profile.spec || '',
+      level:Math.max(1, Math.floor(Number(profile.level) || 1)),
+      slot:row?.slot || 'middle',
+      maxHp,
+      hp,
+      shield:Math.max(0, Math.floor(Number(state.shield ?? profile.shield) || 0)),
+      // PvP 프로필의 attack은 이미 주 능력치의 절반이다. 던전 순수 계산기는
+      // 사냥터와 같이 원래 주 능력치를 받아 내부에서 30~70%를 굴린다.
+      attack:Math.max(1, Math.floor(Number(profile.primaryStat) || Number(profile.attack) * 2 || 1)),
+      defense:Math.max(0, Math.floor(Number(profile.defense) || 0)),
+      skills:{ ...(profile.skills || {}) },
+      cooldowns:{ ...(state.cooldowns || profile.cooldowns || {}) },
+      statuses:{ ...(state.statuses || {}) },
+      buffs:{ ...(state.buffs || {}) },
+      appearance:{ ...(profile.appearance || {}) },
+      equipment:{ ...(profile.equipment || {}) },
+      costume:{ ...(profile.costume || {}) },
+      activePet:profile.activePet || '',
+      isPlayer:id === String(raidIdentity()?.userId || ''),
+    };
+  }
+
+  function roomMembers() {
+    return (networkSession?.members || [])
+      .filter((row) => row && row.active !== false)
+      .sort((a, b) => Number(a.joinOrder || a.join_order || 0) - Number(b.joinOrder || b.join_order || 0))
+      .map(roomMemberToCombatMember);
   }
 
   /* 캔버스 하나에 캐릭터 한 명을 그린다. 대형 화면과 전투 화면이 함께 쓴다. */
@@ -226,7 +324,7 @@
         canvas.height * 0.62,
         member.appearance || {},
         member.klass || 'warrior',
-        { attack:Number(spriteState?.attack) || 0, moving, equipment:member.equipment },
+        { attack:Number(spriteState?.attack) || 0, moving, equipment:member.equipment, costume:member.costume },
         scale,
         member.spec || null,
       );
@@ -257,7 +355,9 @@
     const token = formationAnimationToken;
     let lastPaintAt = 0;
     const frame = (now = Date.now()) => {
-      if (token !== formationAnimationToken || !active || G()?.modalState?.type !== 'raidFormation') {
+      const modalType = G()?.modalState?.type;
+      if (token !== formationAnimationToken || (!active && !networkSession)
+        || !['raidFormation', 'raidNetworkLobby'].includes(modalType)) {
         formationAnimationFrame = null;
         return;
       }
@@ -275,9 +375,605 @@
   /* ---------- 문제 ---------- */
 
   function pickQuestion() {
-    const list = (call('getQuestions') || []).filter((q) => q && q.q && q.answer != null);
-    if (!list.length) return { q:'7 + 5 = ?', choices:['10', '11', '12', '13'], answer:'12' };
-    return list[Math.floor(Math.random() * list.length)];
+    const selected = global.YuksamCombatRules?.selectEnabledQuestion?.(
+      call('getWorkbooks') || [],
+      call('getQuestions') || [],
+      Math.random,
+    );
+    if (selected) return selected;
+    return { q:'7 + 5 = ?', choices:['10', '11', '12', '13'], answer:'12' };
+  }
+
+  /* ---------- 실제 3인 파티 방 ---------- */
+
+  function setNetworkData(data, { initial = false } = {}) {
+    if (!networkSession || !data) return;
+    if (data.room) networkSession.room = data.room;
+    if (Array.isArray(data.members)) networkSession.members = data.members;
+    if (networkSession.room?.question) {
+      networkSession.lastQuestion = publicRaidQuestion(networkSession.room.question);
+      question = networkSession.lastQuestion;
+      if (active?.phase === 'battle' && !busy && panelMode === 'playing') {
+        panelMode = 'menu';
+        panelMessage = '무엇을 할까?';
+        renderBattle();
+      }
+    }
+    const events = Array.isArray(data.events) ? data.events : [];
+    if (initial) {
+      networkSession.lastSequence = events.reduce(
+        (maximum, row) => Math.max(maximum, Number(row?.sequenceNo || row?.sequence_no) || 0),
+        Number(networkSession.lastSequence) || 0,
+      );
+    } else {
+      handleNetworkEvents(events);
+    }
+    networkSession.submissions = Array.isArray(data.submissions) ? data.submissions : [];
+
+    const phase = networkSession.room?.phase || 'lobby';
+    if (phase === 'cancelled') {
+      stopNetworkTransport();
+      call('openModal', `
+        <h2>던전 도전 종료</h2>
+        <div class="panel-card">
+          <p>파티원이 방을 나가 이번 도전이 종료되었습니다.</p>
+          <div class="raid-actions"><button class="primary" id="raidCancelledDoneBtn">마을로 돌아가기</button></div>
+        </div>
+      `, { type:'raidResult', pause:true });
+      const done = global.document.getElementById('raidCancelledDoneBtn');
+      if (done) done.onclick = () => leaveNetworkRoom({ returnToTown:G()?.currentMap === MAP_KEY });
+      return;
+    }
+    if (phase === 'lobby') {
+      renderNetworkLobby();
+      return;
+    }
+    if (!active && !networkStarting) beginNetworkRun();
+    if (phase === 'resolving') maybeResolveNetworkRound();
+  }
+
+  async function refreshNetworkRoom() {
+    if (!networkSession || networkRefreshPending) return;
+    const session = networkSession;
+    networkRefreshPending = true;
+    try {
+      const data = await session.client.sync(session.room.id, session.lastSequence || 0);
+      if (networkSession !== session) return;
+      setNetworkData(data);
+    } catch (error) {
+      if (networkSession === session && session.room?.phase === 'lobby') {
+        renderNetworkLobby(error?.message || '방 정보를 다시 불러오는 중입니다.');
+      }
+    } finally {
+      networkRefreshPending = false;
+    }
+  }
+
+  function stopNetworkTransport() {
+    if (networkUnsubscribe) {
+      try { networkUnsubscribe(); } catch (_) {}
+      networkUnsubscribe = null;
+    }
+    if (networkHeartbeatTimer) {
+      global.clearInterval(networkHeartbeatTimer);
+      networkHeartbeatTimer = null;
+    }
+  }
+
+  function startNetworkTransport() {
+    stopNetworkTransport();
+    if (!networkSession) return;
+    const session = networkSession;
+    networkUnsubscribe = session.client.subscribe(session.room.id, () => refreshNetworkRoom(), refreshNetworkRoom);
+    networkHeartbeatTimer = global.setInterval(async () => {
+      if (networkSession !== session) return;
+      try {
+        const data = await session.client.heartbeat(session.room.id, session.lastSequence || 0);
+        if (networkSession === session) setNetworkData(data);
+      } catch (_) { /* 다음 heartbeat/sync에서 다시 이어진다. */ }
+    }, 3000);
+  }
+
+  function resetNetworkSession() {
+    stopNetworkTransport();
+    networkSession = null;
+    networkDraftPlacement = {};
+    networkSelectedMemberId = null;
+    networkStarting = false;
+    soloMode = true;
+  }
+
+  async function leaveNetworkRoom({ returnToTown = false } = {}) {
+    const session = networkSession;
+    resetNetworkSession();
+    if (session) {
+      try { await session.client.leave(session.room.id); } catch (_) {}
+    }
+    active = null;
+    question = null;
+    busy = false;
+    call('closeModal');
+    if (returnToTown && G()?.currentMap === MAP_KEY) leaveDungeonMap();
+  }
+
+  async function openNetworkLobby(options = {}) {
+    ensureStyles();
+    const client = getRaidPartyClient();
+    if (!client) {
+      call('toast', '로그인한 학생 3명이 있어야 던전에 들어갈 수 있습니다.');
+      return false;
+    }
+
+    call('openModal', `
+      <h2>63빌딩 던전</h2>
+      <div class="panel-card"><p class="raid-room-status">실시간 대기실에 연결하는 중…</p></div>
+    `, { type:'raidNetworkLobby', pause:true });
+
+    try {
+      await global.flushLocalPlayerForPvpV1?.();
+      const data = options.mode === 'join'
+        ? await client.join({ code:String(options.code || '') })
+        : await client.create({ floorGroup:Number(options.floorGroup) || 1 });
+      if (!data?.room?.id) throw new Error('대기실 정보를 받지 못했습니다.');
+      resetNetworkSession();
+      soloMode = false;
+      networkSession = {
+        client,
+        room:data.room,
+        members:Array.isArray(data.members) ? data.members : [],
+        submissions:[],
+        lastSequence:0,
+        handledRounds:new Set(),
+        resolvingRounds:new Set(),
+      };
+      setNetworkData(data, { initial:true });
+      startNetworkTransport();
+      return true;
+    } catch (error) {
+      call('openModal', `
+        <h2>대기실 연결 실패</h2>
+        <div class="panel-card">
+          <p class="raid-error">${esc(error?.message || '던전 서버에 연결하지 못했습니다.')}</p>
+          <div class="raid-actions"><button class="primary" id="raidEntryRetryBtn">입장 화면으로</button></div>
+        </div>
+      `, { type:'raidNetworkLobby', pause:true });
+      const retry = global.document.getElementById('raidEntryRetryBtn');
+      if (retry) retry.onclick = () => global.YuksamRaidEntryUi?.open?.();
+      return false;
+    }
+  }
+
+  function networkMemberCanvas(member) {
+    return `<canvas class="raid-face" data-member="${esc(member.id)}" width="116" height="116"></canvas>`;
+  }
+
+  function networkPlacementFor(roster) {
+    const ids = new Set(roster.map((member) => member.id));
+    Object.keys(networkDraftPlacement).forEach((id) => { if (!ids.has(id)) delete networkDraftPlacement[id]; });
+    roster.forEach((member) => {
+      if (!Object.hasOwn(networkDraftPlacement, member.id)) networkDraftPlacement[member.id] = member.slot || null;
+      if (member.slot) networkDraftPlacement[member.id] = member.slot;
+    });
+    return networkDraftPlacement;
+  }
+
+  function renderNetworkLobby(message = '') {
+    if (!networkSession || networkSession.room?.phase !== 'lobby') return;
+    ensureStyles();
+    const R = rules();
+    const roster = roomMembers();
+    const placement = networkPlacementFor(roster);
+    const me = String(raidIdentity()?.userId || '');
+    const host = String(networkSession.room.hostId || '') === me;
+    const memberById = (id) => roster.find((member) => member.id === id) || null;
+    const rowById = (id) => (networkSession.members || []).find(
+      (row) => String(row.userId || row.user_id || '') === String(id),
+    );
+    const inSlot = (slot) => roster.find((member) => placement[member.id] === slot) || null;
+    const waiting = roster.filter((member) => !placement[member.id]);
+    const seated = roster.length === 3 && R.SLOTS.every((slot) => !!inSlot(slot));
+    const savedFormation = seated && roster.every((member) => rowById(member.id)?.slot === placement[member.id]);
+    const allReady = roster.length === 3 && roster.every((member) => rowById(member.id)?.ready === true);
+    const myReady = rowById(me)?.ready === true;
+
+    if (!networkSelectedMemberId || !memberById(networkSelectedMemberId)) {
+      networkSelectedMemberId = roster[0]?.id || null;
+    }
+
+    const slotHtml = (slot) => {
+      const member = inSlot(slot);
+      const label = esc(R.slotLabel(slot));
+      if (!member) return `
+        <div class="raid-post empty" data-slot="${slot}">
+          <div class="raid-post-title">${label}</div>
+          ${host && roster.length === 3 ? `<button class="raid-plus" data-network-slot="${slot}">+</button>` : ''}
+        </div>`;
+      const ready = rowById(member.id)?.ready === true;
+      return `
+        <div class="raid-post filled ${networkSelectedMemberId === member.id ? 'on' : ''} ${ready ? 'ready' : ''}">
+          <div class="raid-post-title">${label}</div>
+          <div class="raid-figure" ${host ? `data-network-pick="${esc(member.id)}"` : ''}>
+            ${networkMemberCanvas(member)}
+            <div class="raid-figure-name">${esc(member.name)}${isMine(member) ? ' (나)' : ''}</div>
+            <div class="raid-figure-sub">Lv.${member.level} · ${esc(member.spec || '전문화 없음')} · HP ${member.maxHp}</div>
+          </div>
+          ${ready ? '<div class="raid-ready-badge">Ready!</div>' : ''}
+        </div>`;
+    };
+
+    const waitingCards = waiting.map((member) => {
+      const ready = rowById(member.id)?.ready === true;
+      return `<div class="raid-bench-card ${networkSelectedMemberId === member.id ? 'on' : ''} ${ready ? 'ready' : ''}"
+          ${host ? `data-network-pick="${esc(member.id)}"` : ''}>
+        ${networkMemberCanvas(member)}
+        <div class="raid-figure-name">${esc(member.name)}${isMine(member) ? ' (나)' : ''}</div>
+        <div class="raid-figure-sub">Lv.${member.level} · ${esc(member.spec || '전문화 없음')} · HP ${member.maxHp}</div>
+      </div>`;
+    }).join('');
+    const emptyWaiting = Array.from({ length:Math.max(0, 3 - roster.length) }, (_, index) => `
+      <div class="raid-room-member empty">친구를 기다리는 중…<small>${roster.length + index + 1}/3 자리</small></div>
+    `).join('');
+
+    const status = message || (roster.length < 3
+      ? `친구 ${3 - roster.length}명이 더 들어오면 대형을 정할 수 있어요.`
+      : !savedFormation
+        ? (host ? '캐릭터를 골라 앞·가운데·뒤에 한 명씩 배치해 주세요.' : '방장이 대형을 정하고 있어요.')
+        : !allReady
+          ? '대형이 정해졌습니다. 각자 준비를 눌러 주세요.'
+          : (host ? '모두 준비됐습니다. 이제 출발할 수 있어요!' : '모두 준비됐습니다. 방장이 곧 출발합니다!'));
+
+    call('openModal', `
+      <h2>1–10층 파티 대기실</h2>
+      <div class="raid-room-head">
+        <div class="raid-room-code"><span>초대 코드</span><strong>${esc(networkSession.room.code || '----')}</strong></div>
+        <div class="raid-room-count">${roster.length} / 3명</div>
+      </div>
+      <div class="panel-card raid-formation">
+        <div class="raid-posts">${[...R.SLOTS].reverse().map(slotHtml).join('')}</div>
+        <div class="raid-bench-wrap">
+          <div class="raid-bench-head"><span>대기 중</span></div>
+          <div class="raid-bench">${waitingCards}${emptyWaiting || (!waiting.length ? '<div class="raid-bench-empty">모두 자리를 정했습니다!</div>' : '')}</div>
+        </div>
+        <p class="raid-room-status ${allReady ? 'good' : (roster.length < 3 ? 'warn' : '')}">${esc(status)}</p>
+        <div class="raid-room-actions">
+          ${host && roster.length === 3 && !savedFormation ? '<button class="primary" id="raidSaveFormationBtn" disabled>대형 확정</button>' : ''}
+          ${savedFormation ? `<button class="primary" id="raidReadyBtn">${myReady ? '준비 취소' : '준비'}</button>` : ''}
+          ${host && allReady ? '<button class="primary" id="raidNetworkStartBtn">3명 출발!</button>' : ''}
+          <button class="ghost" id="raidNetworkLeaveBtn">방 나가기</button>
+        </div>
+      </div>
+    `, { type:'raidNetworkLobby', pause:true });
+
+    paintAll('.raid-face', memberById, 1.28, { moving:true });
+    startFormationAnimation(memberById);
+
+    global.document.querySelectorAll('[data-network-pick]').forEach((node) => {
+      node.onclick = () => { networkSelectedMemberId = node.dataset.networkPick; renderNetworkLobby(); };
+    });
+    global.document.querySelectorAll('[data-network-slot]').forEach((button) => {
+      button.onclick = () => {
+        const selected = memberById(networkSelectedMemberId);
+        if (!host || !selected) return;
+        const targetSlot = button.dataset.networkSlot;
+        const occupant = inSlot(targetSlot);
+        if (occupant && occupant.id !== selected.id) {
+          networkDraftPlacement[occupant.id] = networkDraftPlacement[selected.id] || null;
+        }
+        networkDraftPlacement[selected.id] = targetSlot;
+        (networkSession.members || []).forEach((row) => { row.ready = false; });
+        renderNetworkLobby();
+      };
+    });
+    const save = global.document.getElementById('raidSaveFormationBtn');
+    if (save) {
+      save.disabled = !seated;
+      save.onclick = async () => {
+        save.disabled = true;
+        try {
+          const data = await networkSession.client.setFormation(networkSession.room.id, { ...networkDraftPlacement });
+          setNetworkData(data);
+        } catch (error) { renderNetworkLobby(error?.message || '대형을 저장하지 못했습니다.'); }
+      };
+    }
+    const ready = global.document.getElementById('raidReadyBtn');
+    if (ready) ready.onclick = async () => {
+      ready.disabled = true;
+      try { setNetworkData(await networkSession.client.ready(networkSession.room.id, !myReady)); }
+      catch (error) { renderNetworkLobby(error?.message || '준비 상태를 바꾸지 못했습니다.'); }
+    };
+    const start = global.document.getElementById('raidNetworkStartBtn');
+    if (start) start.onclick = async () => {
+      start.disabled = true;
+      try { setNetworkData(await networkSession.client.start(networkSession.room.id)); }
+      catch (error) { renderNetworkLobby(error?.message || '던전을 시작하지 못했습니다.'); }
+    };
+    const leave = global.document.getElementById('raidNetworkLeaveBtn');
+    if (leave) leave.onclick = () => leaveNetworkRoom();
+  }
+
+  function isNetworkHost() {
+    return !!networkSession
+      && String(networkSession.room?.hostId || '') === String(raidIdentity()?.userId || '');
+  }
+
+  function beginNetworkRun() {
+    if (!networkSession || active || networkStarting) return;
+    const members = roomMembers();
+    if (members.length !== 3) {
+      renderNetworkLobby('세 명의 캐릭터 정보를 모두 불러오지 못했습니다.');
+      return;
+    }
+    networkStarting = true;
+    try {
+      active = runApi().createRun({ floor:1, members });
+      const assignments = Object.fromEntries(members.map((member) => [member.id, member.slot]));
+      const confirmed = active.confirmFormation(assignments);
+      if (!confirmed.ok) throw new Error(confirmed.reason || '대형을 불러오지 못했습니다.');
+      const roomPhase = networkSession.room?.phase || 'travel';
+      if (['question', 'waiting', 'resolving', 'effects'].includes(roomPhase)) {
+        /* 첫 라운드는 아직 서버에 몬스터 체력 스냅샷이 올라가기 전일 수
+           있으므로 조우 번호로 기본 몬스터를 먼저 복원한다. */
+        active.importSnapshot({
+          phase:'travel',
+          encounterIndex:Number(networkSession.room?.encounterIndex) || 0,
+          members,
+        });
+        active.arriveAtEncounter();
+      }
+      /* 새로 출발한 방은 travel 상태지만, 새로고침 뒤 되찾은 방은 이미
+         문제 풀이·판정·전투 연출 단계일 수 있다. 서버의 최신 전투 상태를
+         먼저 넣어야 처음부터 다시 걷거나 체력이 되돌아가지 않는다. */
+      importNetworkTruth();
+      question = null;
+      busy = false;
+      walkProgress = 1;
+      enterDungeonMap(() => {
+        networkStarting = false;
+        if (!active || networkSession?.room?.phase === 'cancelled') return;
+        if (active.phase === 'travel') {
+          playTravelScene();
+          return;
+        }
+        if (active.phase === 'cleared' || active.phase === 'wiped') {
+          finishRun();
+          return;
+        }
+        openBattleScreen({ resumed:true });
+      });
+    } catch (error) {
+      networkStarting = false;
+      active = null;
+      call('toast', error?.message || '던전을 시작하지 못했습니다.');
+    }
+  }
+
+  function publicRaidQuestion(source) {
+    if (!source) return null;
+    return {
+      id:String(source.id || `raid-${Date.now()}`),
+      prompt:String(source.prompt || source.q || source.question || ''),
+      q:String(source.q || source.prompt || source.question || ''),
+      choices:Array.isArray(source.choices) ? source.choices.map(String) : null,
+    };
+  }
+
+  async function beginNetworkRound() {
+    const session = networkSession;
+    if (!session || !isNetworkHost() || !active || active.phase !== 'battle') return;
+    if (!['travel', 'effects'].includes(session.room?.phase)) return;
+    if (session.beginningRound) return;
+    session.beginningRound = true;
+    try {
+      const selected = pickQuestion();
+      const nextRound = Math.max(1, Number(session.room.round) + 1);
+      session.answerKeys = session.answerKeys || {};
+      session.answerKeys[nextRound] = String(selected.answer ?? '');
+      const data = await session.client.beginRound(
+        session.room.id,
+        publicRaidQuestion(selected),
+        String(selected.answer ?? ''),
+      );
+      if (networkSession === session) setNetworkData(data);
+    } catch (error) {
+      if (networkSession === session) {
+        busy = false;
+        panelMode = 'playing';
+        panelMessage = error?.message || '문제를 불러오지 못했습니다. 다시 시도하는 중입니다.';
+        renderBattle();
+      }
+    } finally {
+      if (networkSession === session) session.beginningRound = false;
+    }
+  }
+
+  function publishMemberStates(snapshot) {
+    return Object.fromEntries((snapshot?.members || []).map((member) => [member.id, {
+      hp:member.hp,
+      maxHp:member.maxHp,
+      shield:member.shield || 0,
+      cooldowns:{ ...(member.cooldowns || {}) },
+      statuses:{ ...(member.statuses || {}) },
+      buffs:{ ...(member.buffs || {}) },
+      chargeActive:member.chargeActive === true,
+      bastionUsed:member.bastionUsed === true,
+    }]));
+  }
+
+  async function maybeResolveNetworkRound() {
+    const session = networkSession;
+    const round = Math.max(1, Number(session?.room?.round) || 1);
+    if (!session || !isNetworkHost() || !active || active.phase !== 'battle') return;
+    if (session.room?.phase !== 'resolving' || session.resolvingRounds.has(round)) return;
+    const inputs = Array.isArray(session.submissions) ? session.submissions : [];
+    if (inputs.length !== 3) return;
+    session.resolvingRounds.add(round);
+
+    try {
+      const submissions = Object.fromEntries(inputs.map((entry) => [String(entry.userId), {
+        correct:entry.correct === true,
+        actionId:String(entry.actionId || 'basic'),
+      }]));
+      const result = active.resolveRound(submissions);
+      if (!result.ok) throw new Error(result.reason || '전투 판정을 완료하지 못했습니다.');
+      const snapshot = active.snapshot();
+      const correctAnswer = String(session.answerKeys?.[round] ?? '');
+      const answerEvents = inputs.map((entry) => ({
+        kind:'round-answer',
+        memberId:String(entry.userId),
+        correct:entry.correct === true,
+        timedOut:entry.timedOut === true,
+        correctAnswer,
+        text:entry.correct === true
+          ? '정답!'
+          : `오답입니다! 정답은 ${correctAnswer || '확인 중'} (피해가 절반만 들어갑니다)`,
+      }));
+      const nextPhase = snapshot.phase === 'battle' ? 'effects' : snapshot.phase;
+      const monsterState = snapshot.monster ? { ...snapshot.monster, raidRound:snapshot.round } : {};
+      const currentFloor = snapshot.phase === 'battle'
+        ? displayFloorForProgress(snapshot, 1)
+        : ENCOUNTER_FLOORS[Math.max(0, Math.min(ENCOUNTER_FLOORS.length - 1, snapshot.encounterIndex - 1))];
+      const data = await session.client.publishRound(session.room.id, round, {
+        nextPhase,
+        encounterIndex:snapshot.encounterIndex,
+        currentFloor,
+        monsterState,
+        memberStates:publishMemberStates(snapshot),
+        events:[...answerEvents, ...(result.events || [])],
+      });
+      if (networkSession === session) setNetworkData(data);
+    } catch (error) {
+      session.resolvingRounds.delete(round);
+      panelMode = 'playing';
+      panelMessage = error?.message || '전투 결과를 동기화하지 못했습니다. 다시 연결하는 중입니다.';
+      if (active) renderBattle();
+    }
+  }
+
+  function importNetworkTruth() {
+    if (!networkSession || !active || typeof active.importSnapshot !== 'function') return;
+    const room = networkSession.room || {};
+    const current = active.snapshot();
+    const phase = ['question', 'waiting', 'resolving', 'effects'].includes(room.phase)
+      ? 'battle'
+      : ['travel', 'cleared', 'wiped'].includes(room.phase) ? room.phase : current.phase;
+    const monster = room.monsterState && Object.keys(room.monsterState).length
+      ? { ...(current.monster || {}), ...room.monsterState }
+      : current.monster;
+    active.importSnapshot({
+      phase,
+      encounterIndex:Number(room.encounterIndex) || 0,
+      round:Number(monster?.raidRound ?? current.round) || 0,
+      monster,
+      members:roomMembers(),
+    });
+  }
+
+  function handleNetworkEvents(rows) {
+    if (!networkSession || !Array.isArray(rows) || !rows.length) return;
+    const session = networkSession;
+    const fresh = rows
+      .filter((row) => (Number(row?.sequenceNo || row?.sequence_no) || 0) > (session.lastSequence || 0))
+      .sort((a, b) => Number(a.sequenceNo || a.sequence_no) - Number(b.sequenceNo || b.sequence_no));
+    if (!fresh.length) return;
+    fresh.forEach((row) => {
+      session.lastSequence = Math.max(session.lastSequence || 0, Number(row.sequenceNo || row.sequence_no) || 0);
+    });
+    if (session.room?.phase === 'cancelled') return;
+    const grouped = new Map();
+    fresh.forEach((row) => {
+      const round = Math.max(0, Number(row.round || row.round_no) || 0);
+      if (!grouped.has(round)) grouped.set(round, []);
+      grouped.get(round).push(row.event || row);
+    });
+    grouped.forEach((events, round) => {
+      if (round <= 0 || session.handledRounds.has(round)) return;
+      session.handledRounds.add(round);
+      session.playbackQueue = session.playbackQueue || [];
+      session.playbackQueue.push({ round, events });
+    });
+    importNetworkTruth();
+    playNextNetworkRound();
+  }
+
+  function playNextNetworkRound() {
+    const session = networkSession;
+    if (!session || session.playbackActive || !active) return;
+    const entry = session.playbackQueue?.shift();
+    if (!entry) return;
+    session.playbackActive = true;
+    const me = String(raidIdentity()?.userId || '');
+    const answerEvent = entry.events.find((event) => event.kind === 'round-answer' && String(event.memberId) === me);
+    const combatEvents = entry.events.filter((event) => event.kind !== 'round-answer');
+    const opening = answerEvent || { kind:'answer-correct', text:'모두 답을 제출했습니다!' };
+    const startPlayback = () => {
+      showPlaybackPanel('전투 중…');
+      playEvents([opening, ...combatEvents], () => {
+        if (networkSession !== session || !active) return;
+        session.playbackActive = false;
+        syncMyRaidCooldowns();
+        question = null;
+        chosenAction = null;
+        if (active.phase === 'cleared' || active.phase === 'wiped') {
+          finishRun();
+        } else if (active.phase === 'travel') {
+          panelMode = 'playing';
+          playTravelScene();
+        } else {
+          busy = false;
+          panelMode = 'menu';
+          panelMessage = isNetworkHost() && ['travel', 'effects'].includes(session.room?.phase)
+            ? '다음 문제를 준비하는 중…'
+            : '무엇을 할까?';
+          renderBattle();
+          if (isNetworkHost()) beginNetworkRound();
+        }
+        playNextNetworkRound();
+      });
+    };
+
+    if (answerEvent?.correct === false && answerEvent.correctAnswer
+      && typeof global.YuksamWrongAnswerReview?.reveal === 'function') {
+      question = { ...(publicRaidQuestion(session.lastQuestion) || {}), answer:answerEvent.correctAnswer };
+      panelMode = 'question';
+      renderBattle();
+      const host = global.document.querySelector('.raid-combat .panel-card');
+      if (host) {
+        global.YuksamWrongAnswerReview.reveal({
+          root:host,
+          correctAnswer:answerEvent.correctAnswer,
+          onComplete:startPlayback,
+        });
+        return;
+      }
+    }
+    startPlayback();
+  }
+
+  async function submitNetworkAnswer(given) {
+    const session = networkSession;
+    if (!session || busy || !active || active.phase !== 'battle') return;
+    const phase = session.room?.phase;
+    if (!['question', 'waiting'].includes(phase)) {
+      panelMode = 'playing';
+      panelMessage = '친구들과 같은 문제를 불러오는 중…';
+      renderBattle();
+      return;
+    }
+    busy = true;
+    const actionId = chosenAction === 'attack'
+      ? 'basic'
+      : String(chosenAction || '').replace(/^active:/, '') || 'basic';
+    showPlaybackPanel('답을 제출했습니다. 다른 친구들의 답을 기다리는 중…');
+    try {
+      await session.client.submit(session.room.id, Number(session.room.round), actionId, String(given ?? ''));
+      const data = await session.client.sync(session.room.id, session.lastSequence || 0);
+      if (networkSession === session) setNetworkData(data);
+    } catch (error) {
+      busy = false;
+      panelMode = 'menu';
+      panelMessage = error?.message || '답을 전송하지 못했습니다. 다시 시도해 주세요.';
+      renderBattle();
+    }
   }
 
   /* ---------- 화면 1: 대형 배치 ---------- */
@@ -385,7 +1081,7 @@
             <div class="raid-bench-card ${selected === member.id ? 'on' : ''}" data-pick="${esc(member.id)}">
               ${memberCanvasHtml(member, 120)}
               <div class="raid-figure-name">${esc(member.name)}${member.isPlayer ? ' (나)' : ''}</div>
-              <div class="raid-figure-sub">${esc(member.spec || '전문화 없음')} · 공격 ${member.attack} · HP ${member.maxHp}</div>
+              <div class="raid-figure-sub">${esc(member.spec || '전문화 없음')} · HP ${member.maxHp}</div>
             </div>`).join('')
         : '<div class="raid-bench-empty">준비를 눌러주세요!</div>';
 
@@ -475,12 +1171,29 @@
     if (!worlds || worlds[MAP_KEY]) return worlds;
     worlds[MAP_KEY] = {
       key:MAP_KEY,
-      label:'63빌딩 던전 1층',
+      label:'63빌딩 던전 1–10층',
       width:1280,
       height:720,
       playerSpawn:{ x:200, y:520 },
     };
     return worlds;
+  }
+
+  /* 한 구간의 네 조우 지점은 3·5·8·10층이다.
+     이동 중에는 직전 조우층에서 다음 조우층까지 자연스럽게 숫자가 올라간다. */
+  const ENCOUNTER_FLOORS = Object.freeze([3, 5, 8, 10]);
+  const ENCOUNTER_START_FLOORS = Object.freeze([1, 3, 5, 8]);
+
+  function displayFloorForProgress(snapshot, progress = 0) {
+    const index = Math.max(0, Math.min(
+      ENCOUNTER_FLOORS.length - 1,
+      Math.floor(Number(snapshot?.encounterIndex) || 0),
+    ));
+    const start = ENCOUNTER_START_FLOORS[index];
+    const target = ENCOUNTER_FLOORS[index];
+    if (snapshot?.phase === 'battle') return target;
+    const ratio = Math.max(0, Math.min(1, Number(progress) || 0));
+    return Math.max(start, Math.min(target, Math.floor(start + (target - start) * ratio + 0.35)));
   }
 
   /* 던전 내부를 화면 가득 그린다. 마을이 아니라 완전히 다른 장소로 보이게 한다. */
@@ -557,14 +1270,21 @@
       ctx.fillRect(x - 46, 24, 92, 7);
     }
 
-    // 층 표시
+    // 층 표시 — 1~10층을 실제로 올라가는 진행감을 보여 준다.
     const snap = active ? active.snapshot() : null;
     ctx.save();
     ctx.textAlign = 'center';
-    ctx.font = '600 15px Noto Sans KR, system-ui';
-    ctx.fillStyle = 'rgba(226,240,255,.7)';
     if (snap) {
-      ctx.fillText(`${snap.title}   ·   ${Math.min(snap.encounterIndex + 1, snap.encounterTotal)} / ${snap.encounterTotal}`, w / 2, 78);
+      const floor = displayFloorForProgress(snap, walkProgress);
+      ctx.font = '900 31px Jua, Noto Sans KR, system-ui';
+      ctx.lineWidth = 7;
+      ctx.strokeStyle = 'rgba(5,10,20,.86)';
+      ctx.strokeText(`현재 ${floor}층`, w / 2, 72);
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillText(`현재 ${floor}층`, w / 2, 72);
+      ctx.font = '700 14px Noto Sans KR, system-ui';
+      ctx.fillStyle = 'rgba(191,219,254,.82)';
+      ctx.fillText(`${snap.title} · 다음 조우 ${Math.min(snap.encounterIndex + 1, snap.encounterTotal)}/${snap.encounterTotal}`, w / 2, 98);
     }
     ctx.restore();
 
@@ -637,15 +1357,19 @@
   }
 
   /* 월드 공용 펫 레이어는 던전 좌표를 모르므로, 복도에서는 주인 옆에 직접 그린다. */
-  function drawRaidPet(ctx, ownerX, ownerY, moving) {
+  function drawRaidPet(ctx, ownerX, ownerY, moving, owner = null) {
     const g = G();
-    const pet = global.PET_DEFS_V27?.[g?.player?.activePet];
-    if (!pet) { raidPetAnchor = null; return; }
+    const petId = owner?.activePet || (isMine(owner) ? g?.player?.activePet : '');
+    const pet = global.PET_DEFS_V27?.[petId];
+    if (!pet) {
+      if (!owner || isMine(owner)) raidPetAnchor = null;
+      return;
+    }
 
     const now = global.performance?.now?.() || Date.now();
     const x = ownerX - 46;
     const y = ownerY + 24 - (moving ? Math.abs(Math.sin(now / 120 + (pet.bob || 0))) * 8 : 0);
-    raidPetAnchor = { x, y, ownerX, ownerY };
+    if (!owner || isMine(owner)) raidPetAnchor = { x, y, ownerX, ownerY };
 
     ctx.save();
     ctx.fillStyle = 'rgba(4,10,18,.25)';
@@ -705,9 +1429,8 @@
       return { member, index, x, y };
     });
 
-    const playerPosition = positioned.find(({ member }) => member.isPlayer);
-    if (playerPosition) drawRaidPet(ctx, playerPosition.x, playerPosition.y, moving);
-    else raidPetAnchor = null;
+    raidPetAnchor = null;
+    positioned.forEach(({ member, x, y }) => drawRaidPet(ctx, x, y, moving, member));
 
     positioned.forEach(({ member, index, x, y }) => {
       const step = moving ? Math.abs(Math.sin((walkProgress * 9) + index)) * 6 : 0;
@@ -715,7 +1438,7 @@
       ctx.globalAlpha = member.hp > 0 ? 1 : 0.35;
       try {
         draw(ctx, x, y - step, member.appearance || {}, member.klass || 'warrior',
-          { attack:0, moving, equipment:member.equipment }, 1.5, member.spec || null);
+          { attack:0, moving, equipment:member.equipment, costume:member.costume }, 1.5, member.spec || null);
       } catch (_) { /* 그리기 실패가 진행을 막지 않게 한다 */ }
       ctx.restore();
 
@@ -894,15 +1617,37 @@
 
   /* ---------- 화면 3: 전투 ---------- */
 
-  function openBattleScreen() {
+  function openBattleScreen(options = {}) {
     ensureStyles();
     question = null;          // 문제는 공격/스킬을 고른 뒤에 나온다
     chosenAction = null;
-    busy = true;              // 등장 문구를 보여 주는 동안에는 입력을 막는다
-    monsterLungePending = false;
     syncViewToTruth();
 
     const monster = active.snapshot().monster;
+
+    /* 브라우저를 새로 열어 진행 중인 방으로 돌아온 경우에는 적 등장부터
+       다시 재생하지 않고 서버가 가리키는 현재 단계에서 곧바로 이어 간다. */
+    if (options.resumed && networkSession) {
+      const roomPhase = networkSession.room?.phase || 'question';
+      question = publicRaidQuestion(networkSession.room?.question || networkSession.lastQuestion);
+      const resolving = roomPhase === 'resolving';
+      const preparing = roomPhase === 'effects' || !question?.q;
+      busy = resolving || preparing;
+      panelMode = busy ? 'playing' : 'menu';
+      panelMessage = resolving
+        ? '친구들의 답을 판정하는 중…'
+        : preparing
+          ? '다음 문제를 준비하는 중…'
+          : '무엇을 할까?';
+      renderBattle();
+      if (isNetworkHost()) {
+        if (resolving) global.setTimeout(() => maybeResolveNetworkRound(), 0);
+        else if (preparing) global.setTimeout(() => beginNetworkRound(), 0);
+      }
+      return;
+    }
+
+    busy = true;              // 등장 문구를 보여 주는 동안에는 입력을 막는다
     panelMode = 'playing';
     panelMessage = monster?.isBoss
       ? `레이드 보스 ${monster.name}이(가) 나타났다!`
@@ -914,8 +1659,11 @@
       if (!active || active.phase !== 'battle') return;
       busy = false;
       panelMode = 'menu';
-      panelMessage = '무엇을 할까?';
+      panelMessage = networkSession && !networkSession.room?.question
+        ? '친구들과 풀 문제를 준비하는 중…'
+        : '무엇을 할까?';
       renderBattle();
+      if (networkSession && isNetworkHost()) beginNetworkRound();
     }, eventDelayMs);
   }
 
@@ -942,14 +1690,33 @@
       .map((member) => {
         const percent = Math.max(0, Math.round((member.hp / member.maxHp) * 100));
         return `
-          <div class="raid-ally-hp ${member.hp <= 0 ? 'down' : ''} ${member.isPlayer ? 'me' : ''}"
+          <div class="raid-ally-hp ${member.hp <= 0 ? 'down' : ''} ${isMine(member) ? 'me' : ''}"
                data-member="${esc(member.id)}">
-            <b>${esc(member.name)}${member.isPlayer ? ' (나)' : ''}</b>
+            <b>${esc(member.name)}${isMine(member) ? ' (나)' : ''}</b>
             <span class="raid-ally-slot">${esc(R.slotLabel(member.slot))}</span>
             <div class="hpbar"><div class="hpfill" style="width:${percent}%"></div></div>
-            <div class="raid-ally-num">${member.hp}/${member.maxHp}</div>
+            <div class="raid-ally-num">${member.hp}/${member.maxHp}${member.shield > 0 ? ` <span class="raid-shield-text">🛡 ${member.shield}</span>` : ''}</div>
+            ${memberStatusHtml(member)}
           </div>`;
       }).join('');
+  }
+
+  function memberStatusHtml(member) {
+    const status = member?.statuses || {};
+    const badges = [];
+    if (Number(status.stunTurns || status.stun) > 0) badges.push(`<span class="raid-status-badge stun">기절 ${Number(status.stunTurns || status.stun)}</span>`);
+    if (Number(status.chillTurns || status.chill) > 0) badges.push(`<span class="raid-status-badge chill">냉기 ${Number(status.chillTurns || status.chill)}</span>`);
+    if (Number(status.poisonTurns || status.poison) > 0) badges.push(`<span class="raid-status-badge shadow">중독 ${Number(status.poisonTurns || status.poison)}</span>`);
+    return badges.length ? `<div class="raid-status-row">${badges.join('')}</div>` : '';
+  }
+
+  function monsterStatusHtml(monster) {
+    const badges = [];
+    if (Number(monster?.stunTurns) > 0) badges.push(`<span class="raid-status-badge stun">기절 ${Number(monster.stunTurns)}</span>`);
+    if (Number(monster?.chillTurns) > 0) badges.push(`<span class="raid-status-badge chill">냉기 ${Number(monster.chillTurns)}</span>`);
+    const shadow = Object.values(monster?.shadowBySource || {}).reduce((sum, value) => sum + Math.max(0, Number(value) || 0), 0);
+    if (shadow > 0) badges.push(`<span class="raid-status-badge shadow">암흑 ${shadow}</span>`);
+    return badges.length ? `<div class="raid-status-row">${badges.join('')}</div>` : '';
   }
 
   /* ---------- 아래 패널: 일반 전투와 같은 3단계 ----------
@@ -966,6 +1733,16 @@
     return Array.isArray(list) ? list : [];
   }
 
+  function myCombatMember() {
+    return active?.snapshot?.().members?.find((member) => isMine(member)) || null;
+  }
+
+  function raidSkillCooldown(skillId) {
+    const member = myCombatMember();
+    if (member?.cooldowns) return Math.max(0, Number(member.cooldowns[skillId]) || 0);
+    return Math.max(0, Number(call('getSkillCooldown', skillId)) || 0);
+  }
+
   function panelHtml() {
     /* 사냥터 전투처럼 별도의 로그 상자를 두지 않는다.
        이 자리(h3)의 글이 바뀌면서 그 자체가 전투 기록이 된다. */
@@ -980,7 +1757,7 @@
           + '<div class="combat-menu"><button class="ghost" data-raid-menu="back">뒤로</button></div>';
       }
       const buttons = skills.map((skill) => {
-        const cd = Number(call('getSkillCooldown', skill.id) || 0);
+        const cd = raidSkillCooldown(skill.id);
         return `<button class="primary" ${cd > 0 ? 'disabled' : ''} data-raid-skill="${esc(skill.id)}">`
           + `${esc(skill.active?.name || skill.name || '스킬')}${cd > 0 ? ` · ${cd}턴` : ''}</button>`;
       }).join('');
@@ -997,7 +1774,7 @@
             <input id="combatAnswer" placeholder="정답 입력" autocomplete="off" />
             <button class="primary" id="raidSubmitBtn">정답 제출</button>
           </div>`;
-      return `<h3>${esc(question?.q || '')}</h3>${answer}`;
+      return `<h3>${esc(question?.q || question?.prompt || '')}</h3>${answer}`;
     }
 
     // 기본 메뉴 — 일반 전투와 같은 구성(도망 자리에 포기)
@@ -1045,8 +1822,29 @@
 
   /* 공격이나 스킬을 고르면 문제가 나온다(일반 전투와 같은 흐름). */
   function startAction(action) {
+    if (String(action).startsWith('active:')) {
+      const skillId = String(action).slice(7);
+      const cooldown = raidSkillCooldown(skillId);
+      if (cooldown > 0) {
+        panelMode = 'skills';
+        panelMessage = `아직 ${cooldown}턴 남았습니다.`;
+        renderBattle();
+        return;
+      }
+    }
     chosenAction = action;
-    question = question || pickQuestion();
+    if (networkSession) {
+      question = publicRaidQuestion(networkSession.room?.question || networkSession.lastQuestion);
+      if (!question?.q) {
+        panelMode = 'playing';
+        panelMessage = '친구들과 풀 문제를 불러오는 중…';
+        renderBattle();
+        if (isNetworkHost()) beginNetworkRound();
+        return;
+      }
+    } else {
+      question = question || pickQuestion();
+    }
     panelMode = 'question';
     renderBattle();
   }
@@ -1066,6 +1864,13 @@
     call('tickSkillCooldowns');
   }
 
+  function syncMyRaidCooldowns() {
+    const member = myCombatMember();
+    const player = G()?.player;
+    if (!member || !player) return;
+    player.skillCooldowns = { ...(member.cooldowns || {}) };
+  }
+
   /* 화면에 보여 줄 체력. 로그가 한 줄씩 재생되는 동안 이 값이 조금씩 따라간다.
      (진행 엔진은 라운드를 한 번에 계산하지만, 화면은 사냥터 전투처럼
       "때릴 때마다 체력바가 쭉 빠지는" 모습을 보여야 한다.) */
@@ -1076,7 +1881,9 @@
     if (!snap?.monster) { view = null; return; }
     view = {
       monsterHp: snap.monster.hp,
+      monsterShield:Math.max(0, Number(snap.monster.shield) || 0),
       members: Object.fromEntries(snap.members.map((m) => [m.id, m.hp])),
+      memberShields:Object.fromEntries(snap.members.map((m) => [m.id, Math.max(0, Number(m.shield) || 0)])),
     };
   }
 
@@ -1087,10 +1894,15 @@
     if (!view) syncViewToTruth();
 
     // 표시용 체력을 입혀 놓은 사본으로 그린다.
-    const monster = { ...truth, hp: Math.max(0, view?.monsterHp ?? truth.hp) };
+    const monster = {
+      ...truth,
+      hp:Math.max(0, view?.monsterHp ?? truth.hp),
+      shield:Math.max(0, view?.monsterShield ?? truth.shield ?? 0),
+    };
     const members = snap.members.map((m) => ({
       ...m,
       hp: Math.max(0, view?.members?.[m.id] ?? m.hp),
+      shield:Math.max(0, view?.memberShields?.[m.id] ?? m.shield ?? 0),
     }));
     const percent = Math.max(0, Math.round((monster.hp / monster.maxHp) * 100));
     const nextKind = rules().attackKindForRound(truth, snap.round);
@@ -1102,8 +1914,9 @@
         <div class="combat-stage raid-stage">
           <div class="combat-hpbox monster">
             <b>${monster.isBoss ? '👑 ' : ''}Lv.${monster.level} ${esc(monster.name)}</b>
-            <div class="raid-hp-text">HP ${monster.hp}/${monster.maxHp}</div>
+            <div class="raid-hp-text">HP ${monster.hp}/${monster.maxHp}${monster.shield > 0 ? ` <span class="raid-shield-text">🛡 ${monster.shield}</span>` : ''}</div>
             <div class="hpbar"><div class="hpfill" style="width:${percent}%"></div></div>
+            ${monsterStatusHtml(monster)}
             <div class="raid-next-hint ${nextKind === 'all' ? 'warn' : ''}">
               ${nextKind === 'all' ? '⚠ 다음은 전체 공격!' : '다음은 앞을 노립니다'}
             </div>
@@ -1134,12 +1947,16 @@
     if (event.kind === 'party-hit') call('playSfx', 'hit');
     else if (event.kind === 'monster-hit') call('playSfx', 'hit');
     else if (event.kind === 'party-heal') call('playSfx', 'heal');
+    else if (event.kind === 'party-shield') call('playSfx', 'open');
+    else if (event.kind === 'party-buff') call('playSfx', 'heal');
+    else if (event.kind === 'member-revive') call('playSfx', 'quest');
+    else if (['monster-dot', 'party-retaliation'].includes(event.kind)) call('playSfx', 'hit');
     else if (event.kind === 'monster-down') call('playSfx', 'quest');
   }
 
   /* 일반 전투처럼 피해 숫자를 대상 위에 띄우고 맞은 쪽을 흔든다.
      학생이 자기 몫의 피해를 눈으로 확인할 수 있어야 하기 때문이다. */
-  function floatNumber(anchor, text, kind) {
+  function floatNumber(anchor, text, kind, offsetY = 0) {
     const layer = global.document.getElementById('raidFloatLayer');
     const stage = global.document.querySelector('.raid-stage');
     if (!layer || !stage || !anchor) return;
@@ -1150,7 +1967,7 @@
     node.className = `raid-float ${kind}`;
     node.textContent = text;
     node.style.left = `${box.left - base.left + box.width / 2}px`;
-    node.style.top = `${box.top - base.top + box.height * 0.28}px`;
+    node.style.top = `${box.top - base.top + box.height * 0.28 + Number(offsetY || 0)}px`;
     layer.appendChild(node);
     global.setTimeout(() => { try { node.remove(); } catch (_) {} }, 1000);
   }
@@ -1189,8 +2006,6 @@
     }, role === 'monster' ? 640 : 580);
   }
 
-  let monsterLungePending = false;
-
   function showEventEffect(event) {
     if (!event) return;
     const monsterNode = global.document.querySelector('.raid-monster-sprite');
@@ -1209,7 +2024,10 @@
     if (event.kind === 'party-hit') {
       if (event.missed) floatNumber(monsterNode, 'MISS', 'miss');
       else {
-        floatNumber(monsterNode, `-${event.damage}`, event.critical ? 'crit' : 'damage');
+        const shieldDamage = Number(event.shieldDamage) || 0;
+        const hpDamage = Number(event.hpDamage ?? event.damage) || 0;
+        if (shieldDamage > 0) floatNumber(monsterNode, `🛡 -${shieldDamage}`, 'shield', hpDamage > 0 ? -18 : 0);
+        if (hpDamage > 0) floatNumber(monsterNode, `-${hpDamage}`, event.critical ? 'crit' : 'damage', shieldDamage > 0 ? 18 : 0);
         shake(monsterNode);
       }
       // 명중 여부와 관계없이 공격을 시도한 사람은 앞으로 나갔다 돌아온다.
@@ -1220,23 +2038,51 @@
 
     if (event.kind === 'monster-hit') {
       const target = memberSpriteNode(event.memberId);
-      if (monsterLungePending) {
-        lunge(monsterNode, 'monster');
-        monsterLungePending = false;
-      }
       if (event.missed) { floatNumber(target, 'MISS', 'miss'); return; }
-      floatNumber(target, `-${event.damage}`, event.critical ? 'crit' : 'damage');
+      const shieldDamage = Number(event.shieldDamage) || 0;
+      const hpDamage = Number(event.hpDamage ?? event.damage) || 0;
+      if (shieldDamage > 0) floatNumber(target, `🛡 -${shieldDamage}`, 'shield', hpDamage > 0 ? -18 : 0);
+      if (hpDamage > 0) floatNumber(target, `-${hpDamage}`, event.critical ? 'crit' : 'damage', shieldDamage > 0 ? 18 : 0);
       shake(target);
       return;
     }
 
     if (event.kind === 'party-heal') {
-      floatNumber(memberSpriteNode(event.memberId), `+${event.amount}`, 'heal');
+      floatNumber(memberSpriteNode(event.targetMemberId || event.memberId), `+${event.amount}`, 'heal');
+      return;
+    }
+
+    if (event.kind === 'party-shield') {
+      floatNumber(memberSpriteNode(event.targetMemberId || event.memberId), `🛡 +${event.amount}`, 'shield');
+      return;
+    }
+
+    if (event.kind === 'party-buff' && Number(event.heal) > 0) {
+      floatNumber(memberSpriteNode(event.memberId), `+${event.heal}`, 'heal');
+      return;
+    }
+
+    if (event.kind === 'member-revive') {
+      floatNumber(memberSpriteNode(event.memberId), `부활 +${event.amount}`, 'heal');
+      return;
+    }
+
+    if (['monster-dot', 'party-retaliation'].includes(event.kind)) {
+      const damage = Number(event.totalDamage ?? event.hpDamage ?? event.amount) || 0;
+      if (damage > 0) {
+        floatNumber(monsterNode, `-${damage}`, event.critical ? 'crit' : 'damage');
+        shake(monsterNode);
+      }
+      if (Number(event.heal) > 0 && event.targetMemberId) {
+        floatNumber(memberSpriteNode(event.targetMemberId), `+${event.heal}`, 'heal', 18);
+      }
       return;
     }
 
     if (event.kind === 'monster-windup') {
-      monsterLungePending = true;
+      /* 공격을 준비하는 순간 앞으로 나온다. 빗나가거나 보호막에 전부
+         막혀도 몬스터가 실제로 공격했다는 움직임은 반드시 보여야 한다. */
+      lunge(monsterNode, 'monster');
       if (event.all) {
         const stage = global.document.querySelector('.raid-stage');
         if (stage) {
@@ -1256,14 +2102,31 @@
      그래서 "때릴 때마다 체력바가 쭉 빠지는" 모습이 나온다. */
   function applyEventToView(event) {
     if (!view || !event) return;
-    if (event.kind === 'party-hit' && !event.missed) {
-      view.monsterHp = Math.max(0, view.monsterHp - (event.damage || 0));
+    if (['party-hit', 'monster-dot', 'party-retaliation'].includes(event.kind) && !event.missed) {
+      view.monsterShield = Math.max(0, view.monsterShield - (Number(event.shieldDamage) || 0));
+      view.monsterHp = Math.max(0, view.monsterHp - (Number(event.hpDamage ?? event.damage ?? event.amount) || 0));
+      if (Number(event.heal) > 0 && event.targetMemberId) {
+        view.members[event.targetMemberId] = (view.members[event.targetMemberId] || 0) + Number(event.heal);
+      }
     } else if (event.kind === 'monster-hit' && !event.missed) {
       const before = view.members[event.memberId] ?? 0;
-      view.members[event.memberId] = Math.max(0, before - (event.damage || 0));
+      view.memberShields[event.memberId] = Math.max(
+        0,
+        (view.memberShields[event.memberId] || 0) - (Number(event.shieldDamage) || 0),
+      );
+      view.members[event.memberId] = Math.max(0, before - (Number(event.hpDamage ?? event.damage) || 0));
     } else if (event.kind === 'party-heal') {
+      const id = event.targetMemberId || event.memberId;
+      const before = view.members[id] ?? 0;
+      view.members[id] = before + (event.amount || 0);
+    } else if (event.kind === 'party-buff' && event.heal > 0) {
       const before = view.members[event.memberId] ?? 0;
-      view.members[event.memberId] = before + (event.amount || 0);
+      view.members[event.memberId] = before + Number(event.heal || 0);
+    } else if (event.kind === 'party-shield') {
+      const id = event.targetMemberId || event.memberId;
+      view.memberShields[id] = (view.memberShields[id] || 0) + Number(event.amount || 0);
+    } else if (event.kind === 'member-revive') {
+      view.members[event.memberId] = Math.max(1, Number(event.memberHp ?? event.amount) || 1);
     }
   }
 
@@ -1285,18 +2148,22 @@
     const monsterFill = doc.querySelector('.combat-hpbox.monster .hpfill');
     const monsterText = doc.querySelector('.combat-hpbox.monster .raid-hp-text');
     if (monsterFill) monsterFill.style.width = `${monsterPct}%`;
-    if (monsterText) monsterText.textContent = `HP ${monsterHp}/${snap.monster.maxHp}`;
+    if (monsterText) {
+      const shield = Math.max(0, Number(view.monsterShield) || 0);
+      monsterText.innerHTML = `HP ${monsterHp}/${snap.monster.maxHp}${shield > 0 ? ` <span class="raid-shield-text">🛡 ${shield}</span>` : ''}`;
+    }
 
     // 파티 체력
     snap.members.forEach((member) => {
       const hp = Math.max(0, view.members?.[member.id] ?? member.hp);
+      const shield = Math.max(0, view.memberShields?.[member.id] ?? member.shield ?? 0);
       const pct = Math.max(0, Math.round((hp / member.maxHp) * 100));
       const box = doc.querySelector(`.raid-ally-hp[data-member="${member.id}"]`);
       if (box) {
         const fill = box.querySelector('.hpfill');
         const num = box.querySelector('.raid-ally-num');
         if (fill) fill.style.width = `${pct}%`;
-        if (num) num.textContent = `${hp}/${member.maxHp}`;
+        if (num) num.innerHTML = `${hp}/${member.maxHp}${shield > 0 ? ` <span class="raid-shield-text">🛡 ${shield}</span>` : ''}`;
         box.classList.toggle('down', hp <= 0);
       }
       const sprite = memberSpriteNode(member.id);
@@ -1333,7 +2200,7 @@
     const manifest = global.YuksamAudioManifest;
     if (!manifest) return null;
     // 내가 스킬을 골랐으면 내 공격만 스킬 소리로 낸다.
-    if (member?.isPlayer && chosenAction && chosenAction !== 'attack') {
+    if (isMine(member) && chosenAction && chosenAction !== 'attack') {
       const skillId = String(chosenAction).slice(7);
       return manifest.skillSounds?.[skillId] || manifest.classBasicSounds?.[member.klass] || null;
     }
@@ -1342,14 +2209,28 @@
 
   function submitAnswer(given) {
     if (busy || !active || active.phase !== 'battle') return;
+    if (networkSession) {
+      submitNetworkAnswer(given);
+      return;
+    }
     busy = true;
 
     const correct = norm(given) === norm(question?.answer);
     const answers = active.rollAllyAnswers();
-    answers.me = correct;
-
-    spendSkillCooldown();   // 쓴 스킬은 쿨타임에 들어간다
-    tickSkillCooldowns();   // 한 턴이 지났으므로 모든 쿨타임을 깎는다
+    active.snapshot().members.filter((member) => !isMine(member)).forEach((member) => {
+      const correctAnswer = answers[member.id] === true;
+      const needsHealing = member.spec === '신성'
+        && active.snapshot().members.some((target) => target.hp > 0 && target.hp < target.maxHp)
+        && !(member.cooldowns?.priest_holy_absorb_v24 > 0);
+      answers[member.id] = {
+        correct:correctAnswer,
+        actionId:needsHealing ? 'priest_holy_absorb_v24' : 'basic',
+      };
+    });
+    answers.me = {
+      correct,
+      actionId:chosenAction === 'attack' ? 'basic' : String(chosenAction || '').replace(/^active:/, ''),
+    };
 
     const snapBefore = active.snapshot();
     const result = active.resolveRound(answers);
@@ -1382,6 +2263,7 @@
 
   function runRound(result, correct, snapBefore) {
     if (!active) return;
+    syncMyRaidCooldowns();
 
     // 정답/오답을 먼저 알려 준 뒤 공격이 이어진다(일반 전투와 같은 순서).
     const opening = {
@@ -1438,7 +2320,7 @@
 
     call('playSfx', cleared ? 'quest' : 'hit');
     call('openModal', `
-      <h2>${cleared ? '🏆 1층 돌파!' : '전멸…'}</h2>
+      <h2>${cleared ? '🏆 1–10층 돌파!' : '전멸…'}</h2>
       <div class="panel-card">
         ${cleared
           ? `<p>63빌딩 관리자를 쓰러뜨렸습니다!</p>
@@ -1449,11 +2331,15 @@
     `, { type:'raidResult', pause:true });
 
     call('appendChatMessage', 'system', '63빌딩 던전',
-      cleared ? '1층을 돌파했습니다!' : '1층에서 전멸했습니다.');
+      cleared ? '1–10층 구간을 돌파했습니다!' : '1–10층 구간에서 전멸했습니다.');
 
     const doneBtn = global.document.getElementById('raidDoneBtn');
     if (doneBtn) {
       doneBtn.onclick = () => {
+        if (networkSession) {
+          leaveNetworkRoom({ returnToTown:true });
+          return;
+        }
         active = null;
         question = null;
         call('closeModal');
@@ -1756,7 +2642,7 @@
   /* 한 판이 돌고 있지 않은데 던전에 서 있으면 갇힌 것이다. */
   function rescueIfStranded() {
     const g = G();
-    if (!g || g.currentMap !== MAP_KEY || active) return;
+    if (!g || g.currentMap !== MAP_KEY || active || networkSession) return;
     const worlds = global.YuksamData?.worldDefs || {};
     g.currentMap = 'town';
     if (g.player) {
@@ -1775,6 +2661,11 @@
   /* 진행 중이던 판을 버린다(연출 중이어도 안전하게 멈춘다). */
   function abandonRun() {
     stopFormationAnimation();
+    const session = networkSession;
+    if (session) {
+      try { session.client.leave(session.room.id).catch?.(() => {}); } catch (_) {}
+      resetNetworkSession();
+    }
     active = null;
     question = null;
     busy = false;
@@ -1789,6 +2680,10 @@
 
   /* 던전 화면 안에서 쓰는 탈출 버튼. */
   function leaveDungeonNow() {
+    if (networkSession) {
+      leaveNetworkRoom({ returnToTown:true });
+      return;
+    }
     abandonRun();
     call('closeModal');
     leaveDungeonMap();
@@ -1862,6 +2757,7 @@
 
   global.YuksamRaidRunUi = Object.freeze({
     startRun,
+    openNetworkLobby,
     isRunning:() => !!active,
     /* 전투 로그를 재생하는 중인지. 재생 중에는 다음 답을 받지 않는다. */
     isBusy:() => busy,
@@ -1873,6 +2769,7 @@
     /* 이동 연출 상태(검사용) — 배경이 얼마나 흘렀는지, 조우 연출이 어디까지 왔는지 */
     travelScrollForTest:() => travelScroll(),
     encounterProgressForTest:() => encounterProgress(),
+    displayFloorForTest:(snapshot, progress) => displayFloorForProgress(snapshot, progress),
     petAnchorForTest:() => (raidPetAnchor ? { ...raidPetAnchor } : null),
     /* 이동 연출 길이(밀리초). 검사에서는 짧게 줄여 빠르게 돌린다. */
     /* 준비 카운트다운 길이(검사에서 짧게 줄이려고 연다). */
