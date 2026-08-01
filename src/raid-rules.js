@@ -119,8 +119,12 @@
   /* 셋이 같은 문제를 동시에 푼다. 맞힌 사람만 제 몫의 피해를 넣고,
      틀린 사람은 절반만 들어간다(일반 전투와 같은 규칙).
      여기에 더해 빗나감과 치명타가 각자 따로 판정된다. */
+  /* 공격 순서는 항상 앞 → 가운데 → 뒤. */
+  const ATTACK_ORDER = Object.freeze({ front:0, middle:1, back:2 });
+
   function resolvePartyAttack({ members, answers, rng }) {
-    const list = Array.isArray(members) ? members : [];
+    const list = (Array.isArray(members) ? [...members] : [])
+      .sort((a, b) => (ATTACK_ORDER[a?.slot] ?? 1) - (ATTACK_ORDER[b?.slot] ?? 1));
     const given = answers && typeof answers === 'object' ? answers : {};
     const roll = typeof rng === 'function' ? rng : Math.random;
     const hits = list

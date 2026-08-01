@@ -108,6 +108,45 @@
       .raid-combat .combat-hpbox.monster{right:5%;top:auto;bottom:16px;min-width:250px}
       .raid-next-hint{font-size:11px;color:#9fb3cd;margin-top:3px}
       .raid-next-hint.warn{color:#fbbf24;font-weight:800}
+
+      /* 피해 숫자와 피격 연출 — 사냥터 전투와 같은 감각 */
+      .raid-float-layer{position:absolute;inset:0;pointer-events:none;z-index:12}
+      .raid-float{position:absolute;transform:translate(-50%,0);font-weight:900;
+        font-size:26px;text-shadow:0 2px 6px rgba(0,0,0,.85);animation:raidFloatUp 1s ease-out forwards}
+      .raid-float.damage{color:#fb7185}
+      .raid-float.crit{color:#fbbf24;font-size:34px}
+      .raid-float.heal{color:#4ade80}
+      .raid-float.miss{color:#cbd5e1;font-size:20px}
+      @keyframes raidFloatUp{
+        0%{opacity:0;transform:translate(-50%,8px) scale(.7)}
+        18%{opacity:1;transform:translate(-50%,-6px) scale(1.15)}
+        100%{opacity:0;transform:translate(-50%,-56px) scale(1)}
+      }
+      .raid-shake{animation:raidShake .42s ease-in-out both}
+      @keyframes raidShake{
+        0%,100%{transform:translateX(0)}
+        20%{transform:translateX(-8px)} 40%{transform:translateX(7px)}
+        60%{transform:translateX(-5px)} 80%{transform:translateX(3px)}
+      }
+      /* 공격하는 캐릭터가 앞으로 살짝 나갔다 돌아온다 */
+      .raid-lunge{animation:raidLunge .38s ease-out both}
+      @keyframes raidLunge{
+        0%{transform:translateX(0)} 45%{transform:translateX(20px)} 100%{transform:translateX(0)}
+      }
+      .raid-stage.raid-danger{box-shadow:inset 0 0 0 3px rgba(251,191,36,.75)}
+      /* 치명타가 터지면 무대가 번쩍인다 */
+      .raid-stage.raid-crit{animation:raidCritFlash .45s ease-out}
+      @keyframes raidCritFlash{
+        0%{box-shadow:inset 0 0 0 0 rgba(251,191,36,0)}
+        30%{box-shadow:inset 0 0 90px 12px rgba(251,191,36,.55)}
+        100%{box-shadow:inset 0 0 0 0 rgba(251,191,36,0)}
+      }
+      /* 쓰러진 몬스터는 어두워지며 넘어간다 */
+      .raid-monster-sprite.raid-dying canvas{
+        filter:brightness(.25) grayscale(1);opacity:.35;
+        transform:rotate(-10deg) translateY(14px);
+        transition:filter .6s ease, opacity .6s ease, transform .6s ease}
+      .raid-ally-sprite.down canvas{filter:grayscale(.9);opacity:.4}
     `;
     global.document.head.appendChild(style);
   }
@@ -582,7 +621,7 @@
 
       /* 이름은 몸에 겹치지 않게 머리 위 이름표로 띄운다.
          멀티플레이에서 다른 학생이 지나갈 때와 같은 모양이다. */
-      drawNameTag(ctx, x, y - 74, member.name, member.hp > 0);
+      drawNameTag(ctx, x, y + 26, member.name, member.hp > 0);
     });
   }
 
@@ -784,8 +823,10 @@
     const order = { front:0, middle:1, back:2 };
     return [...members]
       .sort((a, b) => (order[a.slot] ?? 1) - (order[b.slot] ?? 1))
+      /* combat-idle / combat-idle-player 는 사냥터 전투가 쓰는 클래스다.
+         이걸 붙여야 캐릭터가 가만히 있을 때도 살짝살짝 움직인다. */
       .map((member, index) => `
-        <div class="combat-sprite raid-ally-sprite raid-ally-${index} ${member.hp <= 0 ? 'down' : ''}">
+        <div class="combat-sprite combat-idle combat-idle-player raid-ally-sprite raid-ally-${index} ${member.hp <= 0 ? 'down' : ''}">
           <canvas class="raid-battle-face" data-member="${esc(member.id)}" width="132" height="172"></canvas>
         </div>`).join('');
   }
@@ -800,7 +841,8 @@
       .map((member) => {
         const percent = Math.max(0, Math.round((member.hp / member.maxHp) * 100));
         return `
-          <div class="raid-ally-hp ${member.hp <= 0 ? 'down' : ''} ${member.isPlayer ? 'me' : ''}">
+          <div class="raid-ally-hp ${member.hp <= 0 ? 'down' : ''} ${member.isPlayer ? 'me' : ''}"
+               data-member="${esc(member.id)}">
             <b>${esc(member.name)}${member.isPlayer ? ' (나)' : ''}</b>
             <span class="raid-ally-slot">${esc(R.slotLabel(member.slot))}</span>
             <div class="hpbar"><div class="hpfill" style="width:${percent}%"></div></div>
@@ -906,6 +948,21 @@
     renderBattle();
   }
 
+  /* 던전에서도 스킬 쿨타임이 실제로 돌아야 한다.
+     사냥터 전투가 쓰는 쿨타임 장부를 그대로 쓴다. */
+  function spendSkillCooldown() {
+    if (!chosenAction || chosenAction === 'attack') return;
+    const skillId = String(chosenAction).slice(7);
+    const defs = global.SKILL_DEFS || global.YuksamData?.SKILL_DEFS || {};
+    const cooldown = Number(defs[skillId]?.active?.cooldown) || 0;
+    if (cooldown > 0) call('setSkillCooldown', skillId, cooldown);
+  }
+
+  /* 라운드가 끝날 때마다 쿨타임을 한 턴씩 깎는다. */
+  function tickSkillCooldowns() {
+    call('tickSkillCooldowns');
+  }
+
   /* 화면에 보여 줄 체력. 로그가 한 줄씩 재생되는 동안 이 값이 조금씩 따라간다.
      (진행 엔진은 라운드를 한 번에 계산하지만, 화면은 사냥터 전투처럼
       "때릴 때마다 체력바가 쭉 빠지는" 모습을 보여야 한다.) */
@@ -937,12 +994,12 @@
 
     // 일반 전투와 같은 무대(combat-stage)를 쓰되 왼쪽에 세 명이 선다.
     call('openModal', `
-      <h2>전투 — ${esc(snap.title)}</h2>
+      <h2>전투</h2>
       <div class="combat-layout raid-combat">
         <div class="combat-stage raid-stage">
           <div class="combat-hpbox monster">
             <b>${monster.isBoss ? '👑 ' : ''}Lv.${monster.level} ${esc(monster.name)}</b>
-            <div>HP ${monster.hp}/${monster.maxHp}</div>
+            <div class="raid-hp-text">HP ${monster.hp}/${monster.maxHp}</div>
             <div class="hpbar"><div class="hpfill" style="width:${percent}%"></div></div>
             <div class="raid-next-hint ${nextKind === 'all' ? 'warn' : ''}">
               ${nextKind === 'all' ? '⚠ 다음은 전체 공격!' : '다음은 앞을 노립니다'}
@@ -950,7 +1007,7 @@
           </div>
           <div class="raid-party-hp">${partyHpHtml(members)}</div>
           ${partySpriteHtml(members)}
-          <div class="combat-sprite combat-monster raid-monster-sprite ${monster.isBoss ? 'boss' : ''}">
+          <div class="combat-sprite combat-idle combat-idle-monster combat-monster raid-monster-sprite ${monster.isBoss ? 'boss' : ''}">
             <canvas id="raidMonsterCanvas" width="230" height="210"></canvas>
           </div>
           <div id="raidFloatLayer" class="raid-float-layer"></div>
@@ -1013,6 +1070,17 @@
     if (!event) return;
     const monsterNode = global.document.querySelector('.raid-monster-sprite');
 
+    // 치명타는 무대 전체가 번쩍인다(사냥터 전투와 같다).
+    if (event.critical && !event.missed) {
+      const stage = global.document.querySelector('.raid-stage');
+      if (stage) {
+        stage.classList.remove('raid-crit');
+        void (stage.offsetWidth);
+        stage.classList.add('raid-crit');
+        global.setTimeout(() => { try { stage.classList.remove('raid-crit'); } catch (_) {} }, 500);
+      }
+    }
+
     if (event.kind === 'party-hit') {
       if (event.missed) floatNumber(monsterNode, 'MISS', 'miss');
       else {
@@ -1070,6 +1138,47 @@
     }
   }
 
+  /* 재생 중에는 창을 다시 열지 않고 바뀐 곳만 고친다.
+     창을 새로 열면 체력바가 매번 새로 만들어져 CSS 애니메이션이 죽는다.
+     (사냥터 전투에서 체력바가 스르륵 줄어드는 것과 같은 이유다.) */
+  function updateBattleView() {
+    const snap = active?.snapshot();
+    if (!snap?.monster || !view) return;
+    const doc = global.document;
+
+    // 문구
+    const heading = doc.querySelector('.raid-combat .panel-card h3');
+    if (heading) heading.textContent = panelMessage || '';
+
+    // 몬스터 체력
+    const monsterHp = Math.max(0, view.monsterHp);
+    const monsterPct = Math.max(0, Math.round((monsterHp / snap.monster.maxHp) * 100));
+    const monsterFill = doc.querySelector('.combat-hpbox.monster .hpfill');
+    const monsterText = doc.querySelector('.combat-hpbox.monster .raid-hp-text');
+    if (monsterFill) monsterFill.style.width = `${monsterPct}%`;
+    if (monsterText) monsterText.textContent = `HP ${monsterHp}/${snap.monster.maxHp}`;
+
+    // 파티 체력
+    snap.members.forEach((member) => {
+      const hp = Math.max(0, view.members?.[member.id] ?? member.hp);
+      const pct = Math.max(0, Math.round((hp / member.maxHp) * 100));
+      const box = doc.querySelector(`.raid-ally-hp[data-member="${member.id}"]`);
+      if (box) {
+        const fill = box.querySelector('.hpfill');
+        const num = box.querySelector('.raid-ally-num');
+        if (fill) fill.style.width = `${pct}%`;
+        if (num) num.textContent = `${hp}/${member.maxHp}`;
+        box.classList.toggle('down', hp <= 0);
+      }
+      const sprite = memberSpriteNode(member.id);
+      if (sprite) sprite.classList.toggle('down', hp <= 0);
+    });
+
+    // 쓰러진 몬스터는 사냥터처럼 어두워지며 사라진다.
+    const monsterSprite = doc.querySelector('.raid-monster-sprite');
+    if (monsterSprite) monsterSprite.classList.toggle('raid-dying', monsterHp <= 0);
+  }
+
   function playEvents(events, onDone) {
     let index = 0;
     const step = () => {
@@ -1082,8 +1191,8 @@
       panelMessage = event.text || '';
       applyEventToView(event);
       playEventSound(event);
-      renderBattle();
-      showEventEffect(event);   // 숫자와 흔들림은 그린 뒤에 얹는다
+      updateBattleView();       // 창을 새로 열지 않고 값만 고친다 → 체력바가 스르륵 줄어든다
+      showEventEffect(event);   // 숫자와 흔들림은 그 위에 얹는다
       global.setTimeout(step, eventDelayMs);
     };
     step();
@@ -1112,9 +1221,30 @@
     const answers = active.rollAllyAnswers();
     answers.me = correct;
 
+    spendSkillCooldown();   // 쓴 스킬은 쿨타임에 들어간다
+    tickSkillCooldowns();   // 한 턴이 지났으므로 모든 쿨타임을 깎는다
+
     const snapBefore = active.snapshot();
     const result = active.resolveRound(answers);
     if (!result.ok) { busy = false; panelMode = 'menu'; return; }
+
+    /* 사냥터 전투처럼, 틀리면 정답을 초록색으로 잠깐 보여 준 뒤 공격이 이어진다. */
+    if (!correct && typeof global.YuksamWrongAnswerReview?.reveal === 'function') {
+      const host = global.document.querySelector('.raid-combat .panel-card');
+      if (host) {
+        global.YuksamWrongAnswerReview.reveal({
+          root: host,
+          correctAnswer: question?.answer,
+          onComplete: () => runRound(result, correct, snapBefore),
+        });
+        return;
+      }
+    }
+    runRound(result, correct, snapBefore);
+  }
+
+  function runRound(result, correct, snapBefore) {
+    if (!active) return;
 
     // 정답/오답을 먼저 알려 준 뒤 공격이 이어진다(일반 전투와 같은 순서).
     const opening = {

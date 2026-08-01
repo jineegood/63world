@@ -192,7 +192,10 @@ test('전투 기록은 사냥터처럼 별도 상자 없이 h3 자리에서 바�
 test('전투 로그를 한 줄씩 순서대로 재생한다', () => {
   /* 결과를 한 번에 보여 주지 않고, 일반 전투처럼 한 줄씩 쌓으며 소리를 낸다. */
   assert.match(uiSource, /function playEvents\(events, onDone\)/);
-  assert.match(uiSource, /playEventSound\(event\);\s*\n\s*renderBattle\(\);/);
+  /* 재생 중에는 창을 다시 열지 않고 값만 고친다.
+     창을 새로 열면 체력바가 매번 새로 만들어져 스르륵 줄어드는 연출이 죽는다. */
+  assert.match(uiSource, /playEventSound\(event\);\s*\n\s*updateBattleView\(\);/);
+  assert.match(uiSource, /function updateBattleView\(\)/);
   // 정답/오답을 먼저 알리고, 그 뒤에 각자의 공격이 순서대로 재생된다.
   assert.match(uiSource, /playEvents\(\[opening, \.\.\.withSounds\]/);
   // 재생 중에는 다음 답을 받지 않는다.

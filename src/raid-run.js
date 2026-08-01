@@ -190,7 +190,9 @@
         state.log.push(...events);
         state.encounterIndex += 1;
         const more = state.encounterIndex < encounters.length;
-        state.monster = null;
+        /* 몬스터를 바로 지우면 화면이 사망 연출과 마지막 로그를 그릴 수 없다.
+           쓰러진 표시만 해 두고, 다음 몬스터가 나올 때 교체한다. */
+        state.monster.dying = true;
         state.phase = more ? 'travel' : 'cleared';
         if (!more) state.finishedAt = Date.now();
         return { ok:true, events, monsterDown:true, cleared:!more };
