@@ -9,6 +9,63 @@ const coreSource = () => fs.readFileSync(path.join(root, 'src/multiplayer-core.j
 const multiplayerSource = () => fs.readFileSync(path.join(root, 'src/multiplayer.js'), 'utf8');
 const remoteMotionSource = () => fs.readFileSync(path.join(root, 'src/remote-motion.js'), 'utf8');
 const avatarVisualSyncSource = () => fs.readFileSync(path.join(root, 'src/avatar-visual-sync.js'), 'utf8');
+const gameSource = () => fs.readFileSync(path.join(root, 'game.js'), 'utf8');
+
+test('character names share one visual-width limit for Hangul and English', () => {
+  const source = gameSource();
+  const start = source.indexOf('const CHARACTER_NAME_MAX_VISUAL_UNITS = 14;');
+  const end = source.indexOf('const secureStudentAccess =', start);
+  assert.ok(start >= 0 && end > start);
+  const window = {};
+  vm.runInNewContext(source.slice(start, end), { window });
+  const rules = window.YuksamCharacterNameRules;
+
+  assert.equal(rules.validate('가나다라마바사').ok, true);
+  assert.equal(rules.validate('가나다라마바사').units, 14);
+  assert.equal(rules.validate('가나다라마바사아').ok, false);
+  assert.match(rules.validate('가나다라마바사아').message, /한글 최대 7자/);
+  assert.equal(rules.validate('abcdefghijklmn').ok, true);
+  assert.equal(rules.validate('abcdefghijklmno').ok, false);
+  assert.doesNotMatch(source, /\$\('loginName'\)\.maxLength = 14/);
+  assert.match(source, /const checkedNewName = validateCharacterName/);
+  assert.ok((source.match(/validateCharacterName\(/g) || []).length >= 4);
+});
+
+test('shared nameplate model renders below both local and remote characters and supports themes', () => {
+  const source = gameSource();
+  const start = source.indexOf('/* Shared world nameplates.');
+  assert.ok(start >= 0);
+  const rects = [];
+  const text = [];
+  const window = { performance:{ now:() => 1000 } };
+  const context = {
+    window,
+    CLASS_META:{ warrior:{ name:'전사' } },
+    roundRect:(ctx, x, y, width, height, radius) => rects.push({ x, y, width, height, radius }),
+    Date,
+    Math,
+  };
+  vm.runInNewContext(source.slice(start), context);
+  const ctx = {
+    save() {}, restore() {}, fill() {}, stroke() {},
+    measureText:(value) => ({ width:String(value).length * 10 }),
+    fillText:(value, x, y) => text.push({ value, x, y }),
+  };
+  const api = window.YuksamPlayerNameplateV1;
+  const model = api.draw(ctx, 300, 200, {
+    name:'둘째', level:6, class:'warrior', spec:'무기',
+  }, { source:'remote', userId:'user-2' });
+
+  assert.equal(model.source, 'remote');
+  assert.equal(model.roleLine, 'LV.6 무기 전사');
+  assert.equal(rects[0].y, 258);
+  assert.equal(text[0].value, '둘째');
+  let themed = false;
+  assert.equal(api.registerTheme('gold', () => { themed = true; }), true);
+  api.setThemeResolver(() => 'gold');
+  api.draw(ctx, 300, 200, { name:'둘째', class:'warrior' }, { source:'remote' });
+  assert.equal(themed, true);
+});
 
 test('Supabase REST configuration normalizes to one Realtime websocket endpoint', () => {
   const window = {};
@@ -60,6 +117,8 @@ test('two mocked browser sessions exchange positions and chat', async () => {
     const chats = [];
     const drawn = [];
     const paintedText = [];
+    const nameplates = [];
+    const yuksamPaints = [];
     const canvasListeners = new Map();
     const layers = [];
     const window = {
@@ -68,13 +127,21 @@ test('two mocked browser sessions exchange positions and chat', async () => {
       appendChatMessage:(type, sender, message) => chats.push({ type, sender, message }),
       getPvpIdentityV1:() => ({ userId:`id-${name}`, displayName:name, role:'student' }),
       openRemoteProfileV1:(userId) => chats.push({ type:'profile', userId }),
+      YuksamPlayerNameplateV1:{
+        draw:(ctx, sx, sy, player, meta) => nameplates.push({ x:sx, y:sy, player, meta }),
+      },
+      drawYuksamPetV35:(ctx, point, dancing, moving, pet, now) => {
+        yuksamPaints.push({ point, dancing, moving, petId:pet.id, now });
+      },
       PET_DEFS_V27:{
         chick:{ id:'chick', name:'삐약이', icon:'🐤', color:'#fde68a', bob:0 },
+        yuksam:{ id:'yuksam', name:'육삼이', icon:'🏢', color:'#fbbf24', bob:6, legendary:true },
       },
     };
     const game = {
       player:{ name, x, y:200, level:1, class:'warrior', equipment:{ weapon:'sword_1' },
-        weaponUpgrades:{ sword_1:3 }, appearance:{}, costume:{ hat:'blue-cap' }, activePet:'chick' },
+        weaponUpgrades:{ sword_1:3 }, appearance:{}, costume:{ hat:'blue-cap' }, activePet:'chick',
+        nameplate:{ theme:'sparkle' } },
       lastMove:{ x:1, y:0 },
       currentMap:'town',
       isMoving:false,
@@ -119,7 +186,8 @@ test('two mocked browser sessions exchange positions and chat', async () => {
     vm.runInNewContext(remoteMotionSource(), context);
     vm.runInNewContext(avatarVisualSyncSource(), context);
     vm.runInNewContext(multiplayerSource(), context);
-    return { window, game, intervals, chats, canvasListeners, layers, drawn, paintedText };
+    return { window, game, intervals, chats, canvasListeners, layers, drawn, paintedText,
+      nameplates, yuksamPaints };
   }
 
   const first = createSession('첫째', 100);
@@ -138,6 +206,7 @@ test('two mocked browser sessions exchange positions and chat', async () => {
   assert.equal(first.window.__remotePlayersV53.get('둘째').costume.hat, 'blue-cap');
   assert.equal(first.window.__remotePlayersV53.get('둘째').activePet, 'chick');
   assert.equal(first.window.__remotePlayersV53.get('둘째').weaponTier, 3);
+  assert.equal(first.window.__remotePlayersV53.get('둘째').nameplate.theme, 'sparkle');
   assert.equal(first.window.__remotePlayersV53.get('둘째').pvpAvailable, true);
 
   first.window.__mpBroadcastChatV53('안녕!');
@@ -149,6 +218,19 @@ test('two mocked browser sessions exchange positions and chat', async () => {
   assert.deepEqual(first.drawn.at(-1), { x:300, y:200, moving:false, dance:false, weaponTier:3 });
   assert.equal(first.paintedText.includes('🐤'), true);
   assert.equal(first.paintedText.includes('삐약이'), false);
+  assert.equal(first.nameplates.length, 1);
+  assert.equal(first.nameplates[0].y, 200);
+  assert.equal(first.nameplates[0].player.name, '둘째');
+  assert.equal(first.nameplates[0].player.nameplate.theme, 'sparkle');
+  assert.equal(first.nameplates[0].meta.source, 'remote');
+
+  second.game.player.activePet = 'yuksam';
+  await new Promise((resolve) => setTimeout(resolve, 230));
+  second.intervals.find((entry) => entry.ms === 220).fn();
+  await Promise.resolve();
+  first.layers[0].render();
+  assert.equal(first.window.__remotePlayersV53.get('둘째').activePet, 'yuksam');
+  assert.equal(first.yuksamPaints.at(-1).petId, 'yuksam');
 
   second.game.danceTimer = 3000;
   await new Promise((resolve) => setTimeout(resolve, 230));
@@ -163,4 +245,16 @@ test('two mocked browser sessions exchange positions and chat', async () => {
   contextmenu({ clientX:300, clientY:200, preventDefault:() => { prevented = true; } });
   assert.equal(prevented, true);
   assert.deepEqual(first.chats.at(-1), { type:'profile', userId:'id-둘째' });
+});
+
+test('remote 육삼이 reuses the local face painter and old overhead labels are gone', () => {
+  const game = gameSource();
+  const multiplayer = multiplayerSource();
+  assert.match(game, /window\.drawYuksamPetV35 = drawYuksamPetV35/);
+  assert.match(game, /ctx\.arc\(-6, -1, 2\.1/);
+  assert.match(game, /ctx\.arc\(6, -1, 2\.1/);
+  assert.match(multiplayer, /window\.drawYuksamPetV35\(ctx, point, dancing, moving, pet, now\)/);
+  assert.match(multiplayer, /drawRemoteNameplate\(ctx, s, p\)/);
+  assert.doesNotMatch(multiplayer, /const label = `\$\{p\.name\} \(Lv\./);
+  assert.doesNotMatch(multiplayer, /s\.y - 62/);
 });

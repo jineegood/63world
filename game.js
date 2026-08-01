@@ -89,6 +89,45 @@ const screens = {
   game: $('game'),
 };
 
+/* Character names use visual width instead of raw string length.
+   One Hangul/CJK glyph is about as wide as two Latin letters, so both
+   "한글 7자" and "English14Chars" fit the same nameplate budget. */
+const CHARACTER_NAME_MAX_VISUAL_UNITS = 14;
+const CHARACTER_NAME_LIMIT_MESSAGE = '이름은 한글 최대 7자 또는 영문 최대 14자까지 사용할 수 있어요.';
+
+function characterNameVisualUnits(value) {
+  const normalized = String(value ?? '').normalize('NFC');
+  return [...normalized].reduce((total, character) => {
+    if (/\p{Mark}/u.test(character)) return total;
+    if (/[\p{Script=Latin}0-9 _.'-]/u.test(character)) return total + 1;
+    return total + 2;
+  }, 0);
+}
+
+function validateCharacterName(value) {
+  const name = String(value ?? '').trim().normalize('NFC');
+  if (!name) {
+    return Object.freeze({ ok:false, name:'', units:0, message:'캐릭터 이름을 입력하세요.' });
+  }
+  const units = characterNameVisualUnits(name);
+  if (units > CHARACTER_NAME_MAX_VISUAL_UNITS) {
+    return Object.freeze({
+      ok:false,
+      name,
+      units,
+      message:CHARACTER_NAME_LIMIT_MESSAGE,
+    });
+  }
+  return Object.freeze({ ok:true, name, units, message:'' });
+}
+
+window.YuksamCharacterNameRules = Object.freeze({
+  maxVisualUnits:CHARACTER_NAME_MAX_VISUAL_UNITS,
+  message:CHARACTER_NAME_LIMIT_MESSAGE,
+  visualUnits:characterNameVisualUnits,
+  validate:validateCharacterName,
+});
+
 const secureStudentAccess = YuksamStudentAccessV2.create({
   config:window.YUKSAM_CLOUD || {},
   clientFactory:window.YuksamSupabaseClient?.createClient,
@@ -3772,6 +3811,9 @@ function getSkillTotal(ids) {
 
 function bindEvents() {
   clickMovementControllerV1.bind();
+  if ($('loginName')) {
+    $('loginName').title = CHARACTER_NAME_LIMIT_MESSAGE;
+  }
   $('studentLoginBtn').addEventListener('click', () => { resumeAudio(); handleStudentLogin(); });
   if ($('settingsBtn')) $('settingsBtn').addEventListener('click', () => { resumeAudio(); openSettingsModal(); });
   if ($('adminEntryBtn')) $('adminEntryBtn').addEventListener('click', () => { resumeAudio(); openAdminPanel(); });
@@ -3783,6 +3825,9 @@ function bindEvents() {
     drawPreview();
   });
   $('createCharacterBtn').addEventListener('click', () => {
+    const checkedName = validateCharacterName(game.currentName);
+    if (!checkedName.ok) { toast(checkedName.message); return; }
+    game.currentName = checkedName.name;
     if (!secureStudentAccess.enabled) {
       const stored = readPlayerStorage(game.currentName);
       if (stored.status === 'corrupt') {
@@ -4731,7 +4776,7 @@ function showNewCharacterCreatorTransition(name) {
 }
 
 async function handleStudentLogin() {
-  const name = $('loginName').value.trim();
+  const name = String($('loginName').value ?? '').trim().normalize('NFC');
   const password = secureStudentAccess.enabled ? $('loginPassword').value : $('loginPassword').value.trim();
   if (!name) { toast('캐릭터 이름을 입력하세요.'); return; }
   if (!password) { toast('비밀번호를 입력하세요.'); return; }
@@ -4767,7 +4812,10 @@ async function handleStudentLogin() {
       return;
     }
   }
-  showNewCharacterCreatorTransition(game.currentName || name);
+  const checkedNewName = validateCharacterName(game.currentName || name);
+  if (!checkedNewName.ok) { toast(checkedNewName.message); return; }
+  game.currentName = checkedNewName.name;
+  showNewCharacterCreatorTransition(game.currentName);
 }
 
 function hasAvailableQuest() {
@@ -5949,7 +5997,7 @@ function updateQuestTracker() {
       resumeAudio();
       return secureHandleStudentLoginV2();
     }
-    const name = $('loginName').value.trim();
+    const name = String($('loginName').value ?? '').trim().normalize('NFC');
     const password = $('loginPassword').value.trim();
     if (!name) { toast('캐릭터 이름을 입력하세요.'); return; }
     if (!password) { toast('비밀번호를 입력하세요.'); return; }
@@ -5975,7 +6023,10 @@ function updateQuestTracker() {
       startGame(true);
       return;
     }
-    showNewCharacterCreatorTransition(name);
+    const checkedNewName = validateCharacterName(name);
+    if (!checkedNewName.ok) { toast(checkedNewName.message); return; }
+    game.currentName = checkedNewName.name;
+    showNewCharacterCreatorTransition(game.currentName);
   };
   const studentBtn = $('studentLoginBtn');
   if (studentBtn) {
@@ -7819,10 +7870,10 @@ function updateQuestTracker() {
     return ['arrowleft','a','arrowright','d','e','enter'].includes(k);
   }});
 
-  // 4) 전투 메시지 숫자 색상 재정의: 적 피해 빨간색, 내 HP 감소 파란색
-  function highlightCombatMessageV25(text) {
-    const safe = escapeHtml(String(text || ''));
-    return safe.replace(/HP\s*-\s*\d+|\d+\s*피해|\d+\s*회복|보호막\s*\d+/g, (m) => {
+  // 4) 전투 메시지 색상: 내 이름은 초록, 적 이름은 빨강으로 구분하고
+  // 피해·회복·보호막 숫자는 기존 색을 유지한다.
+  function highlightCombatNumbersV25(safe) {
+    return String(safe || '').replace(/HP\s*-\s*\d+|\d+\s*피해|\d+\s*회복|보호막\s*\d+/g, (m) => {
       if (/^HP\s*-/.test(m)) {
         const n = m.match(/\d+/)?.[0] || '';
         return m.replace(n, `<span class="damage-number-v25-player">${n}</span>`);
@@ -7834,6 +7885,33 @@ function updateQuestTracker() {
       const n = m.match(/\d+/)?.[0] || '';
       return m.replace(n, `<span class="damage-number-v25-generic">${n}</span>`);
     });
+  }
+  function highlightCombatMessageV25(text) {
+    const source = String(text || '');
+    const entities = [
+      { name:String(game.player?.name || ''), className:'combat-log-name-player', color:'#4ade80' },
+      { name:String(currentCombatMonster?.()?.name || ''), className:'combat-log-name-enemy', color:'#fb7185' },
+    ].filter((entry) => entry.name).sort((a, b) => b.name.length - a.name.length);
+    let html = '';
+    let cursor = 0;
+    while (cursor < source.length) {
+      let match = null;
+      entities.forEach((entity) => {
+        const index = source.indexOf(entity.name, cursor);
+        if (index < 0) return;
+        if (!match || index < match.index || (index === match.index && entity.name.length > match.entity.name.length)) {
+          match = { index, entity };
+        }
+      });
+      if (!match) {
+        html += highlightCombatNumbersV25(escapeHtml(source.slice(cursor)));
+        break;
+      }
+      html += highlightCombatNumbersV25(escapeHtml(source.slice(cursor, match.index)));
+      html += `<span class="${match.entity.className}" style="color:${match.entity.color};font-weight:900">${escapeHtml(match.entity.name)}</span>`;
+      cursor = match.index + match.entity.name.length;
+    }
+    return html;
   }
   combatFramePipeline.register({
     id:'combat-frame-v25',
@@ -12507,10 +12585,10 @@ function updateQuestTracker() {
   };
 
   // 6) 육삼이 펫 팔로워 얼굴 추가
-  function drawYuksamPetV35(ctx, p, dancing, moving, pet) {
+  function drawYuksamPetV35(ctx, p, dancing, moving, pet, now = Date.now()) {
     ctx.save();
     ctx.translate(p.x, p.y);
-    const wobble = dancing ? Math.sin(performance.now()/95)*0.18 : Math.sin(performance.now()/520)*0.03;
+    const wobble = dancing ? Math.sin(now/95)*0.18 : Math.sin(now/520)*0.03;
     ctx.rotate(wobble);
     ctx.font = '900 34px Noto Sans KR, Apple Color Emoji, Segoe UI Emoji, system-ui';
     ctx.textAlign='center';
@@ -12526,7 +12604,7 @@ function updateQuestTracker() {
     ctx.beginPath(); ctx.arc(0, 5, 6, 0.2, Math.PI - 0.2); ctx.stroke();
     ctx.strokeStyle = 'rgba(251,191,36,.76)';
     ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(0, 0, 25 + Math.sin(performance.now()/240)*3, 0, Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, 25 + Math.sin(now/240)*3, 0, Math.PI*2); ctx.stroke();
     if (moving) {
       ctx.fillStyle = pet.color || '#fbbf24';
       ctx.globalAlpha = .7;
@@ -12535,6 +12613,8 @@ function updateQuestTracker() {
     }
     ctx.restore();
   }
+  // Realtime friends use this exact painter too, including 육삼이's eyes and smile.
+  window.drawYuksamPetV35 = drawYuksamPetV35;
   worldRenderPipeline.registerOwner({
     id:'final-boss-room-v35',
     priority:350,
@@ -12551,7 +12631,7 @@ function updateQuestTracker() {
         const pet = petDefs[game.player?.activePet];
         if (!pet) return;
         const ctx = game.ctx;
-        const now = performance.now();
+        const now = Date.now();
         const dir = game.lastMove || { x: 1, y: 0 };
         if (Math.abs(dir.x) > 0.1) game.player._petSide = dir.x > 0 ? 'left' : 'right';
         const side = game.player._petSide || 'left';
@@ -12560,7 +12640,7 @@ function updateQuestTracker() {
         const wx = game.player.x + (side === 'left' ? -54 : 54) + (dancing ? Math.sin(now / 90) * 4 : 0);
         const wy = game.player.y + 8 - (moving ? Math.abs(Math.sin(now / 120 + (pet.bob || 0))) * 11 : Math.sin(now / 340 + (pet.bob || 0)) * 2.5);
         const p = worldToScreen(wx, wy);
-        if (pet.id === 'yuksam') drawYuksamPetV35(ctx, p, dancing, moving, pet);
+        if (pet.id === 'yuksam') drawYuksamPetV35(ctx, p, dancing, moving, pet, now);
       } catch {}
     },
   });
@@ -12996,4 +13076,89 @@ window.cheatUpgradeEquippedWeapon = async function cheatUpgradeEquippedWeapon() 
       return true;
     },
   });
+})();
+
+/* Shared world nameplates.
+   Local and realtime characters pass through the same renderer. Future
+   nameplate cosmetics can register a theme and choose it with one resolver. */
+(function installYuksamPlayerNameplateV1() {
+  if (window.YuksamPlayerNameplateV1) return;
+
+  const themes = new Map();
+  let themeResolver = () => 'default';
+
+  function modelFor(player, meta = {}) {
+    const klass = player?.class || 'warrior';
+    const spec = player?.spec === '분노' ? '무기' : String(player?.spec || '');
+    const className = CLASS_META[klass]?.name || '모험가';
+    const level = Math.max(1, Math.trunc(Number(player?.level) || 1));
+    return Object.freeze({
+      name:String(player?.name || '이름없음'),
+      level,
+      klass,
+      spec,
+      className,
+      roleLine:`LV.${level} ${spec ? `${spec} ` : ''}${className}`,
+      source:meta.source === 'remote' ? 'remote' : 'local',
+      userId:String(meta.userId || ''),
+      cosmetics:player?.nameplate && typeof player.nameplate === 'object'
+        ? { ...player.nameplate }
+        : {},
+    });
+  }
+
+  function drawDefaultNameplate(ctx, x, y, model) {
+    const top = y + 58;
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.font = '900 18px Jua, Noto Sans KR, system-ui';
+    const width = Math.max(
+      ctx.measureText(model.name).width,
+      ctx.measureText(model.roleLine).width,
+    ) + 34;
+    const glow = (window.performance?.now?.() || Date.now()) / 1000;
+    ctx.shadowColor = 'rgba(0,0,0,.92)';
+    ctx.shadowBlur = 8;
+    ctx.fillStyle = 'rgba(4,11,22,.82)';
+    roundRect(ctx, x - width / 2, top, width, 50, 16); ctx.fill();
+    ctx.strokeStyle = `rgba(139,230,255,${0.70 + Math.sin(glow * 2.2) * 0.10})`;
+    ctx.lineWidth = 2;
+    roundRect(ctx, x - width / 2, top, width, 50, 16); ctx.stroke();
+    ctx.shadowBlur = 5;
+    ctx.fillStyle = '#fff7b0';
+    ctx.fillText(model.name, x, top + 21);
+    ctx.font = '900 14px Noto Sans KR, Jua, system-ui';
+    ctx.fillStyle = model.spec ? '#7fffd4' : '#d7ecff';
+    ctx.fillText(model.roleLine, x, top + 39);
+    ctx.restore();
+  }
+
+  themes.set('default', drawDefaultNameplate);
+
+  const api = Object.freeze({
+    draw(ctx, x, y, player, meta = {}) {
+      if (!ctx || !player) return null;
+      const model = modelFor(player, meta);
+      let themeId = 'default';
+      try { themeId = String(themeResolver(model, meta) || 'default'); } catch {}
+      const renderer = themes.get(themeId) || themes.get('default');
+      renderer(ctx, x, y, model, meta);
+      return model;
+    },
+    registerTheme(id, renderer) {
+      const key = String(id || '').trim();
+      if (!key || key === 'default' || typeof renderer !== 'function') return false;
+      themes.set(key, renderer);
+      return true;
+    },
+    setThemeResolver(resolver) {
+      themeResolver = typeof resolver === 'function' ? resolver : () => 'default';
+    },
+    modelFor,
+  });
+
+  window.YuksamPlayerNameplateV1 = api;
+  drawPlayerNameplate = function drawPlayerNameplateSharedV1(ctx, x, y, player) {
+    return api.draw(ctx, x, y, player, { source:'local' });
+  };
 })();

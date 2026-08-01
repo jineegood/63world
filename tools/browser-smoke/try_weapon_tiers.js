@@ -11,7 +11,7 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
     console.log(condition ? 'PASS:' : 'FAIL:', name, detail);
   };
 
-  $('loginName').value = 'weapon-tier-smoke';
+  $('loginName').value = 'tier-smoke';
   $('loginPassword').value = '1';
   click('studentLoginBtn');
   await sleep(1300);

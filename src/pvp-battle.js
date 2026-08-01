@@ -62,6 +62,76 @@
     })[char]);
   }
 
+  function highlightPvpCombatNumbers(safeText) {
+    return String(safeText || '').replace(
+      /HP\s*(?:-\s*)?\d+(?:\s*\/\s*\d+)?|총\s*\d+\s*의\s*피해|\d+\s*피해|체력\s*\d+|보호막\s*\d+|\d+\s*회복/g,
+      (fragment) => {
+        const className = /^HP\s*/.test(fragment)
+          ? 'damage-number-v25-player'
+          : (/피해/.test(fragment) || /^체력\s*/.test(fragment)
+            ? 'damage-number-v25-enemy'
+            : 'damage-number-v25-generic');
+        return fragment.replace(/\d+/g, (number) => `<span class="${className}">${number}</span>`);
+      },
+    );
+  }
+
+  function formatPvpCombatMessage(message) {
+    /* 사용자 이름과 서버 문구를 먼저 전부 escape한다. 이후에는 정규식에
+       사용자 문자열을 넣지 않고, escape된 이름을 글자 그대로 비교한다. */
+    const safeMessage = escape(message);
+    const names = [
+      {
+        literal:escape(playerForRole('me').name || ''),
+        className:'pvp-combat-name-me',
+        color:'#4ade80',
+        order:0,
+      },
+      {
+        literal:escape(playerForRole('opponent').name || ''),
+        className:'pvp-combat-name-opponent',
+        color:'#fca5a5',
+        order:1,
+      },
+    ]
+      .filter((entry) => entry.literal)
+      .sort((left, right) => right.literal.length - left.literal.length || left.order - right.order);
+
+    if (!names.length) return highlightPvpCombatNumbers(safeMessage);
+
+    const parts = [];
+    let plain = '';
+    let cursor = 0;
+    const flushPlain = () => {
+      if (!plain) return;
+      parts.push(highlightPvpCombatNumbers(plain));
+      plain = '';
+    };
+
+    while (cursor < safeMessage.length) {
+      const matched = names.find((entry) => safeMessage.startsWith(entry.literal, cursor));
+      if (matched) {
+        flushPlain();
+        parts.push(`<span class="${matched.className}" style="color:${matched.color};font-weight:900">${matched.literal}</span>`);
+        cursor += matched.literal.length;
+        continue;
+      }
+
+      /* 이름이 'lt'처럼 HTML 엔티티 일부와 같아도 &lt; 내부를 건드리지 않는다. */
+      const entity = safeMessage.slice(cursor).match(/^&(amp|lt|gt|quot|#39);/);
+      if (entity) {
+        plain += entity[0];
+        cursor += entity[0].length;
+        continue;
+      }
+
+      plain += safeMessage[cursor];
+      cursor += 1;
+    }
+    flushPlain();
+    return parts.join('');
+  }
+
   function encoded(value) {
     return encodeURIComponent(String(value ?? '')).replace(/'/g, '%27');
   }
@@ -358,7 +428,7 @@
           ${introOverlay()}
         </div>
         <div class="panel-card pvp-combat-panel-v2">
-          <h3 class="combat-notice ${escape(combatTone)}">${escape(message)}</h3>
+          <h3 class="combat-notice ${escape(combatTone)}">${formatPvpCombatMessage(message)}</h3>
           ${contentHtml()}
         </div>
       </div>

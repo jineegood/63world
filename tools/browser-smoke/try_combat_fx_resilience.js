@@ -15,7 +15,7 @@ function ok(name, condition, detail = '') {
 
 run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   const G = () => window.__G;
-  $('loginName').value = '전투FX복원력검증';
+  $('loginName').value = 'FX복원검증';
   $('loginPassword').value = '1234';
   click('studentLoginBtn'); await sleep(1300);
   click('createCharacterBtn'); await sleep(2600);

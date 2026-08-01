@@ -14,7 +14,7 @@ function check(name, condition, detail = '') {
 }
 
 run(root, async ({ window, $, click, sleep, asyncErrors }) => {
-  $('loginName').value = 'combat-entry-smoke';
+  $('loginName').value = 'entry-smoke';
   $('loginPassword').value = '1234';
   click('studentLoginBtn'); await sleep(1200);
   click('createCharacterBtn'); await sleep(2600);

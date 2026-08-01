@@ -113,6 +113,9 @@
         level: G.player.level, class: G.player.class, spec: G.player.spec || null,
         equipment: G.player.equipment || {}, appearance: G.player.appearance || {},
         costume: G.player.costume || {},
+        nameplate:G.player.nameplate && typeof G.player.nameplate === 'object'
+          ? { ...G.player.nameplate }
+          : null,
         activePet:typeof G.player.activePet === 'string' ? G.player.activePet : null,
         petSide,
         weaponTier:avatarVisualSync?.normalizeTier(
@@ -127,7 +130,7 @@
         dance: Number(G.danceTimer || 0) > 0,
       };
       // 달라진 게 없으면 굳이 보내지 않는다. 대신 사라지지 않도록 가끔은 알린다.
-      const key = `${payload.userId || ''}|${payload.map}|${payload.x}|${payload.y}|${payload.moving}|${payload.dance}|${payload.pvpAvailable}|${payload.level}|${payload.activePet || ''}|${payload.petSide}|${payload.weaponTier}|${payload.facing.x},${payload.facing.y}`;
+      const key = `${payload.userId || ''}|${payload.map}|${payload.x}|${payload.y}|${payload.moving}|${payload.dance}|${payload.pvpAvailable}|${payload.level}|${payload.activePet || ''}|${payload.petSide}|${payload.weaponTier}|${JSON.stringify(payload.nameplate || {})}|${payload.facing.x},${payload.facing.y}`;
       if (key !== lastPayloadKey || now - lastKeepaliveAt >= IDLE_KEEPALIVE_MS) {
         lastPayloadKey = key;
         lastKeepaliveAt = now;
@@ -166,7 +169,13 @@
     ctx.beginPath();
     ctx.ellipse(point.x, point.y + 24, 18, 6, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.globalAlpha = 0.94;
+    ctx.globalAlpha = 1;
+    if (pet.id === 'yuksam' && typeof window.drawYuksamPetV35 === 'function') {
+      ctx.restore();
+      // 육삼이는 일반 건물 아이콘과 겹쳐 그리지 않고 얼굴이 들어간 공용 그림만 쓴다.
+      window.drawYuksamPetV35(ctx, point, dancing, moving, pet, now);
+      return;
+    }
     ctx.translate(point.x, point.y);
     ctx.rotate(dancing
       ? Math.sin(now / 95 + Number(pet.bob || 0)) * 0.2
@@ -204,6 +213,21 @@
       ctx.fillText('♬', 22, -30);
     }
     ctx.restore();
+  }
+
+  function drawRemoteNameplate(ctx, point, remote) {
+    const renderer = window.YuksamPlayerNameplateV1;
+    if (typeof renderer?.draw !== 'function') return;
+    renderer.draw(ctx, point.x, point.y, {
+      name:remote?.name,
+      level:remote?.level,
+      class:remote?.class,
+      spec:remote?.spec,
+      nameplate:remote?.nameplate,
+    }, {
+      source:'remote',
+      userId:String(remote?.userId || ''),
+    });
   }
 
   function renderRemotes() {
@@ -259,17 +283,13 @@
           centerY:s.y - 30,
         });
       }
-      // 이름표
+      // Local and remote characters share one below-the-feet nameplate renderer.
+      try { drawRemoteNameplate(ctx, s, p); } catch {}
+
+      // 말풍선은 이름표와 별개로 캐릭터 머리 위에 둔다.
       ctx.save();
       ctx.font = '700 12px "Noto Sans KR", sans-serif';
       ctx.textAlign = 'center';
-      const label = `${p.name} (Lv.${p.level || 1})`;
-      const w = ctx.measureText(label).width + 14;
-      ctx.fillStyle = 'rgba(15,23,42,.72)';
-      ctx.beginPath(); ctx.roundRect(s.x - w / 2, s.y - 62, w, 20, 8); ctx.fill();
-      ctx.fillStyle = '#bae6fd';
-      ctx.fillText(label, s.x, s.y - 48);
-      // 말풍선
       if (p.bubble && p.bubble.until > Date.now()) {
         const t = p.bubble.text;
         const bw = Math.min(220, ctx.measureText(t).width + 18);

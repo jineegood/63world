@@ -46,6 +46,6 @@ test('game routes secure login and saving through the v2 boundary without retain
   assert.match(source, /game\.currentPassword\s*=\s*secureStudentAccess\.enabled\s*\?\s*''\s*:\s*password/);
 });
 
-test('secure existing account enters the game and caches no credential', () => runMode('existing'));
+test('secure existing account, including a legacy long name, enters the game and caches no credential', () => runMode('existing'));
 test('secure new account reaches creation and saves a credential-free character', () => runMode('new'));
 test('secure wrong password stays closed without creating a legacy record', () => runMode('wrong'));

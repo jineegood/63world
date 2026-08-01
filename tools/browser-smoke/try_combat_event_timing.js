@@ -11,7 +11,7 @@ function ok(name, condition, detail = '') {
 
 run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   const G = () => window.__G;
-  $('loginName').value = '전투상태시점검증';
+  $('loginName').value = '상태시점검증';
   $('loginPassword').value = '1234';
   click('studentLoginBtn');
   await sleep(1300);

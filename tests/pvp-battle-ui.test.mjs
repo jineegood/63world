@@ -60,6 +60,10 @@ function createElement(id = '', className = '') {
   return element;
 }
 
+function visibleText(html) {
+  return String(html || '').replace(/<[^>]*>/g, '');
+}
+
 function harness({ viewerId = 'a', submitResult = { waiting:true, round:1 } } = {}) {
   const opened = [];
   const calls = [];
@@ -532,7 +536,7 @@ test('dice visibly rolls and settles before queued damage is applied', async () 
 
   await ui.advance(1_000);
   assert.match(ui.lastHtml(), /HP 85\/100/);
-  assert.match(ui.lastHtml(), /A 학생이 B 학생에게 총 15의 피해를 주었습니다! \(체력 15\)/);
+  assert.match(visibleText(ui.lastHtml()), /A 학생이 B 학생에게 총 15의 피해를 주었습니다! \(체력 15\)/);
   assert.equal(ui.calls.filter(([type, id]) => type === 'sfx' && id === 'hit').length, 1);
 });
 
@@ -565,7 +569,7 @@ test('damage split across shield and HP shows the total log and two floating num
 
   await ui.advance(70);
   assert.match(
-    ui.lastHtml(),
+    visibleText(ui.lastHtml()),
     /A 학생이 B 학생에게 총 15의 피해를 주었습니다! \(보호막 7, 체력 8\)/,
   );
   const numbers = ui.actors.stage.children.filter((child) => /combat-floating-damage/.test(child.className));
@@ -737,9 +741,9 @@ test('wrong-answer action log is complete before minimum guard shield playback',
   });
 
   await ui.advance(70);
-  const actionNotice = ui.lastHtml().match(/<h3 class="combat-notice[^"]*">([^<]*)<\/h3>/)?.[1];
+  const actionNotice = ui.lastHtml().match(/<h3 class="combat-notice[^"]*">([\s\S]*?)<\/h3>/)?.[1];
   assert.equal(
-    actionNotice,
+    visibleText(actionNotice),
     'A: 오답입니다! 정답은 5 (오답이라 데미지가 절반만 들어갑니다)',
   );
   assert.match(ui.lastHtml(), /pvp-wrong-review-v5/);
@@ -750,9 +754,67 @@ test('wrong-answer action log is complete before minimum guard shield playback',
   assert.doesNotMatch(ui.lastHtml(), /막기 훈련|보호막 1 생성/);
 
   await ui.advance(1);
-  const shieldNotice = ui.lastHtml().match(/<h3 class="combat-notice[^"]*">([^<]*)<\/h3>/)?.[1];
-  assert.equal(shieldNotice, 'B 학생의 막기 훈련! 보호막 1 생성!');
+  const shieldNotice = ui.lastHtml().match(/<h3 class="combat-notice[^"]*">([\s\S]*?)<\/h3>/)?.[1];
+  assert.equal(visibleText(shieldNotice), 'B 학생의 막기 훈련! 보호막 1 생성!');
   assert.match(ui.lastHtml(), /HP 100\/100 <span class="shield-badge">🛡 1<\/span>/);
+});
+
+test('combat log safely colors local and opponent names plus damage breakdown numbers', async () => {
+  const ui = harness();
+  ui.window.enterPvpMatchV1({
+    ...ui.match,
+    playerAState:{ ...ui.match.playerAState, name:'나<용사>' },
+    playerBState:{ ...ui.match.playerBState, name:'상대.*[마왕]', shield:4 },
+  });
+
+  ui.emit({
+    type:'event',
+    round:1,
+    sequenceNo:31,
+    kind:'damage',
+    source:'a',
+    target:'b',
+    absorbed:4,
+    hpDamage:8,
+  });
+  await ui.advance(70);
+
+  const html = ui.lastHtml();
+  assert.match(
+    html,
+    /<span class="pvp-combat-name-me" style="color:#4ade80;font-weight:900">나&lt;용사&gt;<\/span>/,
+  );
+  assert.match(
+    html,
+    /<span class="pvp-combat-name-opponent" style="color:#fca5a5;font-weight:900">상대\.\*\[마왕\]<\/span>/,
+  );
+  assert.doesNotMatch(html, /<용사>/);
+  assert.match(html, /총\s*<span class="damage-number-v25-enemy">12<\/span>의 피해/);
+  assert.match(html, /보호막\s*<span class="damage-number-v25-generic">4<\/span>/);
+  assert.match(html, /체력\s*<span class="damage-number-v25-enemy">8<\/span>/);
+});
+
+test('combat log reuses the hunting number class for recovery', async () => {
+  const ui = harness();
+  ui.window.enterPvpMatchV1({
+    ...ui.match,
+    playerAState:{ ...ui.match.playerAState, hp:90 },
+  });
+  ui.emit({
+    type:'event',
+    round:1,
+    sequenceNo:32,
+    kind:'heal',
+    source:'a',
+    target:'a',
+    amount:7,
+  });
+  await ui.advance(70);
+
+  assert.match(
+    ui.lastHtml(),
+    /<span class="pvp-combat-name-me" style="color:#4ade80;font-weight:900">A<\/span> 학생의 체력이 <span class="damage-number-v25-generic">7<\/span> 회복/,
+  );
 });
 
 test('a wrong typed answer displays the correct answer in a green readonly field for two seconds', async () => {

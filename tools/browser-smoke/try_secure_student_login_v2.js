@@ -75,7 +75,8 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   }
 
   window.__secureLoginMode = mode;
-  $('loginName').value = '별빛';
+  // 기존 계정은 새 생성 제한보다 긴 옛 이름이어도 계속 로그인할 수 있어야 한다.
+  $('loginName').value = mode === 'existing' ? '가나다라마바사아' : '별빛';
   $('loginPassword').value = mode === 'wrong' ? 'wrong-123' : 'secret-123';
   click('studentLoginBtn');
   await sleep(80);

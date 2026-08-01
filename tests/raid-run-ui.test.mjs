@@ -19,7 +19,7 @@ const styleSource = read('style.css');
 const gameSource = read('game.js');
 const multiplayerSource = read('src/multiplayer.js');
 
-function networkUiHarness({ mode = 'create' } = {}) {
+function networkUiHarness({ mode = 'create', identityUserId = 'alice' } = {}) {
   const calls = [];
   const styles = new Map();
   let html = '';
@@ -36,6 +36,12 @@ function networkUiHarness({ mode = 'create' } = {}) {
   const partyClient = {
     async create(options) { calls.push(['create', options]); return structuredClone(response); },
     async join(options) { calls.push(['join', options]); return structuredClone(response); },
+    async sync() { calls.push(['sync']); return structuredClone(response); },
+    async start(roomId) {
+      calls.push(['start', roomId]);
+      room.phase = 'travel';
+      return structuredClone(response);
+    },
     subscribe(roomId, listener, onReady) {
       calls.push(['subscribe', roomId, listener, onReady]);
       return () => calls.push(['unsubscribe', roomId]);
@@ -67,7 +73,8 @@ function networkUiHarness({ mode = 'create' } = {}) {
     },
     closeModal() { calls.push(['closeModal']); },
     async flushLocalPlayerForPvpV1() { calls.push(['flush']); },
-    getPvpIdentityV1:() => ({ userId:'alice', displayName:'앨리스', role:'student' }),
+    getPvpIdentityV1:() => ({ userId:identityUserId, displayName:'앨리스', role:'student' }),
+    playSfx(name) { calls.push(['sfx', name]); },
     secureStudentAccessV2:{ getClient:() => ({ fake:true }) },
     YuksamRaidPartyClient:{ create:() => partyClient },
     YuksamRaidRules:{
@@ -81,6 +88,23 @@ function networkUiHarness({ mode = 'create' } = {}) {
   context.globalThis = context;
   vm.runInNewContext(uiSource, context, { filename:'raid-run-ui.js' });
   return { context, calls, partyClient, room, members, html:() => html, mode };
+}
+
+function fillReadyNetworkRoster(harness) {
+  harness.members[0].slot = 'front';
+  harness.members[0].ready = true;
+  harness.members.push(
+    {
+      roomId:'room-1', userId:'bob', joinOrder:2, slot:'middle', ready:true, active:true,
+      profile:{ userId:'bob', name:'보라', className:'mage', spec:'원소', level:6, maxHp:38, attack:11 },
+      state:{ hp:38, maxHp:38, shield:0, cooldowns:{}, statuses:{} },
+    },
+    {
+      roomId:'room-1', userId:'carol', joinOrder:3, slot:'back', ready:true, active:true,
+      profile:{ userId:'carol', name:'초록', className:'priest', spec:'신성', level:5, maxHp:40, attack:8 },
+      state:{ hp:40, maxHp:40, shield:0, cooldowns:{}, statuses:{} },
+    },
+  );
 }
 
 test('온라인 던전 모듈은 의존 순서대로 로드된다', () => {
@@ -177,7 +201,7 @@ test('던전 모달은 공용 X를 숨기고 방 나가기·포기 버튼을 사
   assert.match(uiSource, /data-raid-menu="giveup">포기/);
 });
 
-test('온라인 대기실은 정확히 세 명·대형 저장·전원 준비 후에만 출발 버튼을 연다', () => {
+test('온라인 대기실은 정확히 세 명·대형 저장·전원 준비 후 자동 출발한다', () => {
   const block = uiSource.match(/function renderNetworkLobby\([\s\S]*?\n  \}\n\n  function isNetworkHost/)?.[0] || '';
   assert.notEqual(block, '');
   assert.match(block, /roster\.length === 3 && R\.SLOTS\.every/);
@@ -185,8 +209,45 @@ test('온라인 대기실은 정확히 세 명·대형 저장·전원 준비 후
   assert.match(block, /id="raidSaveFormationBtn"/);
   assert.match(block, /networkSession\.client\.setFormation/);
   assert.match(block, /networkSession\.client\.ready/);
-  assert.match(block, /host && allReady \? '<button class="primary" id="raidNetworkStartBtn"/);
-  assert.match(block, /networkSession\.client\.start/);
+  assert.match(block, /syncNetworkLobbyCountdown\(savedFormation && allReady\)/);
+  assert.doesNotMatch(block, /raidNetworkStartBtn|3명 출발!/);
+  assert.match(uiSource, /if \(isNetworkHost\(\)\) startNetworkRoomAfterCountdown\(\)/);
+  assert.match(uiSource, /session\.client\.start\(session\.room\.id\)/);
+});
+
+test('전원 준비 카운트다운은 모두에게 들리고 방장만 0에 서버 출발을 요청한다', async () => {
+  const host = networkUiHarness();
+  fillReadyNetworkRoster(host);
+  host.context.YuksamRaidRunUi.setCountdownSpeed(5, 1);
+  assert.equal(await host.context.YuksamRaidRunUi.openNetworkLobby({ mode:'create', floorGroup:1 }), true);
+  assert.match(host.html(), /👑 방장/);
+  assert.match(host.html(), /5초 후 출발!/);
+  assert.doesNotMatch(host.html(), /3명 출발!/);
+  await new Promise((resolve) => setTimeout(resolve, 90));
+  assert.equal(host.calls.filter(([kind]) => kind === 'start').length, 1);
+  assert.equal(host.calls.filter(([kind, name]) => kind === 'sfx' && name === 'open').length, 5);
+
+  const guest = networkUiHarness({ mode:'join', identityUserId:'bob' });
+  fillReadyNetworkRoster(guest);
+  guest.context.YuksamRaidRunUi.setCountdownSpeed(5, 1);
+  assert.equal(await guest.context.YuksamRaidRunUi.openNetworkLobby({ mode:'join', code:'0427' }), true);
+  assert.match(guest.html(), /5초 후 출발!/);
+  await new Promise((resolve) => setTimeout(resolve, 90));
+  assert.equal(guest.calls.filter(([kind]) => kind === 'start').length, 0);
+  assert.equal(guest.calls.filter(([kind, name]) => kind === 'sfx' && name === 'open').length, 5);
+});
+
+test('준비 취소가 동기화되면 진행 중이던 자동 출발 카운트다운도 취소된다', async () => {
+  const host = networkUiHarness();
+  fillReadyNetworkRoster(host);
+  host.context.YuksamRaidRunUi.setCountdownSpeed(5, 4);
+  assert.equal(await host.context.YuksamRaidRunUi.openNetworkLobby({ mode:'create', floorGroup:1 }), true);
+  host.members[2].ready = false;
+  const realtimeListener = host.calls.find(([kind]) => kind === 'subscribe')?.[2];
+  realtimeListener?.();
+  await new Promise((resolve) => setTimeout(resolve, 35));
+  assert.equal(host.calls.filter(([kind]) => kind === 'start').length, 0);
+  assert.doesNotMatch(host.html(), /초 후 출발!/);
 });
 
 test('대기 캐릭터 카드에서 근거가 불분명한 공격 숫자를 보여주지 않는다', () => {
@@ -252,8 +313,9 @@ test('1–10층 복도는 1→3→5→8→10층 조우 진행을 표시한다', 
   assert.equal(floor({ encounterIndex:1, phase:'battle' }, 0), 5);
   assert.equal(floor({ encounterIndex:2, phase:'battle' }, 0), 8);
   assert.equal(floor({ encounterIndex:3, phase:'battle' }, 0), 10);
-  assert.match(uiSource, /strokeText\(`현재 \$\{floor\}층`/);
-  assert.match(uiSource, /fillText\(`현재 \$\{floor\}층`/);
+  assert.match(uiSource, /const floorLabel = `\$\{floor\}층`/);
+  assert.match(uiSource, /ctx\.fillStyle = '#fb7185';\s*ctx\.fillText\(floorLabel/);
+  assert.doesNotMatch(uiSource, /다음 조우 \$\{Math\.min/);
 });
 
 test('던전은 마을과 분리된 전체 화면 맵이고 복도에 세 명을 직접 그린다', () => {
@@ -272,6 +334,7 @@ test('복도 이름표와 각 학생의 펫은 같은 파티 좌표를 따른다
   assert.match(uiSource, /const now = Date\.now\(\)/);
   assert.match(uiSource, /positioned\.forEach\(\(\{ member, x, y \}\) => drawRaidPet\(ctx, x, y, moving, member\)\)/);
   assert.match(uiSource, /const x = ownerX - 46/);
+  assert.match(uiSource, /pet\.id === 'yuksam'[\s\S]*?global\.drawYuksamPetV35\(ctx, \{ x, y \}, false, moving, pet, now\)/);
   assert.match(gameSource, /\['petShopInterior', 'upgradeShopInterior', 'finalBossRoom', 'raidTower'\]/);
   assert.match(multiplayerSource, /\['petShopInterior', 'upgradeShopInterior', 'raidTower'\]/);
 });
@@ -293,6 +356,7 @@ test('전투 패널은 일반 사냥처럼 공격·스킬·포기 뒤에 문제�
   assert.match(uiSource, /function raidSkillCooldown\(skillId\)/);
   assert.match(uiSource, /question = null;\s*\/\/ 문제는 공격\/스킬을 고른 뒤에 나온다/);
   assert.match(uiSource, /if \(networkSession\) \{[\s\S]*?publicRaidQuestion\(networkSession\.room\?\.question \|\| networkSession\.lastQuestion\)/);
+  assert.match(uiSource, /if \(panelMode === 'question'\)[\s\S]*?data-raid-menu="back">뒤로/);
   assert.match(uiSource, /정말로 포기하시겠습니까\?/);
 });
 
@@ -322,7 +386,9 @@ test('던전 전투 규칙은 기절·더블 어택·힐·보호막·쿨타임�
   assert.match(combatSource, /kind:'party-heal'/);
   assert.match(combatSource, /kind:'party-shield'/);
   assert.match(combatSource, /member\.cooldowns\[action\.id\]/);
-  assert.match(uiSource, /\.raid-status-badge\.stun/);
+  assert.match(uiSource, /class="combat-badge-v38 \$\{esc\(badge\.key\)\}" data-tooltip=/);
+  assert.match(uiSource, /buildStatusBadges/);
+  assert.match(uiSource, /event\.kind === 'monster-status'[\s\S]*?raidMonsterStatuses/);
   assert.match(uiSource, /event\.kind === 'party-heal'/);
   assert.match(uiSource, /event\.kind === 'party-shield'/);
 });
@@ -338,7 +404,10 @@ test('직업 공격·스킬·회복 효과음은 매니페스트와 실제 재�
 });
 
 test('몬스터와 세 캐릭터의 체력·보호막·상태를 전투 로그 한 줄씩 갱신한다', () => {
-  assert.doesNotMatch(uiSource, /raid-log/);
+  assert.match(uiSource, /function raidMessageHtml\(value\)/);
+  assert.match(uiSource, /raid-log-name \$\{raidSlotClass\(member\.slot\)\}/);
+  assert.match(uiSource, /raid-log-name enemy/);
+  assert.match(uiSource, /class="shield-badge" data-tooltip=/);
   assert.match(uiSource, /panelMessage = event\.text \|\| ''/);
   assert.match(uiSource, /function applyEventToView\(event\)/);
   assert.match(uiSource, /view\.monsterShield = Math\.max/);
@@ -347,6 +416,34 @@ test('몬스터와 세 캐릭터의 체력·보호막·상태를 전투 로그 �
   assert.match(uiSource, /function playEvents\(events, onDone\)/);
   assert.match(uiSource, /playEventSound\(event\);\s*\n\s*updateBattleView\(\);/);
   assert.match(uiSource, /let eventDelayMs = 1500/);
+});
+
+test('던전 문제 제한시간은 서버의 30초 deadline을 화면 중앙 위에 표시한다', () => {
+  assert.match(uiSource, /questionDeadline \?\? networkSession\?\.room\?\.question_deadline/);
+  assert.match(uiSource, /id="raidQuestionTimer" class="raid-question-timer"/);
+  assert.match(uiSource, /node\.textContent = `⏱ \$\{seconds\}초`/);
+  assert.match(uiSource, /global\.setInterval\(updateRaidQuestionTimer, 250\)/);
+  assert.match(uiSource, /\['question', 'waiting'\]\.includes\(phase\)\)[\s\S]*?startRaidQuestionTimer\(\)/);
+  assert.match(uiSource, /stopRaidQuestionTimer\(\)/);
+});
+
+test('아군이 쓰러지면 모든 참가자 재생 흐름에서 기존 사망 효과음을 낸다', () => {
+  assert.match(uiSource, /event\.kind === 'member-down'\) call\('playSfx', 'defeat'\)/);
+});
+
+test('파티 체력창은 앞·가운데·뒤 색을 구분하고 사냥터 보호막 모양을 재사용한다', () => {
+  assert.match(uiSource, /raid-ally-hp \$\{raidSlotClass\(member\.slot\)\}/);
+  assert.match(uiSource, /\.raid-ally-hp\.slot-front/);
+  assert.match(uiSource, /\.raid-ally-hp\.slot-middle/);
+  assert.match(uiSource, /\.raid-ally-hp\.slot-back/);
+  assert.match(uiSource, /class="shield-badge"/);
+});
+
+test('사냥터 전투 로그도 내 이름과 몬스터 이름을 초록·빨강으로 구분한다', () => {
+  assert.match(gameSource, /className:'combat-log-name-player', color:'#4ade80'/);
+  assert.match(gameSource, /className:'combat-log-name-enemy', color:'#fb7185'/);
+  assert.match(gameSource, /currentCombatMonster\?\.\(\)\?\.name/);
+  assert.match(gameSource, /h3\.innerHTML = highlightCombatMessageV25\(message\)/);
 });
 
 test('오답은 정답을 보여준 뒤 절반 피해 로그와 함께 진행한다', () => {

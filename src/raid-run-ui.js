@@ -48,6 +48,11 @@
   let networkDraftPlacement = {};
   let networkSelectedMemberId = null;
   let networkStarting = false;
+  let networkLobbyCountdownTimer = null;
+  let networkLobbyCountdownKey = '';
+  let networkLobbyCountdownValue = 0;
+  let networkLobbyStartPending = false;
+  let raidQuestionTimerInterval = null;
 
   function raidIdentity() {
     return global.getPvpIdentityV1?.() || global.secureStudentAccessV2?.getIdentity?.() || null;
@@ -114,6 +119,8 @@
       .raid-post.ready{border-color:#4ade80;box-shadow:0 0 0 2px rgba(74,222,128,.35)}
       /* 자리 이름은 크게 — 한눈에 앞/가운데/뒤를 알 수 있게 */
       .raid-post-title{font-size:39px;font-weight:900;color:#e2e8f0;line-height:1.1}
+      .raid-host-crown{display:inline-flex;align-items:center;margin-right:5px;color:#fde68a;
+        font-size:12px;font-weight:900;vertical-align:middle;filter:drop-shadow(0 1px 3px rgba(0,0,0,.65))}
       .raid-ready-badge{margin-top:auto;font-size:20px;font-weight:900;color:#4ade80;
         text-shadow:0 2px 6px rgba(0,0,0,.6)}
       .raid-plus{width:88px;height:88px;border-radius:999px;font-size:46px;line-height:1;
@@ -154,10 +161,34 @@
         background:linear-gradient(180deg, rgba(14,58,86,.95), rgba(8,25,42,.95));
         box-shadow:0 0 0 2px rgba(56,189,248,.28), 0 6px 18px rgba(0,0,0,.35)}
       .raid-ally-hp.me b{color:#a5e9ff}
+      .raid-ally-hp.slot-front{border-color:rgba(74,222,128,.88);
+        background:linear-gradient(180deg,rgba(20,83,45,.92),rgba(7,35,25,.94));
+        box-shadow:0 0 0 1px rgba(74,222,128,.2)}
+      .raid-ally-hp.slot-middle{border-color:rgba(250,204,21,.88);
+        background:linear-gradient(180deg,rgba(92,70,10,.92),rgba(41,31,6,.94));
+        box-shadow:0 0 0 1px rgba(250,204,21,.2)}
+      .raid-ally-hp.slot-back{border-color:rgba(96,165,250,.9);
+        background:linear-gradient(180deg,rgba(22,63,112,.92),rgba(8,30,58,.94));
+        box-shadow:0 0 0 1px rgba(96,165,250,.22)}
+      .raid-ally-hp.slot-front b{color:#86efac}.raid-ally-hp.slot-front .hpfill{background:#22c55e}
+      .raid-ally-hp.slot-middle b{color:#fde047}.raid-ally-hp.slot-middle .hpfill{background:#eab308}
+      .raid-ally-hp.slot-back b{color:#93c5fd}.raid-ally-hp.slot-back .hpfill{background:#3b82f6}
       .raid-ally-hp.down{opacity:.45}
       .raid-ally-slot{color:#9fb3cd;margin-left:5px;font-size:11px}
       .raid-ally-num{font-size:11px;color:#cbd5e1;text-align:right}
       .raid-combat .combat-hpbox.monster{right:5%;top:auto;bottom:16px;min-width:250px}
+      .raid-combat .combat-hpbox.monster{border-color:rgba(251,113,133,.82);
+        background:linear-gradient(180deg,rgba(88,24,38,.94),rgba(45,11,21,.95))}
+      .raid-combat .combat-hpbox.monster b{color:#fda4af}
+      .raid-question-timer{position:absolute;left:50%;top:86px;transform:translateX(-50%);z-index:13;
+        min-width:150px;padding:7px 15px;border-radius:999px;text-align:center;font-size:24px;
+        line-height:1;font-weight:950;font-variant-numeric:tabular-nums;color:#f8fafc;
+        background:rgba(6,13,24,.9);border:2px solid rgba(125,211,252,.72);
+        box-shadow:0 5px 18px rgba(0,0,0,.42)}
+      .raid-question-timer.warning{color:#fff1a8;border-color:#fbbf24;animation:raidTimerPulse .72s ease-in-out infinite alternate}
+      .raid-question-timer.danger{color:#fecaca;border-color:#fb7185}
+      .raid-question-timer[hidden]{display:none}
+      @keyframes raidTimerPulse{from{transform:translateX(-50%) scale(1)}to{transform:translateX(-50%) scale(1.06)}}
       .raid-next-hint{font-size:11px;color:#9fb3cd;margin-top:3px}
       .raid-next-hint.warn{color:#fbbf24;font-weight:800}
       .raid-status-row{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
@@ -167,6 +198,9 @@
       .raid-status-badge.chill{border-color:#67e8f9;color:#a5f3fc}
       .raid-status-badge.shadow{border-color:#c084fc;color:#e9d5ff}
       .raid-shield-text{color:#93c5fd;font-weight:900;margin-left:5px}
+      .raid-log-name{font-weight:950;text-shadow:0 1px 5px rgba(0,0,0,.72)}
+      .raid-log-name.slot-front{color:#4ade80}.raid-log-name.slot-middle{color:#fde047}
+      .raid-log-name.slot-back{color:#60a5fa}.raid-log-name.enemy{color:#fb7185}
 
       /* 피해 숫자와 피격 연출 — 사냥터 전투와 같은 감각 */
       .raid-float-layer{position:absolute;inset:0;pointer-events:none;z-index:12}
@@ -428,6 +462,13 @@
     networkSession.submissions = Array.isArray(data.submissions) ? data.submissions : [];
 
     const phase = networkSession.room?.phase || 'lobby';
+    if (phase !== 'lobby') cancelNetworkLobbyCountdown();
+    if (active?.phase === 'battle' && ['question', 'waiting'].includes(phase)) {
+      startRaidQuestionTimer();
+    } else if (raidQuestionTimerInterval) {
+      updateRaidQuestionTimer();
+      stopRaidQuestionTimer();
+    }
     if (phase === 'cancelled') {
       stopNetworkTransport();
       call('openModal', `
@@ -494,11 +535,57 @@
 
   function resetNetworkSession() {
     stopNetworkTransport();
+    cancelNetworkLobbyCountdown();
+    stopRaidQuestionTimer();
     networkSession = null;
     networkDraftPlacement = {};
     networkSelectedMemberId = null;
     networkStarting = false;
     soloMode = true;
+  }
+
+  function raidQuestionDeadlineMs() {
+    const raw = networkSession?.room?.questionDeadline ?? networkSession?.room?.question_deadline;
+    if (raw == null || raw === '') return 0;
+    if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+    const numeric = Number(raw);
+    if (Number.isFinite(numeric) && numeric > 0) return numeric;
+    const parsed = Date.parse(String(raw));
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function raidQuestionTimerActive() {
+    const phase = networkSession?.room?.phase;
+    return !!networkSession && active?.phase === 'battle'
+      && ['question', 'waiting'].includes(phase) && raidQuestionDeadlineMs() > 0;
+  }
+
+  function updateRaidQuestionTimer() {
+    const node = global.document.getElementById('raidQuestionTimer');
+    if (!node) return;
+    if (!raidQuestionTimerActive()) {
+      node.hidden = true;
+      node.classList?.remove('warning', 'danger');
+      return;
+    }
+    const seconds = Math.max(0, Math.ceil((raidQuestionDeadlineMs() - Date.now()) / 1000));
+    node.hidden = false;
+    node.textContent = `⏱ ${seconds}초`;
+    node.classList?.toggle('warning', seconds > 0 && seconds <= 10);
+    node.classList?.toggle('danger', seconds <= 5);
+  }
+
+  function stopRaidQuestionTimer() {
+    if (raidQuestionTimerInterval) global.clearInterval(raidQuestionTimerInterval);
+    raidQuestionTimerInterval = null;
+  }
+
+  function startRaidQuestionTimer() {
+    stopRaidQuestionTimer();
+    updateRaidQuestionTimer();
+    if (raidQuestionTimerActive()) {
+      raidQuestionTimerInterval = global.setInterval(updateRaidQuestionTimer, 250);
+    }
   }
 
   async function leaveNetworkRoom({ returnToTown = false } = {}) {
@@ -576,6 +663,87 @@
     return networkDraftPlacement;
   }
 
+  function cancelNetworkLobbyCountdown() {
+    if (networkLobbyCountdownTimer) global.clearTimeout(networkLobbyCountdownTimer);
+    networkLobbyCountdownTimer = null;
+    networkLobbyCountdownKey = '';
+    networkLobbyCountdownValue = 0;
+    networkLobbyStartPending = false;
+  }
+
+  function networkLobbyStillReady() {
+    if (!networkSession || networkSession.room?.phase !== 'lobby') return false;
+    const rows = (networkSession.members || []).filter((row) => row && row.active !== false);
+    const slots = rows.map((row) => row.slot).filter(Boolean);
+    return rows.length === 3
+      && rows.every((row) => row.ready === true)
+      && slots.length === 3
+      && new Set(slots).size === 3;
+  }
+
+  function playNetworkLobbyCountdownSound() {
+    // 메뉴에서 이미 쓰는 짧은 확인음을 재사용해 매초 또렷하게 들려준다.
+    call('playSfx', 'open');
+  }
+
+  async function startNetworkRoomAfterCountdown() {
+    const session = networkSession;
+    if (!session || !isNetworkHost() || networkLobbyStartPending || !networkLobbyStillReady()) return;
+    networkLobbyStartPending = true;
+    try {
+      const data = await session.client.start(session.room.id);
+      if (networkSession === session) setNetworkData(data);
+    } catch (error) {
+      if (networkSession !== session) return;
+      cancelNetworkLobbyCountdown();
+      renderNetworkLobby(error?.message || '던전을 시작하지 못했습니다. 다시 출발을 준비합니다.');
+    }
+  }
+
+  function scheduleNetworkLobbyCountdown(key) {
+    networkLobbyCountdownTimer = global.setTimeout(() => {
+      networkLobbyCountdownTimer = null;
+      if (networkLobbyCountdownKey !== key || !networkLobbyStillReady()) {
+        cancelNetworkLobbyCountdown();
+        if (networkSession?.room?.phase === 'lobby') renderNetworkLobby();
+        return;
+      }
+      networkLobbyCountdownValue -= 1;
+      if (networkLobbyCountdownValue > 0) {
+        playNetworkLobbyCountdownSound();
+        renderNetworkLobby();
+        if (networkLobbyCountdownKey === key) scheduleNetworkLobbyCountdown(key);
+        return;
+      }
+      networkLobbyCountdownValue = 0;
+      renderNetworkLobby();
+      // 세 화면 모두 같은 카운트다운을 보지만 서버 출발 요청은 방장만 한 번 보낸다.
+      if (isNetworkHost()) startNetworkRoomAfterCountdown();
+    }, COUNTDOWN_STEP_MS);
+  }
+
+  function syncNetworkLobbyCountdown(shouldRun) {
+    if (!shouldRun) {
+      if (networkLobbyCountdownKey || networkLobbyCountdownTimer) cancelNetworkLobbyCountdown();
+      return 0;
+    }
+    const room = networkSession?.room || {};
+    const key = `${room.id || ''}:${room.version || 0}:${room.updatedAt || room.updated_at || ''}`;
+    if (networkLobbyCountdownKey === key) return networkLobbyCountdownValue;
+    cancelNetworkLobbyCountdown();
+    networkLobbyCountdownKey = key;
+    networkLobbyCountdownValue = READY_COUNTDOWN;
+    playNetworkLobbyCountdownSound();
+    scheduleNetworkLobbyCountdown(key);
+    return networkLobbyCountdownValue;
+  }
+
+  function networkHostCrown(member) {
+    return String(member?.id || '') === String(networkSession?.room?.hostId || '')
+      ? '<span class="raid-host-crown" title="방장" aria-label="방장">👑 방장</span>'
+      : '';
+  }
+
   function renderNetworkLobby(message = '') {
     if (!networkSession || networkSession.room?.phase !== 'lobby') return;
     ensureStyles();
@@ -594,6 +762,7 @@
     const savedFormation = seated && roster.every((member) => rowById(member.id)?.slot === placement[member.id]);
     const allReady = roster.length === 3 && roster.every((member) => rowById(member.id)?.ready === true);
     const myReady = rowById(me)?.ready === true;
+    const countdown = syncNetworkLobbyCountdown(savedFormation && allReady);
 
     if (!networkSelectedMemberId || !memberById(networkSelectedMemberId)) {
       networkSelectedMemberId = roster[0]?.id || null;
@@ -613,7 +782,7 @@
           <div class="raid-post-title">${label}</div>
           <div class="raid-figure" ${host ? `data-network-pick="${esc(member.id)}"` : ''}>
             ${networkMemberCanvas(member)}
-            <div class="raid-figure-name">${esc(member.name)}${isMine(member) ? ' (나)' : ''}</div>
+            <div class="raid-figure-name">${networkHostCrown(member)}${esc(member.name)}${isMine(member) ? ' (나)' : ''}</div>
             <div class="raid-figure-sub">Lv.${member.level} · ${esc(member.spec || '전문화 없음')} · HP ${member.maxHp}</div>
           </div>
           ${ready ? '<div class="raid-ready-badge">Ready!</div>' : ''}
@@ -625,7 +794,7 @@
       return `<div class="raid-bench-card ${networkSelectedMemberId === member.id ? 'on' : ''} ${ready ? 'ready' : ''}"
           ${host ? `data-network-pick="${esc(member.id)}"` : ''}>
         ${networkMemberCanvas(member)}
-        <div class="raid-figure-name">${esc(member.name)}${isMine(member) ? ' (나)' : ''}</div>
+        <div class="raid-figure-name">${networkHostCrown(member)}${esc(member.name)}${isMine(member) ? ' (나)' : ''}</div>
         <div class="raid-figure-sub">Lv.${member.level} · ${esc(member.spec || '전문화 없음')} · HP ${member.maxHp}</div>
       </div>`;
     }).join('');
@@ -639,7 +808,7 @@
         ? (host ? '캐릭터를 골라 앞·가운데·뒤에 한 명씩 배치해 주세요.' : '방장이 대형을 정하고 있어요.')
         : !allReady
           ? '대형이 정해졌습니다. 각자 준비를 눌러 주세요.'
-          : (host ? '모두 준비됐습니다. 이제 출발할 수 있어요!' : '모두 준비됐습니다. 방장이 곧 출발합니다!'));
+          : (countdown > 0 ? `${countdown}초 후 자동으로 출발합니다!` : '던전으로 출발하는 중입니다…'));
 
     call('openModal', `
       <h2>1–10층 파티 대기실</h2>
@@ -653,11 +822,11 @@
           <div class="raid-bench-head"><span>대기 중</span></div>
           <div class="raid-bench">${waitingCards}${emptyWaiting || (!waiting.length ? '<div class="raid-bench-empty">모두 자리를 정했습니다!</div>' : '')}</div>
         </div>
+        ${allReady ? `<div class="raid-countdown">${countdown > 0 ? `${countdown}초 후 출발!` : '출발!'}</div>` : ''}
         <p class="raid-room-status ${allReady ? 'good' : (roster.length < 3 ? 'warn' : '')}">${esc(status)}</p>
         <div class="raid-room-actions">
           ${host && roster.length === 3 && !savedFormation ? '<button class="primary" id="raidSaveFormationBtn" disabled>대형 확정</button>' : ''}
           ${savedFormation ? `<button class="primary" id="raidReadyBtn">${myReady ? '준비 취소' : '준비'}</button>` : ''}
-          ${host && allReady ? '<button class="primary" id="raidNetworkStartBtn">3명 출발!</button>' : ''}
           <button class="ghost" id="raidNetworkLeaveBtn">방 나가기</button>
         </div>
       </div>
@@ -699,12 +868,6 @@
       ready.disabled = true;
       try { setNetworkData(await networkSession.client.ready(networkSession.room.id, !myReady)); }
       catch (error) { renderNetworkLobby(error?.message || '준비 상태를 바꾸지 못했습니다.'); }
-    };
-    const start = global.document.getElementById('raidNetworkStartBtn');
-    if (start) start.onclick = async () => {
-      start.disabled = true;
-      try { setNetworkData(await networkSession.client.start(networkSession.room.id)); }
-      catch (error) { renderNetworkLobby(error?.message || '던전을 시작하지 못했습니다.'); }
     };
     const leave = global.document.getElementById('raidNetworkLeaveBtn');
     if (leave) leave.onclick = () => leaveNetworkRoom();
@@ -1350,12 +1513,16 @@
       ctx.font = '900 31px Jua, Noto Sans KR, system-ui';
       ctx.lineWidth = 7;
       ctx.strokeStyle = 'rgba(5,10,20,.86)';
-      ctx.strokeText(`현재 ${floor}층`, w / 2, 72);
+      const prefix = '현재 ';
+      const floorLabel = `${floor}층`;
+      const fullLabel = `${prefix}${floorLabel}`;
+      const startX = w / 2 - ctx.measureText(fullLabel).width / 2;
+      ctx.textAlign = 'left';
+      ctx.strokeText(fullLabel, startX, 72);
       ctx.fillStyle = '#f8fafc';
-      ctx.fillText(`현재 ${floor}층`, w / 2, 72);
-      ctx.font = '700 14px Noto Sans KR, system-ui';
-      ctx.fillStyle = 'rgba(191,219,254,.82)';
-      ctx.fillText(`${snap.title} · 다음 조우 ${Math.min(snap.encounterIndex + 1, snap.encounterTotal)}/${snap.encounterTotal}`, w / 2, 98);
+      ctx.fillText(prefix, startX, 72);
+      ctx.fillStyle = '#fb7185';
+      ctx.fillText(floorLabel, startX + ctx.measureText(prefix).width, 72);
     }
     ctx.restore();
 
@@ -1447,6 +1614,11 @@
     ctx.beginPath();
     ctx.ellipse(x, ownerY + 47, 18, 6, 0, 0, Math.PI * 2);
     ctx.fill();
+    if (pet.id === 'yuksam' && typeof global.drawYuksamPetV35 === 'function') {
+      global.drawYuksamPetV35(ctx, { x, y }, false, moving, pet, now);
+      ctx.restore();
+      return;
+    }
     ctx.translate(x, y);
     ctx.rotate(Math.sin(now / 500 + (pet.bob || 0)) * 0.035);
     const bounce = 1 + Math.sin(now / 460 + (pet.bob || 0)) * 0.025;
@@ -1625,6 +1797,7 @@
   function playTravelScene() {
     // 모달을 닫아 던전 맵이 화면을 가득 채우게 한다.
     stopFormationAnimation();
+    stopRaidQuestionTimer();
     call('closeModal');
     walkStartedAt = (global.performance ? performance.now() : Date.now());
     walkProgress = 0;
@@ -1752,6 +1925,77 @@
         </div>`).join('');
   }
 
+  function raidSlotClass(slot) {
+    return ['front', 'middle', 'back'].includes(slot) ? `slot-${slot}` : 'slot-middle';
+  }
+
+  function shieldBadgeHtml(amount) {
+    const value = Math.max(0, Math.trunc(Number(amount) || 0));
+    return value > 0
+      ? ` <span tabindex="0" class="shield-badge" data-tooltip="${esc(`보호막 ${value}\n피해를 먼저 막아 줍니다.`)}">🛡 ${value}</span>`
+      : '';
+  }
+
+  function statusBadgeHtml(badge) {
+    return `<span tabindex="0" class="combat-badge-v38 ${esc(badge.key)}" data-tooltip="${esc(`${badge.label}\n${badge.tooltip}`)}">${esc(badge.label)}</span>`;
+  }
+
+  function commonStatusBadges(source) {
+    const status = { ...(source || {}) };
+    status.stunTurns = Math.max(0, Number(status.stunTurns || status.stun) || 0);
+    status.chillTurns = Math.max(0, Number(status.chillTurns || status.chill) || 0);
+    status.poisonTurns = Math.max(0, Number(status.poisonTurns || status.poison) || 0);
+    const builder = global.YuksamCombatRules?.buildStatusBadges;
+    if (typeof builder === 'function') return builder(status);
+    const badges = [];
+    if (status.poisonTurns > 0) badges.push({ key:'poison', label:`중독 ${status.poisonTurns}`, tooltip:`턴마다 독 피해를 받습니다. 남은 ${status.poisonTurns}턴` });
+    if (status.stunTurns > 0) badges.push({ key:'stun', label:`기절 ${status.stunTurns}`, tooltip:`행동할 수 없습니다. 남은 ${status.stunTurns}턴` });
+    if (status.chillTurns > 0) badges.push({ key:'chill', label:`냉기 ${status.chillTurns}`, tooltip:'다음 공격 데미지가 50% 감소합니다.' });
+    return badges;
+  }
+
+  function raidMessageHtml(value) {
+    const source = String(value == null ? '' : value);
+    const snap = active?.snapshot?.();
+    const entities = [];
+    (snap?.members || []).forEach((member) => {
+      const name = String(member?.name || '');
+      if (name) entities.push({ name, cls:`raid-log-name ${raidSlotClass(member.slot)}` });
+    });
+    const monsterName = String(snap?.monster?.name || '');
+    if (monsterName) entities.push({ name:monsterName, cls:'raid-log-name enemy' });
+    entities.sort((a, b) => b.name.length - a.name.length);
+
+    let html = '';
+    let cursor = 0;
+    while (cursor < source.length) {
+      let match = null;
+      entities.forEach((entity) => {
+        const index = source.indexOf(entity.name, cursor);
+        if (index < 0) return;
+        if (!match || index < match.index || (index === match.index && entity.name.length > match.entity.name.length)) {
+          match = { index, entity };
+        }
+      });
+      if (!match) {
+        html += esc(source.slice(cursor));
+        break;
+      }
+      html += esc(source.slice(cursor, match.index));
+      html += `<span class="${match.entity.cls}">${esc(match.entity.name)}</span>`;
+      cursor = match.index + match.entity.name.length;
+    }
+    if (!source.length) html = '';
+
+    return html.replace(/HP\s*-\s*\d+|\d+\s*(?:의\s*)?(?:피해|데미지)|\d+\s*회복|보호막\s*[+-]?\s*\d+/g, (matched) => {
+      const number = matched.match(/\d+/)?.[0] || '';
+      const cls = /^HP\s*-/.test(matched)
+        ? 'damage-number-v25-player'
+        : /피해|데미지/.test(matched) ? 'damage-number-v25-enemy' : 'damage-number-v25-generic';
+      return matched.replace(number, `<span class="${cls}">${number}</span>`);
+    });
+  }
+
   function partyHpHtml(members) {
     const R = rules();
     /* 체력창은 캐릭터가 서 있는 순서와 같아야 헷갈리지 않는다.
@@ -1762,33 +2006,32 @@
       .map((member) => {
         const percent = Math.max(0, Math.round((member.hp / member.maxHp) * 100));
         return `
-          <div class="raid-ally-hp ${member.hp <= 0 ? 'down' : ''} ${isMine(member) ? 'me' : ''}"
+          <div class="raid-ally-hp ${raidSlotClass(member.slot)} ${member.hp <= 0 ? 'down' : ''} ${isMine(member) ? 'me' : ''}"
                data-member="${esc(member.id)}">
             <b>${esc(member.name)}${isMine(member) ? ' (나)' : ''}</b>
             <span class="raid-ally-slot">${esc(R.slotLabel(member.slot))}</span>
             <div class="hpbar"><div class="hpfill" style="width:${percent}%"></div></div>
-            <div class="raid-ally-num">${member.hp}/${member.maxHp}${member.shield > 0 ? ` <span class="raid-shield-text">🛡 ${member.shield}</span>` : ''}</div>
+            <div class="raid-ally-num">${member.hp}/${member.maxHp}${shieldBadgeHtml(member.shield)}</div>
             ${memberStatusHtml(member)}
           </div>`;
       }).join('');
   }
 
   function memberStatusHtml(member) {
-    const status = member?.statuses || {};
-    const badges = [];
-    if (Number(status.stunTurns || status.stun) > 0) badges.push(`<span class="raid-status-badge stun">기절 ${Number(status.stunTurns || status.stun)}</span>`);
-    if (Number(status.chillTurns || status.chill) > 0) badges.push(`<span class="raid-status-badge chill">냉기 ${Number(status.chillTurns || status.chill)}</span>`);
-    if (Number(status.poisonTurns || status.poison) > 0) badges.push(`<span class="raid-status-badge shadow">중독 ${Number(status.poisonTurns || status.poison)}</span>`);
-    return badges.length ? `<div class="raid-status-row">${badges.join('')}</div>` : '';
+    const badges = commonStatusBadges(member?.statuses || {});
+    return `<div class="combat-badges-v38 raid-status-row" data-raid-status-member="${esc(member?.id || '')}">${badges.map(statusBadgeHtml).join('')}</div>`;
   }
 
   function monsterStatusHtml(monster) {
-    const badges = [];
-    if (Number(monster?.stunTurns) > 0) badges.push(`<span class="raid-status-badge stun">기절 ${Number(monster.stunTurns)}</span>`);
-    if (Number(monster?.chillTurns) > 0) badges.push(`<span class="raid-status-badge chill">냉기 ${Number(monster.chillTurns)}</span>`);
+    const badges = commonStatusBadges({
+      ...(monster?.statuses || {}),
+      stunTurns:Number(monster?.stunTurns || monster?.statuses?.stunTurns) || 0,
+      chillTurns:Number(monster?.chillTurns || monster?.statuses?.chillTurns) || 0,
+      poisonTurns:Number(monster?.poisonTurns || monster?.statuses?.poisonTurns) || 0,
+    });
     const shadow = Object.values(monster?.shadowBySource || {}).reduce((sum, value) => sum + Math.max(0, Number(value) || 0), 0);
-    if (shadow > 0) badges.push(`<span class="raid-status-badge shadow">암흑 ${shadow}</span>`);
-    return badges.length ? `<div class="raid-status-row">${badges.join('')}</div>` : '';
+    if (shadow > 0) badges.push({ key:'shadow', label:`암흑 ${shadow}`, tooltip:'누적되는 지속 데미지로 턴이 끝날 때 피해를 줍니다.' });
+    return `<div id="raidMonsterStatuses" class="combat-badges-v38 raid-status-row">${badges.map(statusBadgeHtml).join('')}</div>`;
   }
 
   /* ---------- 아래 패널: 일반 전투와 같은 3단계 ----------
@@ -1819,7 +2062,7 @@
     /* 사냥터 전투처럼 별도의 로그 상자를 두지 않는다.
        이 자리(h3)의 글이 바뀌면서 그 자체가 전투 기록이 된다. */
     if (panelMode === 'playing') {
-      return `<h3>${esc(panelMessage)}</h3>`;
+      return `<h3>${raidMessageHtml(panelMessage)}</h3>`;
     }
 
     if (panelMode === 'skills') {
@@ -1846,11 +2089,12 @@
             <input id="combatAnswer" placeholder="정답 입력" autocomplete="off" />
             <button class="primary" id="raidSubmitBtn">정답 제출</button>
           </div>`;
-      return `<h3>${esc(question?.q || question?.prompt || '')}</h3>${answer}`;
+      return `<h3>${esc(question?.q || question?.prompt || '')}</h3>${answer}`
+        + '<div class="combat-menu"><button class="ghost" data-raid-menu="back">뒤로</button></div>';
     }
 
     // 기본 메뉴 — 일반 전투와 같은 구성(도망 자리에 포기)
-    return `<h3>${esc(panelMessage)}</h3>
+    return `<h3>${raidMessageHtml(panelMessage)}</h3>
       <div class="combat-menu">
         <button class="primary" data-raid-menu="attack">공격</button>
         <button class="primary" data-raid-menu="skill">스킬</button>
@@ -1889,7 +2133,7 @@
     panelMode = 'playing';
     panelMessage = message;
     const panel = global.document.querySelector('.raid-combat > .panel-card');
-    if (panel) panel.innerHTML = `<h3>${esc(message)}</h3>`;
+    if (panel) panel.innerHTML = `<h3>${raidMessageHtml(message)}</h3>`;
   }
 
   /* 공격이나 스킬을 고르면 문제가 나온다(일반 전투와 같은 흐름). */
@@ -1984,9 +2228,10 @@
       <h2>전투</h2>
       <div class="combat-layout raid-combat">
         <div class="combat-stage raid-stage">
+          <div id="raidQuestionTimer" class="raid-question-timer" hidden></div>
           <div class="combat-hpbox monster">
             <b>${monster.isBoss ? '👑 ' : ''}Lv.${monster.level} ${esc(monster.name)}</b>
-            <div class="raid-hp-text">HP ${monster.hp}/${monster.maxHp}${monster.shield > 0 ? ` <span class="raid-shield-text">🛡 ${monster.shield}</span>` : ''}</div>
+            <div class="raid-hp-text">HP ${monster.hp}/${monster.maxHp}${shieldBadgeHtml(monster.shield)}</div>
             <div class="hpbar"><div class="hpfill" style="width:${percent}%"></div></div>
             ${monsterStatusHtml(monster)}
             <div class="raid-next-hint ${nextKind === 'all' ? 'warn' : ''}">
@@ -2007,6 +2252,7 @@
     paintAll('.raid-battle-face', (id) => members.find((m) => m.id === id), 1.4);
     drawMonsterModel(global.document.getElementById('raidMonsterCanvas'), monster);
     bindPanel();
+    startRaidQuestionTimer();
   }
 
   /* 소리는 게임의 오디오 목록을 그대로 쓴다. 없으면 조용히 넘어간다. */
@@ -2022,6 +2268,7 @@
     else if (event.kind === 'party-shield') call('playSfx', 'open');
     else if (event.kind === 'party-buff') call('playSfx', 'heal');
     else if (event.kind === 'member-revive') call('playSfx', 'quest');
+    else if (event.kind === 'member-down') call('playSfx', 'defeat');
     else if (['monster-dot', 'party-retaliation'].includes(event.kind)) call('playSfx', 'hit');
     else if (event.kind === 'monster-down') call('playSfx', 'quest');
   }
@@ -2081,6 +2328,20 @@
   function showEventEffect(event) {
     if (!event) return;
     const monsterNode = global.document.querySelector('.raid-monster-sprite');
+
+    if (event.kind === 'monster-status') {
+      const statusNode = global.document.getElementById('raidMonsterStatuses');
+      if (statusNode) {
+        const badge = event.status === 'stun'
+          ? { key:'stun', label:`기절 ${Math.max(1, Number(event.turns) || 1)}`, tooltip:`행동할 수 없습니다. 남은 ${Math.max(1, Number(event.turns) || 1)}턴` }
+          : event.status === 'chill'
+            ? { key:'chill', label:`냉기 ${Math.max(1, Number(event.turns) || 1)}`, tooltip:'다음 공격 데미지가 50% 감소합니다.' }
+            : event.status === 'shadow'
+              ? { key:'shadow', label:`암흑 ${Math.max(1, Number(event.totalStacks) || 1)}`, tooltip:'누적되는 지속 데미지로 턴이 끝날 때 피해를 줍니다.' }
+              : null;
+        if (badge) statusNode.innerHTML = statusBadgeHtml(badge);
+      }
+    }
 
     // 치명타는 무대 전체가 번쩍인다(사냥터 전투와 같다).
     if (event.critical && !event.missed) {
@@ -2212,7 +2473,7 @@
 
     // 문구
     const heading = doc.querySelector('.raid-combat .panel-card h3');
-    if (heading) heading.textContent = panelMessage || '';
+    if (heading) heading.innerHTML = raidMessageHtml(panelMessage || '');
 
     // 몬스터 체력
     const monsterHp = Math.max(0, view.monsterHp);
@@ -2222,7 +2483,7 @@
     if (monsterFill) monsterFill.style.width = `${monsterPct}%`;
     if (monsterText) {
       const shield = Math.max(0, Number(view.monsterShield) || 0);
-      monsterText.innerHTML = `HP ${monsterHp}/${snap.monster.maxHp}${shield > 0 ? ` <span class="raid-shield-text">🛡 ${shield}</span>` : ''}`;
+      monsterText.innerHTML = `HP ${monsterHp}/${snap.monster.maxHp}${shieldBadgeHtml(shield)}`;
     }
 
     // 파티 체력
@@ -2235,7 +2496,7 @@
         const fill = box.querySelector('.hpfill');
         const num = box.querySelector('.raid-ally-num');
         if (fill) fill.style.width = `${pct}%`;
-        if (num) num.innerHTML = `${hp}/${member.maxHp}${shield > 0 ? ` <span class="raid-shield-text">🛡 ${shield}</span>` : ''}`;
+        if (num) num.innerHTML = `${hp}/${member.maxHp}${shieldBadgeHtml(shield)}`;
         box.classList.toggle('down', hp <= 0);
       }
       const sprite = memberSpriteNode(member.id);
@@ -2377,6 +2638,7 @@
 
   function finishRun() {
     if (!active) return;
+    stopRaidQuestionTimer();
     const snap = active.snapshot();
     const cleared = snap.phase === 'cleared';
     const reward = snap.reward || {};
@@ -2733,6 +2995,7 @@
   /* 진행 중이던 판을 버린다(연출 중이어도 안전하게 멈춘다). */
   function abandonRun() {
     stopFormationAnimation();
+    stopRaidQuestionTimer();
     const session = networkSession;
     if (session) {
       try { session.client.leave(session.room.id).catch?.(() => {}); } catch (_) {}
