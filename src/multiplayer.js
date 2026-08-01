@@ -247,7 +247,7 @@
       worldRenderPipeline.registerLayer({
         id: 'remote-players-v53',
         priority: 335, // 플레이어(340)보다 살짝 뒤
-        when: ({ map }) => !['petShopInterior', 'upgradeShopInterior'].includes(map),
+        when: ({ map }) => !['petShopInterior', 'upgradeShopInterior', 'raidTower'].includes(map),
         render: renderRemotes,
       });
       return true;

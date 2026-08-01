@@ -12359,7 +12359,7 @@ function updateQuestTracker() {
   worldRenderPipeline.registerLayer({
     id:'pet-follower-v34',
     priority:341,
-    when:({ map }) => !['petShopInterior', 'upgradeShopInterior', 'finalBossRoom'].includes(map),
+    when:({ map }) => !['petShopInterior', 'upgradeShopInterior', 'finalBossRoom', 'raidTower'].includes(map),
     render:() => drawPetFollowerV34(game.ctx),
   });
 
@@ -12543,7 +12543,7 @@ function updateQuestTracker() {
   worldRenderPipeline.registerLayer({
     id:'legendary-pet-v35',
     priority:350,
-    when:({ map }) => map !== 'finalBossRoom',
+    when:({ map }) => !['finalBossRoom', 'raidTower'].includes(map),
     render:() => {
       try {
         const petDefs = window.PET_DEFS_V27 || {};

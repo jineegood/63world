@@ -11,6 +11,8 @@ const uiSource = readFileSync(join(root, 'src', 'raid-run-ui.js'), 'utf8');
 const htmlSource = readFileSync(join(root, 'index.html'), 'utf8');
 const styleSource = readFileSync(join(root, 'style.css'), 'utf8');
 const dungeonSource = readFileSync(join(root, 'src', 'raid-dungeon.js'), 'utf8');
+const gameSource = readFileSync(join(root, 'game.js'), 'utf8');
+const multiplayerSource = readFileSync(join(root, 'src', 'multiplayer.js'), 'utf8');
 
 test('화면 모듈은 규칙과 진행 뒤에 로드된다', () => {
   const order = ['src/raid-rules.js', 'src/raid-run.js', 'src/raid-run-ui.js', 'src/raid-dungeon.js']
@@ -67,6 +69,7 @@ test('브라우저에서 1층을 처음부터 끝까지 깬다', { timeout:18000
   assert.match(result.stdout, /PASS: 처음에는 세 자리가 모두 비어 있다/);
   assert.match(result.stdout, /PASS: 세 명이 모두 대기칸에 서 있다/);
   assert.match(result.stdout, /PASS: 캐릭터 그림이 실제로 그려진다/);
+  assert.match(result.stdout, /PASS: 로비 캐릭터가 멈추지 않고 계속 움직인다/);
   assert.match(result.stdout, /PASS: 고른 캐릭터가 앞줄에 선다/);
   assert.match(result.stdout, /PASS: 배치한 캐릭터를 대기칸으로 되돌릴 수 있다/);
   assert.match(result.stdout, /PASS: 세 자리를 채우기 전에는 준비할 수 없다/);
@@ -77,6 +80,7 @@ test('브라우저에서 1층을 처음부터 끝까지 깬다', { timeout:18000
   assert.match(result.stdout, /PASS: 카운트다운은 5초부터 센다/);
   // 전투 — 일반 전투 무대 + 왼쪽 3명
   assert.match(result.stdout, /PASS: 이동이 끝나면 전투가 시작된다/);
+  assert.match(result.stdout, /PASS: 복도에서 펫이 주인 옆을 따라 걷는다/);
   assert.match(result.stdout, /PASS: 일반 전투와 같은 무대를 쓴다/);
   assert.match(result.stdout, /PASS: 왼쪽에 캐릭터 셋이 보인다/);
   assert.match(result.stdout, /PASS: 셋의 체력창이 각각 보인다/);
@@ -86,12 +90,16 @@ test('브라우저에서 1층을 처음부터 끝까지 깬다', { timeout:18000
   assert.match(result.stdout, /PASS: 공격 \/ 스킬 \/ 포기 메뉴가 나온다/);
   assert.match(result.stdout, /PASS: 행동을 고르기 전에는 문제가 나오지 않는다/);
   assert.match(result.stdout, /PASS: 공격을 고르면 문제가 나온다/);
+  assert.match(result.stdout, /PASS: 정답을 제출하면 입력칸과 공격 버튼이 즉시 사라진다/);
+  assert.match(result.stdout, /PASS: 입력 UI를 지워도 전투 무대는 새로 만들지 않는다/);
   assert.match(result.stdout, /PASS: 전투 기록은 따로 상자를 두지 않는다/);
   assert.match(result.stdout, /PASS: 적이 나타났다는 문구가 먼저 뜬다/);
   assert.match(result.stdout, /PASS: 전투 로그에 공격·피격이 모두 나온다/);
   assert.match(result.stdout, /PASS: 치명타와 빗나감이 실제로 발동한다/);
   assert.match(result.stdout, /PASS: 힐러 회복 로그가 나온다/);
   assert.match(result.stdout, /PASS: 몬스터가 그림으로 그려진다/);
+  assert.match(result.stdout, /PASS: 파티원이 공격할 때 앞으로 나갔다 돌아온다/);
+  assert.match(result.stdout, /PASS: 몬스터가 반격할 때 앞으로 나갔다 돌아온다/);
   // 끝까지
   assert.match(result.stdout, /PASS: 일반 몬스터 3종을 모두 만난다/);
   assert.match(result.stdout, /PASS: 레이드 보스까지 도달한다/);
@@ -153,6 +161,46 @@ test('전투 아래 패널이 일반 전투와 같은 구성이다', () => {
   assert.match(uiSource, /question = null;\s*\/\/ 문제는 공격\/스킬을 고른 뒤에 나온다/);
   // 포기는 한 번만 확인한다.
   assert.match(uiSource, /정말로 포기하시겠습니까\?/);
+});
+
+test('로비 캐릭터는 배치 중에도 계속 제자리걸음을 한다', () => {
+  assert.match(uiSource, /function startFormationAnimation\(memberById\)/);
+  assert.match(uiSource, /G\(\)\?\.modalState\?\.type !== 'raidFormation'/);
+  assert.match(uiSource, /paintAll\('\.raid-face', memberById, 1\.35, \{ moving:true \}\)/);
+  assert.match(uiSource, /function stopFormationAnimation\(\)/);
+  assert.match(uiSource, /function playTravelScene\(\) \{[\s\S]*?stopFormationAnimation\(\)/);
+});
+
+test('복도 이름표와 펫은 파티 캐릭터 좌표를 함께 쓴다', () => {
+  assert.match(uiSource, /drawNameTag\(ctx, x, y \+ 58, member\.name/);
+  assert.match(uiSource, /function drawRaidPet\(ctx, ownerX, ownerY, moving\)/);
+  assert.match(uiSource, /x = ownerX - 46/);
+  assert.match(uiSource, /playerPosition = positioned\.find\(\(\{ member \}\) => member\.isPlayer\)/);
+  assert.match(uiSource, /drawRaidPet\(ctx, playerPosition\.x, playerPosition\.y, moving\)/);
+
+  // 월드 좌표를 쓰는 공용 펫·원격 학생 레이어가 던전 위에 겹치면 안 된다.
+  assert.match(gameSource, /\['petShopInterior', 'upgradeShopInterior', 'finalBossRoom', 'raidTower'\]/);
+  assert.match(gameSource, /\['finalBossRoom', 'raidTower'\]/);
+  assert.match(multiplayerSource, /\['petShopInterior', 'upgradeShopInterior', 'raidTower'\]/);
+});
+
+test('아군과 몬스터 모두 공격할 때 대기 모션을 끊고 전진한다', () => {
+  assert.match(uiSource, /\.raid-ally-sprite\.raid-party-lunge/);
+  assert.match(uiSource, /\.raid-monster-sprite\.raid-monster-lunge/);
+  assert.match(uiSource, /\.raid-ally-sprite\.raid-shake,\.raid-monster-sprite\.raid-shake/);
+  assert.match(uiSource, /node\.classList\.add\('combat-acting', motionClass\)/);
+  assert.match(uiSource, /lunge\(attacker, 'party'\)/);
+  assert.match(uiSource, /lunge\(monsterNode, 'monster'\)/);
+});
+
+test('답 제출 뒤에는 전투 무대를 유지한 채 문제 입력 UI만 없앤다', () => {
+  assert.match(uiSource, /function showPlaybackPanel\(message = '전투 중…'\)/);
+  assert.match(uiSource, /querySelector\('\.raid-combat > \.panel-card'\)/);
+  assert.match(uiSource, /panel\.innerHTML = `<h3>/);
+  assert.match(uiSource, /showPlaybackPanel\('전투 중…'\);\s*\n\s*runRound/);
+  // 공용 2초 오답 복습기가 객관식·주관식 정답을 실제로 표시할 수 있는 마크업이다.
+  assert.match(uiSource, /data-answer-key=/);
+  assert.match(uiSource, /id="combatAnswer"/);
 });
 
 test('공격 소리는 각자의 직업 소리를 쓴다', () => {

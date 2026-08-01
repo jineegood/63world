@@ -37,6 +37,9 @@
   let active = null;      // 지금 돌고 있는 판
   let question = null;    // 지금 화면에 뜬 문제
   let busy = false;       // 연출 재생 중에는 입력을 막는다
+  let formationAnimationFrame = null;
+  let formationAnimationToken = 0;
+  let raidPetAnchor = null;
 
   /* ---------- 스타일 ---------- */
 
@@ -122,16 +125,27 @@
         18%{opacity:1;transform:translate(-50%,-6px) scale(1.15)}
         100%{opacity:0;transform:translate(-50%,-56px) scale(1)}
       }
-      .raid-shake{animation:raidShake .42s ease-in-out both}
+      .raid-ally-sprite.raid-shake,.raid-monster-sprite.raid-shake{
+        animation:raidShake .42s ease-in-out both!important}
       @keyframes raidShake{
         0%,100%{transform:translateX(0)}
         20%{transform:translateX(-8px)} 40%{transform:translateX(7px)}
         60%{transform:translateX(-5px)} 80%{transform:translateX(3px)}
       }
-      /* 공격하는 캐릭터가 앞으로 살짝 나갔다 돌아온다 */
-      .raid-lunge{animation:raidLunge .38s ease-out both}
-      @keyframes raidLunge{
-        0%{transform:translateX(0)} 45%{transform:translateX(20px)} 100%{transform:translateX(0)}
+      /* 기본 대기 애니메이션보다 우선해 실제로 앞으로 나갔다 돌아오게 한다. */
+      .raid-ally-sprite.raid-party-lunge{
+        animation:raidPartyLunge .56s cubic-bezier(.18,.82,.24,1) both!important}
+      .raid-monster-sprite.raid-monster-lunge{
+        animation:raidMonsterLunge .62s cubic-bezier(.18,.82,.24,1) both!important}
+      @keyframes raidPartyLunge{
+        0%,100%{transform:translateX(0);filter:none}
+        22%{transform:translateX(-5px)}
+        58%{transform:translateX(38px);filter:brightness(1.28)}
+      }
+      @keyframes raidMonsterLunge{
+        0%,100%{transform:translateX(0);filter:none}
+        22%{transform:translateX(9px)}
+        58%{transform:translateX(-52px);filter:brightness(1.28)}
       }
       .raid-stage.raid-danger{box-shadow:inset 0 0 0 3px rgba(251,191,36,.75)}
       /* 치명타가 터지면 무대가 번쩍인다 */
@@ -196,11 +210,12 @@
   }
 
   /* 캔버스 하나에 캐릭터 한 명을 그린다. 대형 화면과 전투 화면이 함께 쓴다. */
-  function paintMember(canvas, member, scale = 1.5) {
+  function paintMember(canvas, member, scale = 1.5, spriteState = null) {
     if (!canvas || !member) return;
     const ctx = typeof canvas.getContext === 'function' ? canvas.getContext('2d') : null;
     const draw = global.drawPlayerSprite;
     if (!ctx || typeof draw !== 'function') return;
+    const moving = spriteState?.moving === true;
     try {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       /* 스프라이트는 기준점 아래로 발이 더 그려진다.
@@ -211,18 +226,50 @@
         canvas.height * 0.62,
         member.appearance || {},
         member.klass || 'warrior',
-        { attack:0, moving:false, equipment:member.equipment },
+        { attack:Number(spriteState?.attack) || 0, moving, equipment:member.equipment },
         scale,
         member.spec || null,
       );
+      canvas.dataset.moving = moving ? 'true' : 'false';
+      canvas.dataset.paintCount = String((Number(canvas.dataset.paintCount) || 0) + 1);
     } catch (_) { /* 그리기 실패가 진행을 막지 않게 한다 */ }
   }
 
-  function paintAll(selector, lookup, scale) {
+  function paintAll(selector, lookup, scale, spriteState = null) {
     global.document.querySelectorAll(selector).forEach((canvas) => {
       const member = lookup(canvas.dataset.member);
-      if (member) paintMember(canvas, member, scale);
+      if (member) paintMember(canvas, member, scale, spriteState);
     });
+  }
+
+  function stopFormationAnimation() {
+    formationAnimationToken += 1;
+    if (formationAnimationFrame != null && typeof global.cancelAnimationFrame === 'function') {
+      global.cancelAnimationFrame(formationAnimationFrame);
+    }
+    formationAnimationFrame = null;
+  }
+
+  /* 배치 화면은 게임 자체가 일시 정지되므로 월드 루프에 기대지 않고
+     캔버스를 계속 다시 그려 세 캐릭터가 제자리걸음을 하게 한다. */
+  function startFormationAnimation(memberById) {
+    stopFormationAnimation();
+    const token = formationAnimationToken;
+    let lastPaintAt = 0;
+    const frame = (now = Date.now()) => {
+      if (token !== formationAnimationToken || !active || G()?.modalState?.type !== 'raidFormation') {
+        formationAnimationFrame = null;
+        return;
+      }
+      if (now - lastPaintAt >= 40) {
+        paintAll('.raid-face', memberById, 1.35, { moving:true });
+        lastPaintAt = now;
+      }
+      if (typeof global.requestAnimationFrame === 'function') {
+        formationAnimationFrame = global.requestAnimationFrame(frame);
+      }
+    };
+    frame(global.performance?.now?.() || Date.now());
   }
 
   /* ---------- 문제 ---------- */
@@ -369,7 +416,7 @@
         </div>
       `, { type:'raidFormation', pause:true });
 
-      paintAll('.raid-face', memberById, 1.35);
+      paintAll('.raid-face', memberById, 1.35, { moving:true });
 
       global.document.querySelectorAll('[data-pick]').forEach((node) => {
         node.onclick = () => {
@@ -411,6 +458,7 @@
     }
 
     render();
+    startFormationAnimation(memberById);
   }
 
   /* ---------- 던전 맵 (화면 전체) ---------- */
@@ -588,6 +636,50 @@
     ctx.restore();
   }
 
+  /* 월드 공용 펫 레이어는 던전 좌표를 모르므로, 복도에서는 주인 옆에 직접 그린다. */
+  function drawRaidPet(ctx, ownerX, ownerY, moving) {
+    const g = G();
+    const pet = global.PET_DEFS_V27?.[g?.player?.activePet];
+    if (!pet) { raidPetAnchor = null; return; }
+
+    const now = global.performance?.now?.() || Date.now();
+    const x = ownerX - 46;
+    const y = ownerY + 24 - (moving ? Math.abs(Math.sin(now / 120 + (pet.bob || 0))) * 8 : 0);
+    raidPetAnchor = { x, y, ownerX, ownerY };
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(4,10,18,.25)';
+    ctx.beginPath();
+    ctx.ellipse(x, ownerY + 47, 18, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.translate(x, y);
+    ctx.rotate(Math.sin(now / 500 + (pet.bob || 0)) * 0.035);
+    const bounce = 1 + Math.sin(now / 460 + (pet.bob || 0)) * 0.025;
+    ctx.scale(bounce, bounce);
+    ctx.font = `${pet.legendary ? 36 : 33}px Noto Sans KR, Apple Color Emoji, Segoe UI Emoji, system-ui`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(15,23,42,.55)';
+    ctx.strokeText(pet.icon || '🐾', 0, 0);
+    ctx.fillText(pet.icon || '🐾', 0, 0);
+    if (pet.legendary) {
+      ctx.globalAlpha = .82;
+      ctx.strokeStyle = 'rgba(251,191,36,.68)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 25 + Math.sin(now / 240) * 3, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    if (moving) {
+      ctx.fillStyle = pet.color || '#fde68a';
+      ctx.globalAlpha = .72;
+      ctx.beginPath(); ctx.ellipse(-8, 20, 5, 3, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(8, 20, 5, 3, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
   /* 파티 세 명을 대형 순서대로 그린다. 이동 중이면 걸어가는 것처럼 옮겨 준다. */
   function drawParty() {
     const g = G();
@@ -605,11 +697,19 @@
     const baseX = w * (0.20 + 0.06 * encounterProgress());
     const order = { front:0, middle:1, back:2 };
 
-    snap.members.forEach((member) => {
+    const positioned = snap.members.map((member) => {
       const index = order[member.slot] ?? 1;
       // 앞줄이 가장 앞(오른쪽), 뒷줄이 뒤에 선다.
       const x = baseX - index * 62;
       const y = h * 0.80 + index * 10;
+      return { member, index, x, y };
+    });
+
+    const playerPosition = positioned.find(({ member }) => member.isPlayer);
+    if (playerPosition) drawRaidPet(ctx, playerPosition.x, playerPosition.y, moving);
+    else raidPetAnchor = null;
+
+    positioned.forEach(({ member, index, x, y }) => {
       const step = moving ? Math.abs(Math.sin((walkProgress * 9) + index)) * 6 : 0;
       ctx.save();
       ctx.globalAlpha = member.hp > 0 ? 1 : 0.35;
@@ -619,9 +719,8 @@
       } catch (_) { /* 그리기 실패가 진행을 막지 않게 한다 */ }
       ctx.restore();
 
-      /* 이름은 몸에 겹치지 않게 머리 위 이름표로 띄운다.
-         멀티플레이에서 다른 학생이 지나갈 때와 같은 모양이다. */
-      drawNameTag(ctx, x, y + 26, member.name, member.hp > 0);
+      /* 발과 그림자 아래에 이름표를 둔다. */
+      drawNameTag(ctx, x, y + 58, member.name, member.hp > 0);
     });
   }
 
@@ -731,6 +830,7 @@
 
   function playTravelScene() {
     // 모달을 닫아 던전 맵이 화면을 가득 채우게 한다.
+    stopFormationAnimation();
     call('closeModal');
     walkStartedAt = (global.performance ? performance.now() : Date.now());
     walkProgress = 0;
@@ -799,6 +899,7 @@
     question = null;          // 문제는 공격/스킬을 고른 뒤에 나온다
     chosenAction = null;
     busy = true;              // 등장 문구를 보여 주는 동안에는 입력을 막는다
+    monsterLungePending = false;
     syncViewToTruth();
 
     const monster = active.snapshot().monster;
@@ -865,13 +966,6 @@
     return Array.isArray(list) ? list : [];
   }
 
-  function actionLabel() {
-    if (!chosenAction || chosenAction === 'attack') return '공격';
-    const defs = global.SKILL_DEFS || global.YuksamData?.SKILL_DEFS || {};
-    const skill = defs[String(chosenAction).slice(7)];
-    return skill?.active?.name || '스킬';
-  }
-
   function panelHtml() {
     /* 사냥터 전투처럼 별도의 로그 상자를 두지 않는다.
        이 자리(h3)의 글이 바뀌면서 그 자체가 전투 기록이 된다. */
@@ -898,10 +992,10 @@
       const choices = Array.isArray(question?.choices) && question.choices.length === 4 ? question.choices : null;
       const answer = choices
         ? `<div class="choice-grid">${choices.map((choice, i) => `
-            <button class="primary raid-choice" data-choice="${i}">${esc(choice)}</button>`).join('')}</div>`
+            <button class="primary raid-choice" data-choice="${i}" data-answer-key="${encodeURIComponent(String(choice))}">${esc(choice)}</button>`).join('')}</div>`
         : `<div class="answer-row">
-            <input id="raidAnswer" placeholder="정답 입력" autocomplete="off" />
-            <button class="primary" id="raidSubmitBtn">${esc(actionLabel())}</button>
+            <input id="combatAnswer" placeholder="정답 입력" autocomplete="off" />
+            <button class="primary" id="raidSubmitBtn">정답 제출</button>
           </div>`;
       return `<h3>${esc(question?.q || '')}</h3>${answer}`;
     }
@@ -932,12 +1026,21 @@
       button.onclick = () => submitAnswer(question.choices[Number(button.dataset.choice)]);
     });
     const submitBtn = global.document.getElementById('raidSubmitBtn');
-    const input = global.document.getElementById('raidAnswer');
+    const input = global.document.getElementById('combatAnswer');
     if (submitBtn && input) {
       submitBtn.onclick = () => submitAnswer(input.value);
       input.onkeydown = (event) => { if (event.key === 'Enter') submitAnswer(input.value); };
       input.focus();
     }
+  }
+
+  /* 체력바와 캐릭터 DOM은 그대로 두고 아래 문제 영역만 전투 문구로 바꾼다.
+     사냥터처럼 제출 즉시 입력칸과 버튼이 사라지면서도, 체력바 전환은 끊기지 않는다. */
+  function showPlaybackPanel(message = '전투 중…') {
+    panelMode = 'playing';
+    panelMessage = message;
+    const panel = global.document.querySelector('.raid-combat > .panel-card');
+    if (panel) panel.innerHTML = `<h3>${esc(message)}</h3>`;
   }
 
   /* 공격이나 스킬을 고르면 문제가 나온다(일반 전투와 같은 흐름). */
@@ -1057,14 +1160,36 @@
     node.classList.remove('raid-shake');
     // 클래스를 다시 붙여야 애니메이션이 재생된다.
     void (node.offsetWidth);
-    node.classList.add('raid-shake');
-    global.setTimeout(() => { try { node.classList.remove('raid-shake'); } catch (_) {} }, 450);
+    node.classList.add('combat-acting', 'raid-shake');
+    global.setTimeout(() => {
+      try {
+        node.classList.remove('raid-shake');
+        if (!node.classList.contains('raid-party-lunge') && !node.classList.contains('raid-monster-lunge')) {
+          node.classList.remove('combat-acting');
+        }
+      } catch (_) {}
+    }, 450);
   }
 
   function memberSpriteNode(memberId) {
     const canvas = global.document.querySelector(`.raid-battle-face[data-member="${memberId}"]`);
     return canvas ? canvas.parentNode : null;
   }
+
+  function lunge(node, role) {
+    if (!node?.classList) return;
+    const motionClass = role === 'monster' ? 'raid-monster-lunge' : 'raid-party-lunge';
+    if (node._raidLungeTimer) global.clearTimeout(node._raidLungeTimer);
+    node.classList.remove('raid-party-lunge', 'raid-monster-lunge', 'combat-acting');
+    void (node.offsetWidth);
+    node.classList.add('combat-acting', motionClass);
+    node._raidLungeTimer = global.setTimeout(() => {
+      try { node.classList.remove(motionClass, 'combat-acting'); } catch (_) {}
+      node._raidLungeTimer = null;
+    }, role === 'monster' ? 640 : 580);
+  }
+
+  let monsterLungePending = false;
 
   function showEventEffect(event) {
     if (!event) return;
@@ -1087,17 +1212,18 @@
         floatNumber(monsterNode, `-${event.damage}`, event.critical ? 'crit' : 'damage');
         shake(monsterNode);
       }
-      // 때린 사람도 살짝 앞으로 튀어나오게 한다.
+      // 명중 여부와 관계없이 공격을 시도한 사람은 앞으로 나갔다 돌아온다.
       const attacker = memberSpriteNode(event.memberId);
-      if (attacker && !event.missed) {
-        attacker.classList.add('raid-lunge');
-        global.setTimeout(() => { try { attacker.classList.remove('raid-lunge'); } catch (_) {} }, 380);
-      }
+      lunge(attacker, 'party');
       return;
     }
 
     if (event.kind === 'monster-hit') {
       const target = memberSpriteNode(event.memberId);
+      if (monsterLungePending) {
+        lunge(monsterNode, 'monster');
+        monsterLungePending = false;
+      }
       if (event.missed) { floatNumber(target, 'MISS', 'miss'); return; }
       floatNumber(target, `-${event.damage}`, event.critical ? 'crit' : 'damage');
       shake(target);
@@ -1109,11 +1235,14 @@
       return;
     }
 
-    if (event.kind === 'monster-windup' && event.all) {
-      const stage = global.document.querySelector('.raid-stage');
-      if (stage) {
-        stage.classList.add('raid-danger');
-        global.setTimeout(() => { try { stage.classList.remove('raid-danger'); } catch (_) {} }, 620);
+    if (event.kind === 'monster-windup') {
+      monsterLungePending = true;
+      if (event.all) {
+        const stage = global.document.querySelector('.raid-stage');
+        if (stage) {
+          stage.classList.add('raid-danger');
+          global.setTimeout(() => { try { stage.classList.remove('raid-danger'); } catch (_) {} }, 620);
+        }
       }
     }
   }
@@ -1214,8 +1343,6 @@
   function submitAnswer(given) {
     if (busy || !active || active.phase !== 'battle') return;
     busy = true;
-    panelMode = 'playing';
-    panelMessage = '전투 중…';
 
     const correct = norm(given) === norm(question?.answer);
     const answers = active.rollAllyAnswers();
@@ -1226,7 +1353,13 @@
 
     const snapBefore = active.snapshot();
     const result = active.resolveRound(answers);
-    if (!result.ok) { busy = false; panelMode = 'menu'; return; }
+    if (!result.ok) {
+      busy = false;
+      panelMode = 'menu';
+      panelMessage = result.reason || '무엇을 할까?';
+      renderBattle();
+      return;
+    }
 
     /* 사냥터 전투처럼, 틀리면 정답을 초록색으로 잠깐 보여 준 뒤 공격이 이어진다. */
     if (!correct && typeof global.YuksamWrongAnswerReview?.reveal === 'function') {
@@ -1235,11 +1368,15 @@
         global.YuksamWrongAnswerReview.reveal({
           root: host,
           correctAnswer: question?.answer,
-          onComplete: () => runRound(result, correct, snapBefore),
+          onComplete: () => {
+            showPlaybackPanel('전투 중…');
+            runRound(result, correct, snapBefore);
+          },
         });
         return;
       }
     }
+    showPlaybackPanel('전투 중…');
     runRound(result, correct, snapBefore);
   }
 
@@ -1637,10 +1774,12 @@
 
   /* 진행 중이던 판을 버린다(연출 중이어도 안전하게 멈춘다). */
   function abandonRun() {
+    stopFormationAnimation();
     active = null;
     question = null;
     busy = false;
     walkProgress = 1;
+    raidPetAnchor = null;
   }
 
   function toggleReturnButton(show) {
@@ -1734,6 +1873,7 @@
     /* 이동 연출 상태(검사용) — 배경이 얼마나 흘렀는지, 조우 연출이 어디까지 왔는지 */
     travelScrollForTest:() => travelScroll(),
     encounterProgressForTest:() => encounterProgress(),
+    petAnchorForTest:() => (raidPetAnchor ? { ...raidPetAnchor } : null),
     /* 이동 연출 길이(밀리초). 검사에서는 짧게 줄여 빠르게 돌린다. */
     /* 준비 카운트다운 길이(검사에서 짧게 줄이려고 연다). */
     setCountdownSpeed:(seconds, stepMs) => {

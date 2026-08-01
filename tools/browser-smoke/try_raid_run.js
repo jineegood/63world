@@ -37,6 +37,8 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   G.player.exp = XP[4];
   G.player.level = window.eval(`computeLevelFromExp(${XP[4]})`);
   G.player.spec = '방어';
+  const testPetId = Object.keys(window.PET_DEFS_V27 || {})[0] || null;
+  if (testPetId) G.player.activePet = testPetId;
   const townBefore = G.currentMap;
 
   // ===== 던전 맵으로 실제 이동 =====
@@ -60,6 +62,12 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   check('캐릭터 그림이 실제로 그려진다',
     window.document.querySelectorAll('.raid-face').length === 3,
     `캔버스=${window.document.querySelectorAll('.raid-face').length}`);
+  await sleep(140);
+  const animatedFaces = [...window.document.querySelectorAll('.raid-face')];
+  check('로비 캐릭터가 멈추지 않고 계속 움직인다',
+    animatedFaces.length === 3
+      && animatedFaces.every((canvas) => canvas.dataset.moving === 'true' && Number(canvas.dataset.paintCount) >= 2),
+    animatedFaces.map((canvas) => `${canvas.dataset.moving}/${canvas.dataset.paintCount}`).join(', '));
   check('자리마다 + 버튼이 있다', plusButtons().length >= 4, `+버튼=${plusButtons().length}`);
   check('세 자리를 채우기 전에는 준비할 수 없다',
     window.document.getElementById('raidStartBtn').disabled === true);
@@ -127,6 +135,10 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   await sleep(3000);
   check('걷는 동안 배경이 실제로 흘러간다', ui.travelScrollForTest() > 0,
     `scroll=${Math.round(ui.travelScrollForTest())}`);
+  const petAnchor = ui.petAnchorForTest();
+  check('복도에서 펫이 주인 옆을 따라 걷는다', !testPetId || (
+    !!petAnchor && Math.hypot(petAnchor.x - petAnchor.ownerX, petAnchor.y - petAnchor.ownerY) < 80
+  ), petAnchor ? JSON.stringify(petAnchor) : '펫 없음');
   await sleep(2000);
   check('복도 끝에서 몬스터가 나타나며 적 등장 연출이 뜬다',
     ui.encounterProgressForTest() > 0, `p=${ui.encounterProgressForTest().toFixed(2)}`);
@@ -180,6 +192,8 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   /* 전투 로그는 한 줄씩만 나오고 이전 줄은 지워진다.
      그래서 어떤 종류가 나왔는지는 재생 '도중'에 모아야 한다. */
   const sawKind = new Set();
+  let sawPartyLunge = false;
+  let sawMonsterLunge = false;
   const collectLine = () => {
     const text = window.document.querySelector('.panel-card h3')?.textContent || '';
     if (/치명타/.test(text)) sawKind.add('crit');
@@ -187,6 +201,8 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
     if (/회복/.test(text)) sawKind.add('heal');
     if (/피해를 주었다/.test(text)) sawKind.add('mine');
     if (/피해를 받았다/.test(text)) sawKind.add('hit');
+    if (window.document.querySelector('.raid-party-lunge')) sawPartyLunge = true;
+    if (window.document.querySelector('.raid-monster-lunge')) sawMonsterLunge = true;
   };
   const waitIdle = async (limit = 400) => {
     let n = 0;
@@ -195,12 +211,22 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   };
 
   const hpBefore = ui.peek().monster.hp;
+  const stageBeforeSubmit = window.document.querySelector('.raid-stage');
   ui.submitAnswerForTest(ui.currentQuestion().answer);
+  check('정답을 제출하면 입력칸과 공격 버튼이 즉시 사라진다',
+    !window.document.getElementById('combatAnswer')
+      && !window.document.getElementById('raidSubmitBtn')
+      && !window.document.querySelector('.raid-choice')
+      && !window.document.querySelector('[data-raid-menu]'));
+  check('입력 UI를 지워도 전투 무대는 새로 만들지 않는다',
+    window.document.querySelector('.raid-stage') === stageBeforeSubmit);
   await sleep(80);
   check('전투 기록은 따로 상자를 두지 않는다', !window.document.querySelector('.raid-log'));
   await waitIdle();
   check('정답을 넣으면 몬스터 체력이 줄어든다', ui.peek().monster.hp < hpBefore,
     `${hpBefore} -> ${ui.peek().monster.hp}`);
+  check('파티원이 공격할 때 앞으로 나갔다 돌아온다', sawPartyLunge);
+  check('몬스터가 반격할 때 앞으로 나갔다 돌아온다', sawMonsterLunge);
   check('몬스터가 그림으로 그려진다', !!window.document.getElementById('raidMonsterCanvas'));
 
   /* 몬스터도 10% 확률로 빗나가므로 한 라운드만 보면 흔들린다.
