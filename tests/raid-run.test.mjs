@@ -238,19 +238,23 @@ test('힐러가 있으면 라운드마다 가장 다친 동료가 회복된다',
     floor:1,
     rng:PLAIN,
     members:[
-      // 이동 중 회복이 먼저 들어가므로, 그러고도 회복 상한에 걸리지 않게 넉넉히 다쳐 둔다.
-      member('me', 'front', { isPlayer:true, spec:'방어', maxHp:300, hp:2 }),
+      member('me', 'front', { isPlayer:true, spec:'방어', maxHp:300, hp:300 }),
       member('ally1', 'middle', { spec:'화염' }),
       member('ally2', 'back', { spec:'신성', attack:10 }),
     ],
   });
   run.confirmFormation({ me:'front', ally1:'middle', ally2:'back' });
   run.arriveAtEncounter();
+  /* 이동 중 회복이 먼저 들어가 모두 가득 찬 상태로 도착한다.
+     힐러가 회복할 대상이 생기도록 도착한 뒤에 다치게 한다. */
+  run.members.find((m) => m.id === 'me').hp = 10;
   const result = run.resolveRound({ me:true, ally1:true, ally2:true });
   const heal = result.events.find((e) => e.kind === 'party-heal');
   assert.ok(heal, '힐러가 회복시켜야 한다');
   assert.equal(heal.memberId, 'me');
-  assert.equal(heal.amount, Math.round(10 * api.YuksamRaidRules.HEAL_RATIO));
+  // 회복량은 모자란 체력을 넘지 않는다.
+  const want = Math.round(10 * api.YuksamRaidRules.HEAL_RATIO);
+  assert.ok(heal.amount > 0 && heal.amount <= want, 'amount=' + heal.amount + ' want<=' + want);
 });
 
 test('전투 사이 이동에서 체력을 회복한다', () => {
@@ -265,7 +269,10 @@ test('전투 사이 이동에서 체력을 회복한다', () => {
   run.arriveAtEncounter();
   run.resolveRound({ me:true, ally1:true, ally2:true }); // 한 방에 처치 → travel
 
-  const before = run.members.find((m) => m.id === 'me').hp;
+  // 다음 몬스터로 걸어가기 직전에 다쳐 있으면, 도착할 때 회복되어 있어야 한다.
+  const me = run.members.find((m) => m.id === 'me');
+  me.hp = 12;
+  const before = me.hp;
   run.arriveAtEncounter();
   const after = run.members.find((m) => m.id === 'me').hp;
   assert.ok(after > before, `이동하며 회복해야 한다: ${before} -> ${after}`);

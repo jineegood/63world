@@ -561,10 +561,11 @@
     dialogueState.selected = 0;
 
     if (heardTheStory()) {
+      /* 이미 들은 이야기는 다시 볼 수 없다.
+         다시 보기를 열어 두면 마지막에 보상을 또 받을 수 있었다. */
       renderElderDialogue({
         text: AFTER_LINES[Math.floor(Math.random() * AFTER_LINES.length)],
         options: [
-          { label: '완료한 퀘스트 다시 보기', run: () => showStoryPage(0) },
           { label: '대화 종료', run: () => call('closeModal') },
         ],
       });
@@ -584,6 +585,8 @@
   function finishStory() {
     const p = player();
     if (!p) return;
+    /* 보상은 딱 한 번만. 어떤 경로로 다시 들어와도 두 번 주지 않는다. */
+    if (heardTheStory()) { call('closeModal'); return; }
     p.quests = p.quests || {};
     p.quests[QUEST_ID] = {
       id: QUEST_ID,

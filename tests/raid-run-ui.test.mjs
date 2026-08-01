@@ -86,7 +86,8 @@ test('브라우저에서 1층을 처음부터 끝까지 깬다', { timeout:18000
   assert.match(result.stdout, /PASS: 공격 \/ 스킬 \/ 포기 메뉴가 나온다/);
   assert.match(result.stdout, /PASS: 행동을 고르기 전에는 문제가 나오지 않는다/);
   assert.match(result.stdout, /PASS: 공격을 고르면 문제가 나온다/);
-  assert.match(result.stdout, /PASS: 전투 로그는 항상 한 줄만 보인다/);
+  assert.match(result.stdout, /PASS: 전투 기록은 따로 상자를 두지 않는다/);
+  assert.match(result.stdout, /PASS: 적이 나타났다는 문구가 먼저 뜬다/);
   assert.match(result.stdout, /PASS: 전투 로그에 공격·피격이 모두 나온다/);
   assert.match(result.stdout, /PASS: 치명타와 빗나감이 실제로 발동한다/);
   assert.match(result.stdout, /PASS: 힐러 회복 로그가 나온다/);
@@ -175,6 +176,17 @@ test('몬스터를 쓰러뜨리면 문제와 행동 버튼이 사라진다', () 
   assert.match(submit, /question = null;/);
   assert.match(submit, /chosenAction = null;/);
   assert.match(submit, /panelMode = 'playing';/);
+});
+
+test('전투 기록은 사냥터처럼 별도 상자 없이 h3 자리에서 바뀐다', () => {
+  // 사냥터 전투처럼 별도 로그 상자를 두지 않는다.
+  assert.doesNotMatch(uiSource, /raid-log/);
+  assert.match(uiSource, /panelMessage = event\.text/);
+  // 체력은 이벤트마다 조금씩 따라간다(한 번에 확 줄지 않는다).
+  assert.match(uiSource, /function applyEventToView\(event\)/);
+  assert.match(uiSource, /view\.monsterHp = Math\.max\(0, view\.monsterHp - \(event\.damage \|\| 0\)\)/);
+  // 진행 숫자(1/4 같은 표시)도 없앴다.
+  assert.doesNotMatch(uiSource, /raid-progress/);
 });
 
 test('전투 로그를 한 줄씩 순서대로 재생한다', () => {

@@ -148,7 +148,7 @@
      앞이 1.5배로 맞는 만큼 누군가 뒤에서 채워 주지 않으면 층을 넘길 수 없다.
      그래서 탱커(앞)와 힐러(뒤)가 함께 있어야 굴러가는 구조가 된다. */
   const HEAL_SPECS = Object.freeze(['신성']);
-  const HEAL_RATIO = 3.2;
+  const HEAL_RATIO = 6;
 
   function isHealer(member) {
     return !!member && HEAL_SPECS.includes(member.spec);
@@ -181,7 +181,7 @@
 
   /* 다음 몬스터에게 걸어가는 동안 숨을 고른다.
      한 층을 네 번 싸워 넘기려면 전투 사이 회복이 반드시 필요하다. */
-  const TRAVEL_RECOVERY = 0.6;
+  const TRAVEL_RECOVERY = 1;
 
   function travelRecovery(members) {
     return (members || [])
@@ -204,22 +204,22 @@
        셋이 동시에 때리므로 피해가 대략 3배다. 그만큼 체력을 두껍게 잡아
        한 마리를 여러 라운드에 걸쳐 잡도록 했다. */
     guardBot: {
-      id:'guardBot', name:'경비 로봇', level:5, hp:96, attack:8,
+      id:'guardBot', name:'경비 로봇', level:5, hp:192, attack:8,
       pattern:['single', 'single', 'all'],
       desc:'1층 로비를 지키는 낡은 경비 로봇. 가끔 사방으로 경보를 터뜨린다.',
     },
     officeGhost: {
-      id:'officeGhost', name:'사무실 유령', level:5, hp:112, attack:10,
+      id:'officeGhost', name:'사무실 유령', level:5, hp:224, attack:10,
       pattern:['single', 'all', 'single'],
       desc:'야근하다 사라진 직원의 그림자. 서류를 흩뿌려 모두를 덮친다.',
     },
     blackoutShade: {
-      id:'blackoutShade', name:'정전 그림자', level:6, hp:124, attack:8,
+      id:'blackoutShade', name:'정전 그림자', level:6, hp:248, attack:8,
       pattern:['all', 'all', 'single'],
       desc:'정전된 층에 고인 어둠. 전체를 한꺼번에 노린다.',
     },
     towerWarden: {
-      id:'towerWarden', name:'63빌딩 관리자', level:7, hp:230, attack:12,
+      id:'towerWarden', name:'63빌딩 관리자', level:7, hp:460, attack:12,
       pattern:['single', 'single', 'all', 'single', 'all'],
       boss:true,
       desc:'빌딩의 모든 층을 관리해 온 존재. 1층의 마지막 관문이다.',

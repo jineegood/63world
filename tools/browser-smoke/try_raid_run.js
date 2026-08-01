@@ -145,6 +145,12 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   check('셋의 체력창이 각각 보인다',
     window.document.querySelectorAll('.raid-ally-hp').length === 3);
   check('몬스터 체력창이 보인다', !!window.document.querySelector('.combat-hpbox.monster'));
+  check('적이 나타났다는 문구가 먼저 뜬다',
+    /나타났다/.test(window.document.querySelector('.panel-card h3')?.textContent || ''),
+    window.document.querySelector('.panel-card h3')?.textContent);
+  // 등장 문구가 지나갈 때까지 기다린다
+  let introWait = 0;
+  while (!window.document.querySelector('[data-raid-menu="attack"]') && introWait < 80) { await sleep(60); introWait += 1; }
   // 일반 전투와 같은 행동 메뉴가 먼저 나온다.
   const menuBtn = (what) => window.document.querySelector(`[data-raid-menu="${what}"]`);
   check('공격 / 스킬 / 포기 메뉴가 나온다',
@@ -175,8 +181,12 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
      그래서 어떤 종류가 나왔는지는 재생 '도중'에 모아야 한다. */
   const sawKind = new Set();
   const collectLine = () => {
-    const node = window.document.querySelector('.raid-log div');
-    if (node && node.className) sawKind.add(node.className);
+    const text = window.document.querySelector('.panel-card h3')?.textContent || '';
+    if (/치명타/.test(text)) sawKind.add('crit');
+    if (/빗나갔|피했/.test(text)) sawKind.add('miss');
+    if (/회복/.test(text)) sawKind.add('heal');
+    if (/피해를 주었다/.test(text)) sawKind.add('mine');
+    if (/피해를 받았다/.test(text)) sawKind.add('hit');
   };
   const waitIdle = async (limit = 400) => {
     let n = 0;
@@ -187,10 +197,7 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   const hpBefore = ui.peek().monster.hp;
   ui.submitAnswerForTest(ui.currentQuestion().answer);
   await sleep(80);
-  // 일반 전투처럼 지금 이 한 줄만 보여야 한다(예전 기록을 쌓지 않는다).
-  check('전투 로그는 항상 한 줄만 보인다',
-    window.document.querySelectorAll('.raid-log div').length === 1,
-    `줄=${window.document.querySelectorAll('.raid-log div').length}`);
+  check('전투 기록은 따로 상자를 두지 않는다', !window.document.querySelector('.raid-log'));
   await waitIdle();
   check('정답을 넣으면 몬스터 체력이 줄어든다', ui.peek().monster.hp < hpBefore,
     `${hpBefore} -> ${ui.peek().monster.hp}`);

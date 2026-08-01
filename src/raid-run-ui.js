@@ -108,43 +108,6 @@
       .raid-combat .combat-hpbox.monster{right:5%;top:auto;bottom:16px;min-width:250px}
       .raid-next-hint{font-size:11px;color:#9fb3cd;margin-top:3px}
       .raid-next-hint.warn{color:#fbbf24;font-weight:800}
-      .raid-log{max-height:190px;overflow-y:auto;background:rgba(2,6,23,.55);border-radius:10px;
-        padding:8px 10px;font-size:13px;line-height:1.55;margin-top:8px}
-      /* 피해 숫자와 피격 연출 — 일반 전투와 같은 감각 */
-      .raid-float-layer{position:absolute;inset:0;pointer-events:none;z-index:12}
-      .raid-float{position:absolute;transform:translate(-50%,0);font-weight:900;
-        font-size:23px;text-shadow:0 2px 6px rgba(0,0,0,.85);animation:raidFloatUp .95s ease-out forwards}
-      .raid-float.damage{color:#fb7185}
-      .raid-float.crit{color:#fbbf24;font-size:30px}
-      .raid-float.heal{color:#4ade80}
-      .raid-float.miss{color:#cbd5e1;font-size:19px}
-      @keyframes raidFloatUp{
-        0%{opacity:0;transform:translate(-50%,6px) scale(.7)}
-        18%{opacity:1;transform:translate(-50%,-6px) scale(1.12)}
-        100%{opacity:0;transform:translate(-50%,-52px) scale(1)}
-      }
-      .raid-shake{animation:raidShake .42s ease-in-out both}
-      @keyframes raidShake{
-        0%,100%{transform:translateX(0)}
-        20%{transform:translateX(-7px)} 40%{transform:translateX(6px)}
-        60%{transform:translateX(-4px)} 80%{transform:translateX(3px)}
-      }
-      .raid-lunge{animation:raidLunge .36s ease-out both}
-      @keyframes raidLunge{
-        0%{transform:translateX(0)} 45%{transform:translateX(16px)} 100%{transform:translateX(0)}
-      }
-      .raid-stage.raid-danger{box-shadow:inset 0 0 0 3px rgba(251,191,36,.75)}
-      .raid-escape-row{margin-top:10px;text-align:right}
-      .raid-escape-row button{font-size:12px;opacity:.85}
-      .raid-log div.crit{color:#fbbf24;font-weight:800}
-      .raid-log div.miss{color:#94a3b8}
-      .raid-log div.heal{color:#4ade80}
-      .raid-log div.good{color:#7dd3fc;font-weight:700}
-      .raid-log div.bad{color:#fca5a5;font-weight:700}
-      .raid-log div.hit{color:#fca5a5}
-      .raid-log div.mine{color:#7dd3fc}
-      .raid-log div.warn{color:#fbbf24;font-weight:700}
-      .raid-progress{font-size:12px;color:#9fb3cd;text-align:center;margin-bottom:6px}
     `;
     global.document.head.appendChild(style);
   }
@@ -617,14 +580,32 @@
       } catch (_) { /* 그리기 실패가 진행을 막지 않게 한다 */ }
       ctx.restore();
 
-      ctx.save();
-      ctx.textAlign = 'center';
-      ctx.font = '600 12px Noto Sans KR, system-ui';
-      ctx.fillStyle = member.hp > 0 ? '#e2e8f0' : '#94a3b8';
-      // 이동 중에는 이름만 보여 준다(자리 이름은 로비와 전투에서 확인한다).
-      ctx.fillText(member.name, x, y + 20);
-      ctx.restore();
+      /* 이름은 몸에 겹치지 않게 머리 위 이름표로 띄운다.
+         멀티플레이에서 다른 학생이 지나갈 때와 같은 모양이다. */
+      drawNameTag(ctx, x, y - 74, member.name, member.hp > 0);
     });
+  }
+
+  function drawNameTag(ctx, x, y, name, alive) {
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.font = '700 13px Noto Sans KR, system-ui';
+    const w = ctx.measureText(name).width + 18;
+    const h = 22;
+    const r = 8;
+    ctx.globalAlpha = alive ? 1 : 0.5;
+    ctx.fillStyle = 'rgba(7,16,27,.78)';
+    ctx.beginPath();
+    ctx.moveTo(x - w / 2 + r, y);
+    ctx.arcTo(x + w / 2, y, x + w / 2, y + h, r);
+    ctx.arcTo(x + w / 2, y + h, x - w / 2, y + h, r);
+    ctx.arcTo(x - w / 2, y + h, x - w / 2, y, r);
+    ctx.arcTo(x - w / 2, y, x + w / 2, y, r);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = alive ? '#edf5ff' : '#94a3b8';
+    ctx.fillText(name, x, y + 15);
+    ctx.restore();
   }
 
   function enterDungeonMap(onReady) {
@@ -778,11 +759,24 @@
     ensureStyles();
     question = null;          // 문제는 공격/스킬을 고른 뒤에 나온다
     chosenAction = null;
-    currentLine = null;
-    busy = false;
-    panelMode = 'menu';
-    panelMessage = '무엇을 할까?';
+    busy = true;              // 등장 문구를 보여 주는 동안에는 입력을 막는다
+    syncViewToTruth();
+
+    const monster = active.snapshot().monster;
+    panelMode = 'playing';
+    panelMessage = monster?.isBoss
+      ? `레이드 보스 ${monster.name}이(가) 나타났다!`
+      : `${monster?.name || '적'}이(가) 나타났다!`;
     renderBattle();
+
+    // 등장 문구를 한 박자 보여 준 뒤 행동 메뉴로 넘어간다.
+    global.setTimeout(() => {
+      if (!active || active.phase !== 'battle') return;
+      busy = false;
+      panelMode = 'menu';
+      panelMessage = '무엇을 할까?';
+      renderBattle();
+    }, eventDelayMs);
   }
 
   /* 왼쪽에 세 명이 대형 순서대로 선다(앞줄이 가장 앞). */
@@ -798,7 +792,9 @@
 
   function partyHpHtml(members) {
     const R = rules();
-    const order = { front:0, middle:1, back:2 };
+    /* 체력창은 캐릭터가 서 있는 순서와 같아야 헷갈리지 않는다.
+       왼쪽부터 뒤 → 가운데 → 앞. */
+    const order = { back:0, middle:1, front:2 };
     return [...members]
       .sort((a, b) => (order[a.slot] ?? 1) - (order[b.slot] ?? 1))
       .map((member) => {
@@ -811,25 +807,6 @@
             <div class="raid-ally-num">${member.hp}/${member.maxHp}</div>
           </div>`;
       }).join('');
-  }
-
-  /* 일반 몬스터 전투와 똑같이 "지금 이 한 줄"만 보여 준다.
-     예전 기록을 쌓아 두지 않는다(제작자 요구). */
-  let currentLine = null;
-
-  function logHtml() {
-    if (!currentLine) return '';
-    const entry = currentLine;
-    const cls = entry.missed ? 'miss'
-      : entry.critical ? 'crit'
-      : entry.kind === 'monster-hit' ? 'hit'
-      : entry.kind === 'party-hit' ? 'mine'
-      : entry.kind === 'party-heal' ? 'heal'
-      : entry.kind === 'answer-correct' ? 'good'
-      : entry.kind === 'answer-wrong' ? 'bad'
-      : ['monster-windup', 'monster-down', 'member-down', 'wiped', 'encounter'].includes(entry.kind) ? 'warn'
-      : '';
-    return `<div class="${cls}">${esc(entry.text)}</div>`;
   }
 
   /* ---------- 아래 패널: 일반 전투와 같은 3단계 ----------
@@ -854,8 +831,10 @@
   }
 
   function panelHtml() {
+    /* 사냥터 전투처럼 별도의 로그 상자를 두지 않는다.
+       이 자리(h3)의 글이 바뀌면서 그 자체가 전투 기록이 된다. */
     if (panelMode === 'playing') {
-      return `<h3>${esc(panelMessage)}</h3><p class="raid-hint">진행 중…</p>`;
+      return `<h3>${esc(panelMessage)}</h3>`;
     }
 
     if (panelMode === 'skills') {
@@ -927,12 +906,34 @@
     renderBattle();
   }
 
+  /* 화면에 보여 줄 체력. 로그가 한 줄씩 재생되는 동안 이 값이 조금씩 따라간다.
+     (진행 엔진은 라운드를 한 번에 계산하지만, 화면은 사냥터 전투처럼
+      "때릴 때마다 체력바가 쭉 빠지는" 모습을 보여야 한다.) */
+  let view = null;
+
+  function syncViewToTruth() {
+    const snap = active?.snapshot();
+    if (!snap?.monster) { view = null; return; }
+    view = {
+      monsterHp: snap.monster.hp,
+      members: Object.fromEntries(snap.members.map((m) => [m.id, m.hp])),
+    };
+  }
+
   function renderBattle() {
     const snap = active.snapshot();
-    const monster = snap.monster;
-    if (!monster) return;
+    const truth = snap.monster;
+    if (!truth) return;
+    if (!view) syncViewToTruth();
+
+    // 표시용 체력을 입혀 놓은 사본으로 그린다.
+    const monster = { ...truth, hp: Math.max(0, view?.monsterHp ?? truth.hp) };
+    const members = snap.members.map((m) => ({
+      ...m,
+      hp: Math.max(0, view?.members?.[m.id] ?? m.hp),
+    }));
     const percent = Math.max(0, Math.round((monster.hp / monster.maxHp) * 100));
-    const nextKind = rules().attackKindForRound(monster, snap.round);
+    const nextKind = rules().attackKindForRound(truth, snap.round);
 
     // 일반 전투와 같은 무대(combat-stage)를 쓰되 왼쪽에 세 명이 선다.
     call('openModal', `
@@ -947,23 +948,18 @@
               ${nextKind === 'all' ? '⚠ 다음은 전체 공격!' : '다음은 앞을 노립니다'}
             </div>
           </div>
-          <div class="raid-party-hp">${partyHpHtml(snap.members)}</div>
-          ${partySpriteHtml(snap.members)}
+          <div class="raid-party-hp">${partyHpHtml(members)}</div>
+          ${partySpriteHtml(members)}
           <div class="combat-sprite combat-monster raid-monster-sprite ${monster.isBoss ? 'boss' : ''}">
             <canvas id="raidMonsterCanvas" width="230" height="210"></canvas>
           </div>
           <div id="raidFloatLayer" class="raid-float-layer"></div>
         </div>
-        <div class="panel-card">
-          <p class="raid-progress">${snap.encounterIndex + 1} / ${snap.encounterTotal}</p>
-          <!-- 일반 전투와 같은 순서: 전투 기록이 위, 행동/문제가 아래 -->
-          <div class="raid-log">${logHtml()}</div>
-          ${panelHtml()}
-        </div>
+        <div class="panel-card">${panelHtml()}</div>
       </div>
     `, { type:'raidBattle', pause:true });
 
-    paintAll('.raid-battle-face', (id) => snap.members.find((m) => m.id === id), 1.4);
+    paintAll('.raid-battle-face', (id) => members.find((m) => m.id === id), 1.4);
     drawMonsterModel(global.document.getElementById('raidMonsterCanvas'), monster);
     bindPanel();
   }
@@ -1059,15 +1055,32 @@
      각 줄은 최소 1.5초씩 보여 준다 — 학생이 읽을 시간이 필요하다. */
   let eventDelayMs = 1500;
 
+  /* 이 한 줄이 일어난 만큼만 표시용 체력을 움직인다.
+     그래서 "때릴 때마다 체력바가 쭉 빠지는" 모습이 나온다. */
+  function applyEventToView(event) {
+    if (!view || !event) return;
+    if (event.kind === 'party-hit' && !event.missed) {
+      view.monsterHp = Math.max(0, view.monsterHp - (event.damage || 0));
+    } else if (event.kind === 'monster-hit' && !event.missed) {
+      const before = view.members[event.memberId] ?? 0;
+      view.members[event.memberId] = Math.max(0, before - (event.damage || 0));
+    } else if (event.kind === 'party-heal') {
+      const before = view.members[event.memberId] ?? 0;
+      view.members[event.memberId] = before + (event.amount || 0);
+    }
+  }
+
   function playEvents(events, onDone) {
-    currentLine = null;
     let index = 0;
     const step = () => {
       if (!active) return;
-      if (index >= events.length) { onDone?.(); return; }
+      if (index >= events.length) { syncViewToTruth(); onDone?.(); return; }
       const event = events[index];
       index += 1;
-      currentLine = event;      // 이전 줄을 지우고 이 줄만 보여 준다
+      // 글은 '무엇을 할까?' 자리에 그대로 들어간다(별도 로그 상자 없음).
+      panelMode = 'playing';
+      panelMessage = event.text || '';
+      applyEventToView(event);
       playEventSound(event);
       renderBattle();
       showEventEffect(event);   // 숫자와 흔들림은 그린 뒤에 얹는다
@@ -1132,7 +1145,6 @@
       }
       question = pickQuestion();
       chosenAction = null;
-      currentLine = null;
       busy = false;
       panelMode = 'menu';
       panelMessage = '무엇을 할까?';
@@ -1497,7 +1509,6 @@
   function abandonRun() {
     active = null;
     question = null;
-    currentLine = null;
     busy = false;
     walkProgress = 1;
   }

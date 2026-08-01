@@ -175,8 +175,8 @@ test('신성 전문화만 힐러로 인정된다', () => {
 
 test('문제를 맞힌 힐러가 가장 많이 다친 동료를 회복시킨다', () => {
   const members = [
-    { id:'tank', slot:'front', hp:10, maxHp:60, attack:12, spec:'방어' },
-    { id:'mid', slot:'middle', hp:50, maxHp:60, attack:11, spec:'화염' },
+    { id:'tank', slot:'front', hp:10, maxHp:300, attack:12, spec:'방어' },
+    { id:'mid', slot:'middle', hp:290, maxHp:300, attack:11, spec:'화염' },
     { id:'healer', slot:'back', hp:40, maxHp:40, attack:10, spec:'신성' },
   ];
   const { heals } = rules.resolvePartyHeal({ members, answers:{ healer:true } });
@@ -218,7 +218,9 @@ test('전투 사이 이동에서 최대 체력의 일부를 회복한다', () =>
   const recovery = rules.travelRecovery(members);
   assert.equal(recovery.length, 1);
   assert.equal(recovery[0].memberId, 'a');
-  assert.equal(recovery[0].amount, Math.round(60 * rules.TRAVEL_RECOVERY));
+  // 회복량은 최대 체력 기준이지만 모자란 만큼을 넘지는 않는다.
+  assert.equal(recovery[0].amount,
+    Math.min(Math.round(60 * rules.TRAVEL_RECOVERY), 60 - 20));
 });
 
 test('1층은 일반 전투 3회 뒤에 레이드 보스가 나온다', () => {
