@@ -672,20 +672,34 @@
     openBattleScreen();
   }
 
+  /* 매니페스트에 등록된 소리를 낸다.
+     실제 API 이름은 window.playMappedAudio 다(예전에 잘못된 이름을 써서 소리가 나지 않았다). */
+  function playAsset(audioId, fallbackSfx) {
+    if (!audioId) return false;
+    if (typeof global.playMappedAudio === 'function') {
+      try {
+        if (global.playMappedAudio(audioId)) return true;
+      } catch (_) { /* 아래로 */ }
+    }
+    if (fallbackSfx) call('playSfx', fallbackSfx);
+    return false;
+  }
+
   /* 몬스터를 만나는 순간의 효과음. */
   function playEncounterSound() {
-    if (typeof global.playAudioAssetV42 === 'function') {
-      try { global.playAudioAssetV42('dungeonEncounter'); return; } catch (_) { /* 아래로 */ }
-    }
-    call('playSfx', 'hit');
+    playAsset('dungeonEncounter', 'hit');
   }
 
   /* ---------- 화면 3: 전투 ---------- */
 
   function openBattleScreen() {
     ensureStyles();
-    question = pickQuestion();
+    question = null;          // 문제는 공격/스킬을 고른 뒤에 나온다
+    chosenAction = null;
+    playingEvents = [];
     busy = false;
+    panelMode = 'menu';
+    panelMessage = '무엇을 할까?';
     renderBattle();
   }
 
@@ -734,18 +748,99 @@
     }).join('');
   }
 
-  function answerHtml() {
-    if (busy) return '<p class="raid-hint">진행 중…</p>';
-    const choices = Array.isArray(question?.choices) && question.choices.length === 4 ? question.choices : null;
-    if (choices) {
-      return `<div class="choice-grid">${choices.map((choice, i) => `
-        <button class="primary raid-choice" data-choice="${i}">${esc(choice)}</button>
-      `).join('')}</div>`;
+  /* ---------- 아래 패널: 일반 전투와 같은 3단계 ----------
+     menu    : 공격 / 스킬 / 포기
+     skills  : 배운 액티브 스킬 목록
+     question: 문제 풀이 (공격 또는 스킬을 고른 뒤)
+     playing : 결과 재생 중 */
+  let panelMode = 'menu';
+  let chosenAction = null;      // 'attack' 또는 'active:스킬id'
+  let panelMessage = '무엇을 할까?';
+
+  function learnedSkills() {
+    const list = call('getLearnedActiveSkills') || [];
+    return Array.isArray(list) ? list : [];
+  }
+
+  function actionLabel() {
+    if (!chosenAction || chosenAction === 'attack') return '공격';
+    const defs = global.SKILL_DEFS || global.YuksamData?.SKILL_DEFS || {};
+    const skill = defs[String(chosenAction).slice(7)];
+    return skill?.active?.name || '스킬';
+  }
+
+  function panelHtml() {
+    if (panelMode === 'playing') {
+      return `<h3>${esc(panelMessage)}</h3><p class="raid-hint">진행 중…</p>`;
     }
-    return `<div class="answer-row">
-      <input id="raidAnswer" placeholder="정답 입력" autocomplete="off" />
-      <button class="primary" id="raidSubmitBtn">공격</button>
-    </div>`;
+
+    if (panelMode === 'skills') {
+      const skills = learnedSkills();
+      if (!skills.length) {
+        return '<h3>아직 획득한 액티브 스킬이 없습니다.</h3>'
+          + '<div class="combat-menu"><button class="ghost" data-raid-menu="back">뒤로</button></div>';
+      }
+      const buttons = skills.map((skill) => {
+        const cd = Number(call('getSkillCooldown', skill.id) || 0);
+        return `<button class="primary" ${cd > 0 ? 'disabled' : ''} data-raid-skill="${esc(skill.id)}">`
+          + `${esc(skill.active?.name || skill.name || '스킬')}${cd > 0 ? ` · ${cd}턴` : ''}</button>`;
+      }).join('');
+      return '<h3>사용할 스킬을 선택하세요.</h3>'
+        + `<div class="combat-menu">${buttons}<button class="ghost" data-raid-menu="back">뒤로</button></div>`;
+    }
+
+    if (panelMode === 'question') {
+      const choices = Array.isArray(question?.choices) && question.choices.length === 4 ? question.choices : null;
+      const answer = choices
+        ? `<div class="choice-grid">${choices.map((choice, i) => `
+            <button class="primary raid-choice" data-choice="${i}">${esc(choice)}</button>`).join('')}</div>`
+        : `<div class="answer-row">
+            <input id="raidAnswer" placeholder="정답 입력" autocomplete="off" />
+            <button class="primary" id="raidSubmitBtn">${esc(actionLabel())}</button>
+          </div>`;
+      return `<h3>${esc(question?.q || '')}</h3>${answer}`;
+    }
+
+    // 기본 메뉴 — 일반 전투와 같은 구성(도망 자리에 포기)
+    return `<h3>${esc(panelMessage)}</h3>
+      <div class="combat-menu">
+        <button class="primary" data-raid-menu="attack">공격</button>
+        <button class="primary" data-raid-menu="skill">스킬</button>
+        <button class="ghost" data-raid-menu="giveup">포기</button>
+      </div>`;
+  }
+
+  function bindPanel() {
+    global.document.querySelectorAll('[data-raid-menu]').forEach((button) => {
+      button.onclick = () => {
+        const what = button.dataset.raidMenu;
+        if (what === 'attack') startAction('attack');
+        else if (what === 'skill') { panelMode = 'skills'; renderBattle(); }
+        else if (what === 'back') { panelMode = 'menu'; panelMessage = '무엇을 할까?'; renderBattle(); }
+        else if (what === 'giveup') confirmGiveUp();
+      };
+    });
+    global.document.querySelectorAll('[data-raid-skill]').forEach((button) => {
+      button.onclick = () => startAction(`active:${button.dataset.raidSkill}`);
+    });
+    global.document.querySelectorAll('.raid-choice').forEach((button) => {
+      button.onclick = () => submitAnswer(question.choices[Number(button.dataset.choice)]);
+    });
+    const submitBtn = global.document.getElementById('raidSubmitBtn');
+    const input = global.document.getElementById('raidAnswer');
+    if (submitBtn && input) {
+      submitBtn.onclick = () => submitAnswer(input.value);
+      input.onkeydown = (event) => { if (event.key === 'Enter') submitAnswer(input.value); };
+      input.focus();
+    }
+  }
+
+  /* 공격이나 스킬을 고르면 문제가 나온다(일반 전투와 같은 흐름). */
+  function startAction(action) {
+    chosenAction = action;
+    question = question || pickQuestion();
+    panelMode = 'question';
+    renderBattle();
   }
 
   function renderBattle() {
@@ -777,46 +872,23 @@
         </div>
         <div class="panel-card">
           <p class="raid-progress">${snap.encounterIndex + 1} / ${snap.encounterTotal}</p>
-          <!-- 일반 전투와 같은 순서: 전투 기록이 문제보다 위에 온다 -->
+          <!-- 일반 전투와 같은 순서: 전투 기록이 위, 행동/문제가 아래 -->
           <div class="raid-log">${logHtml()}</div>
-          <h3>${esc(question?.q || '')}</h3>
-          ${answerHtml()}
-          <div class="raid-escape-row">
-            <button class="ghost" id="raidGiveUpBtn">🏳 포기하고 마을로</button>
-          </div>
+          ${panelHtml()}
         </div>
       </div>
     `, { type:'raidBattle', pause:true });
 
     paintAll('.raid-battle-face', (id) => snap.members.find((m) => m.id === id), 1.4);
     drawMonsterModel(global.document.getElementById('raidMonsterCanvas'), monster);
-
-    /* 포기 버튼은 연출 중에도 눌려야 한다. 던전에 갇히지 않기 위한 탈출구이기 때문이다. */
-    const giveUpBtn = global.document.getElementById('raidGiveUpBtn');
-    if (giveUpBtn) giveUpBtn.onclick = () => confirmGiveUp();
-
-    if (busy) return;
-    global.document.querySelectorAll('.raid-choice').forEach((button) => {
-      button.onclick = () => submitAnswer(question.choices[Number(button.dataset.choice)]);
-    });
-    const submitBtn = global.document.getElementById('raidSubmitBtn');
-    const input = global.document.getElementById('raidAnswer');
-    if (submitBtn && input) {
-      submitBtn.onclick = () => submitAnswer(input.value);
-      input.onkeydown = (event) => { if (event.key === 'Enter') submitAnswer(input.value); };
-      input.focus();
-    }
+    bindPanel();
   }
 
   /* 소리는 게임의 오디오 목록을 그대로 쓴다. 없으면 조용히 넘어간다. */
   function playEventSound(event) {
     if (!event) return;
     if (event.audioId) {
-      if (typeof global.playAudioAssetV42 === 'function') {
-        try { global.playAudioAssetV42(event.audioId); return; } catch (_) { /* 아래로 */ }
-      }
-      // 목록 재생이 없으면 기본 효과음으로 대신한다.
-      call('playSfx', event.audioId === 'miss' ? 'miss' : 'hit');
+      playAsset(event.audioId, event.audioId === 'miss' ? 'miss' : 'hit');
       return;
     }
     if (event.kind === 'party-hit') call('playSfx', 'hit');
@@ -920,30 +992,66 @@
     step();
   }
 
+  /* 파티원의 직업 기본 공격 소리(또는 고른 스킬 소리)를 낸다.
+     세 명이 각자 때리므로 각자의 직업 소리가 순서대로 들린다. */
+  function attackAudioIdFor(member) {
+    const manifest = global.YuksamAudioManifest;
+    if (!manifest) return null;
+    // 내가 스킬을 골랐으면 내 공격만 스킬 소리로 낸다.
+    if (member?.isPlayer && chosenAction && chosenAction !== 'attack') {
+      const skillId = String(chosenAction).slice(7);
+      return manifest.skillSounds?.[skillId] || manifest.classBasicSounds?.[member.klass] || null;
+    }
+    return manifest.classBasicSounds?.[member?.klass] || null;
+  }
+
   function submitAnswer(given) {
     if (busy || !active || active.phase !== 'battle') return;
     busy = true;
+    panelMode = 'playing';
+    panelMessage = '전투 중…';
 
     const correct = norm(given) === norm(question?.answer);
     const answers = active.rollAllyAnswers();
     answers.me = correct;
 
+    const snapBefore = active.snapshot();
     const result = active.resolveRound(answers);
-    if (!result.ok) { busy = false; return; }
+    if (!result.ok) { busy = false; panelMode = 'menu'; return; }
 
-    // 정답/오답을 먼저 알려 준 뒤 공격이 이어진다.
+    // 정답/오답을 먼저 알려 준 뒤 공격이 이어진다(일반 전투와 같은 순서).
     const opening = {
       kind:correct ? 'answer-correct' : 'answer-wrong',
       text:correct ? '정답!' : `오답입니다! 정답은 ${question?.answer} (피해가 절반만 들어갑니다)`,
     };
 
-    playEvents([opening, ...result.events], () => {
+    /* 파티원 공격에는 각자의 직업 소리를 붙인다.
+       턴 순서는 캐릭1 → 캐릭2 → 캐릭3 → 적 공격이다. */
+    const withSounds = result.events.map((event) => {
+      if (event.kind !== 'party-hit' || event.missed) return event;
+      const member = snapBefore.members.find((m) => m.id === event.memberId);
+      const audioId = attackAudioIdFor(member);
+      return audioId && !event.audioId ? { ...event, audioId } : event;
+    });
+
+    playEvents([opening, ...withSounds], () => {
       if (!active) return;
       if (result.wiped || result.cleared) { finishRun(); return; }
-      if (result.monsterDown) { playTravelScene(); return; }
+      /* 몬스터를 쓰러뜨렸으면 곧바로 이동으로 넘어간다.
+         이때 문제와 행동 버튼을 반드시 지워야 한다(예전에 남아 있던 버그). */
+      if (result.monsterDown) {
+        question = null;
+        chosenAction = null;
+        panelMode = 'playing';
+        playTravelScene();
+        return;
+      }
       question = pickQuestion();
+      chosenAction = null;
       playingEvents = [];
       busy = false;
+      panelMode = 'menu';
+      panelMessage = '무엇을 할까?';
       renderBattle();
     });
   }
@@ -1328,13 +1436,13 @@
     if (typeof openModal !== 'function') { leaveDungeonNow(); return; }
     const snapshot = active ? active.snapshot() : null;
     openModal(`
-      <h2>던전에서 나가기</h2>
+      <h2>포기</h2>
       <div class="panel-card">
-        <p>지금 나가면 <strong>${esc(snapshot?.title || '이번 층')}</strong>의 진행이 사라집니다.</p>
-        <p class="raid-hint">보상은 받지 못하고 마을로 돌아갑니다.</p>
-        <div class="answer-row">
-          <button class="primary" id="raidGiveUpYes">나가기</button>
-          <button class="ghost" id="raidGiveUpNo">계속 싸우기</button>
+        <p>정말로 포기하시겠습니까?</p>
+        <p class="raid-hint">${esc(snapshot?.title || '이번 층')}의 진행이 사라지고, 보상 없이 마을로 돌아갑니다.</p>
+        <div class="action-row">
+          <button class="primary" id="raidGiveUpYes">예, 포기합니다</button>
+          <button class="ghost" id="raidGiveUpNo">아니오</button>
         </div>
       </div>
     `, { type:'raidGiveUp', pause:true });
@@ -1344,10 +1452,11 @@
     if (yes) yes.onclick = () => leaveDungeonNow();
     if (no) {
       no.onclick = () => {
-        // 전투로 되돌아간다. 연출이 멈춰 있어도 계속 진행할 수 있게 한다.
+        // 전투로 되돌아간다. 행동 메뉴부터 다시 고르게 한다.
         if (!active) { leaveDungeonNow(); return; }
         busy = false;
-        if (!question) question = pickQuestion();
+        panelMode = 'menu';
+        panelMessage = '무엇을 할까?';
         renderBattle();
       };
     }

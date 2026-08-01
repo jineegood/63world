@@ -131,7 +131,31 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   check('셋의 체력창이 각각 보인다',
     window.document.querySelectorAll('.raid-ally-hp').length === 3);
   check('몬스터 체력창이 보인다', !!window.document.querySelector('.combat-hpbox.monster'));
-  check('문제가 출제된다', !!ui.currentQuestion()?.q, ui.currentQuestion()?.q);
+  // 일반 전투와 같은 행동 메뉴가 먼저 나온다.
+  const menuBtn = (what) => window.document.querySelector(`[data-raid-menu="${what}"]`);
+  check('공격 / 스킬 / 포기 메뉴가 나온다',
+    !!menuBtn('attack') && !!menuBtn('skill') && !!menuBtn('giveup'));
+  check('행동을 고르기 전에는 문제가 나오지 않는다', !ui.currentQuestion());
+
+  fire(menuBtn('skill'));
+  await sleep(30);
+  check('스킬을 누르면 스킬 목록이나 안내가 나온다',
+    !!window.document.querySelector('[data-raid-skill]')
+    || /액티브 스킬이 없습니다/.test(window.document.querySelector('.panel-card')?.textContent || ''));
+  fire(window.document.querySelector('[data-raid-menu="back"]'));
+  await sleep(30);
+
+  fire(menuBtn('attack'));
+  await sleep(30);
+  check('공격을 고르면 문제가 나온다', !!ui.currentQuestion()?.q, ui.currentQuestion()?.q);
+
+  /* 매 턴 공격을 골라 문제를 푼다(일반 전투와 같은 흐름). */
+  const attackOnce = async () => {
+    const btn = menuBtn('attack');
+    if (btn) { fire(btn); await sleep(25); }
+    const q = ui.currentQuestion();
+    if (q) ui.submitAnswerForTest(q.answer);
+  };
 
   // 전투 로그를 한 줄씩 재생하므로 재생이 끝날 때까지 기다린다.
   const waitIdle = async (limit = 300) => {
@@ -157,8 +181,7 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
     const front = ui.peek().members.find((m) => m.slot === 'front');
     if (front.hp < front.maxHp) { frontHurt = true; break; }
     if (ui.peek().phase !== 'battle') break;
-    const q = ui.currentQuestion();
-    if (q) ui.submitAnswerForTest(q.answer);
+    await attackOnce();
     await waitIdle();
     await sleep(20);
   }
@@ -178,8 +201,7 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
     if (snap.phase === 'battle' && snap.monster) {
       seen.add(snap.monster.name);
       if (snap.monster.isBoss) sawBoss = true;
-      const q = ui.currentQuestion();
-      if (q) ui.submitAnswerForTest(q.answer);
+      await attackOnce();
       await waitIdle();
       // 한 판 동안 치명타·빗나감·회복이 실제로 나오는지 로그 색으로 확인한다.
       window.document.querySelectorAll('.raid-log div').forEach((node) => {
@@ -246,9 +268,9 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   }
   fire(window.document.getElementById('raidStartBtn'));
   await sleep(2400);
-  check('전투 화면에 포기 버튼이 있다', !!window.document.getElementById('raidGiveUpBtn'),
+  check('전투 화면에 포기 버튼이 있다', !!window.document.querySelector('[data-raid-menu="giveup"]'),
     `modal=${G.modalState?.type}`);
-  fire(window.document.getElementById('raidGiveUpBtn'));
+  fire(window.document.querySelector('[data-raid-menu="giveup"]'));
   await sleep(40);
   check('포기하면 한 번 물어본다', G.modalState?.type === 'raidGiveUp', `type=${G.modalState?.type}`);
   fire(window.document.getElementById('raidGiveUpYes'));

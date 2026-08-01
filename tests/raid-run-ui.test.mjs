@@ -78,6 +78,9 @@ test('브라우저에서 1층을 처음부터 끝까지 깬다', { timeout:18000
   assert.match(result.stdout, /PASS: 정답을 넣으면 몬스터 체력이 줄어든다/);
   assert.match(result.stdout, /PASS: 앞줄에 선 캐릭터가 반격을 맞는다/);
   // 전투 흐름 — 로그가 한 줄씩 쌓이고 치명타·빗나감·회복이 실제로 나온다
+  assert.match(result.stdout, /PASS: 공격 \/ 스킬 \/ 포기 메뉴가 나온다/);
+  assert.match(result.stdout, /PASS: 행동을 고르기 전에는 문제가 나오지 않는다/);
+  assert.match(result.stdout, /PASS: 공격을 고르면 문제가 나온다/);
   assert.match(result.stdout, /PASS: 전투 로그가 한 줄씩 쌓인다/);
   assert.match(result.stdout, /PASS: 전투 로그에 공격·피격이 모두 나온다/);
   assert.match(result.stdout, /PASS: 치명타와 빗나감이 실제로 발동한다/);
@@ -130,11 +133,51 @@ test('몬스터는 이모티콘이 아니라 직접 그린 모델을 쓴다', ()
   });
 });
 
+test('전투 아래 패널이 일반 전투와 같은 구성이다', () => {
+  /* 공격 / 스킬 / 포기 세 가지. 도망 자리에 포기가 들어간다.
+     행동을 고른 뒤에야 문제가 나오는 것도 일반 전투와 같다. */
+  assert.match(uiSource, /data-raid-menu="attack"[\s\S]*?>공격</);
+  assert.match(uiSource, /data-raid-menu="skill"[\s\S]*?>스킬</);
+  assert.match(uiSource, /data-raid-menu="giveup"[\s\S]*?>포기</);
+  assert.match(uiSource, /class="combat-menu"/);
+  // 배운 액티브 스킬을 그대로 쓴다.
+  assert.match(uiSource, /call\('getLearnedActiveSkills'\)/);
+  assert.match(uiSource, /call\('getSkillCooldown', skill\.id\)/);
+  // 전투가 시작되면 문제가 아니라 행동 메뉴부터 나온다.
+  assert.match(uiSource, /question = null;\s*\/\/ 문제는 공격\/스킬을 고른 뒤에 나온다/);
+  // 포기는 한 번만 확인한다.
+  assert.match(uiSource, /정말로 포기하시겠습니까\?/);
+});
+
+test('공격 소리는 각자의 직업 소리를 쓴다', () => {
+  assert.match(uiSource, /function attackAudioIdFor\(member\)/);
+  assert.match(uiSource, /manifest\.classBasicSounds\?\.\[member\?\.klass\]/);
+  // 스킬을 골랐으면 그 스킬 소리를 쓴다.
+  assert.match(uiSource, /manifest\.skillSounds\?\.\[skillId\]/);
+});
+
+test('효과음은 실제 API 이름(playMappedAudio)을 쓴다', () => {
+  /* 예전에 없는 이름(playAudioAssetV42)을 불러 소리가 나지 않았다. */
+  assert.doesNotMatch(uiSource, /playAudioAssetV42/);
+  assert.match(uiSource, /global\.playMappedAudio === 'function'/);
+  assert.match(uiSource, /playAsset\('dungeonEncounter', 'hit'\)/);
+});
+
+test('몬스터를 쓰러뜨리면 문제와 행동 버튼이 사라진다', () => {
+  /* 마지막 일격 뒤에도 정답 버튼이 남아 있던 버그를 막는다. */
+  const submit = uiSource.match(/if \(result\.monsterDown\) \{[\s\S]*?\n      \}/)?.[0] || '';
+  assert.notEqual(submit, '');
+  assert.match(submit, /question = null;/);
+  assert.match(submit, /chosenAction = null;/);
+  assert.match(submit, /panelMode = 'playing';/);
+});
+
 test('전투 로그를 한 줄씩 순서대로 재생한다', () => {
   /* 결과를 한 번에 보여 주지 않고, 일반 전투처럼 한 줄씩 쌓으며 소리를 낸다. */
   assert.match(uiSource, /function playEvents\(events, onDone\)/);
   assert.match(uiSource, /playEventSound\(event\);\s*\n\s*renderBattle\(\);/);
-  assert.match(uiSource, /playEvents\(\[opening, \.\.\.result\.events\]/);
+  // 정답/오답을 먼저 알리고, 그 뒤에 각자의 공격이 순서대로 재생된다.
+  assert.match(uiSource, /playEvents\(\[opening, \.\.\.withSounds\]/);
   // 재생 중에는 다음 답을 받지 않는다.
   assert.match(uiSource, /isBusy:\(\) => busy/);
 });
@@ -160,7 +203,8 @@ test('던전에 갇히지 않도록 세 겹으로 막는다', () => {
   assert.match(uiSource, /global\.showScreen = function showScreenWithRaidGuard/);
   // 3) 던전 안에서 언제든 나갈 수 있다
   assert.match(uiSource, /toggleReturnButton\(true\)/);
-  assert.match(uiSource, /id="raidGiveUpBtn"/);
+  // 전투 중에는 행동 메뉴의 '포기'가 탈출구다(모달이 화면을 덮기 때문).
+  assert.match(uiSource, /data-raid-menu="giveup"/);
   assert.match(uiSource, /function confirmGiveUp\(\)/);
   // 마을 귀환 버튼을 눌렀을 때도 던전 상태를 함께 정리한다
   assert.match(uiSource, /global\.returnTown = function returnTownWithRaidCleanup/);
