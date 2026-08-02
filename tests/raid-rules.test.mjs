@@ -266,6 +266,12 @@ test('몬스터 공격 패턴은 정해진 순서를 반복한다', () => {
   assert.equal(rules.attackKindForRound({}, 0), 'single');
 });
 
+test('던전 몬스터는 60% 강해지고 전체 연속 공격은 최대 3타까지 반복한다', () => {
+  assert.equal(rules.MONSTER_DAMAGE_MULTIPLIER, 1.6);
+  assert.deepEqual({ ...rules.attackPlanForRound(rules.MONSTERS.guardBot, 2) }, { kind:'all', hits:2 });
+  assert.deepEqual({ ...rules.attackPlanForRound(rules.MONSTERS.towerWarden, 3) }, { kind:'all', hits:3 });
+});
+
 test('보스는 전체 공격을 섞어 쓴다', () => {
   const boss = rules.MONSTERS.towerWarden;
   assert.ok(boss.pattern.includes('all'), '보스에게 전체 공격이 있어야 한다');

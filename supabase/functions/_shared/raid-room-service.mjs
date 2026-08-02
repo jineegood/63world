@@ -38,6 +38,16 @@ function afterSequence(value) {
 function normalizeQuestionPublic(raw) {
   const source = object(raw);
   if (!source) failRaidRoom('INVALID_REQUEST');
+  const byUser = object(source.byUser);
+  if (byUser) {
+    const normalized = {};
+    for (const [rawUserId, rawQuestion] of Object.entries(byUser).slice(0, 3)) {
+      const userId = text(rawUserId, 100);
+      if (userId) normalized[userId] = normalizeQuestionPublic(rawQuestion);
+    }
+    if (Object.keys(normalized).length !== 3) failRaidRoom('INVALID_REQUEST');
+    return { byUser:normalized };
+  }
   const prompt = text(source.prompt || source.q || source.question, MAX_QUESTION);
   if (!prompt) failRaidRoom('INVALID_REQUEST');
   const choices = Array.isArray(source.choices)
@@ -138,7 +148,8 @@ export function createRaidRoomService({ store, now = Date.now } = {}) {
       store.listMembers(id),
       store.listEventsAfter(id, afterSequence(rawAfterSequence)),
     ]);
-    const result = { room, members, events };
+    const privateQuestion = object(room.question?.byUser)?.[String(userId)] || room.question;
+    const result = { room:{ ...room, question:privateQuestion || null }, members, events };
     if (room.hostId === userId && room.phase === 'resolving') {
       const submitted = await store.listRoundJudgements(id, room.round);
       const byUser = new Map(submitted.map((entry) => [String(entry.userId), entry]));
@@ -148,6 +159,9 @@ export function createRaidRoomService({ store, now = Date.now } = {}) {
         correct:false,
         timedOut:true,
       }));
+      result.answerKeys = typeof store.getRoundAnswerKeys === 'function'
+        ? await store.getRoundAnswerKeys(id, room.round)
+        : {};
     }
     return result;
   }
@@ -236,7 +250,7 @@ export function createRaidRoomService({ store, now = Date.now } = {}) {
       }
       case 'beginRound': {
         const id = roomId(body.roomId);
-        const answerKey = text(body.answerKey);
+        const answerKey = text(body.answerKey, 2048);
         if (!answerKey) failRaidRoom('INVALID_REQUEST');
         await store.beginRound({
           roomId:id,

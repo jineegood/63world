@@ -677,7 +677,7 @@
     });
   }
 
-  function resolveMonsterTurn({ members, monster, attackKind, monsterAttack, rng, defs, raidRules, events }) {
+  function resolveMonsterTurn({ members, monster, attackKind, monsterHitCount = 1, monsterAttack, rng, defs, raidRules, events }) {
     /* 예전 스킬 트리 캐릭터도 복구본에서 그대로 작동하도록 턴 회복을 유지한다. */
     members.forEach((member) => {
       if (member.hp <= 0) return;
@@ -704,22 +704,28 @@
       return;
     }
 
-    const living = members
+    const living = () => members
       .filter((member) => member.hp > 0)
       .sort((a, b) => (ATTACK_ORDER[a?.slot] ?? 1) - (ATTACK_ORDER[b?.slot] ?? 1));
-    const targets = attackKind === 'all' ? living : [pickTarget(living, raidRules)].filter(Boolean);
+    const targets = attackKind === 'all' ? living() : [pickTarget(living(), raidRules)].filter(Boolean);
     if (!targets.length) return;
+    const hitCount = Math.max(1, Math.min(3, integer(monsterHitCount, 1)));
     events.push({
-      kind:'monster-windup', all:attackKind === 'all', audioId:'enemyAttack',
-      text:attackKind === 'all' ? `${monster.name}이(가) 전체 공격을 준비합니다!` : `${monster.name}의 공격!`,
+      kind:'monster-windup', all:attackKind === 'all', hitCount, audioId:'enemyAttack',
+      text:attackKind === 'all'
+        ? `${monster.name}이(가) ${hitCount > 1 ? `${hitCount}연속 ` : ''}전체 공격을 준비합니다!`
+        : `${monster.name}의 강력한 집중 공격!`,
     });
 
     let chillConsumed = false;
-    targets.forEach((member) => {
+    for (let hitIndex = 0; hitIndex < hitCount; hitIndex += 1) {
+      const waveTargets = attackKind === 'all' ? living() : targets;
+      waveTargets.forEach((member) => {
       if (member.hp <= 0) return;
       const focus = attackKind === 'all' ? 1 : number(raidRules?.SINGLE_TARGET_BONUS, 1.35);
       let incoming = Math.max(1, Math.round(
         Math.max(0, number(monsterAttack))
+        * number(raidRules?.MONSTER_DAMAGE_MULTIPLIER, 1.6)
         * damageMultiplierForSlot(member.slot, raidRules)
         * focus
         * incomingMultiplier(member),
@@ -735,6 +741,7 @@
       if (missed) {
         events.push({
           kind:'monster-hit', memberId:member.id, memberName:member.name,
+          hitIndex, hitCount,
           missed:true, critical:false, damage:0, hpDamage:0, shieldDamage:0,
           audioId:'miss', text:`${monster.name}의 공격이 ${member.name}에게 빗나갔습니다!`,
         });
@@ -746,6 +753,7 @@
       const applied = applyDamageToMember(member, incoming);
       events.push({
         kind:'monster-hit', memberId:member.id, memberName:member.name,
+        hitIndex, hitCount,
         slot:member.slot, missed:false, critical, ...applied,
         audioId:critical ? 'critical' : 'enemyAttack',
         text:`${critical ? '치명타! ' : ''}${member.name}이(가) ${applied.totalDamage}의 피해를 받았습니다.`,
@@ -788,7 +796,8 @@
           text:`${member.name}이(가) 쓰러졌습니다!`,
         });
       }
-    });
+      });
+    }
     if (chillConsumed) monster.chillTurns = Math.max(0, monster.chillTurns - 1);
 
     resolveShadowTicks(monster, members, rng, defs, events);
@@ -811,7 +820,7 @@
     });
   }
 
-  function resolveRound({ members, monster, submissions = {}, attackKind = 'single', monsterAttack, rng, defs:defsOverride, raidRules } = {}) {
+  function resolveRound({ members, monster, submissions = {}, attackKind = 'single', monsterHitCount = 1, monsterAttack, rng, defs:defsOverride, raidRules } = {}) {
     const defs = skillDefs(defsOverride);
     const party = Array.isArray(members) ? members : [];
     const target = monster;
@@ -841,6 +850,7 @@
       members:party,
       monster:target,
       attackKind,
+      monsterHitCount,
       monsterAttack:monsterAttack ?? target.attack,
       rng,
       defs,

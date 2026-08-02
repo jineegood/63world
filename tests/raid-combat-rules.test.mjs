@@ -255,7 +255,7 @@ test('all shields have a minimum value of one and split shield damage from HP da
   const hit = result.events.find((event) => event.kind === 'monster-hit' && !event.missed);
   assert.equal(shield.amount, 1);
   assert.equal(hit.shieldDamage, 1);
-  assert.equal(hit.hpDamage, 0, '방어 전문화 감소 후 1 피해가 보호막에 전부 막혀야 한다');
+  assert.equal(hit.hpDamage, 2, '던전 몬스터 60% 강화 뒤 남은 피해는 HP에 들어가야 한다');
 });
 
 test('block training creates at least one shield even at very low HP', () => {
@@ -282,7 +282,7 @@ test('frost status halves the next monster attack and is consumed by one turn', 
     submissions:{ mage:{ correct:true, actionId:'mage_frost_lance_v24' } },
   });
   const hit = result.events.find((event) => event.kind === 'monster-hit' && !event.missed);
-  assert.equal(hit.requestedDamage, 10, '앞줄 20 피해가 냉기로 절반이 되어야 한다');
+  assert.equal(hit.requestedDamage, 19, '60% 강화된 집중 공격도 냉기로 절반이 되어야 한다');
   assert.equal(target.chillTurns, 1, '강제 냉기 2턴 중 공격 한 번으로 1턴이 소비되어야 한다');
 });
 

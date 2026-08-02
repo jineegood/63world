@@ -165,6 +165,27 @@
       return state.members.filter((m) => m.hp > 0);
     }
 
+    function reviveForNextEncounter() {
+      const recovered = [];
+      R.travelRecovery(state.members).forEach((entry) => {
+        const member = state.members.find((m) => m.id === entry.memberId);
+        if (!member) return;
+        member.hp = entry.revived
+          ? Math.min(member.maxHp, Math.max(1, Number(entry.amount) || 1))
+          : Math.min(member.maxHp, member.hp + entry.amount);
+        recovered.push({
+          memberId:member.id,
+          amount:entry.amount,
+          memberHp:member.hp,
+          revived:entry.revived === true,
+        });
+      });
+      if (recovered.length) {
+        push('travel-recovery', '쓰러졌던 파티원이 HP 1로 다시 일어났습니다.', { recovered });
+      }
+      return recovered;
+    }
+
     /* ---------- 밖에서 부르는 것 ---------- */
 
     /* 대형을 확정하고 첫 이동을 시작한다. */
@@ -186,23 +207,7 @@
 
       /* 직전 몬스터에게 쓰러진 사람만 다음 전투 시작 직전에 HP 1로 돌아온다.
          살아 있던 사람은 이동 중에도 현재 HP를 그대로 유지한다. */
-      const recovered = [];
-      R.travelRecovery(state.members).forEach((entry) => {
-        const member = state.members.find((m) => m.id === entry.memberId);
-        if (!member) return;
-        member.hp = entry.revived
-          ? Math.min(member.maxHp, Math.max(1, Number(entry.amount) || 1))
-          : Math.min(member.maxHp, member.hp + entry.amount);
-        recovered.push({
-          memberId:member.id,
-          amount:entry.amount,
-          memberHp:member.hp,
-          revived:entry.revived === true,
-        });
-      });
-      if (recovered.length) {
-        push('travel-recovery', '쓰러졌던 파티원이 HP 1로 다시 일어났습니다.', { recovered });
-      }
+      reviveForNextEncounter();
 
       const monster = spawnMonster();
       if (!monster) {
@@ -233,12 +238,16 @@
         entry && typeof entry === 'object' && !Array.isArray(entry)
       ));
       if (structured) {
-        const kind = R.attackKindForRound(state.monster, state.round);
+        const attackPlan = typeof R.attackPlanForRound === 'function'
+          ? R.attackPlanForRound(state.monster, state.round)
+          : { kind:R.attackKindForRound(state.monster, state.round), hits:1 };
+        const kind = attackPlan.kind;
         const resolved = R.resolvePartyCombatRound({
           members:state.members,
           monster:state.monster,
           submissions:answers,
           attackKind:kind,
+          monsterHitCount:attackPlan.hits,
           monsterAttack:state.monster.attack,
           rng,
         });
@@ -254,6 +263,8 @@
           const more = state.encounterIndex < encounters.length;
           state.monster.dying = true;
           state.phase = more ? 'travel' : 'cleared';
+          /* 다음 전투용 HP 1 부활을 서버에 HP 0이 저장되기 전에 반영한다. */
+          if (more) reviveForNextEncounter();
           if (!more) state.finishedAt = Date.now();
           return { ok:true, events, monsterDown:true, cleared:!more };
         }
@@ -268,7 +279,7 @@
           }
         }
         state.log.push(...events);
-        return wiped ? { ok:true, events, wiped:true } : { ok:true, events, attackKind:kind };
+        return wiped ? { ok:true, events, wiped:true } : { ok:true, events, attackKind:kind, monsterHitCount:attackPlan.hits };
       }
 
       // 1) 파티가 때린다. 각자 빗나감·치명타가 따로 판정된다.

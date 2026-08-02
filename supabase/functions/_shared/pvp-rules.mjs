@@ -11,6 +11,7 @@ const CLASS_SPECS = Object.freeze({
   mage:new Set(['냉기', '화염']),
   priest:new Set(['신성', '암흑']),
 });
+export const PVP_DAMAGE_MULTIPLIER = 0.5;
 
 function clamp(value, [minimum, maximum]) {
   const number = Number(value);
@@ -170,7 +171,9 @@ function applyAction(sourceKey, targetKey, entry, state, events) {
   if (source.hp <= 0 || source.statuses.stun > 0) return;
   const skill = actionFor(source, entry.actionId);
   const active = skill.active;
-  const factor = entry.correct === true ? 1 : 0.5;
+  /* 친선 PVP는 캐릭터의 원래 능력치를 쓰되, 한 방 결판을 줄이기 위해
+     모든 공격 피해를 절반으로 낮춘다. 오답이면 거기서 다시 절반이다. */
+  const factor = PVP_DAMAGE_MULTIPLIER * (entry.correct === true ? 1 : 0.5);
   if (skill.id !== 'basic') {
     source.cooldowns[skill.id] = Math.max(0, Number(active.cooldown) || 0);
     events.push({ kind:'cooldown', source:sourceKey, target:sourceKey, skillId:skill.id, amount:source.cooldowns[skill.id] });

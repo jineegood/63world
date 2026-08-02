@@ -154,6 +154,18 @@ export function createSupabaseRaidRoomStore(client) {
       }));
     },
 
+    async getRoundAnswerKeys(id, round) {
+      const row = check(await client.from('raid_question_secrets_v1')
+        .select('answer_key').eq('room_id', id).eq('round_no', round).maybeSingle());
+      if (!row?.answer_key) return {};
+      try {
+        const parsed = JSON.parse(row.answer_key);
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+      } catch {
+        return { default:String(row.answer_key) };
+      }
+    },
+
     setFormation:value => rpc('private_set_raid_formation_v1', {
       p_user_id:value.userId,
       p_room_id:value.roomId,

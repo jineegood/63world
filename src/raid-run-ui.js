@@ -161,15 +161,15 @@
         background:linear-gradient(180deg, rgba(14,58,86,.95), rgba(8,25,42,.95));
         box-shadow:0 0 0 2px rgba(56,189,248,.28), 0 6px 18px rgba(0,0,0,.35)}
       .raid-ally-hp.me b{color:#a5e9ff}
-      .raid-ally-hp.slot-front{border-color:rgba(74,222,128,.88);
-        background:linear-gradient(180deg,rgba(20,83,45,.92),rgba(7,35,25,.94));
-        box-shadow:0 0 0 1px rgba(74,222,128,.2)}
-      .raid-ally-hp.slot-middle{border-color:rgba(250,204,21,.88);
-        background:linear-gradient(180deg,rgba(92,70,10,.92),rgba(41,31,6,.94));
-        box-shadow:0 0 0 1px rgba(250,204,21,.2)}
-      .raid-ally-hp.slot-back{border-color:rgba(96,165,250,.9);
-        background:linear-gradient(180deg,rgba(22,63,112,.92),rgba(8,30,58,.94));
-        box-shadow:0 0 0 1px rgba(96,165,250,.22)}
+      .raid-ally-hp.slot-front{border-color:rgba(74,222,128,.5);
+        background:linear-gradient(180deg,rgba(27,55,42,.91),rgba(10,25,21,.94));
+        box-shadow:0 0 0 1px rgba(74,222,128,.1)}
+      .raid-ally-hp.slot-middle{border-color:rgba(250,204,21,.48);
+        background:linear-gradient(180deg,rgba(58,51,29,.91),rgba(27,24,16,.94));
+        box-shadow:0 0 0 1px rgba(250,204,21,.1)}
+      .raid-ally-hp.slot-back{border-color:rgba(96,165,250,.5);
+        background:linear-gradient(180deg,rgba(31,49,70,.91),rgba(14,25,39,.94));
+        box-shadow:0 0 0 1px rgba(96,165,250,.1)}
       .raid-ally-hp.slot-front b{color:#86efac}.raid-ally-hp.slot-front .hpfill{background:#22c55e}
       .raid-ally-hp.slot-middle b{color:#fde047}.raid-ally-hp.slot-middle .hpfill{background:#eab308}
       .raid-ally-hp.slot-back b{color:#93c5fd}.raid-ally-hp.slot-back .hpfill{background:#3b82f6}
@@ -204,8 +204,9 @@
 
       /* 피해 숫자와 피격 연출 — 사냥터 전투와 같은 감각 */
       .raid-float-layer{position:absolute;inset:0;pointer-events:none;z-index:12}
-      .raid-float{position:absolute;transform:translate(-50%,0);font-weight:900;
-        font-size:26px;text-shadow:0 2px 6px rgba(0,0,0,.85);animation:raidFloatUp 1s ease-out forwards}
+      .raid-float{position:absolute;transform:translate(-50%,0);font-weight:950;
+        font-size:27px;-webkit-text-stroke:.55px rgba(15,23,42,.78);
+        text-shadow:0 2px 7px rgba(0,0,0,.92),0 0 2px currentColor;animation:raidFloatUp 2s ease-out forwards}
       .raid-float.damage{color:#fb7185}
       .raid-float.crit{color:#fbbf24;font-size:34px}
       .raid-float.heal{color:#4ade80}
@@ -435,12 +436,33 @@
     return { q:'7 + 5 = ?', choices:['10', '11', '12', '13'], answer:'12' };
   }
 
+  function pickDistinctQuestions(count) {
+    const wanted = Math.max(1, Math.trunc(Number(count) || 1));
+    const picked = [];
+    const used = new Set();
+    for (let attempt = 0; attempt < wanted * 20 && picked.length < wanted; attempt += 1) {
+      const candidate = pickQuestion();
+      const key = `${candidate?.id || ''}\u0000${candidate?.q || candidate?.prompt || candidate?.question || ''}`;
+      if (!key.replace('\u0000', '') || used.has(key)) continue;
+      used.add(key);
+      picked.push(candidate);
+    }
+    if (picked.length < wanted) {
+      throw new Error('던전에는 서로 다른 활성 문제 3개 이상이 필요합니다. 선생님이 문제집을 확인해 주세요.');
+    }
+    return picked;
+  }
+
   /* ---------- 실제 3인 파티 방 ---------- */
 
   function setNetworkData(data, { initial = false } = {}) {
     if (!networkSession || !data) return;
     if (data.room) networkSession.room = data.room;
     if (Array.isArray(data.members)) networkSession.members = data.members;
+    if (data.answerKeys && networkSession.room?.round) {
+      networkSession.answerKeys = networkSession.answerKeys || {};
+      networkSession.answerKeys[networkSession.room.round] = { ...data.answerKeys };
+    }
     if (networkSession.room?.question) {
       networkSession.lastQuestion = publicRaidQuestion(networkSession.room.question);
       question = networkSession.lastQuestion;
@@ -985,14 +1007,21 @@
     if (session.beginningRound) return;
     session.beginningRound = true;
     try {
-      const selected = pickQuestion();
+      const members = roomMembers();
+      const selected = pickDistinctQuestions(members.length);
+      const questionByUser = Object.fromEntries(members.map((member, index) => [
+        String(member.id), publicRaidQuestion(selected[index]),
+      ]));
+      const answerByUser = Object.fromEntries(members.map((member, index) => [
+        String(member.id), String(selected[index]?.answer ?? ''),
+      ]));
       const nextRound = Math.max(1, Number(session.room.round) + 1);
       session.answerKeys = session.answerKeys || {};
-      session.answerKeys[nextRound] = String(selected.answer ?? '');
+      session.answerKeys[nextRound] = answerByUser;
       const data = await session.client.beginRound(
         session.room.id,
-        publicRaidQuestion(selected),
-        String(selected.answer ?? ''),
+        { byUser:questionByUser },
+        JSON.stringify(answerByUser),
       );
       if (networkSession === session) setNetworkData(data);
     } catch (error) {
@@ -1040,9 +1069,14 @@
       const result = active.resolveRound(submissions);
       if (!result.ok) throw new Error(result.reason || '전투 판정을 완료하지 못했습니다.');
       const snapshot = active.snapshot();
-      const correctAnswer = String(session.answerKeys?.[round] ?? '');
       const answerEvents = inputs.map((entry) => {
         const skipped = downAtRoundStart.has(String(entry.userId));
+        const storedAnswers = session.answerKeys?.[round];
+        const correctAnswer = String(
+          storedAnswers && typeof storedAnswers === 'object'
+            ? storedAnswers[String(entry.userId)] ?? storedAnswers.default ?? ''
+            : storedAnswers ?? '',
+        );
         return {
           kind:'round-answer',
           memberId:String(entry.userId),
@@ -2288,7 +2322,7 @@
     node.style.left = `${box.left - base.left + box.width / 2}px`;
     node.style.top = `${box.top - base.top + box.height * 0.28 + Number(offsetY || 0)}px`;
     layer.appendChild(node);
-    global.setTimeout(() => { try { node.remove(); } catch (_) {} }, 1000);
+    global.setTimeout(() => { try { node.remove(); } catch (_) {} }, 2000);
   }
 
   function shake(node) {

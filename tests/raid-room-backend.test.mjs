@@ -9,6 +9,10 @@ const migration = fs.readFileSync(
   path.join(root, 'supabase/migrations/202608010002_raid_party_rooms_v1.sql'),
   'utf8',
 );
+const individualQuestionsMigration = fs.readFileSync(
+  path.join(root, 'supabase/migrations/202608020001_raid_individual_questions_v1.sql'),
+  'utf8',
+);
 const serviceUrl = pathToFileURL(path.join(root, 'supabase/functions/_shared/raid-room-service.mjs'));
 const errorUrl = pathToFileURL(path.join(root, 'supabase/functions/_shared/raid-room-error.mjs'));
 const storeUrl = pathToFileURL(path.join(root, 'supabase/functions/_shared/raid-room-store.mjs'));
@@ -43,6 +47,14 @@ test('room, member and public event rows are enabled for realtime updates', () =
   for (const table of ['raid_rooms_v1', 'raid_room_members_v1', 'raid_events_v1']) {
     assert.match(migration, new RegExp(`alter publication supabase_realtime add table public\\.${table}`, 'i'));
   }
+});
+
+test('each raid member has a private answer key and a matching public question', () => {
+  assert.match(individualQuestionsMigration, /p_question_public\s*->\s*'byUser'/i);
+  assert.match(individualQuestionsMigration, /p_answer_key::jsonb/i);
+  assert.match(individualQuestionsMigration, /v_answer_key\s*:=\s*v_answer_keys\s*->>\s*p_user_id::text/i);
+  assert.match(individualQuestionsMigration, /v_question_count\s*<>\s*v_member_count/i);
+  assert.match(individualQuestionsMigration, /v_answer_count\s*<>\s*v_member_count/i);
 });
 
 test('all state mutations are service-only RPCs with database locks and host-authoritative publishing', () => {
@@ -214,12 +226,15 @@ test('only the host receives private correctness judgements after all submission
       { userId:'b', actionId:'double', correct:false },
       { userId:'c', actionId:'heal', correct:true },
     ],
+    getRoundAnswerKeys:async () => ({ host:'42', b:'7', c:'9' }),
   };
   const service = createRaidRoomService({ store });
   const host = await service.handle('host', { op:'sync', roomId:'room-1', afterSequence:0 });
   const member = await service.handle('b', { op:'sync', roomId:'room-1', afterSequence:0 });
   assert.equal(host.submissions.length, 3);
+  assert.deepEqual(host.answerKeys, { host:'42', b:'7', c:'9' });
   assert.equal('submissions' in member, false);
+  assert.equal('answerKeys' in member, false);
 });
 
 test('published events strip raw answers and reject an invalid next phase', async () => {

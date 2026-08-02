@@ -200,7 +200,7 @@
       <div class="pvp-invite-v1">
         <h2>⚔️ 대전 신청</h2>
         <p><strong>${escape(name)}</strong> 학생이 대전을 신청했어요!</p>
-        <p class="muted">마을에서 문제를 풀며 겨루는 친선 대전이에요. 보상이나 손해는 없고 승패만 기록됩니다.</p>
+        <p class="muted">마을에서 문제를 풀며 겨루는 친선 대전이에요. 보상이나 손해는 없고 승패만 기록됩니다. <strong>PVP에서는 모든 공격 데미지가 50%로 적용됩니다.</strong></p>
         <div class="action-row">
           <button class="primary" onclick="respondPvpInviteV1('${escape(invite.id)}', true)">수락</button>
           <button class="ghost" onclick="respondPvpInviteV1('${escape(invite.id)}', false)">거절</button>

@@ -281,8 +281,10 @@ test('가짜 인증 계정 3개의 전체 방·라운드 계약이 통과한다'
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
 });
 
-test('서버 라운드는 같은 문제를 세 명에게 주고 세 답을 모아 한 번만 발행한다', () => {
-  assert.match(uiSource, /session\.client\.beginRound\([\s\S]*?publicRaidQuestion\(selected\)[\s\S]*?String\(selected\.answer \?\? ''\)/);
+test('서버 라운드는 세 명에게 서로 다른 문제를 주고 세 답을 모아 한 번만 발행한다', () => {
+  assert.match(uiSource, /pickDistinctQuestions\(members\.length\)/);
+  assert.match(uiSource, /\{ byUser:questionByUser \}/);
+  assert.match(uiSource, /JSON\.stringify\(answerByUser\)/);
   assert.match(uiSource, /session\.client\.submit\(session\.room\.id, Number\(session\.room\.round\), actionId/);
   assert.match(uiSource, /session\.room\?\.phase !== 'resolving'/);
   assert.match(uiSource, /inputs\.length !== 3/);

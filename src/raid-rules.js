@@ -110,7 +110,11 @@
   /* 일반 전투와 같은 감각을 내기 위한 치명타·빗나감.
      rng는 밖에서 받아 서버가 같은 결과를 재현할 수 있게 한다. */
   /* 한 명만 노리는 공격은 전체 공격보다 한 방이 더 아프다. */
-  const SINGLE_TARGET_BONUS = 1.35;
+  const SINGLE_TARGET_BONUS = 1.6;
+
+  /* 던전 몬스터는 사냥터 몬스터보다 파티 전투에 맞게 더 강하다.
+     원본 공격력은 시트에서 읽기 쉽게 그대로 두고 실제 계산 때만 60%를 더한다. */
+  const MONSTER_DAMAGE_MULTIPLIER = 1.6;
 
   /* 던전이라고 캐릭터가 더 세지지 않는다.
      일반 몬스터 전투와 완전히 같은 피해가 나와야 한다(제작자 요구). */
@@ -213,22 +217,22 @@
        한 마리를 여러 라운드에 걸쳐 잡도록 했다. */
     guardBot: {
       id:'guardBot', name:'경비 로봇', level:5, hp:192, attack:8,
-      pattern:['single', 'single', 'all'],
+      pattern:['single', 'single', { kind:'all', hits:2 }],
       desc:'1층 로비를 지키는 낡은 경비 로봇. 가끔 사방으로 경보를 터뜨린다.',
     },
     officeGhost: {
       id:'officeGhost', name:'사무실 유령', level:5, hp:224, attack:10,
-      pattern:['single', 'all', 'single'],
+      pattern:['single', { kind:'all', hits:2 }, 'single'],
       desc:'야근하다 사라진 직원의 그림자. 서류를 흩뿌려 모두를 덮친다.',
     },
     blackoutShade: {
       id:'blackoutShade', name:'정전 그림자', level:6, hp:248, attack:8,
-      pattern:['all', 'all', 'single'],
+      pattern:[{ kind:'all', hits:2 }, 'all', 'single'],
       desc:'정전된 층에 고인 어둠. 전체를 한꺼번에 노린다.',
     },
     towerWarden: {
       id:'towerWarden', name:'63빌딩 관리자', level:7, hp:460, attack:12,
-      pattern:['single', 'single', 'all', 'single', 'all'],
+      pattern:['single', { kind:'all', hits:2 }, 'single', { kind:'all', hits:3 }, 'all'],
       boss:true,
       desc:'빌딩의 모든 층을 관리해 온 존재. 1층의 마지막 관문이다.',
     },
@@ -270,11 +274,20 @@
   /* 몬스터가 이번 라운드에 단일 공격을 하는지 전체 공격을 하는지.
      정해진 순서를 반복하므로 학생이 패턴을 외워 대비할 수 있다. */
   function attackKindForRound(monster, round) {
+    return attackPlanForRound(monster, round).kind;
+  }
+
+  function attackPlanForRound(monster, round) {
     const pattern = Array.isArray(monster?.pattern) && monster.pattern.length
       ? monster.pattern
       : ['single'];
     const index = Math.max(0, Math.floor(Number(round) || 0));
-    return pattern[index % pattern.length] === 'all' ? 'all' : 'single';
+    const selected = pattern[index % pattern.length];
+    const source = selected && typeof selected === 'object' ? selected : { kind:selected };
+    return {
+      kind:source.kind === 'all' ? 'all' : 'single',
+      hits:Math.max(1, Math.min(3, Math.trunc(Number(source.hits) || 1))),
+    };
   }
 
   /* ---------- 혼자 도는 버전의 동료 ---------- */
@@ -307,7 +320,7 @@
     }
     const result = engine.resolveRound({
       ...options,
-      raidRules:{ damageMultiplier, pickTarget, SINGLE_TARGET_BONUS },
+      raidRules:{ damageMultiplier, pickTarget, SINGLE_TARGET_BONUS, MONSTER_DAMAGE_MULTIPLIER },
     });
     return { ok:true, ...result };
   }
@@ -322,6 +335,7 @@
     ALLY_CORRECT_RATE,
     PARTY_POWER,
     SINGLE_TARGET_BONUS,
+    MONSTER_DAMAGE_MULTIPLIER,
     CRIT_CHANCE,
     CRIT_MULTIPLIER,
     MISS_CHANCE,
@@ -342,6 +356,7 @@
     availableFloors,
     floorEncounters,
     attackKindForRound,
+    attackPlanForRound,
     allyAnswersCorrectly,
     isPartyWiped,
     isMonsterDown,

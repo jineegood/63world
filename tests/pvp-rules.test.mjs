@@ -218,7 +218,7 @@ test('shared workbook q fields are accepted by the PvP question selector', async
   assert.equal(rules.judgeAnswer(picked, '42'), true);
 });
 
-test('wrong answers deal half damage and first-strike KO cancels the second action', async () => {
+test('PvP attacks are halved, and wrong answers are halved once more', async () => {
   const rules = await import(rulesUrl.href);
   const resolved = rules.resolveRound({
     match:{ id:'match-1', round:1 },
@@ -228,11 +228,12 @@ test('wrong answers deal half damage and first-strike KO cancels the second acti
   });
   const damageEvents = resolved.events.filter((event) => event.kind === 'damage');
   assert.equal(resolved.initiative.first, 'a');
-  assert.equal(damageEvents.length, 1);
+  assert.equal(damageEvents.length, 2);
   assert.equal(damageEvents[0].source, 'a');
-  assert.equal(damageEvents[0].amount, 50);
-  assert.equal(damageEvents[0].requestedAmount, 85);
-  assert.equal(resolved.state.b.hp, 0);
+  assert.equal(damageEvents[0].amount, 43);
+  assert.equal(damageEvents[0].requestedAmount, 43);
+  assert.equal(resolved.state.b.hp, 7);
+  assert.equal(rules.PVP_DAMAGE_MULTIPLIER, 0.5);
 });
 
 test('shield absorbs damage before HP and effects are assigned stable event ids', async () => {
@@ -243,11 +244,11 @@ test('shield absorbs damage before HP and effects are assigned stable event ids'
     b:{ player:fighter('b', { shield:30 }), actionId:'basic', correct:true },
     randomInt:sequence([20, 10, 100, 100]),
   });
-  assert.equal(resolved.state.b.shield, 0);
-  assert.equal(resolved.state.b.hp, 190);
+  assert.equal(resolved.state.b.shield, 10);
+  assert.equal(resolved.state.b.hp, 200);
   assert.equal(resolved.events[0].id, 'match-2:3:0');
   assert.equal(resolved.events[0].kind, 'action');
-  assert.equal(resolved.events[1].absorbed, 30);
+  assert.equal(resolved.events[1].absorbed, 20);
 });
 
 test('Block Training grants at least one shield before each incoming action', async () => {

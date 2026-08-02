@@ -248,6 +248,10 @@ class FakeRaidRoomStore {
       .map(({ userId, actionId, correct }) => ({ userId, actionId, correct })));
   }
 
+  async getRoundAnswerKeys(roomId, round) {
+    return clone(this.answerKeys.get(`${roomId}:${round}`) || {});
+  }
+
   async setFormation({ roomId, userId, assignments }) {
     const room = this.requireHost(roomId, userId);
     if (room.phase !== 'lobby') fail('ROOM_CLOSED');
@@ -297,7 +301,7 @@ class FakeRaidRoomStore {
     room.round += 1;
     room.question = clone(questionPublic);
     room.questionDeadline = begunAt + 30_000;
-    this.answerKeys.set(`${roomId}:${room.round}`, String(answerKey).trim().toLocaleLowerCase('ko-KR'));
+    this.answerKeys.set(`${roomId}:${room.round}`, JSON.parse(answerKey));
     this.submissions.set(`${roomId}:${room.round}`, new Map());
     this.touchRoom(room);
   }
@@ -312,7 +316,8 @@ class FakeRaidRoomStore {
     submissions.set(userId, {
       userId,
       actionId,
-      correct:String(answer).trim().toLocaleLowerCase('ko-KR') === this.answerKeys.get(key),
+      correct:String(answer).trim().toLocaleLowerCase('ko-KR')
+        === String(this.answerKeys.get(key)?.[userId] || '').trim().toLocaleLowerCase('ko-KR'),
       submittedAt,
     });
     const received = submissions.size;
@@ -449,22 +454,28 @@ test('three authenticated browser sessions create, join, form, start and resolve
     assignments,
   );
 
-  const publicQuestion = { id:'q-1', prompt:'6 × 7은?', choices:['40', '41', '42', '43'] };
-  const begun = await alice.beginRound(roomId, publicQuestion, '42');
+  const questions = {
+    alice:{ id:'q-1', prompt:'6 × 7은?', choices:['40', '41', '42', '43'] },
+    bob:{ id:'q-2', prompt:'8 × 8은?', choices:['56', '64', '72', '80'] },
+    cara:{ id:'q-3', prompt:'9 × 9은?', choices:['72', '81', '90', '99'] },
+  };
+  const answers = { alice:'42', bob:'64', cara:'81' };
+  const begun = await alice.beginRound(roomId, { byUser:questions }, JSON.stringify(answers));
   assert.equal(begun.room.phase, 'answering');
   assert.equal(begun.room.round, 1);
-  assert.deepEqual(begun.room.question, publicQuestion);
+  assert.deepEqual(begun.room.question, questions.alice);
   assert.equal(JSON.stringify(begun).includes('answerKey'), false, '정답 키는 어떤 응답에도 노출되면 안 된다');
 
   const [aliceView, bobView, caraView] = await Promise.all([
     alice.sync(roomId), bob.sync(roomId), cara.sync(roomId),
   ]);
-  assert.deepEqual(aliceView.room.question, bobView.room.question);
-  assert.deepEqual(bobView.room.question, caraView.room.question);
+  assert.deepEqual(aliceView.room.question, questions.alice);
+  assert.deepEqual(bobView.room.question, questions.bob);
+  assert.deepEqual(caraView.room.question, questions.cara);
 
   const first = await alice.submit(roomId, 1, 'warrior_weapon_breaker', '42');
-  const second = await bob.submit(roomId, 1, 'mage_basic_double', '42');
-  const third = await cara.submit(roomId, 1, 'priest_basic_heal', '42');
+  const second = await bob.submit(roomId, 1, 'mage_basic_double', '64');
+  const third = await cara.submit(roomId, 1, 'priest_basic_heal', '81');
   assert.deepEqual(
     [first.waiting, second.waiting, third.waiting],
     [true, true, false],
@@ -517,4 +528,3 @@ test('three authenticated browser sessions create, join, form, start and resolve
     assert.deepEqual(view.members, published.members);
   }
 });
-
