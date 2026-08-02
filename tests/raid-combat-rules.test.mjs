@@ -66,17 +66,23 @@ const sequence = (values, fallback = 0.5) => {
   return () => queue.length ? queue.shift() : fallback;
 };
 
-function resolve({ members, target = monster(), submissions, rng = constant(), attackKind = 'single' }) {
+function resolve({ members, target = monster(), submissions, rng = constant(), attackKind = 'single', plan = null }) {
   return combat.resolveRound({
     members,
     monster:target,
     submissions,
+    plan,
     attackKind,
     monsterAttack:target.attack,
     rng,
     raidRules:raid,
   });
 }
+
+/* 시트 패턴 효과 검사용 — 아무도 몬스터를 때리지 못하게 해 두면
+   몬스터 턴만 깨끗하게 볼 수 있다(공격력 0인 파티원 한 명). */
+const dummy = (extra = {}) => member('dummy', { attack:1, maxHp:400, hp:400, ...extra });
+const idle = { dummy:{ correct:false, actionId:'basic' } };
 
 test('member normalization preserves independent skill, cooldown, shield, status, and passive state', () => {
   const original = {
@@ -256,7 +262,9 @@ test('all shields have a minimum value of one and split shield damage from HP da
   const hit = result.events.find((event) => event.kind === 'monster-hit' && !event.missed);
   assert.equal(shield.amount, 1);
   assert.equal(hit.shieldDamage, 1);
-  assert.equal(hit.hpDamage, 2, '던전 몬스터 60% 강화 뒤 남은 피해는 HP에 들어가야 한다');
+  /* 시트의 「기본 공격력」에 60% 상향이 이미 들어 있어 계산에서 다시 곱하지 않는다.
+     그래서 예전보다 남는 HP 피해가 작다. */
+  assert.equal(hit.hpDamage, 1, '보호막이 막고 남은 피해는 HP에 들어가야 한다');
 });
 
 test('block training creates at least one shield even at very low HP', () => {
@@ -283,7 +291,7 @@ test('frost status halves the next monster attack and is consumed by one turn', 
     submissions:{ mage:{ correct:true, actionId:'mage_frost_lance_v24' } },
   });
   const hit = result.events.find((event) => event.kind === 'monster-hit' && !event.missed);
-  assert.equal(hit.requestedDamage, 19, '60% 강화된 집중 공격도 냉기로 절반이 되어야 한다');
+  assert.equal(hit.requestedDamage, 12, '집중 공격도 냉기로 절반이 되어야 한다');
   assert.equal(target.chillTurns, 1, '강제 냉기 2턴 중 공격 한 번으로 1턴이 소비되어야 한다');
 });
 
@@ -455,10 +463,12 @@ test('raid-run revives a genuinely downed structured-combat member at exactly 1 
   const run = api.YuksamRaidRun.createRun({
     floor:1,
     rng:constant(),
+    /* 1층 첫 몬스터(버섯돌이킹)의 첫 기술은 시트대로 뒷자리를 노린다.
+       그래서 확실히 쓰러지는 사람을 뒷자리에 세운다. */
     members:[
-      member('front', { slot:'front', maxHp:1, hp:1, attack:1 }),
+      member('front', { slot:'front', maxHp:100, hp:100, attack:1 }),
       member('middle', { slot:'middle', maxHp:100, hp:100, attack:1 }),
-      member('back', { slot:'back', maxHp:100, hp:100, attack:1 }),
+      member('back', { slot:'back', maxHp:1, hp:1, attack:1 }),
     ],
   });
   run.confirmFormation({ front:'front', middle:'middle', back:'back' });
@@ -469,17 +479,17 @@ test('raid-run revives a genuinely downed structured-combat member at exactly 1 
     back:{ correct:true, actionId:'basic' },
   };
   run.resolveRound(submissions);
-  assert.equal(run.members.find((entry) => entry.id === 'front').hp, 0);
+  assert.equal(run.members.find((entry) => entry.id === 'back').hp, 0);
 
+  run.members.find((entry) => entry.id === 'front').attack = 500;
   run.members.find((entry) => entry.id === 'middle').attack = 500;
-  run.members.find((entry) => entry.id === 'back').attack = 500;
   const defeated = run.resolveRound(submissions);
   assert.equal(defeated.monsterDown, true);
   assert.equal(run.phase, 'travel');
 
   run.members.find((entry) => entry.id === 'middle').hp = 77;
   run.arriveAtEncounter();
-  assert.equal(run.members.find((entry) => entry.id === 'front').hp, 1);
+  assert.equal(run.members.find((entry) => entry.id === 'back').hp, 1);
   assert.equal(run.members.find((entry) => entry.id === 'middle').hp, 77);
 });
 

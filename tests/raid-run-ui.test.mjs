@@ -455,12 +455,24 @@ test('오답은 정답을 보여준 뒤 절반 피해 로그와 함께 진행한
   assert.match(uiSource, /correct:entry\.correct === true/);
 });
 
-test('몬스터는 이모티콘 대신 네 종류의 직접 그린 모델을 쓴다', () => {
+test('시트의 17마리가 모두 이모티콘 대신 직접 그린 모델을 가진다', () => {
   assert.doesNotMatch(uiSource, /raid-monster-face/);
   assert.match(uiSource, /id="raidMonsterCanvas"/);
   assert.match(uiSource, /const MONSTER_PAINTERS = \{/);
-  for (const id of ['guardBot', 'officeGhost', 'blackoutShade', 'towerWarden']) {
-    assert.match(uiSource, new RegExp(`${id}\\(ctx, cx, cy, t`), `${id} 그림 함수가 필요하다`);
+  // 규칙 파일에 있는 몬스터 id를 그대로 가져와 그림이 하나도 빠지지 않았는지 본다.
+  const ids = [...read('src/raid-rules.js').matchAll(/id:'([a-zA-Z]+)', name:'/g)].map((m) => m[1]);
+  assert.equal(ids.length, 17, '시트의 몬스터는 17마리다');
+  for (const id of ids) {
+    assert.match(uiSource, new RegExp(`^    ${id}\\(ctx, cx, cy, t`, 'm'), `${id} 그림 함수가 필요하다`);
+  }
+});
+
+test('새로 그린 몬스터는 사냥터 스프라이트를 빌려 쓰거나 직접 그린다', () => {
+  // 버섯·슬라임·스톰프 계열은 사냥터 그림을 그대로 재사용한다(같은 세계관).
+  assert.match(uiSource, /function borrowSprite\(name, ctx, cx, cy, scale, tint\)/);
+  for (const sprite of ['drawMushroomSprite', 'drawSlimeSprite', 'drawStompSprite']) {
+    assert.match(uiSource, new RegExp(`borrowSprite\\('${sprite}'`), `${sprite}를 빌려 써야 한다`);
+    assert.match(gameSource, new RegExp(`function ${sprite}\\(`), `${sprite}가 game.js에 있어야 한다`);
   }
 });
 

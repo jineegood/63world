@@ -45,6 +45,8 @@
       chillTurns:Math.max(0, integer(value.chillTurns ?? value.chill ?? value.weakenTurns)),
       poisonTurns:Math.max(0, integer(value.poisonTurns ?? value.poison)),
       poisonDamage:Math.max(0, integer(value.poisonDamage ?? value.poisonDmg)),
+      /* 던전 몬스터의 실명 패턴: 앞으로 이 횟수만큼 공격이 무조건 빗나간다. */
+      blindHits:Math.max(0, integer(value.blindHits ?? value.blind)),
     };
   }
 
@@ -93,6 +95,11 @@
       shield:Math.max(0, integer(monster.shield)),
       stunTurns:Math.max(0, integer(monster.stunTurns ?? monster.stun)),
       chillTurns:Math.max(0, integer(monster.chillTurns ?? monster.chill ?? monster.weakenTurns)),
+      /* 아래 셋은 던전 몬스터의 패턴 효과가 남긴 자국이다.
+         강화 남은 턴 / 반격 자세 / 다음 턴에 예고해 둔 기술 이름. */
+      empowerTurns:Math.max(0, integer(monster.empowerTurns)),
+      counterMode:monster.counterMode === 'all' ? 'all' : (monster.counterMode === 'single' ? 'single' : null),
+      chargedPlanName:monster.chargedPlanName ? String(monster.chargedPlanName) : null,
       shadowBySource:copyNumberMap(sourceMap),
       pattern:Array.isArray(monster.pattern) ? [...monster.pattern] : monster.pattern,
     };
@@ -111,6 +118,9 @@
     monster.shield = 0;
     monster.stunTurns = 0;
     monster.chillTurns = 0;
+    monster.empowerTurns = 0;
+    monster.counterMode = null;
+    monster.chargedPlanName = null;
     monster.shadowBySource = {};
     return monster;
   }
@@ -301,6 +311,171 @@
     }));
   }
 
+  /* ---------- 던전 몬스터 패턴 효과 ----------
+
+     시트의 「패턴 N」한 칸이 몬스터의 한 턴이다. 그 칸에 적힌 효과를
+     여기서 실제 상태로 바꿔 준다. 화면과 서버가 같은 결과를 쓰도록
+     전부 이 순수 함수 안에서만 계산한다. */
+
+  const DEFAULT_EFFECT = Object.freeze({
+    POISON_TURNS:2, STUN_TURNS:1, CHILL_TURNS:1, DRAIN_RATIO:1,
+    EMPOWER_MULTIPLIER:1.5, COUNTER_RATIO:1, CHARGE_MULTIPLIER:2,
+  });
+
+  function effectTable(raidRules) {
+    const source = raidRules?.PATTERN_EFFECT;
+    return source && typeof source === 'object' ? { ...DEFAULT_EFFECT, ...source } : DEFAULT_EFFECT;
+  }
+
+  /* 실명 한 번을 써 버린다. 남아 있었으면 true(=이번 공격은 빗나감). */
+  function consumeBlind(member) {
+    if (!member?.statuses || !(member.statuses.blindHits > 0)) return false;
+    member.statuses.blindHits -= 1;
+    return true;
+  }
+
+  /* 패턴 한 칸을 계산에 쓸 모양으로 다듬는다.
+     raid-rules의 normalizeAttackPlan과 같은 규칙을 쓰되, 이 모듈만 따로
+     불러 쓰는 서버에서도 돌아가도록 여기에도 한 벌 둔다. */
+  function normalizePlan(source, fallbackKind = 'single', fallbackHits = 1) {
+    if (source === null || source === undefined) {
+      return normalizePlan({ kind:fallbackKind, hits:fallbackHits });
+    }
+    const src = typeof source === 'object' ? source : { kind:source };
+    const kind = src.kind === 'all' ? 'all' : (src.kind === 'none' ? 'none' : 'single');
+    const targets = ['front', 'middle', 'back', 'random'];
+    return {
+      name:String(src.name || (kind === 'all' ? '전체 공격' : '공격')),
+      kind,
+      hits:Math.max(1, Math.min(4, integer(src.hits, fallbackHits) || 1)),
+      target:targets.includes(src.target) ? src.target : null,
+      poison:Math.max(0, integer(src.poison)),
+      stun:src.stun === true,
+      chill:src.chill === true,
+      drain:src.drain === true,
+      shieldPct:Math.max(0, number(src.shieldPct)),
+      healPct:Math.max(0, number(src.healPct)),
+      counter:src.counter === 'all' ? 'all' : (src.counter === 'single' ? 'single' : null),
+      blind:Math.max(0, integer(src.blind)),
+      empower:Math.max(0, integer(src.empower)),
+      chargeNext:src.chargeNext ? String(src.chargeNext) : null,
+    };
+  }
+
+  function findPlanByName(monster, name) {
+    const pattern = Array.isArray(monster?.pattern) ? monster.pattern : [];
+    const found = pattern.find((entry) => entry && typeof entry === 'object' && entry.name === name);
+    return found ? normalizePlan(found) : null;
+  }
+
+  /* 이번 턴에 실제로 쓸 기술. 지난 턴에 예고해 둔 게 있으면 그게 우선이고
+     피해가 두 배가 된다. */
+  function planForMonsterTurn(monster, requestedPlan, effect) {
+    const base = normalizePlan(requestedPlan);
+    const reserved = monster.chargedPlanName ? findPlanByName(monster, monster.chargedPlanName) : null;
+    monster.chargedPlanName = null;
+    if (!reserved) return { plan:base, chargeMultiplier:1, charged:false };
+    return { plan:reserved, chargeMultiplier:Math.max(1, number(effect.CHARGE_MULTIPLIER, 2)), charged:true };
+  }
+
+  /* 자리를 노리는 패턴이면 그 자리 사람을, 아니면 원래 규칙대로 고른다. */
+  function pickPlanTarget(living, plan, raidRules, rng) {
+    if (!living.length) return null;
+    if (plan.target === 'random') return living[Math.floor(roll(rng) * living.length)] || living[0];
+    if (plan.target) {
+      const found = living.find((member) => member.slot === plan.target);
+      if (found) return found;
+    }
+    return pickTarget(living, raidRules) || living[0];
+  }
+
+  /* 한 대 맞은 사람에게 그 기술이 남기는 상태이상을 건다. */
+  function applyPlanStatuses(member, monster, plan, effect, events) {
+    if (member.hp <= 0) return;
+    if (plan.poison > 0) {
+      member.statuses.poisonDamage = Math.max(0, integer(member.statuses.poisonDamage)) + plan.poison;
+      member.statuses.poisonTurns = Math.max(
+        member.statuses.poisonTurns,
+        Math.max(1, integer(effect.POISON_TURNS, 2)),
+      );
+      events.push({
+        kind:'member-status', status:'poison', memberId:member.id, memberName:member.name,
+        targetMemberId:member.id, amount:plan.poison, turns:member.statuses.poisonTurns,
+        text:`${member.name}이(가) 중독되었습니다! 매 턴 ${member.statuses.poisonDamage}의 피해`,
+      });
+    }
+    if (plan.stun) {
+      member.statuses.stunTurns = Math.max(member.statuses.stunTurns, Math.max(1, integer(effect.STUN_TURNS, 1)));
+      events.push({
+        kind:'member-status', status:'stun', memberId:member.id, memberName:member.name,
+        targetMemberId:member.id, turns:member.statuses.stunTurns, audioId:'stunned',
+        text:`${member.name}이(가) 기절했습니다!`,
+      });
+    }
+    if (plan.chill) {
+      member.statuses.chillTurns = Math.max(member.statuses.chillTurns, Math.max(1, integer(effect.CHILL_TURNS, 1)));
+      events.push({
+        kind:'member-status', status:'chill', memberId:member.id, memberName:member.name,
+        targetMemberId:member.id, turns:member.statuses.chillTurns,
+        text:`${member.name}이(가) 얼어붙었습니다! 다음 공격 피해가 절반이 됩니다.`,
+      });
+    }
+  }
+
+  /* 몬스터 턴이 시작될 때 파티가 받는 독 피해. */
+  function tickMemberPoison(members, events) {
+    members.forEach((member) => {
+      if (member.hp <= 0 || !(member.statuses.poisonTurns > 0)) return;
+      const amount = Math.max(1, integer(member.statuses.poisonDamage, 1));
+      const applied = applyDamageToMember(member, amount);
+      member.statuses.poisonTurns -= 1;
+      if (member.statuses.poisonTurns <= 0) member.statuses.poisonDamage = 0;
+      events.push({
+        kind:'member-dot', status:'poison', memberId:member.id, memberName:member.name,
+        targetMemberId:member.id, turns:member.statuses.poisonTurns, ...applied,
+        text:`${member.name}이(가) 독으로 ${applied.totalDamage}의 피해를 받았습니다.`,
+      });
+      if (member.hp <= 0) {
+        events.push({
+          kind:'member-down', memberId:member.id, targetMemberId:member.id,
+          memberName:member.name, memberHp:0, text:`${member.name}이(가) 쓰러졌습니다!`,
+        });
+      }
+    });
+  }
+
+  /* 반격 자세인 몬스터를 때렸을 때 되돌아오는 피해.
+     세기는 그 몬스터의 '전체 공격' 한 대와 같다(집중 배율 없음). */
+  function resolveCounter({ attacker, members, monster, monsterAttack, raidRules, effect, events }) {
+    if (!monster.counterMode || monster.hp <= 0) return;
+    const ratio = Math.max(0, number(effect.COUNTER_RATIO, 1));
+    if (!(ratio > 0)) return;
+    const victims = monster.counterMode === 'all'
+      ? members.filter((member) => member.hp > 0)
+      : [attacker].filter((member) => member && member.hp > 0);
+    victims.forEach((member) => {
+      let incoming = Math.max(1, Math.round(
+        Math.max(0, number(monsterAttack))
+        * number(raidRules?.MONSTER_DAMAGE_MULTIPLIER, 1)
+        * damageMultiplierForSlot(member.slot, raidRules)
+        * incomingMultiplier(member)
+        * ratio,
+      ));
+      const applied = applyDamageToMember(member, incoming);
+      events.push({
+        kind:'monster-counter', memberId:member.id, memberName:member.name,
+        slot:member.slot, missed:false, critical:false, ...applied, audioId:'enemyAttack',
+        text:`${monster.name}의 반격! ${member.name}이(가) ${applied.totalDamage}의 피해를 받았습니다.`,
+      });
+      if (member.hp <= 0) {
+        events.push({
+          kind:'member-down', memberId:member.id, targetMemberId:member.id,
+          memberName:member.name, memberHp:0, text:`${member.name}이(가) 쓰러졌습니다!`,
+        });
+      }
+    });
+  }
+
   function resolveWrongAction({ member, monster, action, rng, defs, events }) {
     const active = action.active || {};
     const damaging = action.id === BASIC_ACTION || ['damage', 'damageHeal', 'shadowDot'].includes(active.type);
@@ -316,6 +491,14 @@
     if (action.id !== BASIC_ACTION && multiplier === 0 && hitCount === 1) return;
     if (action.id !== BASIC_ACTION) member.cooldowns[action.id] = Math.max(0, integer(active.cooldown));
     for (let hitIndex = 0; hitIndex < hitCount && monster.hp > 0; hitIndex += 1) {
+      if (consumeBlind(member)) {
+        events.push(eventBase(member, action, {
+          kind:'party-hit', correct:false, hitIndex, missed:true, blinded:true, critical:false,
+          damage:0, hpDamage:0, shieldDamage:0, audioId:'miss',
+          text:`앞이 보이지 않습니다! ${member.name}의 공격이 빗나갔습니다!`,
+        }));
+        continue;
+      }
       const raw = Math.max(1, Math.ceil(getAttackPower(member, rng) * multiplier));
       const damage = Math.max(1, Math.floor(raw * 0.5));
       const applied = applyDamageToMonster(monster, damage, active.ignoreShield === true);
@@ -463,12 +646,17 @@
         raw = attackRoll.power * number(hit.attackMultiplier);
         maximumRaw = attackRoll.maximumPower * number(hit.attackMultiplier);
       }
-      const missed = roll(rng) < BASE_MISS_CHANCE;
+      /* 던전 몬스터의 실명 패턴이 걸려 있으면 굴림 없이 그냥 빗나간다. */
+      const blinded = consumeBlind(member);
+      const missed = blinded || roll(rng) < BASE_MISS_CHANCE;
       if (missed) {
         events.push(eventBase(member, action, {
           kind:'party-hit', correct:true, hitIndex:hit.hitIndex, label:hit.label,
-          missed:true, critical:false, damage:0, hpDamage:0, shieldDamage:0,
-          audioId:'miss', text:`${member.name}의 ${hit.label}이(가) 빗나갔습니다!`,
+          missed:true, blinded, critical:false, damage:0, hpDamage:0, shieldDamage:0,
+          audioId:'miss',
+          text:blinded
+            ? `앞이 보이지 않습니다! ${member.name}의 ${hit.label}이(가) 빗나갔습니다!`
+            : `${member.name}의 ${hit.label}이(가) 빗나갔습니다!`,
         }));
         continue;
       }
@@ -677,7 +865,8 @@
     });
   }
 
-  function resolveMonsterTurn({ members, monster, attackKind, monsterHitCount = 1, monsterAttack, rng, defs, raidRules, events }) {
+  function resolveMonsterTurn({ members, monster, plan:requestedPlan, attackKind, monsterHitCount = 1, monsterAttack, rng, defs, raidRules, events }) {
+    const effect = effectTable(raidRules);
     /* 예전 스킬 트리 캐릭터도 복구본에서 그대로 작동하도록 턴 회복을 유지한다. */
     members.forEach((member) => {
       if (member.hp <= 0) return;
@@ -694,6 +883,11 @@
     });
     members.forEach((member) => applyBlockTraining(member, defs, events));
 
+    /* 지난 턴에 잡은 반격 자세는 여기까지다(파티 턴 동안만 유효). */
+    monster.counterMode = null;
+    /* 몬스터가 움직이기 전에 파티가 독 피해를 받는다. */
+    tickMemberPoison(members, events);
+
     if (monster.stunTurns > 0) {
       events.push({
         kind:'monster-skip', status:'stun', turns:monster.stunTurns,
@@ -704,30 +898,55 @@
       return;
     }
 
+    /* 지난 턴에 예고해 둔 기술이 있으면 그것을 두 배 피해로 쓴다. */
+    const { plan, chargeMultiplier, charged } = planForMonsterTurn(
+      monster,
+      requestedPlan ?? { kind:attackKind, hits:monsterHitCount },
+      effect,
+    );
+    if (charged) {
+      events.push({
+        kind:'monster-charge-release', planName:plan.name, audioId:'enemyAttack',
+        text:`${monster.name}이(가) 예고한 ${plan.name}을(를) 두 배의 힘으로 사용합니다!`,
+      });
+    }
+
     const living = () => members
       .filter((member) => member.hp > 0)
       .sort((a, b) => (ATTACK_ORDER[a?.slot] ?? 1) - (ATTACK_ORDER[b?.slot] ?? 1));
-    const targets = attackKind === 'all' ? living() : [pickTarget(living(), raidRules)].filter(Boolean);
-    if (!targets.length) return;
-    const hitCount = Math.max(1, Math.min(3, integer(monsterHitCount, 1)));
-    events.push({
-      kind:'monster-windup', all:attackKind === 'all', hitCount, audioId:'enemyAttack',
-      text:attackKind === 'all'
-        ? `${monster.name}이(가) ${hitCount > 1 ? `${hitCount}연속 ` : ''}전체 공격을 준비합니다!`
-        : `${monster.name}의 강력한 집중 공격!`,
-    });
-
+    const empowered = monster.empowerTurns > 0;
+    const empowerMultiplier = empowered ? Math.max(1, number(effect.EMPOWER_MULTIPLIER, 1.5)) : 1;
     let chillConsumed = false;
+    let drained = 0;
+
+    if (plan.kind !== 'none') {
+      const targets = plan.kind === 'all'
+        ? living()
+        : [pickPlanTarget(living(), plan, raidRules, rng)].filter(Boolean);
+      if (!targets.length) return;
+      const hitCount = plan.hits;
+      events.push({
+        kind:'monster-windup', all:plan.kind === 'all', hitCount,
+        planName:plan.name, empowered, audioId:'enemyAttack',
+        text:plan.kind === 'all'
+          ? `${monster.name}의 ${plan.name}! ${hitCount > 1 ? `${hitCount}연속 ` : ''}전체 공격을 준비합니다!`
+          : `${monster.name}의 ${plan.name}! ${targets[0]?.name || ''}을(를) 노립니다!`,
+      });
+
     for (let hitIndex = 0; hitIndex < hitCount; hitIndex += 1) {
-      const waveTargets = attackKind === 'all' ? living() : targets;
+      const waveTargets = plan.kind === 'all'
+        ? living()
+        : targets.filter((member) => member.hp > 0);
       waveTargets.forEach((member) => {
       if (member.hp <= 0) return;
-      const focus = attackKind === 'all' ? 1 : number(raidRules?.SINGLE_TARGET_BONUS, 1.35);
+      const focus = plan.kind === 'all' ? 1 : number(raidRules?.SINGLE_TARGET_BONUS, 1.35);
       let incoming = Math.max(1, Math.round(
         Math.max(0, number(monsterAttack))
-        * number(raidRules?.MONSTER_DAMAGE_MULTIPLIER, 1.6)
+        * number(raidRules?.MONSTER_DAMAGE_MULTIPLIER, 1)
         * damageMultiplierForSlot(member.slot, raidRules)
         * focus
+        * empowerMultiplier
+        * chargeMultiplier
         * incomingMultiplier(member),
       ));
       const thickArmorRank = skillRank(member, 'warrior_thick_armor');
@@ -758,6 +977,10 @@
         audioId:critical ? 'critical' : 'enemyAttack',
         text:`${critical ? '치명타! ' : ''}${member.name}이(가) ${applied.totalDamage}의 피해를 받았습니다.`,
       });
+
+      /* 시트에 적힌 이 기술의 부가 효과(독·기절·냉기·흡혈)를 여기서 건다. */
+      applyPlanStatuses(member, monster, plan, effect, events);
+      if (plan.drain) drained += Math.round(applied.totalDamage * Math.max(0, number(effect.DRAIN_RATIO, 1)));
 
       if (member.hp > 0) {
         const prayerRank = skillRank(member, 'priest_basic_prayer');
@@ -798,7 +1021,79 @@
       }
       });
     }
+    } /* ← 공격하는 턴 끝 */
+
     if (chillConsumed) monster.chillTurns = Math.max(0, monster.chillTurns - 1);
+
+    /* 흡혈: 이번 턴에 준 피해만큼 몬스터가 회복한다. */
+    if (drained > 0) {
+      const before = monster.hp;
+      monster.hp = Math.min(monster.maxHp, monster.hp + drained);
+      const healed = monster.hp - before;
+      if (healed > 0) {
+        events.push({
+          kind:'monster-heal', status:'drain', amount:healed, monsterHp:monster.hp,
+          text:`${monster.name}이(가) 빼앗은 생명력으로 ${healed} 회복했습니다!`,
+        });
+      }
+    }
+
+    /* 강화는 이번 턴을 쓰고 한 칸 줄어든다. */
+    if (monster.empowerTurns > 0) monster.empowerTurns -= 1;
+
+    /* 공격이 아닌 부분(보호막·회복·강화·실명·반격 자세·예고)을 처리한다. */
+    if (plan.shieldPct > 0) {
+      const amount = Math.max(1, Math.ceil(monster.maxHp * plan.shieldPct));
+      monster.shield = Math.max(0, integer(monster.shield)) + amount;
+      events.push({
+        kind:'monster-shield', planName:plan.name, amount, shield:monster.shield,
+        text:`${monster.name}의 ${plan.name}! 보호막 ${amount}을(를) 만들었습니다.`,
+      });
+    }
+    if (plan.healPct > 0) {
+      const before = monster.hp;
+      monster.hp = Math.min(monster.maxHp, monster.hp + Math.max(1, Math.ceil(monster.maxHp * plan.healPct)));
+      const healed = monster.hp - before;
+      events.push({
+        kind:'monster-heal', planName:plan.name, amount:healed, monsterHp:monster.hp,
+        text:healed > 0
+          ? `${monster.name}의 ${plan.name}! HP ${healed}을(를) 회복했습니다.`
+          : `${monster.name}이(가) ${plan.name}을(를) 썼지만 이미 온전합니다.`,
+      });
+    }
+    if (plan.empower > 0) {
+      monster.empowerTurns = Math.max(monster.empowerTurns, plan.empower);
+      events.push({
+        kind:'monster-buff', status:'empower', planName:plan.name, turns:monster.empowerTurns,
+        text:`${monster.name}의 ${plan.name}! ${monster.empowerTurns}턴 동안 공격이 강해집니다.`,
+      });
+    }
+    if (plan.blind > 0) {
+      members.forEach((member) => {
+        if (member.hp <= 0) return;
+        member.statuses.blindHits = Math.max(member.statuses.blindHits, plan.blind);
+      });
+      events.push({
+        kind:'monster-blind', status:'blind', planName:plan.name, hits:plan.blind,
+        text:`${monster.name}의 ${plan.name}! 파티의 다음 공격 ${plan.blind}회가 빗나갑니다.`,
+      });
+    }
+    if (plan.counter) {
+      monster.counterMode = plan.counter;
+      events.push({
+        kind:'monster-counter-stance', status:'counter', planName:plan.name, mode:plan.counter,
+        text:plan.counter === 'all'
+          ? `${monster.name}의 ${plan.name}! 다음에 맞을 때마다 파티 전체에 반격합니다.`
+          : `${monster.name}의 ${plan.name}! 다음에 때린 사람에게 반격합니다.`,
+      });
+    }
+    if (plan.chargeNext && findPlanByName(monster, plan.chargeNext)) {
+      monster.chargedPlanName = plan.chargeNext;
+      events.push({
+        kind:'monster-charge', status:'charge', planName:plan.name, nextName:plan.chargeNext,
+        text:`${monster.name}이(가) 힘을 모읍니다. 다음 턴은 ${plan.chargeNext}!`,
+      });
+    }
 
     resolveShadowTicks(monster, members, rng, defs, events);
 
@@ -820,16 +1115,18 @@
     });
   }
 
-  function resolveRound({ members, monster, submissions = {}, attackKind = 'single', monsterHitCount = 1, monsterAttack, rng, defs:defsOverride, raidRules } = {}) {
+  function resolveRound({ members, monster, submissions = {}, plan:monsterPlan = null, attackKind = 'single', monsterHitCount = 1, monsterAttack, rng, defs:defsOverride, raidRules } = {}) {
     const defs = skillDefs(defsOverride);
     const party = Array.isArray(members) ? members : [];
     const target = monster;
     if (!target) return { events:[], monsterDown:true, partyWiped:party.every((member) => member.hp <= 0) };
     const events = [];
+    const effect = effectTable(raidRules);
     const ordered = [...party].sort((a, b) => (ATTACK_ORDER[a?.slot] ?? 1) - (ATTACK_ORDER[b?.slot] ?? 1));
 
     for (const member of ordered) {
       if (target.hp <= 0) break;
+      const beforeDurability = target.hp + Math.max(0, integer(target.shield));
       resolveMemberAction({
         member,
         members:party,
@@ -839,6 +1136,15 @@
         defs,
         events,
       });
+      /* 반격 자세인 몬스터를 실제로 때렸으면 그 자리에서 되받아친다. */
+      const landed = (target.hp + Math.max(0, integer(target.shield))) < beforeDurability;
+      if (landed && target.hp > 0) {
+        resolveCounter({
+          attacker:member, members:party, monster:target,
+          monsterAttack:monsterAttack ?? target.attack,
+          raidRules, effect, events,
+        });
+      }
     }
 
     if (target.hp <= 0) {
@@ -849,6 +1155,7 @@
     resolveMonsterTurn({
       members:party,
       monster:target,
+      plan:monsterPlan,
       attackKind,
       monsterHitCount,
       monsterAttack:monsterAttack ?? target.attack,
@@ -876,6 +1183,8 @@
     applyDamageToMonster,
     applyDamageToMember,
     tickCooldowns,
+    normalizePlan,
+    findPlanByName,
     resolveRound,
   });
 })(typeof window !== 'undefined' ? window : globalThis);

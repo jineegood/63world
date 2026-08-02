@@ -69,8 +69,21 @@ test('대형을 확정하면 이동이 시작되고 몬스터를 만난다', () 
   const arrival = run.arriveAtEncounter();
   assert.equal(arrival.ok, true);
   assert.equal(run.phase, 'battle');
-  assert.equal(arrival.monster.name, '경비 로봇');
+  // 시트의 출현 규칙대로 1층의 첫 상대는 Lv.5 버섯돌이킹이다.
+  assert.equal(arrival.monster.name, '버섯돌이킹');
   assert.equal(arrival.monster.isBoss, false);
+});
+
+test('같은 난수를 주면 같은 몬스터 목록이 나오고, 목록을 주면 그대로 쓴다', () => {
+  // 방에 셋이 들어와도 모두 같은 몬스터를 봐야 한다.
+  const a = makeRun().snapshot().encounterIds;
+  const b = makeRun().snapshot().encounterIds;
+  assert.deepEqual([...a], [...b], '같은 난수면 같은 목록');
+
+  const fixed = makeRun({ encounterIds:['guardBot', 'towerWarden'] });
+  assert.deepEqual([...fixed.snapshot().encounterIds], ['guardBot', 'towerWarden']);
+  fixed.confirmFormation({ me:'front', ally1:'middle', ally2:'back' });
+  assert.equal(fixed.arriveAtEncounter().monster.name, '경비 로봇');
 });
 
 test('이동 중이 아닐 때 도착 처리를 하면 막힌다', () => {
@@ -106,7 +119,7 @@ test('몬스터 반격은 대형에 따라 앞에 선 사람이 가장 아프다
   const run = makeRun();
   run.confirmFormation({ me:'front', ally1:'middle', ally2:'back' });
   run.arriveAtEncounter();
-  // 경비 로봇 1라운드째는 단일 공격 → 앞줄만 맞는다.
+  // 버섯돌이킹 1라운드째는 단일 공격 → 한 명만 맞는다.
   const monsterAttack = run.monster.attack;
   const first = run.resolveRound({ me:true, ally1:true, ally2:true });
   const hits = first.events.filter((e) => e.kind === 'monster-hit');
@@ -122,19 +135,23 @@ test('전체 공격 라운드에는 셋 다 각자 배율로 맞는다', () => {
   const run = makeRun();
   run.confirmFormation({ me:'front', ally1:'middle', ally2:'back' });
   run.arriveAtEncounter();
-  // 경비 로봇 패턴은 single, single, all → 세 번째 라운드가 전체 공격
+  // 버섯돌이킹 패턴은 단일 → 전체(포자) → 회복 → 두 번째 라운드가 전체 공격이다.
   run.resolveRound({ me:false, ally1:false, ally2:false });
-  run.resolveRound({ me:false, ally1:false, ally2:false });
-  const third = run.resolveRound({ me:false, ally1:false, ally2:false });
+  const second = run.resolveRound({ me:false, ally1:false, ally2:false });
 
-  assert.equal(third.attackKind, 'all');
-  const hits = third.events.filter((e) => e.kind === 'monster-hit');
+  assert.equal(second.attackKind, 'all');
+  const hits = second.events.filter((e) => e.kind === 'monster-hit');
   assert.equal(hits.length, 3);
   const byId = Object.fromEntries(hits.map((h) => [h.memberId, h.damage]));
   assert.ok(byId.me > byId.ally1 && byId.ally1 > byId.ally2,
     `앞>중간>뒤 순이어야 한다: ${JSON.stringify(byId)}`);
-  assert.ok(third.events.some((e) => e.kind === 'monster-windup' && e.all === true),
+  assert.ok(second.events.some((e) => e.kind === 'monster-windup' && e.all === true),
     '전체 공격은 미리 알려 줘야 피할 준비를 한다');
+
+  // 세 번째 라운드는 공격하지 않는 회복 턴이라 아무도 맞지 않는다.
+  const third = run.resolveRound({ me:false, ally1:false, ally2:false });
+  assert.equal(third.attackKind, 'none');
+  assert.equal(third.events.filter((e) => e.kind === 'monster-hit').length, 0);
 });
 
 test('몬스터를 쓰러뜨리면 반격 없이 다음 이동으로 넘어간다', () => {
@@ -172,9 +189,10 @@ test('일반 전투 3회를 지나면 마지막에 레이드 보스가 나온다
   }
 
   assert.equal(met.length, 4);
-  assert.deepEqual(met.slice(0, 3).map((m) => m.boss), [false, false, false]);
+  assert.deepEqual([...met.slice(0, 3).map((m) => m.boss)], [false, false, false]);
   assert.equal(met[3].boss, true);
-  assert.equal(met[3].name, '63빌딩 관리자');
+  // 마지막 자리는 그 구간에서 가장 레벨이 높은 Lv.7 몬스터다(시트의 출현 규칙).
+  assert.ok(['오염된 슬라임', '폭주 복사기'].includes(met[3].name), `보스 이름: ${met[3].name}`);
   assert.equal(run.phase, 'cleared', '보스를 잡으면 층을 깬 것이다');
 });
 
@@ -297,11 +315,12 @@ test('진행 중 전투를 다시 연결해도 HP 0인 학생은 즉시 부활�
 
 /* 1층을 끝까지 돌려 결과를 돌려준다.
    정답률은 4라운드에 3번 맞히는 패턴(75%)으로 고정한다 — 무작위가 아니라 항상 같은 결과가 나온다. */
-function playFloorOne(members) {
+function playFloorOne(members, encounterIds = null) {
   const run = api.YuksamRaidRun.createRun({
     floor:1,
     rng:PLAIN,
     members:members.map((m) => ({ ...m })),
+    encounterIds,
   });
   run.confirmFormation(Object.fromEntries(members.map((m) => [m.id, m.slot])));
 
@@ -352,7 +371,10 @@ test('힐러가 빠지면 같은 능력치로도 1층을 넘기지 못한다', (
 });
 
 test('대형을 거꾸로 세우면(약한 사람이 앞) 훨씬 위험해진다', () => {
-  /* 앞줄이 1.5배를 맞으므로 누구를 앞에 세우는지가 실제로 결과를 바꿔야 한다. */
+  /* 앞줄이 1.5배를 맞으므로 누구를 앞에 세우는지가 실제로 결과를 바꿔야 한다.
+     시트 이후로 몬스터마다 노리는 자리가 달라졌으므로, 앞자리를 노리는
+     종이비둘기(종이부리 쪼기 → 앞)로 상대를 고정해 대형만 비교한다. */
+  const encounters = ['paperPigeon', 'paperPigeon', 'paperPigeon', 'paperPigeon'];
   const roster = [
     { id:'tank', name:'탱커', spec:'방어', maxHp:66, hp:66, attack:7 },
     { id:'dps', name:'딜러', spec:'화염', maxHp:52, hp:52, attack:8 },
@@ -360,16 +382,17 @@ test('대형을 거꾸로 세우면(약한 사람이 앞) 훨씬 위험해진다
   ];
   const good = playFloorOne(roster.map((m) => ({
     ...m, slot:m.id === 'tank' ? 'front' : m.id === 'dps' ? 'middle' : 'back',
-  })));
+  })), encounters);
   const bad = playFloorOne(roster.map((m) => ({
     ...m, slot:m.id === 'healer' ? 'front' : m.id === 'dps' ? 'middle' : 'back',
-  })));
+  })), encounters);
 
-  assert.equal(good.phase, 'cleared');
-  /* 앞에 선 사람이 1.5배로 맞으므로, 약한 사람을 앞에 세우면 더 일찍 쓰러져야 한다.
-     (난이도가 높아 양쪽 모두 누군가는 쓰러지므로 "언제" 쓰러지는지로 본다.) */
-  assert.ok(bad.firstDownRound < good.firstDownRound,
-    `약한 사람을 앞에 세우면 더 일찍 쓰러져야 한다: 올바른 대형 ${good.firstDownRound}라운드 vs 거꾸로 ${bad.firstDownRound}라운드`);
+  /* 앞에 선 사람이 1.5배로 맞으므로, 튼튼한 탱커를 앞에 세우면 넘어가고
+     약한 힐러를 앞에 세우면 무너져야 한다. 대형이 실제로 결과를 가른다는 뜻이다. */
+  assert.equal(good.phase, 'cleared', `탱커를 앞에 세우면 깨야 한다 (${good.round}라운드에 ${good.phase})`);
+  assert.equal(bad.phase, 'wiped', `힐러를 앞에 세우면 무너져야 한다 (${bad.round}라운드에 ${bad.phase})`);
+  assert.ok(bad.lowestRatio <= good.lowestRatio,
+    `거꾸로 선 대형이 더 위험해야 한다: 올바른 ${good.lowestRatio} vs 거꾸로 ${bad.lowestRatio}`);
 });
 
 test('현재 상태를 화면이 읽을 수 있는 형태로 알려 준다', () => {

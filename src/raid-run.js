@@ -76,14 +76,21 @@
      - wiped     : 전멸했다 */
   const PHASES = Object.freeze(['formation', 'travel', 'battle', 'cleared', 'wiped']);
 
-  function createRun({ floor = 1, members = [], rng = Math.random } = {}) {
+  function createRun({ floor = 1, members = [], rng = Math.random, encounterIds = null } = {}) {
     const R = rules();
     if (!R) throw new Error('YuksamRaidRules must be loaded before raid-run.js');
 
     const floorDef = R.getFloor(floor);
     if (!floorDef) throw new Error(`아직 열리지 않은 층입니다: ${floor}`);
 
-    const encounters = R.floorEncounters(floor);
+    /* 같은 레벨에 두 마리가 있는 자리는 무작위로 하나를 뽑는다.
+       방에서 미리 뽑아 둔 목록(encounterIds)이 오면 그대로 쓴다 —
+       세 명이 서로 다른 몬스터를 보면 안 되기 때문이다.
+       목록이 없으면 이 진행의 난수로 뽑아, 같은 난수면 같은 결과가 나온다. */
+    const rolledIds = Array.isArray(encounterIds) && encounterIds.length
+      ? encounterIds.map(String)
+      : (typeof R.rollEncounters === 'function' ? R.rollEncounters(floor, rng) : null);
+    const encounters = R.floorEncounters(floor, rolledIds);
     const roster = members.map((member) => cloneMemberState({
       id:String(member.id),
       name:String(member.name || '동료'),
@@ -246,6 +253,9 @@
           members:state.members,
           monster:state.monster,
           submissions:answers,
+          /* 시트에서 옮긴 이번 턴의 기술 한 칸을 통째로 넘긴다.
+             아래 attackKind/monsterHitCount는 예전 호출부와의 호환용이다. */
+          plan:attackPlan,
           attackKind:kind,
           monsterHitCount:attackPlan.hits,
           monsterAttack:state.monster.attack,
@@ -335,7 +345,18 @@
       }
 
       // 3) 몬스터가 반격한다. 대형에 따라 맞는 정도가 갈린다.
+      /* 이 간이 경로는 스킬 없이 숫자만 굴리므로 부가 효과는 다루지 않는다.
+         공격하지 않는 턴('none')만 건너뛰고 나머지는 예전 그대로 계산한다. */
       const kind = R.attackKindForRound(state.monster, state.round);
+      if (kind === 'none') {
+        events.push({
+          kind:'monster-skip', status:'idle',
+          text:`${state.monster.name}이(가) 이번 턴에는 공격하지 않았다.`,
+        });
+        state.round += 1;
+        state.log.push(...events);
+        return { ok:true, events, attackKind:kind };
+      }
       const counter = R.resolveMonsterAttack({
         members:state.members,
         attack:state.monster.attack,
@@ -405,6 +426,8 @@
         round:state.round,
         encounterIndex:state.encounterIndex,
         encounterTotal:encounters.length,
+        /* 방장이 뽑은 목록을 그대로 저장·공유할 수 있게 함께 내보낸다. */
+        encounterIds:encounters.map((entry) => entry.id),
         members:state.members.map(snapshotMember),
         monster:snapshotMonster(state.monster),
         reward:state.reward ? { ...state.reward } : state.reward,

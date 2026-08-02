@@ -231,7 +231,9 @@ test('1층은 일반 전투 3회 뒤에 레이드 보스가 나온다', () => {
   assert.equal(encounters.length, 4);
   assert.equal(encounters.filter((e) => e.isBoss).length, 1);
   assert.equal(encounters[3].isBoss, true);
-  assert.equal(encounters[3].name, '63빌딩 관리자');
+  // 시트의 출현 규칙: Lv.5 두 마리 → Lv.6 한 마리 → Lv.7 한 마리(보스 자리)
+  assert.deepEqual([...encounters.map((e) => e.level)], [5, 5, 6, 7]);
+  assert.deepEqual([...encounters.slice(0, 2).map((e) => e.name)], ['버섯돌이킹', '종이비둘기']);
   // 앞의 셋은 보스가 아니어야 한다.
   assert.ok(encounters.slice(0, 3).every((e) => !e.isBoss));
 });
@@ -240,20 +242,67 @@ test('1층은 Lv.5 셋이 도전하는 난이도로 잡혀 있다', () => {
   const floor = rules.getFloor(1);
   assert.equal(floor.recommendedLevel, 5);
   const encounters = rules.floorEncounters(1);
-  // 보스는 일반 몬스터보다 확실히 단단해야 한다.
+  // 보스 자리는 그 층에서 가장 레벨이 높은 몬스터다.
   const boss = encounters[3];
-  const normals = encounters.slice(0, 3);
-  assert.ok(normals.every((m) => boss.hp > m.hp), '보스가 가장 단단해야 한다');
-  assert.ok(normals.every((m) => boss.attack >= m.attack), '보스가 가장 아파야 한다');
+  assert.ok(encounters.every((m) => m.level <= boss.level), '보스가 가장 높은 레벨이어야 한다');
   // Lv.5 사냥터 몬스터(스톰프 HP 28~31)보다 훨씬 단단해야 셋이 싸울 맛이 난다.
-  assert.ok(normals.every((m) => m.hp >= 80), '3명이 함께 때릴 만큼은 단단해야 한다');
+  assert.ok(encounters.every((m) => m.hp >= 80), '3명이 함께 때릴 만큼은 단단해야 한다');
+  assert.ok(encounters.every((m) => m.attack > 0));
 });
 
-test('아직 열지 않은 층은 없는 것으로 나온다', () => {
+test('시트의 일곱 구간이 모두 있고 그 밖의 층은 없는 것으로 나온다', () => {
   // 규칙 파일은 별도 vm 컨텍스트에서 돌아가 배열 프로토타입이 다르다. 네이티브 배열로 옮겨 비교한다.
-  assert.deepEqual([...rules.availableFloors()], [1]);
+  assert.deepEqual([...rules.availableFloors()], [1, 11, 21, 31, 41, 51, 61]);
   assert.equal(rules.getFloor(2), null);
   assert.equal([...rules.floorEncounters(2)].length, 0);
+});
+
+test('몬스터 17마리가 시트 그대로 들어 있고 레벨별 출현표와 맞는다', () => {
+  const ids = Object.keys(rules.MONSTERS);
+  assert.equal(ids.length, 17, '시트의 몬스터는 17마리다');
+  // 출현표에 적힌 id는 모두 실제 몬스터여야 한다.
+  const rostered = Object.values(rules.LEVEL_ROSTER).flatMap((list) => [...list]);
+  assert.equal(rostered.length, 17);
+  assert.ok(rostered.every((id) => rules.MONSTERS[id]), '출현표의 id가 모두 있어야 한다');
+  // 레벨 칸과 몬스터의 레벨이 어긋나면 안 된다.
+  Object.entries(rules.LEVEL_ROSTER).forEach(([level, list]) => {
+    [...list].forEach((id) => assert.equal(rules.MONSTERS[id].level, Number(level)));
+  });
+  // 체력·공격력·패턴이 빠진 몬스터가 없어야 한다.
+  ids.forEach((id) => {
+    const monster = rules.MONSTERS[id];
+    assert.ok(monster.hp > 0 && monster.attack > 0, `${id} 수치 누락`);
+    assert.ok(Array.isArray(monster.pattern) && monster.pattern.length > 0, `${id} 패턴 누락`);
+    monster.pattern.forEach((entry) => assert.ok(entry && entry.name, `${id} 기술 이름 누락`));
+  });
+});
+
+test('구간마다 시트가 정한 횟수만큼 싸우고 마지막이 그 구간의 보스다', () => {
+  rules.availableFloors().forEach((floor) => {
+    const encounters = rules.floorEncounters(floor);
+    /* 대부분 네 번이지만 61~63층은 세 개 층뿐이라 세 번이다(시트 그대로). */
+    const planned = [...rules.getFloor(floor).plan]
+      .reduce((sum, step) => sum + (step.mode === 'both' ? 2 : 1), 0);
+    assert.equal(encounters.length, planned, `${floor}층 조우 수`);
+    assert.equal(encounters[encounters.length - 1].isBoss, true);
+    assert.ok(encounters.slice(0, -1).every((e) => !e.isBoss));
+    // 레벨이 내려가지 않고 올라가기만 해야 학생이 점점 어려워진다고 느낀다.
+    encounters.slice(1).forEach((entry, index) => {
+      assert.ok(entry.level >= encounters[index].level, `${floor}층 레벨 역전`);
+    });
+  });
+});
+
+test('두 마리 중 하나를 뽑는 자리는 무작위 값에 따라 갈린다', () => {
+  // rollEncounters는 밖에서 준 난수만 쓴다 — 서버가 같은 목록을 다시 만들 수 있어야 한다.
+  const low = rules.rollEncounters(1, () => 0);
+  const high = rules.rollEncounters(1, () => 0.99);
+  assert.deepEqual([...low].slice(0, 2), ['mushroomKing', 'paperPigeon']);
+  assert.notDeepEqual([...low], [...high], '뽑기 자리가 난수에 따라 달라져야 한다');
+  // 뽑아 둔 목록을 그대로 넘기면 그 순서대로 나온다(방 전원이 같은 몬스터를 본다).
+  const fixed = rules.floorEncounters(1, ['guardBot', 'officeGhost']);
+  assert.deepEqual(fixed.map((m) => m.id), ['guardBot', 'officeGhost']);
+  assert.equal(fixed[1].isBoss, true);
 });
 
 test('몬스터 공격 패턴은 정해진 순서를 반복한다', () => {
@@ -266,17 +315,64 @@ test('몬스터 공격 패턴은 정해진 순서를 반복한다', () => {
   assert.equal(rules.attackKindForRound({}, 0), 'single');
 });
 
-test('던전 몬스터는 60% 강해지고 전체 연속 공격은 최대 3타까지 반복한다', () => {
-  assert.equal(rules.MONSTER_DAMAGE_MULTIPLIER, 1.6);
-  assert.deepEqual({ ...rules.attackPlanForRound(rules.MONSTERS.guardBot, 2) }, { kind:'all', hits:2 });
-  assert.deepEqual({ ...rules.attackPlanForRound(rules.MONSTERS.towerWarden, 3) }, { kind:'all', hits:3 });
+test('시트의 공격력에 60%가 이미 들어 있어 계산에서 다시 곱하지 않는다', () => {
+  /* 예전에는 시트의 낮은 공격력에 여기서 1.6을 곱했다. 최종본의 「기본 공격력」은
+     그 60% 상향이 이미 반영된 값이라 다시 곱하면 피해가 두 배가 된다. */
+  assert.equal(rules.MONSTER_DAMAGE_MULTIPLIER, 1);
+
+  // 시트 「예상 피해」와 실제 계산이 맞는지 대표로 몇 마리만 확인한다.
+  const expected = {
+    mushroomKing:{ single:[31, 21, 12], all:[20, 13, 8] },
+    towerWarden:{ single:[70, 46, 28], all:[44, 29, 17] },
+    rooftopMyeongjinRobot:{ single:[115, 77, 46], all:[72, 48, 29] },
+  };
+  Object.entries(expected).forEach(([id, want]) => {
+    const attack = rules.MONSTERS[id].attack;
+    ['front', 'middle', 'back'].forEach((slot, index) => {
+      const single = Math.round(attack * rules.damageMultiplier(slot) * rules.SINGLE_TARGET_BONUS * rules.MONSTER_DAMAGE_MULTIPLIER);
+      const all = Math.round(attack * rules.damageMultiplier(slot) * rules.MONSTER_DAMAGE_MULTIPLIER);
+      assert.equal(single, want.single[index], `${id} 단일 ${slot}`);
+      assert.equal(all, want.all[index], `${id} 전체 ${slot}`);
+    });
+  });
 });
 
-test('보스는 전체 공격을 섞어 쓴다', () => {
-  const boss = rules.MONSTERS.towerWarden;
-  assert.ok(boss.pattern.includes('all'), '보스에게 전체 공격이 있어야 한다');
-  assert.ok(boss.pattern.includes('single'));
-  assert.equal(boss.boss, true);
+test('패턴 한 칸은 기술 이름·타수·노리는 자리·부가 효과까지 그대로 읽힌다', () => {
+  const stomp = rules.attackPlanForRound(rules.MONSTERS.buildingStomp, 0);
+  assert.equal(stomp.name, '대지 찍기');
+  assert.equal(stomp.kind, 'all');
+  assert.equal(stomp.stun, true);
+
+  const charge = rules.attackPlanForRound(rules.MONSTERS.buildingStomp, 1);
+  assert.equal(charge.kind, 'single');
+  assert.equal(charge.hits, 2);
+  assert.equal(charge.target, 'middle');
+
+  // 명진쌤 로봇은 시트대로 4연속까지 때린다.
+  const laser = rules.attackPlanForRound(rules.MONSTERS.rooftopMyeongjinRobot, 1);
+  assert.equal(laser.hits, 4);
+  assert.equal(laser.poison, 5);
+
+  // 공격하지 않는 턴도 그대로 남는다.
+  const guardUp = rules.attackPlanForRound(rules.MONSTERS.engineIronGiant, 2);
+  assert.equal(guardUp.kind, 'none');
+  assert.equal(guardUp.shieldPct, 0.5);
+
+  // chargeNext가 가리키는 기술은 같은 몬스터의 패턴 안에 반드시 있어야 한다.
+  Object.values(rules.MONSTERS).forEach((monster) => {
+    monster.pattern.forEach((entry) => {
+      if (!entry.chargeNext) return;
+      assert.ok(rules.planByName(monster, entry.chargeNext), `${monster.id}의 예고 대상 없음`);
+    });
+  });
+});
+
+test('보스급 몬스터는 전체 공격과 단일 공격을 섞어 쓴다', () => {
+  ['towerWarden', 'nonexistentFloorLord', 'rooftopMyeongjinRobot'].forEach((id) => {
+    const kinds = new Set(rules.MONSTERS[id].pattern.map((entry) => entry.kind));
+    assert.ok(kinds.has('all'), `${id}에 전체 공격이 있어야 한다`);
+    assert.ok(kinds.has('single'), `${id}에 단일 공격이 있어야 한다`);
+  });
 });
 
 test('동료 정답 판정은 밖에서 준 무작위 값만 쓴다', () => {

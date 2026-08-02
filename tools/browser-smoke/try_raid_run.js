@@ -149,7 +149,8 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   };
   await travelWait();
   check('이동이 끝나면 전투가 시작된다', G.modalState?.type === 'raidBattle', `type=${G.modalState?.type}`);
-  check('첫 몬스터는 경비 로봇', ui.peek().monster?.name === '경비 로봇', ui.peek().monster?.name);
+  // 시트의 출현 규칙대로 1층 첫 상대는 Lv.5 버섯돌이킹이다.
+  check('첫 몬스터는 버섯돌이킹', ui.peek().monster?.name === '버섯돌이킹', ui.peek().monster?.name);
   check('일반 전투와 같은 무대를 쓴다', !!window.document.querySelector('.combat-stage'));
   check('왼쪽에 캐릭터 셋이 보인다',
     window.document.querySelectorAll('.raid-ally-sprite').length === 3,
@@ -199,8 +200,9 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
     if (/치명타/.test(text)) sawKind.add('crit');
     if (/빗나갔|피했/.test(text)) sawKind.add('miss');
     if (/회복/.test(text)) sawKind.add('heal');
-    if (/피해를 주었다/.test(text)) sawKind.add('mine');
-    if (/피해를 받았다/.test(text)) sawKind.add('hit');
+    /* 3인 전투 엔진은 "주었습니다/받았습니다", 옛 간이 경로는 "주었다/받았다"로 쓴다. */
+    if (/피해를 주었(다|습니다)/.test(text)) sawKind.add('mine');
+    if (/피해를 받았(다|습니다)/.test(text)) sawKind.add('hit');
     if (window.document.querySelector('.raid-party-lunge')) sawPartyLunge = true;
     if (window.document.querySelector('.raid-monster-lunge')) sawMonsterLunge = true;
   };
@@ -265,9 +267,15 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   }
 
   const finalPhase = ui.isRunning() ? ui.peek().phase : 'closed';
-  check('일반 몬스터 3종을 모두 만난다',
-    ['경비 로봇', '사무실 유령', '정전 그림자'].every((name) => seen.has(name)),
-    [...seen].join(', '));
+  /* 몬스터 구성은 시트의 출현 규칙에서 뽑히므로 이름을 박아 두지 않는다.
+     그 층에 실제로 배정된 몬스터만 나왔는지, 보스 전까지 셋을 만났는지 본다. */
+  const floorNames = new Set(
+    (window.YuksamRaidRules?.floorEncounters(1, ui.peek().encounterIds) || []).map((m) => m.name),
+  );
+  check('만난 몬스터가 모두 1층 배정표 안에 있다',
+    seen.size > 0 && [...seen].every((name) => floorNames.has(name)),
+    `만남=${[...seen].join(', ')} / 배정=${[...floorNames].join(', ')}`);
+  check('보스 전까지 일반 몬스터 3종을 만난다', seen.size >= 4, [...seen].join(', '));
   check('레이드 보스까지 도달한다', sawBoss);
   check('전투 로그에 공격·피격이 모두 나온다',
     sawKind.has('mine') && sawKind.has('hit'), [...sawKind].join(','));
