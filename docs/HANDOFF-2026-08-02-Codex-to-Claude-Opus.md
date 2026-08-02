@@ -9,6 +9,7 @@
 - 이번 핵심 기능 커밋: `4f8fc2c feat: rebalance realtime raid rounds`
 - 직전 기준 커밋: `ef8d99b feat: polish realtime raid presentation`
 - GitHub: `https://github.com/jineegood/63world`
+- GitHub 최신 복구본 브랜치: `origin/recovery/local-engine-20260726` (`075b34a`까지 업로드 완료)
 - 배포 게임: `https://63world.vercel.app`
 - 로컬 확인 주소: `http://127.0.0.1:8765/`
 - Supabase project ref: `eabxfedywcxbnfyyufcs`
@@ -170,11 +171,13 @@ Vercel:
 vercel.cmd --prod --yes
 ```
 
-GitHub:
+GitHub 복구본 브랜치:
 
 ```powershell
-git push origin recovery/local-engine-20260726:main
+git push origin recovery/local-engine-20260726
 ```
+
+주의: 2026-08-02 현재 원격 `main`은 이 복구본과 공통 조상은 있지만, 한때 진행했다가 버린 대규모 서버 권위형 작업 이력이 별도로 올라가 있어 단순 fast-forward가 아니다. 안전을 위해 `main`을 force push로 덮어쓰지 않았다. 현재 올바른 최신 게임은 `recovery/local-engine-20260726` 브랜치이며, Vercel production은 이 로컬 복구본에서 직접 배포했다. 다음 작업자도 제작자 확인 없이 `origin/main`을 merge하거나 복구본으로 강제 덮어쓰지 말 것.
 
 ## 6. 검사 결과
 
@@ -187,6 +190,8 @@ git push origin recovery/local-engine-20260726:main
 - Supabase DB migration 원격 적용 완료
 - `raid-room-v1` 배포 완료
 - `pvp-match-v1` 배포 완료
+- GitHub `recovery/local-engine-20260726` 브랜치에 `075b34a`까지 업로드 완료
+- Vercel production 직접 배포 완료, `https://63world.vercel.app` HTTP 200 확인
 
 ## 7. 다음 작업에서 실제 브라우저로 꼭 확인할 것
 
