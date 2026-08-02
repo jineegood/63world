@@ -21,6 +21,8 @@ test('wrong answers show the answer in green, deal half damage, then allow the c
   assert.match(wrongBranch, /tone:'correct-answer'/);
   assert.match(wrongBranch, /duration:2[0-9]{3}/);
   assert.match(wrongBranch, /preserveDuration:true/);
+  assert.match(wrongBranch, /wrongActionAudioId/);
+  assert.match(wrongBranch, /audioId:wrongActionAudioId, fallbackSfx:'hit'/);
   assert.match(wrongBranch, /monsterCounterAttack/);
   assert.match(style, /\.combat-notice\.correct-answer[^}]*#(?:22c55e|4ade80)/);
   assert.match(game, /YuksamWrongAnswerReview\.reveal/);

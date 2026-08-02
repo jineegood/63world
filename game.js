@@ -8893,6 +8893,13 @@ function updateQuestTracker() {
     const correctAnswer = game.currentQuestion?.answer ?? '';
     const result = calculateWrongActionDamageV2();
     const wrongHits = result.hitInfo;
+    const wrongSkillId = String(game.currentCombatAction || '').startsWith('active:')
+      ? String(game.currentCombatAction).slice(7)
+      : null;
+    const wrongActionAudioId = wrongSkillId
+      ? window.YuksamAudioManifest?.skillSounds?.[wrongSkillId]
+        || window.YuksamAudioManifest?.classBasicSounds?.[game.player?.class]
+      : window.YuksamAudioManifest?.classBasicSounds?.[game.player?.class];
     const effectBatchId = `${monster.id}:wrong:${game.combatEffectSerial = (Number(game.combatEffectSerial) || 0) + 1}`;
     const events = [
       {
@@ -8908,6 +8915,9 @@ function updateQuestTracker() {
         type:index === 0 ? 'player-hit' : 'player-extra-hit',
         text:`오답 공격으로 ${hit.dmg}의 피해를 주었습니다.`,
         duration:PLAYER_ATTACK_NOTICE_DELAY_V46,
+        ...(index === 0 && wrongActionAudioId
+          ? { audioId:wrongActionAudioId, fallbackSfx:'hit' }
+          : {}),
         effect:{
           id:`${effectBatchId}:${index}`,
           type:'monster-damage',

@@ -201,6 +201,7 @@ test('wrong damaging answers deal half damage without applying the skill status'
   const hit = result.events.find((event) => event.kind === 'party-hit');
   assert.equal(hit.damage, 45);
   assert.equal(hit.correct, false);
+  assert.equal(hit.audioId, 'shatteringStrike');
   assert.ok(!result.events.some((event) => event.kind === 'monster-status'));
   assert.equal(fighter.cooldowns.warrior_weapon_slash, 4, '5턴을 사용하고 살아 있는 적의 턴 뒤 1 감소');
 });
