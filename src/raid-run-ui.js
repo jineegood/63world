@@ -2233,7 +2233,7 @@
     const badges = commonStatusBadges(member?.statuses || {});
     /* 던전 몬스터의 실명 패턴 — 남은 횟수만큼 공격이 그냥 빗나간다. */
     const blind = Math.max(0, Number(member?.statuses?.blindHits) || 0);
-    if (blind > 0) badges.push({ key:'blind', label:`실명 ${blind}`, tooltip:`다음 공격 ${blind}회가 무조건 빗나갑니다.` });
+    if (blind > 0) badges.push({ key:'blind', label:`실명 ${blind}`, tooltip:`다음 공격 ${blind}회가 50% 확률로 빗나갑니다.` });
     return `<div class="combat-badges-v38 raid-status-row" data-raid-status-member="${esc(member?.id || '')}">${badges.map(statusBadgeHtml).join('')}</div>`;
   }
 
@@ -2552,7 +2552,9 @@
     else if (event.kind === 'party-shield') call('playSfx', 'open');
     else if (event.kind === 'party-buff') call('playSfx', 'heal');
     else if (event.kind === 'member-revive') call('playSfx', 'quest');
-    else if (event.kind === 'member-down') call('playSfx', 'defeat');
+    /* 사망음은 낮고 조용한 합성음이라 던전 음악에 묻힌다.
+       선생님이 음원을 등록해 두었으면 그것을 먼저 쓰고, 없으면 합성음으로. */
+    else if (event.kind === 'member-down') playAsset('defeat', 'defeat');
     else if (['monster-dot', 'party-retaliation'].includes(event.kind)) call('playSfx', 'hit');
     else if (['member-dot', 'monster-counter'].includes(event.kind)) call('playSfx', 'hit');
     else if (['monster-heal', 'monster-shield', 'monster-buff'].includes(event.kind)) call('playSfx', 'open');
@@ -2922,8 +2924,11 @@
        기술을 계속 "다음은 B"라고 알려 주고 있었다. */
     const hintNode = doc.querySelector('.raid-next-hint');
     if (hintNode) {
+      /* 예고는 반드시 서버가 준 값(스냅샷)만 보고 만든다.
+         재생 중에만 쓰는 표시용 상태를 섞으면 세 화면의 예고가 서로 달라진다.
+         (배지는 로그를 따라가야 하니 표시용을 쓰고, 예고는 아니다.) */
       const hint = nextPlanHint(
-        { ...snap.monster, ...(view.monsterStatuses || {}) },
+        snap.monster,
         rules().attackPlanForRound(snap.monster, snap.round, snap.patternSeed),
       );
       hintNode.textContent = hint.text;

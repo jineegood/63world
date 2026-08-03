@@ -211,20 +211,53 @@ test('강화 턴 동안 몬스터의 공격이 실제로 더 아프다', () => {
   assert.ok(buffedBefore - buffed.hp > plainDamage, '강화 중에는 더 아파야 한다');
 });
 
-test('실명에 걸리면 다음 공격이 정해진 횟수만큼 빗나간다', () => {
-  const target = dummy({ attack:100 });
-  turn({ members:[target], plan:{ name:'암전', kind:'none', blind:2 }, submissions:idle });
-  assert.equal(target.statuses.blindHits, 2);
+test('실명은 절반의 확률로만 빗나가게 하고 횟수는 반드시 닳는다', () => {
+  /* 무조건 빗나가면 너무 강해서 50% 확률로 바꿨다(제작자 조정). */
+  const unlucky = dummy({ attack:100 });
+  turn({ members:[unlucky], plan:{ name:'암전', kind:'none', blind:2 }, submissions:idle });
+  assert.equal(unlucky.statuses.blindHits, 2);
 
-  const boss = monster();
-  const before = boss.hp;
-  const blinded = turn({
-    members:[target], target:boss, plan:wait,
+  // 굴림이 낮으면(0.1 < 0.5) 빗나간다.
+  const missBoss = monster();
+  const missBefore = missBoss.hp;
+  const missed = turn({
+    members:[unlucky], target:missBoss, plan:wait, rng:constant(0.1),
     submissions:{ dummy:{ correct:true, actionId:'basic' } },
   });
-  assert.ok(blinded.events.some((event) => event.kind === 'party-hit' && event.blinded === true));
-  assert.equal(boss.hp, before, '실명 중에는 피해가 들어가지 않는다');
-  assert.equal(target.statuses.blindHits, 1, '한 번 쓰면 한 칸 닳는다');
+  assert.ok(missed.events.some((event) => event.kind === 'party-hit' && event.blinded === true));
+  assert.equal(missBoss.hp, missBefore, '빗나갔으면 피해가 없다');
+  assert.equal(unlucky.statuses.blindHits, 1, '한 번 쓰면 한 칸 닳는다');
+
+  // 굴림이 높으면(0.9 >= 0.5) 실명이 있어도 그대로 맞는다.
+  const lucky = dummy({ attack:100 });
+  turn({ members:[lucky], plan:{ name:'암전', kind:'none', blind:2 }, submissions:idle });
+  const hitBoss = monster();
+  const hitBefore = hitBoss.hp;
+  const landed = turn({
+    members:[lucky], target:hitBoss, plan:wait, rng:constant(0.9),
+    submissions:{ dummy:{ correct:true, actionId:'basic' } },
+  });
+  assert.ok(!landed.events.some((event) => event.blinded === true), '이번에는 실명이 빗나가게 하지 않는다');
+  assert.ok(hitBoss.hp < hitBefore, '피해가 들어가야 한다');
+  assert.equal(lucky.statuses.blindHits, 1, '맞았어도 횟수는 닳는다');
+});
+
+test('전체 공격은 한 사람이 받는 몫이 절반으로 줄어든다', () => {
+  /* 셋을 한꺼번에 때리므로 그대로 두면 단일 공격보다 훨씬 세다(제작자 조정). */
+  const alone = dummy();
+  const beforeAll = alone.hp;
+  turn({ members:[alone], plan:{ name:'전체', kind:'all' }, submissions:idle });
+  const allDamage = beforeAll - alone.hp;
+
+  const solo = dummy();
+  const beforeSingle = solo.hp;
+  turn({ members:[solo], plan:{ name:'단일', kind:'single' }, submissions:idle });
+  const singleDamage = beforeSingle - solo.hp;
+
+  /* 단일은 집중 배율(1.6), 전체는 0.5이므로 전체가 확실히 약해야 한다. */
+  assert.ok(allDamage > 0 && singleDamage > allDamage,
+    `전체(${allDamage})가 단일(${singleDamage})보다 약해야 한다`);
+  assert.equal(raid.PATTERN_EFFECT.ALL_ATTACK_MULTIPLIER, 0.5);
 });
 
 test('반격 자세인 몬스터를 때리면 되받아친다', () => {

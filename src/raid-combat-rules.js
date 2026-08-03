@@ -45,7 +45,7 @@
       chillTurns:Math.max(0, integer(value.chillTurns ?? value.chill ?? value.weakenTurns)),
       poisonTurns:Math.max(0, integer(value.poisonTurns ?? value.poison)),
       poisonDamage:Math.max(0, integer(value.poisonDamage ?? value.poisonDmg)),
-      /* 던전 몬스터의 실명 패턴: 앞으로 이 횟수만큼 공격이 무조건 빗나간다. */
+      /* 던전 몬스터의 실명 패턴: 앞으로 이 횟수만큼 공격이 절반 확률로 빗나간다. */
       blindHits:Math.max(0, integer(value.blindHits ?? value.blind)),
     };
   }
@@ -318,6 +318,7 @@
      전부 이 순수 함수 안에서만 계산한다. */
 
   const DEFAULT_EFFECT = Object.freeze({
+    ALL_ATTACK_MULTIPLIER:0.5,
     POISON_TURNS:2, STUN_TURNS:1, CHILL_TURNS:1, DRAIN_RATIO:1,
     EMPOWER_MULTIPLIER:1.5, COUNTER_RATIO:1, CHARGE_MULTIPLIER:2,
   });
@@ -327,11 +328,14 @@
     return source && typeof source === 'object' ? { ...DEFAULT_EFFECT, ...source } : DEFAULT_EFFECT;
   }
 
-  /* 실명 한 번을 써 버린다. 남아 있었으면 true(=이번 공격은 빗나감). */
-  function consumeBlind(member) {
+  /* 실명 한 번을 써 버린다. 무조건 빗나가면 너무 강해서, 절반의 확률로만
+     빗나가게 한다. 굴림 결과와 상관없이 남은 횟수는 한 칸 줄어든다. */
+  const BLIND_MISS_CHANCE = 0.5;
+
+  function consumeBlind(member, rng) {
     if (!member?.statuses || !(member.statuses.blindHits > 0)) return false;
     member.statuses.blindHits -= 1;
-    return true;
+    return roll(rng) < BLIND_MISS_CHANCE;
   }
 
   /* 패턴 한 칸을 계산에 쓸 모양으로 다듬는다.
@@ -491,7 +495,7 @@
     if (action.id !== BASIC_ACTION && multiplier === 0 && hitCount === 1) return;
     if (action.id !== BASIC_ACTION) member.cooldowns[action.id] = Math.max(0, integer(active.cooldown));
     for (let hitIndex = 0; hitIndex < hitCount && monster.hp > 0; hitIndex += 1) {
-      if (consumeBlind(member)) {
+      if (consumeBlind(member, rng)) {
         events.push(eventBase(member, action, {
           kind:'party-hit', correct:false, hitIndex, missed:true, blinded:true, critical:false,
           damage:0, hpDamage:0, shieldDamage:0, audioId:'miss',
@@ -647,7 +651,7 @@
         maximumRaw = attackRoll.maximumPower * number(hit.attackMultiplier);
       }
       /* 던전 몬스터의 실명 패턴이 걸려 있으면 굴림 없이 그냥 빗나간다. */
-      const blinded = consumeBlind(member);
+      const blinded = consumeBlind(member, rng);
       const missed = blinded || roll(rng) < BASE_MISS_CHANCE;
       if (missed) {
         events.push(eventBase(member, action, {
@@ -940,7 +944,11 @@
     waveTargets.forEach((member) => {
     for (let hitIndex = 0; hitIndex < hitCount; hitIndex += 1) {
       if (member.hp <= 0) break;
-      const focus = plan.kind === 'all' ? 1 : number(raidRules?.SINGLE_TARGET_BONUS, 1.35);
+      /* 전체 공격은 셋을 한꺼번에 때리므로 한 사람이 받는 몫을 낮춘다.
+         단일 공격은 한 명에게 집중되므로 집중 배율을 곱한다. */
+      const focus = plan.kind === 'all'
+        ? Math.max(0, number(effect.ALL_ATTACK_MULTIPLIER, 0.5))
+        : number(raidRules?.SINGLE_TARGET_BONUS, 1.35);
       let incoming = Math.max(1, Math.round(
         Math.max(0, number(monsterAttack))
         * number(raidRules?.MONSTER_DAMAGE_MULTIPLIER, 1)

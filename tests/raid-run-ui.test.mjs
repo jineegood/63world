@@ -518,8 +518,10 @@ test('던전 문제 제한시간은 서버의 30초 deadline을 화면 중앙 �
   assert.match(uiSource, /stopRaidQuestionTimer\(\)/);
 });
 
-test('아군이 쓰러지면 모든 참가자 재생 흐름에서 기존 사망 효과음을 낸다', () => {
-  assert.match(uiSource, /event\.kind === 'member-down'\) call\('playSfx', 'defeat'\)/);
+test('아군이 쓰러지면 모든 참가자 재생 흐름에서 사망 효과음을 낸다', () => {
+  /* 합성 사망음은 낮고 조용해 던전 음악에 묻힌다.
+     등록된 음원이 있으면 그것을 먼저 쓰고, 없으면 기존 합성음으로 떨어진다. */
+  assert.match(uiSource, /event\.kind === 'member-down'\) playAsset\('defeat', 'defeat'\)/);
 });
 
 test('파티 체력창은 앞·가운데·뒤 색을 구분하고 사냥터 보호막 모양을 재사용한다', () => {
