@@ -172,12 +172,13 @@
         100%{opacity:0;transform:scale(1.3)}
       }
       .raid-monster-sprite{display:grid;place-items:center;right:5%;top:104px;width:236px;height:216px}
-      /* 머리 위 체력바 — 캔버스 위쪽에 작게 붙는다 */
+      /* 머리 위 체력창 — 사냥터 .combat-hpbox를 그대로 쓰되 자리만 잡아 준다.
+         사냥터: min-width 230px / padding 10px 12px / radius 16px / 체력바 9px
+         여기  : 폭 168px 로 줄이고 나머지 비율은 그대로 둔다. */
       .raid-ally-hp{position:absolute;left:50%;bottom:100%;transform:translateX(-50%);
-        margin-bottom:2px;width:132px;z-index:6;pointer-events:auto;
-        background:rgba(6,13,24,.9);border:1px solid rgba(255,255,255,.12);
-        border-radius:9px;padding:3px 6px 4px;font-size:11px;line-height:1.25;text-align:center}
-      .raid-ally-hp .hpbar{height:7px;margin:2px 0 1px}
+        margin-bottom:6px;width:168px;min-width:0;z-index:6;
+        padding:7px 9px;border-radius:13px;font-size:12px;line-height:1.3;text-align:center}
+      .raid-ally-hp .hpbar{margin-top:6px}
       /* 내 체력은 한눈에 찾을 수 있게 배경과 테두리를 다르게 준다 */
       .raid-ally-hp.me{border-color:rgba(56,189,248,.85);
         background:linear-gradient(180deg, rgba(14,58,86,.95), rgba(8,25,42,.95));
@@ -196,14 +197,13 @@
       .raid-ally-hp.slot-middle b{color:#fde047}.raid-ally-hp.slot-middle .hpfill{background:#eab308}
       .raid-ally-hp.slot-back b{color:#93c5fd}.raid-ally-hp.slot-back .hpfill{background:#3b82f6}
       .raid-ally-hp.down{opacity:.45}
-      .raid-ally-hp b{font-size:11px;display:inline-block;max-width:88px;overflow:hidden;
-        text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
-      .raid-ally-slot{color:#9fb3cd;margin-left:4px;font-size:10px}
-      .raid-ally-num{font-size:10px;color:#cbd5e1;text-align:center}
-      /* 머리 위라 좁으므로 상태 배지는 한 줄에 모아 작게 */
-      .raid-ally-hp .raid-status-row{justify-content:center;gap:3px;margin-top:2px}
+      .raid-ally-hp b{display:block;font-size:13px;overflow:hidden;
+        text-overflow:ellipsis;white-space:nowrap}
+      .raid-ally-slot{color:#9fb3cd;margin-left:5px;font-size:11px;font-weight:800}
+      .raid-ally-num{font-size:12px;color:#e2e8f0;margin-top:2px}
+      /* 상태 배지는 사냥터와 같은 모양, 좁은 자리라 가운데로 모은다 */
+      .raid-ally-hp .raid-status-row{justify-content:center;gap:4px;margin-top:4px}
       .raid-ally-hp .raid-status-row:empty{display:none}
-      .raid-ally-hp .combat-badge-v38{font-size:9px;padding:1px 5px}
       .raid-combat .combat-hpbox.monster{right:5%;top:auto;bottom:16px;min-width:250px}
       .raid-combat .combat-hpbox.monster{border-color:rgba(251,113,133,.82);
         background:linear-gradient(180deg,rgba(88,24,38,.94),rgba(45,11,21,.95))}
@@ -230,21 +230,14 @@
       .raid-log-name.slot-front{color:#4ade80}.raid-log-name.slot-middle{color:#fde047}
       .raid-log-name.slot-back{color:#60a5fa}.raid-log-name.enemy{color:#fb7185}
 
-      /* 피해 숫자와 피격 연출 — 사냥터 전투와 같은 감각 */
+      /* 피해 숫자는 사냥터의 .combat-floating-damage를 그대로 쓴다.
+         색·글꼴·크기·애니메이션이 style.css 한 곳에서 관리된다.
+         여기서는 던전에만 있는 MISS 표시와 얹을 자리만 더한다. */
       .raid-float-layer{position:absolute;inset:0;pointer-events:none;z-index:12}
-      .raid-float{position:absolute;transform:translate(-50%,0);font-weight:950;
-        font-size:27px;-webkit-text-stroke:.55px rgba(15,23,42,.78);
-        text-shadow:0 2px 7px rgba(0,0,0,.92),0 0 2px currentColor;animation:raidFloatUp 2s ease-out forwards}
-      .raid-float.damage{color:#fb7185}
-      .raid-float.crit{color:#fbbf24;font-size:34px}
-      .raid-float.heal{color:#4ade80}
-      .raid-float.shield{color:#93c5fd}
-      .raid-float.miss{color:#cbd5e1;font-size:20px}
-      @keyframes raidFloatUp{
-        0%{opacity:0;transform:translate(-50%,8px) scale(.7)}
-        18%{opacity:1;transform:translate(-50%,-6px) scale(1.15)}
-        100%{opacity:0;transform:translate(-50%,-56px) scale(1)}
-      }
+      .raid-float-layer .combat-floating-damage{z-index:12}
+      .combat-floating-damage.raid-miss{color:#cbd5e1;font-size:20px;
+        -webkit-text-stroke-color:rgba(15,23,42,.92);
+        text-shadow:0 2px 3px rgba(0,0,0,.95),0 0 8px rgba(100,116,139,.85)}
       .raid-ally-sprite.raid-shake,.raid-monster-sprite.raid-shake{
         animation:raidShake .42s ease-in-out both!important}
       @keyframes raidShake{
@@ -2113,11 +2106,10 @@
     return ['front', 'middle', 'back'].includes(slot) ? `slot-${slot}` : 'slot-middle';
   }
 
+  /* 사냥터와 같은 모양의 보호막 표시. 사냥터는 툴팁 없이 방패와 숫자만 쓴다. */
   function shieldBadgeHtml(amount) {
     const value = Math.max(0, Math.trunc(Number(amount) || 0));
-    return value > 0
-      ? ` <span tabindex="0" class="shield-badge" data-tooltip="${esc(`보호막 ${value}\n피해를 먼저 막아 줍니다.`)}">🛡 ${value}</span>`
-      : '';
+    return value > 0 ? ` <span class="shield-badge">🛡 ${value}</span>` : '';
   }
 
   function statusBadgeHtml(badge) {
@@ -2180,18 +2172,20 @@
     });
   }
 
-  /* 캐릭터 머리 위에 붙는 작은 체력바 하나. */
+  /* 캐릭터 머리 위에 붙는 체력창.
+     차례와 마크업은 사냥터의 .combat-hpbox와 똑같이 맞춘다.
+       이름 → HP 숫자(+보호막) → 상태 배지 → 체력바
+     크기만 머리 위에 얹을 수 있게 줄인다. */
   function allyHpHtml(member) {
     const R = rules();
     const percent = Math.max(0, Math.round((member.hp / member.maxHp) * 100));
     return `
-      <div class="raid-ally-hp ${raidSlotClass(member.slot)} ${member.hp <= 0 ? 'down' : ''} ${isMine(member) ? 'me' : ''}"
+      <div class="combat-hpbox raid-ally-hp ${raidSlotClass(member.slot)} ${member.hp <= 0 ? 'down' : ''} ${isMine(member) ? 'me' : ''}"
            data-member="${esc(member.id)}">
-        <b>${esc(member.name)}${isMine(member) ? ' (나)' : ''}</b>
-        <span class="raid-ally-slot">${esc(R.slotLabel(member.slot))}</span>
-        <div class="hpbar"><div class="hpfill" style="width:${percent}%"></div></div>
-        <div class="raid-ally-num">${member.hp}/${member.maxHp}${shieldBadgeHtml(member.shield)}</div>
+        <b>${esc(member.name)}${isMine(member) ? ' (나)' : ''}<span class="raid-ally-slot">${esc(R.slotLabel(member.slot))}</span></b>
+        <div class="raid-ally-num">HP ${member.hp}/${member.maxHp}${shieldBadgeHtml(member.shield)}</div>
         ${memberStatusHtml(member)}
+        <div class="hpbar"><div class="hpfill" style="width:${percent}%"></div></div>
       </div>`;
   }
 
@@ -2398,6 +2392,14 @@
       monsterShield:Math.max(0, Number(snap.monster.shield) || 0),
       members: Object.fromEntries(snap.members.map((m) => [m.id, m.hp])),
       memberShields:Object.fromEntries(snap.members.map((m) => [m.id, Math.max(0, Number(m.shield) || 0)])),
+      /* 몬스터 상태는 체력처럼 '표시용'을 따로 둔다.
+         기절은 걸린 그 라운드 안에서 몬스터 턴에 바로 소모되기 때문에,
+         최종 상태만 보면 배지가 한 번도 보이지 않는다. 사냥터에서는
+         내 턴과 몬스터 턴이 따로 그려져 그 사이에 보이는 것이다. */
+      monsterStatuses:{
+        stunTurns:Math.max(0, Number(snap.monster.stunTurns) || 0),
+        chillTurns:Math.max(0, Number(snap.monster.chillTurns) || 0),
+      },
     };
   }
 
@@ -2471,11 +2473,12 @@
       <div class="combat-layout raid-combat">
         <div class="combat-stage raid-stage">
           <div id="raidQuestionTimer" class="raid-question-timer" hidden></div>
+          <!-- 사냥터 몬스터 체력창과 같은 차례: 이름 → HP 숫자 → 상태 배지 → 체력바 -->
           <div class="combat-hpbox monster">
             <b>${monster.isBoss ? '👑 ' : ''}Lv.${monster.level} ${esc(monster.name)}</b>
             <div class="raid-hp-text">HP ${monster.hp}/${monster.maxHp}${shieldBadgeHtml(monster.shield)}</div>
-            <div class="hpbar"><div class="hpfill" style="width:${percent}%"></div></div>
             ${monsterStatusHtml(monster)}
+            <div class="hpbar"><div class="hpfill" style="width:${percent}%"></div></div>
             <div class="raid-next-hint ${nextHint.warn ? 'warn' : ''}">
               ${esc(nextHint.text)}
             </div>
@@ -2519,7 +2522,25 @@
 
   /* 일반 전투처럼 피해 숫자를 대상 위에 띄우고 맞은 쪽을 흔든다.
      학생이 자기 몫의 피해를 눈으로 확인할 수 있어야 하기 때문이다. */
-  function floatNumber(anchor, text, kind, offsetY = 0) {
+  /* 피해·회복 숫자는 사냥터의 showCombatFloatingNumberV49와 똑같이 띄운다.
+     같은 클래스(.combat-floating-damage), 같은 서식(-N / +N),
+     같은 자리(대상 한가운데), 같은 시간(1.2초). */
+  const FLOAT_KINDS = ['damage', 'heal', 'shield', 'shield-damage'];
+
+  function floatCombatNumber(anchor, side, amount, kind, critical = false, offsetY = 0) {
+    const value = Math.max(0, Math.floor(Number(amount) || 0));
+    if (!value || !FLOAT_KINDS.includes(kind)) return;
+    floatNode(anchor, side, kind + (critical ? ' critical' : ''),
+      kind === 'damage' || kind === 'shield-damage' ? `-${value}` : `+${value}`, offsetY);
+  }
+
+  /* 빗나감은 사냥터에 없는 표시지만 던전은 셋이 동시에 굴리므로 꼭 필요하다.
+     서식은 같은 글꼴·같은 애니메이션을 쓰고 색만 다르게 둔다. */
+  function floatMiss(anchor, side) {
+    floatNode(anchor, side, 'raid-miss', 'MISS', 0);
+  }
+
+  function floatNode(anchor, side, kindClass, text, offsetY) {
     const layer = global.document.getElementById('raidFloatLayer');
     const stage = global.document.querySelector('.raid-stage');
     if (!layer || !stage || !anchor) return;
@@ -2527,12 +2548,12 @@
     const base = stage.getBoundingClientRect?.();
     if (!box || !base || !box.width) return;
     const node = global.document.createElement('div');
-    node.className = `raid-float ${kind}`;
+    node.className = `combat-floating-damage ${side} ${kindClass}`;
     node.textContent = text;
-    node.style.left = `${box.left - base.left + box.width / 2}px`;
-    node.style.top = `${box.top - base.top + box.height * 0.28 + Number(offsetY || 0)}px`;
+    node.style.left = `${box.left - base.left + box.width * 0.5}px`;
+    node.style.top = `${box.top - base.top + box.height * 0.5 + Number(offsetY || 0)}px`;
     layer.appendChild(node);
-    global.setTimeout(() => { try { node.remove(); } catch (_) {} }, 2000);
+    global.setTimeout(() => { try { node.remove(); } catch (_) {} }, 1200);
   }
 
   function shake(node) {
@@ -2660,12 +2681,12 @@
 
     if (event.kind === 'party-hit') {
       playPartyAttackFx(event);
-      if (event.missed) floatNumber(monsterNode, 'MISS', 'miss');
+      if (event.missed) floatMiss(monsterNode, 'monster');
       else {
         const shieldDamage = Number(event.shieldDamage) || 0;
         const hpDamage = Number(event.hpDamage ?? event.damage) || 0;
-        if (shieldDamage > 0) floatNumber(monsterNode, `🛡 -${shieldDamage}`, 'shield', hpDamage > 0 ? -18 : 0);
-        if (hpDamage > 0) floatNumber(monsterNode, `-${hpDamage}`, event.critical ? 'crit' : 'damage', shieldDamage > 0 ? 18 : 0);
+        if (shieldDamage > 0) floatCombatNumber(monsterNode, 'monster', shieldDamage, 'shield-damage', false, hpDamage > 0 ? -22 : 0);
+        if (hpDamage > 0) floatCombatNumber(monsterNode, 'monster', hpDamage, 'damage', event.critical, shieldDamage > 0 ? 22 : 0);
         shake(monsterNode);
       }
       // 명중 여부와 관계없이 공격을 시도한 사람은 앞으로 나갔다 돌아온다.
@@ -2676,11 +2697,11 @@
 
     /* 몬스터 쪽 회복·보호막 (흡혈, 긴급 보수, 철갑 방벽 …) */
     if (event.kind === 'monster-heal') {
-      if (Number(event.amount) > 0) floatNumber(monsterNode, `+${event.amount}`, 'heal');
+      floatCombatNumber(monsterNode, 'monster', event.amount, 'heal');
       return;
     }
     if (event.kind === 'monster-shield') {
-      floatNumber(monsterNode, `🛡 +${event.amount}`, 'shield');
+      floatCombatNumber(monsterNode, 'monster', event.amount, 'shield');
       return;
     }
 
@@ -2689,8 +2710,8 @@
       const target = memberSpriteNode(event.memberId);
       const shieldDamage = Number(event.shieldDamage) || 0;
       const hpDamage = Number(event.hpDamage ?? event.damage) || 0;
-      if (shieldDamage > 0) floatNumber(target, `🛡 -${shieldDamage}`, 'shield', hpDamage > 0 ? -18 : 0);
-      if (hpDamage > 0) floatNumber(target, `-${hpDamage}`, 'damage', shieldDamage > 0 ? 18 : 0);
+      if (shieldDamage > 0) floatCombatNumber(target, 'player', shieldDamage, 'shield-damage', false, hpDamage > 0 ? -22 : 0);
+      if (hpDamage > 0) floatCombatNumber(target, 'player', hpDamage, 'damage', false, shieldDamage > 0 ? 22 : 0);
       shake(target);
       if (event.kind === 'monster-counter') lunge(monsterNode, 'monster');
       return;
@@ -2699,43 +2720,43 @@
     if (event.kind === 'monster-hit') {
       const target = memberSpriteNode(event.memberId);
       playMonsterAttackFx(event, active?.snapshot?.().monster);
-      if (event.missed) { floatNumber(target, 'MISS', 'miss'); return; }
+      if (event.missed) { floatMiss(target, 'player'); return; }
       const shieldDamage = Number(event.shieldDamage) || 0;
       const hpDamage = Number(event.hpDamage ?? event.damage) || 0;
-      if (shieldDamage > 0) floatNumber(target, `🛡 -${shieldDamage}`, 'shield', hpDamage > 0 ? -18 : 0);
-      if (hpDamage > 0) floatNumber(target, `-${hpDamage}`, event.critical ? 'crit' : 'damage', shieldDamage > 0 ? 18 : 0);
+      if (shieldDamage > 0) floatCombatNumber(target, 'player', shieldDamage, 'shield-damage', false, hpDamage > 0 ? -22 : 0);
+      if (hpDamage > 0) floatCombatNumber(target, 'player', hpDamage, 'damage', event.critical, shieldDamage > 0 ? 22 : 0);
       shake(target);
       return;
     }
 
     if (event.kind === 'party-heal') {
-      floatNumber(memberSpriteNode(event.targetMemberId || event.memberId), `+${event.amount}`, 'heal');
+      floatCombatNumber(memberSpriteNode(event.targetMemberId || event.memberId), 'player', event.amount, 'heal');
       return;
     }
 
     if (event.kind === 'party-shield') {
-      floatNumber(memberSpriteNode(event.targetMemberId || event.memberId), `🛡 +${event.amount}`, 'shield');
+      floatCombatNumber(memberSpriteNode(event.targetMemberId || event.memberId), 'player', event.amount, 'shield');
       return;
     }
 
     if (event.kind === 'party-buff' && Number(event.heal) > 0) {
-      floatNumber(memberSpriteNode(event.memberId), `+${event.heal}`, 'heal');
+      floatCombatNumber(memberSpriteNode(event.memberId), 'player', event.heal, 'heal');
       return;
     }
 
     if (event.kind === 'member-revive') {
-      floatNumber(memberSpriteNode(event.memberId), `부활 +${event.amount}`, 'heal');
+      floatCombatNumber(memberSpriteNode(event.memberId), 'player', event.amount, 'heal');
       return;
     }
 
     if (['monster-dot', 'party-retaliation'].includes(event.kind)) {
       const damage = Number(event.totalDamage ?? event.hpDamage ?? event.amount) || 0;
       if (damage > 0) {
-        floatNumber(monsterNode, `-${damage}`, event.critical ? 'crit' : 'damage');
+        floatCombatNumber(monsterNode, 'monster', damage, 'damage', event.critical);
         shake(monsterNode);
       }
       if (Number(event.heal) > 0 && event.targetMemberId) {
-        floatNumber(memberSpriteNode(event.targetMemberId), `+${event.heal}`, 'heal', 18);
+        floatCombatNumber(memberSpriteNode(event.targetMemberId), 'player', event.heal, 'heal', false, 22);
       }
       return;
     }
@@ -2803,6 +2824,17 @@
     } else if (event.kind === 'member-revive') {
       view.members[event.memberId] = Math.max(1, Number(event.memberHp ?? event.amount) || 1);
     }
+
+    /* 몬스터 상태 배지도 로그 한 줄에 맞춰 켜고 끈다.
+       기절이 걸린 줄에서 배지가 켜지고, 몬스터가 건너뛰는 줄에서 꺼진다. */
+    const statuses = view.monsterStatuses || (view.monsterStatuses = {});
+    if (event.kind === 'monster-status') {
+      const turns = Math.max(1, Number(event.turns) || 1);
+      if (event.status === 'stun') statuses.stunTurns = Math.max(statuses.stunTurns || 0, turns);
+      if (event.status === 'chill') statuses.chillTurns = Math.max(statuses.chillTurns || 0, turns);
+    } else if (event.kind === 'monster-skip' && event.status === 'stun') {
+      statuses.stunTurns = Math.max(0, (statuses.stunTurns || 0) - 1);
+    }
   }
 
   /* 재생 중에는 창을 다시 열지 않고 바뀐 곳만 고친다.
@@ -2850,16 +2882,23 @@
        기술을 계속 "다음은 B"라고 알려 주고 있었다. */
     const hintNode = doc.querySelector('.raid-next-hint');
     if (hintNode) {
-      const hint = nextPlanHint(snap.monster, rules().attackPlanForRound(
-        snap.monster, snap.round, snap.patternSeed,
-      ));
+      const hint = nextPlanHint(
+        { ...snap.monster, ...(view.monsterStatuses || {}) },
+        rules().attackPlanForRound(snap.monster, snap.round, snap.patternSeed),
+      );
       hintNode.textContent = hint.text;
       hintNode.classList.toggle('warn', !!hint.warn);
     }
 
-    // 몬스터 상태 배지(기절·강화·예고 …)도 함께 갱신한다.
+    /* 몬스터 상태 배지(기절·냉기·강화·예고 …).
+       기절·냉기는 표시용 값을 얹어 로그가 흐르는 동안 실제로 보이게 한다. */
     const statusNode = doc.getElementById('raidMonsterStatuses');
-    if (statusNode) statusNode.innerHTML = monsterStatusBadgesHtml(snap.monster);
+    if (statusNode) {
+      statusNode.innerHTML = monsterStatusBadgesHtml({
+        ...snap.monster,
+        ...(view.monsterStatuses || {}),
+      });
+    }
 
     // 쓰러진 몬스터는 사냥터처럼 어두워지며 사라진다.
     const monsterSprite = doc.querySelector('.raid-monster-sprite');

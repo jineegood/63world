@@ -404,10 +404,14 @@ test('던전 전투 규칙은 기절·더블 어택·힐·보호막·쿨타임�
   assert.match(combatSource, /member\.cooldowns\[action\.id\]/);
   assert.match(uiSource, /class="combat-badge-v38 \$\{esc\(badge\.key\)\}" data-tooltip=/);
   assert.match(uiSource, /buildStatusBadges/);
-  /* 몬스터 상태 배지는 스냅샷을 보고 통째로 다시 그린다.
-     (배지 하나만 덮어쓰면 기절과 강화가 서로를 지운다.) */
-  assert.match(uiSource, /statusNode\.innerHTML = monsterStatusBadgesHtml\(snap\.monster\)/);
+  /* 몬스터 상태 배지는 스냅샷 + 표시용 상태를 합쳐 통째로 다시 그린다.
+     기절은 걸린 라운드 안에서 몬스터 턴에 바로 소모되므로, 최종 상태만
+     보면 배지가 한 번도 보이지 않는다. 그래서 체력처럼 로그 한 줄마다
+     표시용 값을 켜고 끈다. */
+  assert.match(uiSource, /statusNode\.innerHTML = monsterStatusBadgesHtml\(\{\s*\n\s*\.\.\.snap\.monster,\s*\n\s*\.\.\.\(view\.monsterStatuses \|\| \{\}\),/);
   assert.match(uiSource, /function monsterStatusBadgesHtml\(monster\)/);
+  assert.match(uiSource, /if \(event\.status === 'stun'\) statuses\.stunTurns = Math\.max/);
+  assert.match(uiSource, /event\.kind === 'monster-skip' && event\.status === 'stun'/);
   assert.match(uiSource, /event\.kind === 'party-heal'/);
   assert.match(uiSource, /event\.kind === 'party-shield'/);
 });
@@ -466,7 +470,8 @@ test('몬스터와 세 캐릭터의 체력·보호막·상태를 전투 로그 �
   assert.match(uiSource, /function raidMessageHtml\(value\)/);
   assert.match(uiSource, /raid-log-name \$\{raidSlotClass\(member\.slot\)\}/);
   assert.match(uiSource, /raid-log-name enemy/);
-  assert.match(uiSource, /class="shield-badge" data-tooltip=/);
+  // 보호막 표시는 사냥터와 완전히 같은 모양이다(툴팁 없이 방패와 숫자만).
+  assert.match(uiSource, /return value > 0 \? ` <span class="shield-badge">🛡 \$\{value\}<\/span>` : '';/);
   assert.match(uiSource, /panelMessage = event\.text \|\| ''/);
   assert.match(uiSource, /function applyEventToView\(event\)/);
   assert.match(uiSource, /view\.monsterShield = Math\.max/);
@@ -496,6 +501,30 @@ test('파티 체력창은 앞·가운데·뒤 색을 구분하고 사냥터 보�
   assert.match(uiSource, /\.raid-ally-hp\.slot-middle/);
   assert.match(uiSource, /\.raid-ally-hp\.slot-back/);
   assert.match(uiSource, /class="shield-badge"/);
+});
+
+test('체력창과 피해 숫자는 사냥터와 같은 모양·차례를 쓴다', () => {
+  /* 사냥터 .combat-hpbox 차례: 이름 → HP 숫자(+보호막) → 상태 배지 → 체력바.
+     던전도 같은 클래스와 같은 차례를 써야 서식이 어긋나지 않는다. */
+  assert.match(uiSource, /class="combat-hpbox raid-ally-hp/);
+  const allyBox = uiSource.match(/function allyHpHtml\(member\)[\s\S]*?\n  \}/)?.[0] || '';
+  assert.notEqual(allyBox, '');
+  const order = ['<b>', 'raid-ally-num', 'memberStatusHtml(member)', 'class="hpbar"']
+    .map((token) => allyBox.indexOf(token));
+  assert.ok(order.every((at, index) => at > 0 && (index === 0 || at > order[index - 1])),
+    `사냥터와 같은 차례여야 한다: ${order.join(',')}`);
+
+  // 몬스터 체력창도 배지가 체력바보다 위에 온다.
+  const monsterBox = uiSource.match(/<div class="combat-hpbox monster">[\s\S]*?<\/div>\s*<!--|<div class="combat-hpbox monster">[\s\S]*?raid-next-hint/)?.[0] || '';
+  assert.ok(monsterBox.indexOf('monsterStatusHtml(monster)') < monsterBox.indexOf('class="hpbar"'));
+
+  /* 피해 숫자도 사냥터와 같은 클래스·서식을 쓴다. 던전 전용 숫자 서식은 없앤다. */
+  assert.match(uiSource, /node\.className = `combat-floating-damage \$\{side\} \$\{kindClass\}`/);
+  assert.match(uiSource, /kind === 'damage' \|\| kind === 'shield-damage' \? `-\$\{value\}` : `\+\$\{value\}`/);
+  assert.doesNotMatch(uiSource, /\.raid-float\{/, '던전 전용 숫자 서식이 남아 있으면 안 된다');
+  assert.doesNotMatch(uiSource, /🛡 -\$\{shieldDamage\}/, '보호막 피해도 사냥터처럼 숫자만 띄운다');
+  // 보호막 피해는 사냥터와 같은 shield-damage 색을 쓴다.
+  assert.match(uiSource, /'shield-damage'/);
 });
 
 test('사냥터 전투 로그도 내 이름과 몬스터 이름을 초록·빨강으로 구분한다', () => {
