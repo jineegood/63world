@@ -16,6 +16,13 @@ const PUBLIC_CODES = new Set([
   'ROUND_CLOSED',
   'JOIN_RATE_LIMIT',
   'TEMPORARY_UNAVAILABLE',
+  /* 문제 발급이 막힌 이유를 구분해 준다.
+     예전에는 전부 INVALID_REQUEST 하나여서 원인을 좁힐 수 없었다. */
+  'QUESTION_INVALID',
+  'ANSWER_INVALID',
+  'QUESTION_COUNT',
+  'ANSWER_COUNT',
+  'MEMBER_MISMATCH',
 ]);
 
 const TRANSIENT_CODES = new Set([

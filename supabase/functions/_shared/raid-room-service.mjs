@@ -50,7 +50,7 @@ function afterSequence(value) {
 
 function normalizeQuestionPublic(raw) {
   const source = object(raw);
-  if (!source) failRaidRoom('INVALID_REQUEST');
+  if (!source) failRaidRoom('QUESTION_INVALID');
   const byUser = object(source.byUser);
   if (byUser) {
     const normalized = {};
@@ -58,11 +58,12 @@ function normalizeQuestionPublic(raw) {
       const userId = text(rawUserId, 100);
       if (userId) normalized[userId] = normalizeQuestionPublic(rawQuestion);
     }
-    if (Object.keys(normalized).length !== 3) failRaidRoom('INVALID_REQUEST');
+    /* 셋 몫이 정확히 채워져야 한다. 학생 id가 겹치거나 비어 있으면 여기서 걸린다. */
+    if (Object.keys(normalized).length !== 3) failRaidRoom('QUESTION_COUNT');
     return { byUser:normalized };
   }
   const prompt = text(source.prompt || source.q || source.question, MAX_QUESTION);
-  if (!prompt) failRaidRoom('INVALID_REQUEST');
+  if (!prompt) failRaidRoom('QUESTION_INVALID');
   const choices = Array.isArray(source.choices)
     ? source.choices.slice(0, 8).map((choice) => text(choice)).filter(Boolean)
     : [];
@@ -276,7 +277,7 @@ export function createRaidRoomService({ store, now = Date.now } = {}) {
       case 'beginRound': {
         const id = roomId(body.roomId);
         const answerKey = text(body.answerKey, 2048);
-        if (!answerKey) failRaidRoom('INVALID_REQUEST');
+        if (!answerKey) failRaidRoom('ANSWER_INVALID');
         await store.beginRound({
           roomId:id,
           userId,

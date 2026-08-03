@@ -1062,6 +1062,32 @@
     return true;
   }
 
+  /* 서버로 보낼 문제 꾸러미를 미리 검사한다.
+     문제가 없으면 사람이 읽을 수 있는 이유를, 멀쩡하면 null을 돌려준다.
+     서버의 검사 조건(세 명 / 각자 몫의 문제·정답)과 같은 것을 본다. */
+  function describeRoundPayloadProblem(members, questionByUser, answerByUser) {
+    const ids = members.map((member) => String(member.id || ''));
+    if (ids.some((id) => !id)) return '학생 정보를 읽지 못했습니다. 방을 다시 만들어 주세요.';
+    if (new Set(ids).size !== ids.length) {
+      return '같은 학생이 두 번 들어와 있습니다. 방을 다시 만들어 주세요.';
+    }
+    const noQuestion = ids.filter((id) => !String(questionByUser[id]?.prompt || '').trim());
+    if (noQuestion.length) {
+      const who = noQuestion
+        .map((id) => members.find((member) => String(member.id) === id)?.name || '학생')
+        .join(', ');
+      return `${who} 몫의 문제를 만들지 못했습니다. 선생님이 문제집을 확인해 주세요.`;
+    }
+    const noAnswer = ids.filter((id) => !String(answerByUser[id] ?? '').trim());
+    if (noAnswer.length) {
+      const who = noAnswer
+        .map((id) => members.find((member) => String(member.id) === id)?.name || '학생')
+        .join(', ');
+      return `${who} 몫의 문제에 정답이 비어 있습니다. 선생님이 문제집에서 정답을 채워 주세요.`;
+    }
+    return null;
+  }
+
   async function beginNetworkRound() {
     const session = networkSession;
     if (!session || !isNetworkHost() || !active || active.phase !== 'battle') return;
@@ -1085,6 +1111,20 @@
       const answerByUser = Object.fromEntries(members.map((member, index) => [
         String(member.id), String(selected[index]?.answer ?? ''),
       ]));
+
+      /* 보내기 전에 서버와 같은 조건을 그대로 확인한다.
+         서버가 거절하면 "요청이 올바르지 않습니다"만 뜨고 끝이라, 무엇이
+         비었는지 여기서 먼저 집어 준다. 선생님이 바로 고칠 수 있어야 한다. */
+      const problem = describeRoundPayloadProblem(members, questionByUser, answerByUser);
+      if (problem) {
+        session.beginningRound = false;
+        busy = false;
+        panelMode = 'playing';
+        panelMessage = problem;
+        renderBattle();
+        return;
+      }
+
       const nextRound = Math.max(1, Number(session.room.round) + 1);
       session.answerKeys = session.answerKeys || {};
       session.answerKeys[nextRound] = answerByUser;

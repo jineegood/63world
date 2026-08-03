@@ -323,3 +323,35 @@ test('backend error mapping hides raw database details', async () => {
   assert.equal(publicRaidRoomErrorCode({ code:'PGRST002', message:'schema cache' }), 'TEMPORARY_UNAVAILABLE');
   assert.equal(publicRaidRoomErrorCode({ code:'23505', message:'sensitive row detail' }), 'SERVER_ERROR');
 });
+
+test('문제 발급이 막히면 이유마다 다른 코드를 돌려준다', async () => {
+  const { RaidRoomValidation } = await import(serviceUrl.href);
+  const q = (prompt) => ({ id:'q', prompt, choices:['1','2'] });
+
+  // 문제 꾸러미 자체가 없거나 모양이 틀린 경우
+  assert.throws(
+    () => RaidRoomValidation.normalizeQuestionPublic(null),
+    (error) => error.code === 'QUESTION_INVALID',
+  );
+  // 문제 글이 비어 있는 경우 — 선생님이 문제집을 고쳐야 한다
+  assert.throws(
+    () => RaidRoomValidation.normalizeQuestionPublic({ byUser:{ a:q(''), b:q('B'), c:q('C') } }),
+    (error) => error.code === 'QUESTION_INVALID',
+  );
+  // 셋 몫이 채워지지 않은 경우
+  assert.throws(
+    () => RaidRoomValidation.normalizeQuestionPublic({ byUser:{ a:q('A'), b:q('B') } }),
+    (error) => error.code === 'QUESTION_COUNT',
+  );
+  // 멀쩡하면 셋 몫이 그대로 나온다
+  const ok = RaidRoomValidation.normalizeQuestionPublic({ byUser:{ a:q('A'), b:q('B'), c:q('C') } });
+  assert.deepEqual(Object.keys(ok.byUser), ['a', 'b', 'c']);
+  assert.equal(ok.byUser.a.prompt, 'A');
+});
+
+test('새 이유 코드들도 학생에게 보여 줄 수 있는 공개 코드다', async () => {
+  const { publicRaidRoomErrorCode } = await import(errorUrl.href);
+  for (const code of ['QUESTION_INVALID', 'ANSWER_INVALID', 'QUESTION_COUNT', 'ANSWER_COUNT', 'MEMBER_MISMATCH']) {
+    assert.equal(publicRaidRoomErrorCode({ code:'P0001', message:code }), code, code);
+  }
+});
