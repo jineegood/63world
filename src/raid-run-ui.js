@@ -153,17 +153,31 @@
         flex:1;display:flex;align-items:center;justify-content:center;text-align:center}
       /* 전투 — 일반 전투 무대를 그대로 쓰고 왼쪽에 세 명이 선다.
          체력창은 무대 위쪽에 가로로 놓아 캐릭터를 가리지 않게 한다. */
-      .raid-stage{min-height:440px}
-      .raid-ally-sprite{width:150px;height:164px}
-      .raid-ally-0{bottom:16px;left:31%;z-index:4}
-      .raid-ally-1{bottom:78px;left:18%;z-index:3}
-      .raid-ally-2{bottom:140px;left:5%;z-index:2}
+      .raid-stage{min-height:470px}
+      /* 세 명은 서로 겹치지 않게 넉넉히 벌려 세운다.
+         각자 머리 위에 자기 체력바를 달고 있어 누가 위험한지 바로 보인다. */
+      .raid-ally-sprite{width:150px;height:164px;overflow:visible}
+      .raid-ally-0{bottom:10px;left:34%;z-index:4}
+      .raid-ally-1{bottom:96px;left:18%;z-index:3}
+      .raid-ally-2{bottom:182px;left:2%;z-index:2}
       .raid-ally-sprite.down{opacity:.35;filter:grayscale(.8)}
+      /* 전체 공격이 덮칠 때 각자 자리에 이는 충격파 */
+      .raid-ally-sprite.raid-storm-hit::after{content:'';position:absolute;inset:-14px 2px 6px;
+        border-radius:50%;pointer-events:none;z-index:5;
+        background:radial-gradient(circle,rgba(248,113,113,.42),rgba(248,113,113,0) 68%);
+        animation:raidStormHit .5s ease-out forwards}
+      @keyframes raidStormHit{
+        0%{opacity:0;transform:scale(.55)}
+        35%{opacity:1;transform:scale(1.06)}
+        100%{opacity:0;transform:scale(1.3)}
+      }
       .raid-monster-sprite{display:grid;place-items:center;right:5%;top:104px;width:236px;height:216px}
-      .raid-party-hp{position:absolute;left:10px;right:10px;top:10px;z-index:9;
-        display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-      .raid-ally-hp{background:rgba(6,13,24,.88);border:1px solid rgba(255,255,255,.10);
-        border-radius:12px;padding:5px 9px;font-size:12px}
+      /* 머리 위 체력바 — 캔버스 위쪽에 작게 붙는다 */
+      .raid-ally-hp{position:absolute;left:50%;bottom:100%;transform:translateX(-50%);
+        margin-bottom:2px;width:132px;z-index:6;pointer-events:auto;
+        background:rgba(6,13,24,.9);border:1px solid rgba(255,255,255,.12);
+        border-radius:9px;padding:3px 6px 4px;font-size:11px;line-height:1.25;text-align:center}
+      .raid-ally-hp .hpbar{height:7px;margin:2px 0 1px}
       /* 내 체력은 한눈에 찾을 수 있게 배경과 테두리를 다르게 준다 */
       .raid-ally-hp.me{border-color:rgba(56,189,248,.85);
         background:linear-gradient(180deg, rgba(14,58,86,.95), rgba(8,25,42,.95));
@@ -182,8 +196,14 @@
       .raid-ally-hp.slot-middle b{color:#fde047}.raid-ally-hp.slot-middle .hpfill{background:#eab308}
       .raid-ally-hp.slot-back b{color:#93c5fd}.raid-ally-hp.slot-back .hpfill{background:#3b82f6}
       .raid-ally-hp.down{opacity:.45}
-      .raid-ally-slot{color:#9fb3cd;margin-left:5px;font-size:11px}
-      .raid-ally-num{font-size:11px;color:#cbd5e1;text-align:right}
+      .raid-ally-hp b{font-size:11px;display:inline-block;max-width:88px;overflow:hidden;
+        text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
+      .raid-ally-slot{color:#9fb3cd;margin-left:4px;font-size:10px}
+      .raid-ally-num{font-size:10px;color:#cbd5e1;text-align:center}
+      /* 머리 위라 좁으므로 상태 배지는 한 줄에 모아 작게 */
+      .raid-ally-hp .raid-status-row{justify-content:center;gap:3px;margin-top:2px}
+      .raid-ally-hp .raid-status-row:empty{display:none}
+      .raid-ally-hp .combat-badge-v38{font-size:9px;padding:1px 5px}
       .raid-combat .combat-hpbox.monster{right:5%;top:auto;bottom:16px;min-width:250px}
       .raid-combat .combat-hpbox.monster{border-color:rgba(251,113,133,.82);
         background:linear-gradient(180deg,rgba(88,24,38,.94),rgba(45,11,21,.95))}
@@ -2080,9 +2100,11 @@
     return [...members]
       .sort((a, b) => (order[a.slot] ?? 1) - (order[b.slot] ?? 1))
       /* combat-idle / combat-idle-player 는 사냥터 전투가 쓰는 클래스다.
-         이걸 붙여야 캐릭터가 가만히 있을 때도 살짝살짝 움직인다. */
+         이걸 붙여야 캐릭터가 가만히 있을 때도 살짝살짝 움직인다.
+         체력바는 각자의 머리 위에 함께 붙인다. */
       .map((member, index) => `
         <div class="combat-sprite combat-idle combat-idle-player raid-ally-sprite raid-ally-${index} ${member.hp <= 0 ? 'down' : ''}">
+          ${allyHpHtml(member)}
           <canvas class="raid-battle-face" data-member="${esc(member.id)}" width="132" height="172"></canvas>
         </div>`).join('');
   }
@@ -2158,25 +2180,19 @@
     });
   }
 
-  function partyHpHtml(members) {
+  /* 캐릭터 머리 위에 붙는 작은 체력바 하나. */
+  function allyHpHtml(member) {
     const R = rules();
-    /* 체력창은 캐릭터가 서 있는 순서와 같아야 헷갈리지 않는다.
-       왼쪽부터 뒤 → 가운데 → 앞. */
-    const order = { back:0, middle:1, front:2 };
-    return [...members]
-      .sort((a, b) => (order[a.slot] ?? 1) - (order[b.slot] ?? 1))
-      .map((member) => {
-        const percent = Math.max(0, Math.round((member.hp / member.maxHp) * 100));
-        return `
-          <div class="raid-ally-hp ${raidSlotClass(member.slot)} ${member.hp <= 0 ? 'down' : ''} ${isMine(member) ? 'me' : ''}"
-               data-member="${esc(member.id)}">
-            <b>${esc(member.name)}${isMine(member) ? ' (나)' : ''}</b>
-            <span class="raid-ally-slot">${esc(R.slotLabel(member.slot))}</span>
-            <div class="hpbar"><div class="hpfill" style="width:${percent}%"></div></div>
-            <div class="raid-ally-num">${member.hp}/${member.maxHp}${shieldBadgeHtml(member.shield)}</div>
-            ${memberStatusHtml(member)}
-          </div>`;
-      }).join('');
+    const percent = Math.max(0, Math.round((member.hp / member.maxHp) * 100));
+    return `
+      <div class="raid-ally-hp ${raidSlotClass(member.slot)} ${member.hp <= 0 ? 'down' : ''} ${isMine(member) ? 'me' : ''}"
+           data-member="${esc(member.id)}">
+        <b>${esc(member.name)}${isMine(member) ? ' (나)' : ''}</b>
+        <span class="raid-ally-slot">${esc(R.slotLabel(member.slot))}</span>
+        <div class="hpbar"><div class="hpfill" style="width:${percent}%"></div></div>
+        <div class="raid-ally-num">${member.hp}/${member.maxHp}${shieldBadgeHtml(member.shield)}</div>
+        ${memberStatusHtml(member)}
+      </div>`;
   }
 
   function memberStatusHtml(member) {
@@ -2188,6 +2204,12 @@
   }
 
   function monsterStatusHtml(monster) {
+    return `<div id="raidMonsterStatuses" class="combat-badges-v38 raid-status-row">${
+      monsterStatusBadgesHtml(monster)
+    }</div>`;
+  }
+
+  function monsterStatusBadgesHtml(monster) {
     const badges = commonStatusBadges({
       ...(monster?.statuses || {}),
       stunTurns:Number(monster?.stunTurns || monster?.statuses?.stunTurns) || 0,
@@ -2207,7 +2229,7 @@
       key:'charge', label:'예고',
       tooltip:`다음 턴에 ${monster.chargedPlanName}을(를) 두 배 피해로 사용합니다.`,
     });
-    return `<div id="raidMonsterStatuses" class="combat-badges-v38 raid-status-row">${badges.map(statusBadgeHtml).join('')}</div>`;
+    return badges.map(statusBadgeHtml).join('');
   }
 
   /* ---------- 아래 패널: 일반 전투와 같은 3단계 ----------
@@ -2384,6 +2406,12 @@
   const SLOT_WORD = { front:'앞', middle:'가운데', back:'뒤' };
 
   function nextPlanHint(monster, plan) {
+    /* 기절한 몬스터는 다음 턴을 통째로 건너뛴다. 예정돼 있던 기술도 취소되고
+       그 다음 턴에는 새로 뽑는다. 그러니 기술 이름을 보여 주면 거짓말이 된다. */
+    const stun = Math.max(0, Number(monster?.stunTurns) || 0);
+    if (stun > 0) {
+      return { warn:false, text:`기절 ${stun}턴 — 다음 턴은 쉽니다` };
+    }
     if (monster?.chargedPlanName) {
       return { warn:true, text:`⚠ 다음은 ${monster.chargedPlanName} — 두 배 피해!` };
     }
@@ -2452,7 +2480,6 @@
               ${esc(nextHint.text)}
             </div>
           </div>
-          <div class="raid-party-hp">${partyHpHtml(members)}</div>
           ${partySpriteHtml(members)}
           <div class="combat-sprite combat-idle combat-idle-monster combat-monster raid-monster-sprite ${monster.isBoss ? 'boss' : ''}">
             <canvas id="raidMonsterCanvas" width="230" height="210"></canvas>
@@ -2542,23 +2569,83 @@
     }, role === 'monster' ? 640 : 580);
   }
 
+  /* ---------- 투사체·타격 연출 ----------
+
+     사냥터 전투가 쓰는 YuksamCombatFx를 그대로 빌려 쓴다. 그쪽 엔진은
+     무대에서 `.combat-player` 하나와 `.combat-monster` 하나를 찾아
+     그 사이로 투사체를 날린다. 던전은 사람이 셋이라 `.combat-player`가
+     고정돼 있지 않으므로, 이번 연출에 관계된 사람에게만 잠깐 그 표를
+     붙였다가 뗀다. 그러면 마법사 화염구·사제 신성탄이 사냥터와 똑같이
+     그 캐릭터에게서 몬스터로 날아간다. */
+  const FX_ANCHOR_MS = 1100;
+
+  function withFxAnchor(memberId, run) {
+    const doc = global.document;
+    const node = memberSpriteNode(memberId);
+    if (!node || !doc) return;
+    /* 겹치면 엉뚱한 사람에게서 날아가므로 먼저 다른 표를 모두 뗀다. */
+    doc.querySelectorAll('.raid-ally-sprite.combat-player')
+      .forEach((other) => other.classList.remove('combat-player'));
+    node.classList.add('combat-player');
+    try { run(); } catch (_) {}
+    global.setTimeout(() => {
+      try { node.classList.remove('combat-player'); } catch (_) {}
+    }, FX_ANCHOR_MS);
+  }
+
+  function skillDefFor(skillId) {
+    return global.YuksamData?.SKILL_DEFS?.[skillId] || null;
+  }
+
+  /* 파티원 한 명이 때릴 때의 연출. 스킬이면 그 스킬 고유 연출, 아니면 직업 기본 공격. */
+  function playPartyAttackFx(event) {
+    const fx = global.YuksamCombatFx;
+    if (!fx || event.missed) return;
+    const member = active?.snapshot?.().members?.find((entry) => entry.id === event.memberId);
+    const skillId = event.skillId;
+    const profile = skillId
+      ? { ...fx.getSkillFxProfile(skillId, skillDefFor(skillId)), source:'player', target:'monster' }
+      : fx.getBasicAttackFxProfile(member?.klass || 'warrior');
+    withFxAnchor(event.memberId, () => fx.playPlayerActionFx(profile));
+  }
+
+  /* 몬스터가 한 명을 때릴 때의 연출. 맞는 사람 쪽으로 날아간다. */
+  function playMonsterAttackFx(event, monster) {
+    const fx = global.YuksamCombatFx;
+    if (!fx) return;
+    const profile = fx.getMonsterHitFxProfile(
+      { type:monster?.id || 'monster', level:monster?.level },
+      null,
+    );
+    if (!profile) return;
+    withFxAnchor(event.memberId, () => fx.playMonsterActionFx({ ...profile, target:'player' }));
+  }
+
+  /* 전체 공격(폭풍·파동)은 세 명 자리에 차례로 충격파가 인다.
+     한 명씩 때리는 연출과 구분돼야 "전체 공격이 왔다"가 눈에 들어온다. */
+  function playPartyWideStorm() {
+    const doc = global.document;
+    const stage = doc?.querySelector('.raid-stage');
+    if (!stage) return;
+    doc.querySelectorAll('.raid-ally-sprite').forEach((node, index) => {
+      global.setTimeout(() => {
+        if (!node.isConnected) return;
+        node.classList.remove('raid-storm-hit');
+        void (node.offsetWidth);
+        node.classList.add('raid-storm-hit');
+        global.setTimeout(() => {
+          try { node.classList.remove('raid-storm-hit'); } catch (_) {}
+        }, 520);
+      }, index * 110);
+    });
+  }
+
   function showEventEffect(event) {
     if (!event) return;
     const monsterNode = global.document.querySelector('.raid-monster-sprite');
 
-    if (event.kind === 'monster-status') {
-      const statusNode = global.document.getElementById('raidMonsterStatuses');
-      if (statusNode) {
-        const badge = event.status === 'stun'
-          ? { key:'stun', label:`기절 ${Math.max(1, Number(event.turns) || 1)}`, tooltip:`행동할 수 없습니다. 남은 ${Math.max(1, Number(event.turns) || 1)}턴` }
-          : event.status === 'chill'
-            ? { key:'chill', label:`냉기 ${Math.max(1, Number(event.turns) || 1)}`, tooltip:'다음 공격 데미지가 50% 감소합니다.' }
-            : event.status === 'shadow'
-              ? { key:'shadow', label:`암흑 ${Math.max(1, Number(event.totalStacks) || 1)}`, tooltip:'누적되는 지속 데미지로 턴이 끝날 때 피해를 줍니다.' }
-              : null;
-        if (badge) statusNode.innerHTML = statusBadgeHtml(badge);
-      }
-    }
+    /* 몬스터 상태 배지는 updateBattleView가 스냅샷을 보고 통째로 다시 그린다.
+       (예전에는 여기서 배지 하나로 덮어써서 기절·강화가 서로를 지웠다.) */
 
     // 치명타는 무대 전체가 번쩍인다(사냥터 전투와 같다).
     if (event.critical && !event.missed) {
@@ -2572,6 +2659,7 @@
     }
 
     if (event.kind === 'party-hit') {
+      playPartyAttackFx(event);
       if (event.missed) floatNumber(monsterNode, 'MISS', 'miss');
       else {
         const shieldDamage = Number(event.shieldDamage) || 0;
@@ -2610,6 +2698,7 @@
 
     if (event.kind === 'monster-hit') {
       const target = memberSpriteNode(event.memberId);
+      playMonsterAttackFx(event, active?.snapshot?.().monster);
       if (event.missed) { floatNumber(target, 'MISS', 'miss'); return; }
       const shieldDamage = Number(event.shieldDamage) || 0;
       const hpDamage = Number(event.hpDamage ?? event.damage) || 0;
@@ -2655,12 +2744,22 @@
       /* 공격을 준비하는 순간 앞으로 나온다. 빗나가거나 보호막에 전부
          막혀도 몬스터가 실제로 공격했다는 움직임은 반드시 보여야 한다. */
       lunge(monsterNode, 'monster');
+      const fx = global.YuksamCombatFx;
+      const monster = active?.snapshot?.().monster;
+      if (fx && monster) {
+        const profile = fx.getMonsterActionFxProfile(
+          { type:monster.id || 'monster', level:monster.level }, null,
+        );
+        if (profile) fx.playMonsterActionFx(profile);
+      }
       if (event.all) {
         const stage = global.document.querySelector('.raid-stage');
         if (stage) {
           stage.classList.add('raid-danger');
           global.setTimeout(() => { try { stage.classList.remove('raid-danger'); } catch (_) {} }, 620);
         }
+        /* 전체 공격은 파티 전원 자리에 폭풍이 한 번씩 인다. */
+        playPartyWideStorm();
       }
     }
   }
@@ -2745,6 +2844,22 @@
       const sprite = memberSpriteNode(member.id);
       if (sprite) sprite.classList.toggle('down', hp <= 0);
     });
+
+    /* 다음 턴 예고 — 기절·예고가 재생 도중에 바뀌므로 여기서도 다시 그린다.
+       예전에는 라운드가 시작될 때 그린 문구가 그대로 남아, 기절로 취소된
+       기술을 계속 "다음은 B"라고 알려 주고 있었다. */
+    const hintNode = doc.querySelector('.raid-next-hint');
+    if (hintNode) {
+      const hint = nextPlanHint(snap.monster, rules().attackPlanForRound(
+        snap.monster, snap.round, snap.patternSeed,
+      ));
+      hintNode.textContent = hint.text;
+      hintNode.classList.toggle('warn', !!hint.warn);
+    }
+
+    // 몬스터 상태 배지(기절·강화·예고 …)도 함께 갱신한다.
+    const statusNode = doc.getElementById('raidMonsterStatuses');
+    if (statusNode) statusNode.innerHTML = monsterStatusBadgesHtml(snap.monster);
 
     // 쓰러진 몬스터는 사냥터처럼 어두워지며 사라진다.
     const monsterSprite = doc.querySelector('.raid-monster-sprite');

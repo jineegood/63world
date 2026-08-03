@@ -933,12 +933,13 @@
           : `${monster.name}의 ${plan.name}! ${targets[0]?.name || ''}을(를) 노립니다!`,
       });
 
+    /* 연속 공격은 한 사람을 연달아 때린 뒤 다음 사람으로 넘어간다.
+       앞·앞·가운데·가운데·뒤·뒤 순서로 로그가 나와야 누가 몇 대 맞았는지 읽힌다.
+       (예전에는 앞·가운데·뒤를 한 바퀴씩 돌아 순서가 섞여 보였다.) */
+    const waveTargets = plan.kind === 'all' ? living() : targets;
+    waveTargets.forEach((member) => {
     for (let hitIndex = 0; hitIndex < hitCount; hitIndex += 1) {
-      const waveTargets = plan.kind === 'all'
-        ? living()
-        : targets.filter((member) => member.hp > 0);
-      waveTargets.forEach((member) => {
-      if (member.hp <= 0) return;
+      if (member.hp <= 0) break;
       const focus = plan.kind === 'all' ? 1 : number(raidRules?.SINGLE_TARGET_BONUS, 1.35);
       let incoming = Math.max(1, Math.round(
         Math.max(0, number(monsterAttack))
@@ -964,7 +965,7 @@
           missed:true, critical:false, damage:0, hpDamage:0, shieldDamage:0,
           audioId:'miss', text:`${monster.name}의 공격이 ${member.name}에게 빗나갔습니다!`,
         });
-        return;
+        continue;   // 빗나가도 남은 타수는 이어서 굴린다
       }
       const criticalChance = member.klass === 'warrior' && member.spec === '방어' ? 0.10 : BASE_CRIT_CHANCE;
       const critical = roll(rng) < criticalChance;
@@ -1019,8 +1020,8 @@
           text:`${member.name}이(가) 쓰러졌습니다!`,
         });
       }
-      });
     }
+    });
     } /* ← 공격하는 턴 끝 */
 
     if (chillConsumed) monster.chillTurns = Math.max(0, monster.chillTurns - 1);

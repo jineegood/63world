@@ -404,9 +404,52 @@ test('던전 전투 규칙은 기절·더블 어택·힐·보호막·쿨타임�
   assert.match(combatSource, /member\.cooldowns\[action\.id\]/);
   assert.match(uiSource, /class="combat-badge-v38 \$\{esc\(badge\.key\)\}" data-tooltip=/);
   assert.match(uiSource, /buildStatusBadges/);
-  assert.match(uiSource, /event\.kind === 'monster-status'[\s\S]*?raidMonsterStatuses/);
+  /* 몬스터 상태 배지는 스냅샷을 보고 통째로 다시 그린다.
+     (배지 하나만 덮어쓰면 기절과 강화가 서로를 지운다.) */
+  assert.match(uiSource, /statusNode\.innerHTML = monsterStatusBadgesHtml\(snap\.monster\)/);
+  assert.match(uiSource, /function monsterStatusBadgesHtml\(monster\)/);
   assert.match(uiSource, /event\.kind === 'party-heal'/);
   assert.match(uiSource, /event\.kind === 'party-shield'/);
+});
+
+test('기절한 몬스터는 다음 턴 예고 대신 쉰다고 알려 준다', () => {
+  /* 기절하면 예정돼 있던 기술이 취소되고 다음 턴에 새로 뽑는다.
+     그런데도 예고에 그 기술 이름이 남아 있어 거짓 정보가 됐었다. */
+  const block = uiSource.match(/function nextPlanHint\([\s\S]*?\n  \}/)?.[0] || '';
+  assert.notEqual(block, '');
+  assert.match(block, /Number\(monster\?\.stunTurns\)/);
+  assert.match(block, /다음 턴은 쉽니다/);
+  // 예고 문구는 재생 도중에도 다시 그려야 한다.
+  assert.match(uiSource, /hintNode\.textContent = hint\.text/);
+});
+
+test('던전도 사냥터의 투사체 연출 엔진을 그대로 쓴다', () => {
+  // 사냥터와 같은 YuksamCombatFx를 쓰고, 새로 만들지 않는다.
+  assert.match(uiSource, /global\.YuksamCombatFx/);
+  assert.match(uiSource, /fx\.getBasicAttackFxProfile\(member\?\.klass \|\| 'warrior'\)/);
+  assert.match(uiSource, /fx\.getSkillFxProfile\(skillId, skillDefFor\(skillId\)\)/);
+  assert.match(uiSource, /fx\.playPlayerActionFx\(profile\)/);
+  assert.match(uiSource, /fx\.playMonsterActionFx\(/);
+  /* 사냥터 엔진은 무대에서 .combat-player 하나를 찾는다. 던전은 셋이라
+     연출에 관계된 사람에게만 잠깐 그 표를 붙였다 뗀다. */
+  assert.match(uiSource, /function withFxAnchor\(memberId, run\)/);
+  assert.match(uiSource, /node\.classList\.add\('combat-player'\)/);
+  assert.match(uiSource, /node\.classList\.remove\('combat-player'\)/);
+  // 전체 공격은 세 자리에 차례로 충격파가 인다.
+  assert.match(uiSource, /function playPartyWideStorm\(\)/);
+  assert.match(uiSource, /@keyframes raidStormHit/);
+});
+
+test('체력바는 각 캐릭터 머리 위에 붙고 세 명은 넉넉히 벌려 세운다', () => {
+  // 위쪽 한 줄짜리 체력창은 없애고 캐릭터마다 하나씩 단다.
+  assert.doesNotMatch(uiSource, /class="raid-party-hp"/);
+  assert.match(uiSource, /function allyHpHtml\(member\)/);
+  assert.match(uiSource, /\$\{allyHpHtml\(member\)\}\s*\n\s*<canvas class="raid-battle-face"/);
+  assert.match(uiSource, /\.raid-ally-hp\{position:absolute;left:50%;bottom:100%/);
+  // 서로 겹치지 않게 자리 간격을 벌린다.
+  assert.match(uiSource, /\.raid-ally-0\{bottom:10px;left:34%/);
+  assert.match(uiSource, /\.raid-ally-1\{bottom:96px;left:18%/);
+  assert.match(uiSource, /\.raid-ally-2\{bottom:182px;left:2%/);
 });
 
 test('직업 공격·스킬·회복 효과음은 매니페스트와 실제 재생 API를 쓴다', () => {

@@ -84,6 +84,27 @@ test('연속 타수는 시트에 적힌 만큼 실제로 나온다', () => {
   assert.equal(result.events.filter((event) => event.kind === 'monster-hit').length, 4);
 });
 
+test('전체 연속 공격은 한 사람을 연달아 때린 뒤 다음 사람으로 넘어간다', () => {
+  /* 앞·앞·가운데·가운데·뒤·뒤 순서여야 누가 몇 대 맞았는지 읽힌다.
+     앞·가운데·뒤를 한 바퀴씩 도는 순서가 아니다. */
+  const party = [
+    member('front', { slot:'front' }),
+    member('middle', { slot:'middle' }),
+    member('back', { slot:'back' }),
+  ];
+  const result = turn({
+    members:party,
+    plan:{ name:'2연속 전체', kind:'all', hits:2 },
+    submissions:Object.fromEntries(party.map((m) => [m.id, { correct:false, actionId:'basic' }])),
+  });
+  const hits = result.events.filter((event) => event.kind === 'monster-hit');
+  assert.deepEqual([...hits.map((event) => event.memberId)],
+    ['front', 'front', 'middle', 'middle', 'back', 'back']);
+
+  // 타수 번호도 사람마다 0,1로 다시 센다.
+  assert.deepEqual([...hits.map((event) => event.hitIndex)], [0, 1, 0, 1, 0, 1]);
+});
+
 test('독은 다음 몬스터 턴마다 피해를 주고 정해진 턴 뒤에 사라진다', () => {
   const target = dummy();
   const boss = monster();
