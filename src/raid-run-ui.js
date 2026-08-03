@@ -536,6 +536,15 @@
 
     const phase = networkSession.room?.phase || 'lobby';
     if (phase !== 'lobby') cancelNetworkLobbyCountdown();
+
+    /* 보정 — 재생이 모두 끝난 조용한 순간에는 화면 값을 서버 값과 맞춘다.
+       실시간 알림과 폴링이 겹쳐 로그 몇 줄을 놓치더라도, 다음 문제가 나오기
+       전에 세 화면의 숫자가 반드시 같아진다. */
+    if (active && !networkSession.playbackActive && !networkSession.playbackQueue?.length
+      && ['question', 'waiting', 'travel', 'effects'].includes(phase)) {
+      syncViewToTruth();
+      if (G()?.modalState?.type === 'raidBattle') updateBattleView();
+    }
     if (active?.phase === 'battle' && ['question', 'waiting'].includes(phase)) {
       startRaidQuestionTimer();
     } else if (raidQuestionTimerInterval) {
@@ -1277,14 +1286,38 @@
       if (!grouped.has(round)) grouped.set(round, []);
       grouped.get(round).push(row.event || row);
     });
+    /* 화면에 보이는 체력은 로그 한 줄씩 깎아 내려간다. 그 출발점은 반드시
+       '이번 라운드가 시작되기 전' 값이어야 한다.
+       그런데 아래 importNetworkTruth()는 방장이 올린 '라운드가 끝난 뒤' 값을
+       바로 덮어쓴다. 재생이 시작되기 전에 화면이 한 번이라도 다시 그려지면
+       출발점이 끝난 뒤 값으로 잡히고, 거기서 피해를 또 빼서 혼자만 체력이
+       낮게 보였다. 그래서 덮어쓰기 전에 출발점을 붙잡아 둔다. */
+    const queue = session.playbackQueue = session.playbackQueue || [];
+    const idle = !session.playbackActive && !queue.length;
+    const baseline = idle ? captureViewBaseline() : null;
+
+    let first = true;
     grouped.forEach((events, round) => {
       if (round <= 0 || session.handledRounds.has(round)) return;
       session.handledRounds.add(round);
-      session.playbackQueue = session.playbackQueue || [];
-      session.playbackQueue.push({ round, events });
+      queue.push({ round, events, baseline:first ? baseline : null });
+      first = false;
     });
     importNetworkTruth();
     playNextNetworkRound();
+  }
+
+  /* 지금 화면에 보이는 값을 그대로 복사해 둔다(없으면 현재 진행 상태에서 만든다). */
+  function captureViewBaseline() {
+    if (!view) syncViewToTruth();
+    if (!view) return null;
+    return {
+      monsterHp:view.monsterHp,
+      monsterShield:view.monsterShield,
+      members:{ ...(view.members || {}) },
+      memberShields:{ ...(view.memberShields || {}) },
+      monsterStatuses:{ ...(view.monsterStatuses || {}) },
+    };
   }
 
   function playNextNetworkRound() {
@@ -1293,6 +1326,9 @@
     const entry = session.playbackQueue?.shift();
     if (!entry) return;
     session.playbackActive = true;
+    /* 붙잡아 둔 출발점이 있으면 거기서부터 깎기 시작한다.
+       (이 줄이 없으면 방장이 올린 '끝난 뒤' 값에서 또 빼게 된다.) */
+    if (entry.baseline) view = { ...entry.baseline };
     const me = String(raidIdentity()?.userId || '');
     const answerEvent = entry.events.find((event) => event.kind === 'round-answer' && String(event.memberId) === me);
     const combatEvents = entry.events.filter((event) => event.kind !== 'round-answer');
@@ -1302,6 +1338,10 @@
       playEvents([opening, ...combatEvents], () => {
         if (networkSession !== session || !active) return;
         session.playbackActive = false;
+        /* 아직 재생할 라운드가 남아 있으면 화면 값을 서버 값으로 되돌리지 않는다.
+           되돌리면 다음 라운드의 출발점이 '그 라운드가 끝난 뒤' 값이 되어
+           체력이 두 번 깎인다. 마지막 라운드까지 다 보여 준 뒤에만 맞춘다. */
+        if (!session.playbackQueue?.length) syncViewToTruth();
         syncMyRaidCooldowns();
         question = null;
         chosenAction = null;
@@ -1324,7 +1364,7 @@
           if (isNetworkHost()) beginNetworkRound();
         }
         playNextNetworkRound();
-      });
+      }, { syncAtEnd:false });
     };
 
     if (answerEvent?.skipped !== true && answerEvent?.correct === false && answerEvent.correctAnswer
@@ -2905,11 +2945,15 @@
     if (monsterSprite) monsterSprite.classList.toggle('raid-dying', monsterHp <= 0);
   }
 
-  function playEvents(events, onDone) {
+  function playEvents(events, onDone, { syncAtEnd = true } = {}) {
     let index = 0;
     const step = () => {
       if (!active) return;
-      if (index >= events.length) { syncViewToTruth(); onDone?.(); return; }
+      if (index >= events.length) {
+        if (syncAtEnd) syncViewToTruth();
+        onDone?.();
+        return;
+      }
       const event = events[index];
       index += 1;
       // 글은 '무엇을 할까?' 자리에 그대로 들어간다(별도 로그 상자 없음).

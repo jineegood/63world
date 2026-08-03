@@ -477,9 +477,36 @@ test('몬스터와 세 캐릭터의 체력·보호막·상태를 전투 로그 �
   assert.match(uiSource, /view\.monsterShield = Math\.max/);
   assert.match(uiSource, /view\.monsterHp = Math\.max/);
   assert.match(uiSource, /view\.memberShields\[event\.memberId\] = Math\.max/);
-  assert.match(uiSource, /function playEvents\(events, onDone\)/);
+  assert.match(uiSource, /function playEvents\(events, onDone, \{ syncAtEnd = true \} = \{\}\)/);
   assert.match(uiSource, /playEventSound\(event\);\s*\n\s*updateBattleView\(\);/);
   assert.match(uiSource, /let eventDelayMs = 1500/);
+});
+
+test('세 화면의 체력 숫자가 어긋나지 않는다', () => {
+  /* 실제 사고: 세 명이 같이 하는데 한 명 화면만 몬스터 체력이 낮게 보였다.
+     화면 값은 로그 한 줄씩 깎아 내려가는데, 그 출발점이 방장이 올린
+     '라운드가 끝난 뒤' 값으로 잡히면 거기서 피해를 또 빼기 때문이다.
+     그래서 덮어쓰기 전에 출발점을 붙잡아 두고, 재생을 그 값에서 시작한다. */
+  assert.match(uiSource, /function captureViewBaseline\(\)/);
+  const start = uiSource.indexOf('function handleNetworkEvents(rows)');
+  const end = uiSource.indexOf('function captureViewBaseline()');
+  assert.ok(start > 0 && end > start, 'handleNetworkEvents를 찾지 못했다');
+  const handler = uiSource.slice(start, end);
+  /* 출발점을 붙잡는 일이 importNetworkTruth() 호출보다 먼저여야 한다.
+     (설명 주석에도 같은 이름이 나오므로 실제 호출 줄로 비교한다.) */
+  const capturedAt = handler.indexOf('const baseline = idle ? captureViewBaseline()');
+  const importedAt = handler.indexOf('\n    importNetworkTruth();');
+  assert.ok(capturedAt > 0 && importedAt > capturedAt,
+    '서버 값을 덮어쓰기 전에 출발점을 붙잡아야 한다');
+  assert.match(uiSource, /if \(entry\.baseline\) view = \{ \.\.\.entry\.baseline \};/);
+
+  /* 재생할 라운드가 남아 있는 동안에는 서버 값으로 되돌리지 않는다.
+     되돌리면 다음 라운드에서 또 두 번 깎인다. */
+  assert.match(uiSource, /if \(!session\.playbackQueue\?\.length\) syncViewToTruth\(\);/);
+  assert.match(uiSource, /\}, \{ syncAtEnd:false \}\);/);
+
+  /* 로그를 몇 줄 놓치더라도 조용한 순간에 반드시 서버 값과 맞춘다. */
+  assert.match(uiSource, /!networkSession\.playbackActive && !networkSession\.playbackQueue\?\.length/);
 });
 
 test('던전 문제 제한시간은 서버의 30초 deadline을 화면 중앙 위에 표시한다', () => {
