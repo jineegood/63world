@@ -26,6 +26,11 @@ const member = (id, slot, extra = {}) => ({
 /* 빗나감(10%)·치명타(15%)에 걸리지 않고 동료는 정답을 맞히는(70% 미만) 평범한 굴림 */
 const PLAIN = () => 0.5;
 
+/* 몬스터의 기술 순서는 무작위지만 씨앗이 같으면 같은 순서가 나온다.
+   검사에서는 씨앗을 고정해 순서를 알고 시작한다.
+   'test-2'는 1층 첫 몬스터(버섯돌이킹)가 단일 → 전체 → 없음 순으로 쓰는 씨앗이다. */
+const FIXED_SEED = 'test-2';
+
 const makeRun = (overrides = {}) => api.YuksamRaidRun.createRun({
   floor:1,
   members:[
@@ -34,6 +39,7 @@ const makeRun = (overrides = {}) => api.YuksamRaidRun.createRun({
     member('ally2', 'back'),
   ],
   rng:PLAIN, // 동료가 항상 정답
+  patternSeed:FIXED_SEED,
   ...overrides,
 });
 
@@ -72,6 +78,49 @@ test('대형을 확정하면 이동이 시작되고 몬스터를 만난다', () 
   // 시트의 출현 규칙대로 1층의 첫 상대는 Lv.5 버섯돌이킹이다.
   assert.equal(arrival.monster.name, '버섯돌이킹');
   assert.equal(arrival.monster.isBoss, false);
+});
+
+test('같은 방에 있는 셋은 무작위 기술 순서를 똑같이 본다', () => {
+  /* 방장과 참가자가 각자 진행 엔진을 만들지만, 방 id를 씨앗으로 쓰므로
+     따로 계산해도 같은 순서가 나와야 한다. 어긋나면 다음 턴 예고가 서로 다르다. */
+  const R = api.YuksamRaidRules;
+  const start = (seed) => {
+    const run = makeRun({ patternSeed:seed, encounterIds:['guardBot'] });
+    run.confirmFormation({ me:'front', ally1:'middle', ally2:'back' });
+    run.arriveAtEncounter();
+    return run;
+  };
+  const readOrder = (run) => {
+    const seed = run.snapshot().patternSeed;
+    return Array.from({ length:8 }, (_, round) =>
+      R.attackPlanForRound(run.monster, round, seed).name).join(' → ');
+  };
+
+  const host = start('room-abc');
+  const guest = start('room-abc');
+  assert.equal(host.snapshot().patternSeed, 'room-abc');
+  assert.equal(readOrder(host), readOrder(guest), '같은 방이면 같은 순서');
+
+  const other = start('room-zzz');
+  assert.notEqual(readOrder(host), readOrder(other), '다른 방이면 다른 순서');
+
+  // 씨앗을 안 주면 진행마다 알아서 하나 만든다.
+  const auto = api.YuksamRaidRun.createRun({
+    floor:1, rng:() => 0.42,
+    members:[member('me', 'front'), member('a', 'middle'), member('b', 'back')],
+  });
+  assert.ok(auto.snapshot().patternSeed, '씨앗이 비어 있으면 안 된다');
+});
+
+test('진행 중 방장 스냅샷을 받으면 씨앗도 함께 맞춘다', () => {
+  const run = makeRun({ patternSeed:'mine' });
+  run.confirmFormation({ me:'front', ally1:'middle', ally2:'back' });
+  assert.equal(run.snapshot().patternSeed, 'mine');
+  run.importSnapshot({ patternSeed:'host-seed' });
+  assert.equal(run.snapshot().patternSeed, 'host-seed');
+  // 빈 값이 오면 쓰던 씨앗을 유지한다(순서가 도중에 바뀌면 안 된다).
+  run.importSnapshot({ patternSeed:'' });
+  assert.equal(run.snapshot().patternSeed, 'host-seed');
 });
 
 test('같은 난수를 주면 같은 몬스터 목록이 나오고, 목록을 주면 그대로 쓴다', () => {
@@ -119,7 +168,7 @@ test('몬스터 반격은 대형에 따라 앞에 선 사람이 가장 아프다
   const run = makeRun();
   run.confirmFormation({ me:'front', ally1:'middle', ally2:'back' });
   run.arriveAtEncounter();
-  // 버섯돌이킹 1라운드째는 단일 공격 → 한 명만 맞는다.
+  // 고정 씨앗에서 버섯돌이킹의 첫 턴은 단일 공격 → 한 명만 맞는다.
   const monsterAttack = run.monster.attack;
   const first = run.resolveRound({ me:true, ally1:true, ally2:true });
   const hits = first.events.filter((e) => e.kind === 'monster-hit');
@@ -135,7 +184,7 @@ test('전체 공격 라운드에는 셋 다 각자 배율로 맞는다', () => {
   const run = makeRun();
   run.confirmFormation({ me:'front', ally1:'middle', ally2:'back' });
   run.arriveAtEncounter();
-  // 버섯돌이킹 패턴은 단일 → 전체(포자) → 회복 → 두 번째 라운드가 전체 공격이다.
+  // 고정 씨앗에서 버섯돌이킹은 단일 → 전체(포자) → 회복 순으로 쓴다.
   run.resolveRound({ me:false, ally1:false, ally2:false });
   const second = run.resolveRound({ me:false, ally1:false, ally2:false });
 
@@ -315,12 +364,13 @@ test('진행 중 전투를 다시 연결해도 HP 0인 학생은 즉시 부활�
 
 /* 1층을 끝까지 돌려 결과를 돌려준다.
    정답률은 4라운드에 3번 맞히는 패턴(75%)으로 고정한다 — 무작위가 아니라 항상 같은 결과가 나온다. */
-function playFloorOne(members, encounterIds = null) {
+function playFloorOne(members, encounterIds = null, patternSeed = FIXED_SEED) {
   const run = api.YuksamRaidRun.createRun({
     floor:1,
     rng:PLAIN,
     members:members.map((m) => ({ ...m })),
     encounterIds,
+    patternSeed,
   });
   run.confirmFormation(Object.fromEntries(members.map((m) => [m.id, m.slot])));
 

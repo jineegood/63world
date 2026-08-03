@@ -76,7 +76,9 @@
      - wiped     : 전멸했다 */
   const PHASES = Object.freeze(['formation', 'travel', 'battle', 'cleared', 'wiped']);
 
-  function createRun({ floor = 1, members = [], rng = Math.random, encounterIds = null } = {}) {
+  function createRun({
+    floor = 1, members = [], rng = Math.random, encounterIds = null, patternSeed = null,
+  } = {}) {
     const R = rules();
     if (!R) throw new Error('YuksamRaidRules must be loaded before raid-run.js');
 
@@ -122,6 +124,13 @@
       bastionUsed:member.bastionUsed,
     }));
 
+    /* 몬스터가 기술을 뽑는 데 쓰는 씨앗.
+       방에 있는 셋이 같은 값을 넣어야 같은 순서를 본다(방 id를 넘겨준다).
+       안 넘기면 이 진행의 난수로 하나 만든다. */
+    const seed = patternSeed == null || patternSeed === ''
+      ? `run-${Math.floor(Number(rng()) * 0x7fffffff)}`
+      : String(patternSeed);
+
     const state = {
       floor,
       title:floorDef.title,
@@ -130,6 +139,7 @@
       encounterIndex:0,
       monster:null,
       round:0,
+      patternSeed:seed,
       log:[],
       reward:floorDef.reward,
       finishedAt:null,
@@ -246,8 +256,8 @@
       ));
       if (structured) {
         const attackPlan = typeof R.attackPlanForRound === 'function'
-          ? R.attackPlanForRound(state.monster, state.round)
-          : { kind:R.attackKindForRound(state.monster, state.round), hits:1 };
+          ? R.attackPlanForRound(state.monster, state.round, state.patternSeed)
+          : { kind:R.attackKindForRound(state.monster, state.round, state.patternSeed), hits:1 };
         const kind = attackPlan.kind;
         const resolved = R.resolvePartyCombatRound({
           members:state.members,
@@ -347,7 +357,7 @@
       // 3) 몬스터가 반격한다. 대형에 따라 맞는 정도가 갈린다.
       /* 이 간이 경로는 스킬 없이 숫자만 굴리므로 부가 효과는 다루지 않는다.
          공격하지 않는 턴('none')만 건너뛰고 나머지는 예전 그대로 계산한다. */
-      const kind = R.attackKindForRound(state.monster, state.round);
+      const kind = R.attackKindForRound(state.monster, state.round, state.patternSeed);
       if (kind === 'none') {
         events.push({
           kind:'monster-skip', status:'idle',
@@ -428,6 +438,8 @@
         encounterTotal:encounters.length,
         /* 방장이 뽑은 목록을 그대로 저장·공유할 수 있게 함께 내보낸다. */
         encounterIds:encounters.map((entry) => entry.id),
+        /* 화면이 "다음 턴에 무엇이 오는지"를 계산할 때 같은 씨앗을 써야 한다. */
+        patternSeed:state.patternSeed,
         members:state.members.map(snapshotMember),
         monster:snapshotMonster(state.monster),
         reward:state.reward ? { ...state.reward } : state.reward,
@@ -522,6 +534,10 @@
       state.monster = importedMonster;
       state.round = importedRound;
       state.encounterIndex = importedEncounterIndex;
+      /* 방장이 쓰는 씨앗을 그대로 받아야 셋이 같은 기술 순서를 본다. */
+      if (next.patternSeed != null && next.patternSeed !== '') {
+        state.patternSeed = String(next.patternSeed);
+      }
       if (Object.prototype.hasOwnProperty.call(next, 'phase')) state.phase = next.phase;
       if (typeof next.title === 'string' && next.title) state.title = next.title;
       if (next.reward && typeof next.reward === 'object' && !Array.isArray(next.reward)) {

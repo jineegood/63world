@@ -305,13 +305,53 @@ test('두 마리 중 하나를 뽑는 자리는 무작위 값에 따라 갈린�
   assert.equal(fixed[1].isBoss, true);
 });
 
-test('몬스터 공격 패턴은 정해진 순서를 반복한다', () => {
-  const monster = { pattern:['single', 'single', 'all'] };
-  assert.equal(rules.attackKindForRound(monster, 0), 'single');
-  assert.equal(rules.attackKindForRound(monster, 1), 'single');
-  assert.equal(rules.attackKindForRound(monster, 2), 'all');
-  // 한 바퀴 돌면 처음으로 돌아온다 — 학생이 외워서 대비할 수 있어야 한다.
-  assert.equal(rules.attackKindForRound(monster, 3), 'single');
+test('기술 순서는 무작위지만 씨앗이 같으면 언제나 같은 순서다', () => {
+  /* 방에 있는 셋과 서버가 각자 계산해도 같은 순서를 봐야 한다.
+     그래서 난수를 그때그때 굴리지 않고 씨앗에서 다시 만들어 낸다. */
+  const monster = { id:'m', index:0, pattern:[
+    { name:'A', kind:'single' }, { name:'B', kind:'all' }, { name:'C', kind:'none' },
+  ] };
+  const orderFor = (seed) => Array.from({ length:9 }, (_, round) =>
+    rules.attackPlanForRound(monster, round, seed).name).join('');
+
+  assert.equal(orderFor('room-1'), orderFor('room-1'), '같은 씨앗이면 같은 순서');
+  const seeds = new Set(['a', 'b', 'c', 'd', 'e', 'f'].map(orderFor));
+  assert.ok(seeds.size > 1, '씨앗이 다르면 순서도 달라져야 한다');
+});
+
+test('한 바퀴 안에서는 모든 기술이 한 번씩 나온다', () => {
+  /* 한 기술만 계속 나오거나 회복·보호막이 아예 안 나오면 안 된다.
+     기술 수만큼이 한 바퀴이고, 그 안에서 전부 한 번씩 쓴다. */
+  const monster = { id:'m', index:0, pattern:[
+    { name:'A', kind:'single' }, { name:'B', kind:'all' },
+    { name:'C', kind:'none' }, { name:'D', kind:'single' },
+  ] };
+  for (const seed of ['room-1', 'room-2', 'room-3', 'room-4']) {
+    for (let cycle = 0; cycle < 3; cycle += 1) {
+      const names = Array.from({ length:4 }, (_, step) =>
+        rules.attackPlanForRound(monster, cycle * 4 + step, seed).name);
+      assert.deepEqual([...names].sort(), ['A', 'B', 'C', 'D'], `${seed} ${cycle}바퀴`);
+    }
+  }
+});
+
+test('같은 몬스터라도 조우 자리와 바퀴가 다르면 순서가 다시 섞인다', () => {
+  const first = { id:'m', index:0, pattern:[
+    { name:'A', kind:'single' }, { name:'B', kind:'all' }, { name:'C', kind:'none' },
+  ] };
+  const second = { ...first, index:1 };
+  const order = (monster, from) => Array.from({ length:3 }, (_, step) =>
+    rules.attackPlanForRound(monster, from + step, 'room-1').name).join('');
+  // 같은 방·같은 몬스터여도 조우 자리가 다르면 다른 순서가 나올 수 있다.
+  const variants = new Set([order(first, 0), order(first, 3), order(second, 0)]);
+  assert.ok(variants.size > 1, '자리·바퀴마다 다시 섞여야 한다');
+});
+
+test('기술이 하나뿐이면 그 기술만 나오고, 패턴이 없으면 기본 단일 공격이다', () => {
+  const only = { id:'m', index:0, pattern:[{ name:'하나', kind:'all' }] };
+  for (let round = 0; round < 5; round += 1) {
+    assert.equal(rules.attackPlanForRound(only, round, 'seed').name, '하나');
+  }
   assert.equal(rules.attackKindForRound({}, 0), 'single');
 });
 
@@ -338,23 +378,25 @@ test('시트의 공격력에 60%가 이미 들어 있어 계산에서 다시 곱
 });
 
 test('패턴 한 칸은 기술 이름·타수·노리는 자리·부가 효과까지 그대로 읽힌다', () => {
-  const stomp = rules.attackPlanForRound(rules.MONSTERS.buildingStomp, 0);
-  assert.equal(stomp.name, '대지 찍기');
+  /* 순서는 무작위이므로 '몇 번째 턴'이 아니라 기술 이름으로 찾아 확인한다. */
+  const plan = (id, name) => rules.planByName(rules.MONSTERS[id], name);
+
+  const stomp = plan('buildingStomp', '대지 찍기');
   assert.equal(stomp.kind, 'all');
   assert.equal(stomp.stun, true);
 
-  const charge = rules.attackPlanForRound(rules.MONSTERS.buildingStomp, 1);
+  const charge = plan('buildingStomp', '콘크리트 돌진');
   assert.equal(charge.kind, 'single');
   assert.equal(charge.hits, 2);
   assert.equal(charge.target, 'middle');
 
   // 명진쌤 로봇은 시트대로 4연속까지 때린다.
-  const laser = rules.attackPlanForRound(rules.MONSTERS.rooftopMyeongjinRobot, 1);
+  const laser = plan('rooftopMyeongjinRobot', '레이저 지시봉');
   assert.equal(laser.hits, 4);
   assert.equal(laser.poison, 5);
 
   // 공격하지 않는 턴도 그대로 남는다.
-  const guardUp = rules.attackPlanForRound(rules.MONSTERS.engineIronGiant, 2);
+  const guardUp = plan('engineIronGiant', '철갑 방벽');
   assert.equal(guardUp.kind, 'none');
   assert.equal(guardUp.shieldPct, 0.5);
 

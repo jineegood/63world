@@ -965,7 +965,13 @@
     }
     networkStarting = true;
     try {
-      active = runApi().createRun({ floor:currentStartFloor(), members });
+      /* 방 id를 기술 순서의 씨앗으로 쓴다. 셋이 같은 값을 넣으므로
+         각자 계산해도 같은 순서가 나온다(다음 턴 예고가 어긋나지 않는다). */
+      active = runApi().createRun({
+        floor:currentStartFloor(),
+        members,
+        patternSeed:String(networkSession.room?.id || ''),
+      });
       const assignments = Object.fromEntries(members.map((member) => [member.id, member.slot]));
       const confirmed = active.confirmFormation(assignments);
       if (!confirmed.ok) throw new Error(confirmed.reason || '대형을 불러오지 못했습니다.');
@@ -2382,7 +2388,7 @@
       shield:Math.max(0, view?.memberShields?.[m.id] ?? m.shield ?? 0),
     }));
     const percent = Math.max(0, Math.round((monster.hp / monster.maxHp) * 100));
-    const nextPlan = rules().attackPlanForRound(truth, snap.round);
+    const nextPlan = rules().attackPlanForRound(truth, snap.round, snap.patternSeed);
     const nextKind = nextPlan.kind;
     const nextHint = nextPlanHint(truth, nextPlan);
 

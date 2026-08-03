@@ -553,18 +553,76 @@
     };
   }
 
-  /* 몬스터가 이번 라운드에 단일 공격을 하는지 전체 공격을 하는지.
-     정해진 순서를 반복하므로 학생이 패턴을 외워 대비할 수 있다. */
-  function attackKindForRound(monster, round) {
-    return attackPlanForRound(monster, round).kind;
+  /* ---------- 기술 순서는 무작위 ----------
+
+     몬스터는 자기 기술을 정해진 차례가 아니라 무작위로 쓴다.
+     다만 두 가지를 지켜야 한다.
+
+     1) 같은 방의 셋과 서버가 반드시 '같은' 순서를 봐야 한다.
+        각자 따로 굴리면 화면마다 다음 턴 예고가 어긋난다.
+        그래서 난수를 그때그때 굴리지 않고 (씨앗, 몬스터, 라운드)에서
+        똑같이 다시 만들어 낸다. 같은 값을 넣으면 언제나 같은 결과다.
+
+     2) 한 기술만 계속 나오거나 회복·보호막이 한 번도 안 나오면 안 된다.
+        그래서 '섞은 주머니' 방식을 쓴다 — 기술 수만큼의 한 바퀴 안에서는
+        모든 기술이 한 번씩 나오되, 그 안의 순서를 매번 새로 섞는다.
+        (기술이 셋이면 3턴마다 새로 섞는다.) */
+
+  /* 문자열이든 숫자든 32비트 정수 하나로 접는다. */
+  function hashSeed(value) {
+    const text = String(value == null ? '' : value);
+    let hash = 2166136261;
+    for (let index = 0; index < text.length; index += 1) {
+      hash ^= text.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
   }
 
-  function attackPlanForRound(monster, round) {
+  /* 씨앗 하나로 굴러가는 작은 난수기(mulberry32). 같은 씨앗이면 같은 값. */
+  function seededRng(seed) {
+    let state = (hashSeed(seed) + 0x6d2b79f5) >>> 0;
+    return function next() {
+      state = (state + 0x6d2b79f5) >>> 0;
+      let value = state;
+      value = Math.imul(value ^ (value >>> 15), value | 1);
+      value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+      return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  /* 0..length-1을 씨앗대로 섞은 차례. 같은 씨앗이면 언제나 같은 차례다. */
+  function shuffledOrder(length, seed) {
+    const order = Array.from({ length }, (_, index) => index);
+    const rng = seededRng(seed);
+    for (let index = length - 1; index > 0; index -= 1) {
+      const pick = Math.floor(rng() * (index + 1));
+      const swap = order[index];
+      order[index] = order[pick];
+      order[pick] = swap;
+    }
+    return order;
+  }
+
+  /* 이 몬스터의 이번 한 바퀴에 쓸 씨앗.
+     몬스터·조우 순서·바퀴 수가 다르면 순서도 달라진다. */
+  function cycleSeed(monster, cycle, seed) {
+    return `${seed ?? ''}|${monster?.id || 'monster'}|${monster?.index ?? 0}|${cycle}`;
+  }
+
+  function attackKindForRound(monster, round, seed = 0) {
+    return attackPlanForRound(monster, round, seed).kind;
+  }
+
+  function attackPlanForRound(monster, round, seed = 0) {
     const pattern = Array.isArray(monster?.pattern) && monster.pattern.length
       ? monster.pattern
       : ['single'];
     const index = Math.max(0, Math.floor(Number(round) || 0));
-    return normalizeAttackPlan(pattern[index % pattern.length]);
+    if (pattern.length === 1) return normalizeAttackPlan(pattern[0]);
+    const cycle = Math.floor(index / pattern.length);
+    const order = shuffledOrder(pattern.length, cycleSeed(monster, cycle, seed));
+    return normalizeAttackPlan(pattern[order[index % pattern.length]]);
   }
 
   /* chargeNext가 이름으로 가리키는 기술을 그 몬스터의 패턴에서 찾는다. */
@@ -646,6 +704,9 @@
     rollEncounters,
     PATTERN_EFFECT,
     normalizeAttackPlan,
+    hashSeed,
+    seededRng,
+    shuffledOrder,
     attackKindForRound,
     attackPlanForRound,
     planByName,

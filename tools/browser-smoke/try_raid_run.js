@@ -327,6 +327,12 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   fire(window.document.getElementById('raidStartBtn'));
   let waitBattle = 0;
   while (G.modalState?.type !== 'raidBattle' && waitBattle < 120) { await sleep(50); waitBattle += 1; }
+  /* 전투가 열려도 "적이 나타났다" 문구가 지나가야 행동 메뉴가 붙는다.
+     문구 길이가 몬스터마다 달라 바로 확인하면 검사가 들쭉날쭉해진다. */
+  let menuWait = 0;
+  while (!window.document.querySelector('[data-raid-menu="giveup"]') && menuWait < 120) {
+    await sleep(50); menuWait += 1;
+  }
   check('전투 화면에 포기 버튼이 있다', !!window.document.querySelector('[data-raid-menu="giveup"]'),
     `modal=${G.modalState?.type}`);
   fire(window.document.querySelector('[data-raid-menu="giveup"]'));
