@@ -355,3 +355,32 @@ test('새 이유 코드들도 학생에게 보여 줄 수 있는 공개 코드�
     assert.equal(publicRaidRoomErrorCode({ code:'P0001', message:code }), code, code);
   }
 });
+
+test('마이그레이션은 PostgreSQL 18 전용 함수를 쓰지 않는다', () => {
+  /* 실제 사고: private_begin_raid_round_v1 이 jsonb_object_length() 를 썼는데
+     이 함수는 PostgreSQL 18에서 추가되었고 운영 서버는 17.6이다.
+     호출할 때마다 없는 함수 오류가 나고 exception when others 가 그것을 삼켜
+     매 라운드 INVALID_REQUEST 로 되돌아왔다 — 던전이 한 라운드도 못 굴렀다.
+     다시는 이런 함수가 들어오지 않도록 살아 있는 정의를 검사한다. */
+  const PG18_ONLY = ['jsonb_object_length', 'json_object_length'];
+  const dir = path.join(root, 'supabase/migrations');
+  const live = new Map();   // 함수 이름 -> 마지막(살아 있는) 정의
+  for (const file of fs.readdirSync(dir).sort()) {
+    const sql = fs.readFileSync(path.join(dir, file), 'utf8');
+    const pattern = /create or replace function\s+public\.(\w+)([\s\S]*?)\n\$\$;/gi;
+    for (const match of sql.matchAll(pattern)) {
+      live.set(match[1], { file, body:match[2] });
+    }
+  }
+  for (const [name, entry] of live) {
+    for (const banned of PG18_ONLY) {
+      assert.ok(
+        !entry.body.includes(banned + '('),
+        `${name} (${entry.file}) 가 PostgreSQL 18 전용 ${banned}() 를 쓴다`,
+      );
+    }
+  }
+  // 대체 함수가 실제로 있어야 한다.
+  assert.ok(live.has('private_jsonb_object_size_v1'), '17에서도 도는 개수 세기 함수가 있어야 한다');
+  assert.match(live.get('private_begin_raid_round_v1').body, /private_jsonb_object_size_v1/);
+});

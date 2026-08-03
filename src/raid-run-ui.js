@@ -694,6 +694,11 @@
       };
       setNetworkData(data, { initial:true });
       startNetworkTransport();
+      /* 새로 만든 방이 아니라 진행 중이던 방으로 돌아온 경우에는 반드시 알린다.
+         모르면 "방을 만든 적도 없는데 왜 셋이 들어가 있지?"가 된다. */
+      if (data.resumed) {
+        call('toast', '진행 중이던 던전 방으로 돌아왔습니다. 새로 시작하려면 방에서 나가 주세요.');
+      }
       return true;
     } catch (error) {
       call('openModal', `

@@ -133,12 +133,25 @@
       return null;
     }
 
+    /* 이미 참여 중인 방이 있으면 서버가 ALREADY_IN_ROOM으로 막는다.
+       그럴 때 무조건 옛 방으로 돌아가면 "방을 만든 적도 없는데 남들과
+       같이 들어가 있는" 상황이 된다. 그래서 옛 방의 상태를 보고 나눈다.
+
+         아직 출발 전(로비) : 버려진 방이므로 정리하고 새로 만든다.
+         진행 중            : 끊겼다 돌아온 것이므로 그 방으로 복구한다.
+                              (돌아왔다는 사실을 resumed로 알려 준다.) */
     async function enterOrResume(body) {
       try {
         return await invoke(body, { verifySession:true });
       } catch (error) {
         if (error?.code !== 'ALREADY_IN_ROOM') throw error;
-        return invoke({ op:'resume' }, { verifySession:true });
+        const existing = await invoke({ op:'resume' }, { verifySession:true });
+        const stale = existing?.room?.id && existing.room.phase === 'lobby';
+        if (stale && body?.op === 'create') {
+          await invoke({ op:'leave', roomId:existing.room.id, requestId:requestId('leave') });
+          return invoke({ ...body, requestId:requestId('create') }, { verifySession:true });
+        }
+        return existing ? { ...existing, resumed:true } : existing;
       }
     }
 
