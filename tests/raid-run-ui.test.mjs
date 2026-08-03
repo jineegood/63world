@@ -209,7 +209,9 @@ test('온라인 대기실은 정확히 세 명·대형 저장·전원 준비 후
   assert.match(block, /id="raidSaveFormationBtn"/);
   assert.match(block, /networkSession\.client\.setFormation/);
   assert.match(block, /networkSession\.client\.ready/);
-  assert.match(block, /syncNetworkLobbyCountdown\(savedFormation && allReady\)/);
+  // 구간을 못 연 사람이 있으면 카운트다운도 시작하지 않는다.
+  assert.match(block, /syncNetworkLobbyCountdown\(savedFormation && allReady && partyUnlocked\)/);
+  assert.match(block, /partyUnlockState\(\)/);
   assert.doesNotMatch(block, /raidNetworkStartBtn|3명 출발!/);
   assert.match(uiSource, /if \(isNetworkHost\(\)\) startNetworkRoomAfterCountdown\(\)/);
   assert.match(uiSource, /session\.client\.start\(session\.room\.id\)/);

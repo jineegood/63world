@@ -103,6 +103,7 @@ if ($Mode -eq 'all' -or $Mode -eq 'check') {
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/ui-tooltip.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/map-decor.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/spec-prompt.js')
+  Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/raid-progress.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/raid-combat-rules.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/raid-rules.js')
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--check', 'src/raid-run.js')

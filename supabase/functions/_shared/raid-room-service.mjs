@@ -5,6 +5,19 @@ const MAX_QUESTION = 500;
 const MAX_RESULT_BYTES = 96 * 1024;
 const ALLOWED_PUBLISH_PHASES = new Set(['effects', 'travel', 'cleared', 'wiped', 'cancelled']);
 
+/* 63빌딩 던전 구간(1~7). 앞 구간을 깨야 다음 구간이 열린다. */
+const FIRST_FLOOR_GROUP = 1;
+const LAST_FLOOR_GROUP = 7;
+
+/* 이 사람이 지금 들어갈 수 있는 가장 높은 구간. 1구간은 언제나 열려 있다. */
+function unlockedFloorGroup(profile) {
+  const cleared = Math.max(0, Math.min(
+    LAST_FLOOR_GROUP,
+    Math.trunc(Number(profile?.raidTopGroup) || 0),
+  ));
+  return Math.min(LAST_FLOOR_GROUP, cleared + 1);
+}
+
 function text(value, maximum = MAX_TEXT) {
   return String(value ?? '').trim().slice(0, maximum);
 }
@@ -188,8 +201,11 @@ export function createRaidRoomService({ store, now = Date.now } = {}) {
     switch (op) {
       case 'create': {
         const floorGroup = Math.trunc(Number(body.floorGroup) || 0);
-        if (floorGroup !== 1) failRaidRoom('FLOOR_LOCKED');
+        if (floorGroup < FIRST_FLOOR_GROUP || floorGroup > LAST_FLOOR_GROUP) failRaidRoom('FLOOR_LOCKED');
         const profile = await authoritativeProfile(userId);
+        /* 앞 구간을 깬 사람만 다음 구간의 방을 만들 수 있다.
+           1구간은 언제나 열려 있다. (참가자 셋 전부 확인은 start에서 한다.) */
+        if (floorGroup > unlockedFloorGroup(profile)) failRaidRoom('FLOOR_LOCKED');
         return recoverActiveRoom(userId, async () => {
           const created = await store.createRoom({
             userId,
@@ -240,6 +256,15 @@ export function createRaidRoomService({ store, now = Date.now } = {}) {
       }
       case 'start': {
         const id = roomId(body.roomId);
+        /* 출발 직전에 셋 모두 이 구간을 열었는지 확인한다.
+           방을 만든 사람만 열려 있고 나머지가 아직이면 들어갈 수 없다. */
+        const room = await store.getRoomForUser(id, userId);
+        if (!room) failRaidRoom('NOT_MEMBER');
+        const roster = await store.listMembers(id);
+        const targetGroup = Math.max(FIRST_FLOOR_GROUP, Math.trunc(Number(room.floorGroup) || 1));
+        if (roster.some((member) => targetGroup > unlockedFloorGroup(member?.profile))) {
+          failRaidRoom('FLOOR_LOCKED');
+        }
         await store.startRoom({
           roomId:id,
           userId,

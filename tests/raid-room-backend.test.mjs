@@ -94,15 +94,79 @@ test('service ignores caller combat stats and loads the authenticated profile fr
   assert.equal(calls[0].profile.attack, 7);
 });
 
-test('only the first floor group can currently be created and join codes require four digits', async () => {
+test('앞 구간을 깬 사람만 다음 구간의 방을 만들 수 있다', async () => {
+  const { createRaidRoomService } = await import(serviceUrl.href);
+  const madeRooms = [];
+  const withProgress = (cleared) => createRaidRoomService({
+    now:() => 1000,
+    store:{
+      getAuthoritativeProfile:async () => ({ name:'A', raidTopGroup:cleared }),
+      createRoom:async (value) => { madeRooms.push(value.floorGroup); return { roomId:'room-1' }; },
+      getRoomForUser:async () => ({ id:'room-1', hostId:'a', phase:'lobby', round:0 }),
+      listMembers:async () => [],
+      listEventsAfter:async () => [],
+    },
+  });
+
+  // 아직 하나도 못 깼으면 1구간만 만들 수 있다.
+  await withProgress(0).handle('a', { op:'create', floorGroup:1, requestId:'r1' });
+  await assert.rejects(
+    withProgress(0).handle('a', { op:'create', floorGroup:2, requestId:'r2' }),
+    (error) => error.code === 'FLOOR_LOCKED',
+  );
+
+  // 1구간을 깼으면 2구간까지 열린다. 3구간은 아직이다.
+  await withProgress(1).handle('a', { op:'create', floorGroup:2, requestId:'r3' });
+  await assert.rejects(
+    withProgress(1).handle('a', { op:'create', floorGroup:3, requestId:'r4' }),
+    (error) => error.code === 'FLOOR_LOCKED',
+  );
+  assert.deepEqual(madeRooms, [1, 2]);
+
+  // 없는 구간 번호는 막는다.
+  await assert.rejects(
+    withProgress(7).handle('a', { op:'create', floorGroup:8, requestId:'r5' }),
+    (error) => error.code === 'FLOOR_LOCKED',
+  );
+  await assert.rejects(
+    withProgress(7).handle('a', { op:'create', floorGroup:0, requestId:'r6' }),
+    (error) => error.code === 'FLOOR_LOCKED',
+  );
+});
+
+test('셋 중 한 명이라도 구간을 못 열었으면 출발할 수 없다', async () => {
+  const { createRaidRoomService } = await import(serviceUrl.href);
+  const started = [];
+  const withRoster = (roster) => createRaidRoomService({
+    now:() => 1000,
+    store:{
+      getRoomForUser:async () => ({ id:'room-1', hostId:'a', phase:'lobby', floorGroup:3, round:0 }),
+      listMembers:async () => roster,
+      listEventsAfter:async () => [],
+      startRoom:async (value) => { started.push(value.roomId); },
+    },
+  });
+  const member = (userId, cleared) => ({ userId, profile:{ name:userId, raidTopGroup:cleared } });
+
+  // 셋 다 2구간까지 깼으면 3구간에 들어갈 수 있다.
+  await withRoster([member('a', 2), member('b', 2), member('c', 2)])
+    .handle('a', { op:'start', roomId:'room-1', requestId:'s1' });
+  assert.deepEqual(started, ['room-1']);
+
+  // 한 명이 뒤처져 있으면 막힌다.
+  await assert.rejects(
+    withRoster([member('a', 2), member('b', 0), member('c', 2)])
+      .handle('a', { op:'start', roomId:'room-1', requestId:'s2' }),
+    (error) => error.code === 'FLOOR_LOCKED',
+  );
+  assert.deepEqual(started, ['room-1'], '막혔으면 출발시키지 않는다');
+});
+
+test('초대 코드는 숫자 네 자리여야 한다', async () => {
   const { createRaidRoomService } = await import(serviceUrl.href);
   const service = createRaidRoomService({
     store:{ getAuthoritativeProfile:async () => ({ name:'A' }) },
   });
-  await assert.rejects(
-    service.handle('a', { op:'create', floorGroup:2, requestId:'r1' }),
-    (error) => error.code === 'FLOOR_LOCKED',
-  );
   await assert.rejects(
     service.handle('a', { op:'join', code:'123', requestId:'r2' }),
     (error) => error.code === 'ROOM_NOT_FOUND',

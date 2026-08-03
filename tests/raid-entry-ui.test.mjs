@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
 const source = readFileSync(join(root, 'src', 'raid-entry-ui.js'), 'utf8');
+const progressSource = readFileSync(join(root, 'src', 'raid-progress.js'), 'utf8');
 const dungeonSource = readFileSync(join(root, 'src', 'raid-dungeon.js'), 'utf8');
 
 class FakeNode {
@@ -26,7 +27,8 @@ class FakeNode {
   focus() { this.focused = true; }
 }
 
-function createHarness() {
+/* clearedGroup: 이 학생이 지금까지 깬 던전 구간(0이면 아직 하나도 못 깼다). */
+function createHarness({ clearedGroup = 0 } = {}) {
   const nodes = new Map();
   let floorButtons = [];
   const styles = [];
@@ -71,9 +73,12 @@ function createHarness() {
     YuksamRaidRunUi:{
       async openNetworkLobby(options) { calls.push(options); return true; },
     },
+    /* 구간 해금은 플레이어의 raidTopGroup으로 정해진다. */
+    game:{ player:{ raidTopGroup:clearedGroup } },
   };
   context.window = context;
   context.globalThis = context;
+  vm.runInNewContext(progressSource, context, { filename:'raid-progress.js' });
   vm.runInNewContext(source, context, { filename:'raid-entry-ui.js' });
   return {
     context,
@@ -105,8 +110,8 @@ test('첫 화면에는 방 만들기와 숫자 4자리 참가 입력이 있다',
   assert.match(h.html(), /친구 <strong>3명<\/strong>/);
 });
 
-test('방 만들기를 누르면 일곱 구간 중 1–10층만 열린다', () => {
-  const h = createHarness();
+test('아직 아무것도 못 깼으면 일곱 구간 중 1–10층만 열린다', () => {
+  const h = createHarness({ clearedGroup:0 });
   h.context.YuksamRaidEntryUi.open();
   h.nodes.get('raidCreateRoomBtn').onclick();
 
@@ -117,8 +122,33 @@ test('방 만들기를 누르면 일곱 구간 중 1–10층만 열린다', () =
   assert.match(h.html(), /1–10층/);
   assert.match(h.html(), /11–20층/);
   assert.match(h.html(), /61–63층/);
-  assert.equal((h.html().match(/향후 업데이트/g) || []).length, 6);
+  // 잠긴 구간은 무엇을 먼저 깨야 하는지 알려 준다.
+  assert.equal((h.html().match(/먼저 깨야 합니다/g) || []).length, 6);
+  assert.match(h.html(), /1–10층을 먼저 깨야 합니다/);
   assert.match(source, /\.raid-floor-card\.locked\{background:linear-gradient\([^;]*#080b11/);
+});
+
+test('앞 구간을 깨면 바로 다음 구간이 열린다', () => {
+  const h = createHarness({ clearedGroup:2 });
+  h.context.YuksamRaidEntryUi.openFloorSelection();
+  const open = h.floorButtons().filter((button) => !button.disabled);
+  // 1·2구간을 깼으니 3구간까지 열려 있고 4구간부터는 잠겨 있다.
+  assert.equal(open.length, 3);
+  assert.deepEqual(open.map((button) => button.dataset.raidFloorGroup), ['1', '2', '3']);
+  assert.equal(h.floorButtons()[3].disabled, true);
+});
+
+test('마지막 구간까지 깨도 목록은 일곱 구간 그대로다', () => {
+  const h = createHarness({ clearedGroup:7 });
+  h.context.YuksamRaidEntryUi.openFloorSelection();
+  assert.equal(h.floorButtons().length, 7);
+  assert.equal(h.floorButtons().filter((button) => !button.disabled).length, 7);
+});
+
+test('입장 안내에 3명 모두 열어야 한다는 조건이 적혀 있다', () => {
+  const h = createHarness({ clearedGroup:1 });
+  h.context.YuksamRaidEntryUi.openFloorSelection();
+  assert.match(h.html(), /파티원 3명이 모두 열어야/);
 });
 
 test('열린 구간을 누르면 방 생성 계약을 정확히 호출한다', async () => {

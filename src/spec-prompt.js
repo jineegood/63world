@@ -18,7 +18,13 @@
   global.__YUKSAM_SPEC_PROMPT_V1__ = true;
 
   const REQUIRED_LEVEL = 5;
-  const DELAY_MS = 900;
+  const DELAY_MS = 300;
+
+  /* 레벨업은 전투 중에도, 퀘스트 보상으로도, 치트로도 일어난다.
+     showScreen/closeModal만 지켜보면 그 어느 쪽도 잡지 못하는 경우가 생겨
+     "레벨 5인데 전문화 창이 한참 뒤에 떴다"가 된다.
+     그래서 짧은 주기로 직접 확인한다(툴팁 모듈과 같은 폴링 백업 방식). */
+  const WATCH_MS = 400;
 
   const G = () => (typeof game !== 'undefined' ? game : null);
   const call = (name, ...args) => (typeof global[name] === 'function' ? global[name](...args) : undefined);
@@ -49,6 +55,23 @@
     global.setTimeout(() => { promptIfNeeded(); }, DELAY_MS);
   }
 
+  /* 폴링 백업 — 레벨 5가 된 뒤 늦어도 1초 안에는 창이 뜬다.
+     하는 일이 값 몇 개를 읽는 것뿐이라 게임 속도에 영향을 주지 않는다. */
+  let watchTimer = null;
+
+  function startWatcher() {
+    if (watchTimer || typeof global.setInterval !== 'function') return;
+    watchTimer = global.setInterval(() => {
+      try { promptIfNeeded(); } catch (_) {}
+    }, WATCH_MS);
+  }
+
+  function stopWatcher() {
+    if (!watchTimer) return;
+    global.clearInterval(watchTimer);
+    watchTimer = null;
+  }
+
   function install() {
     // 게임 화면으로 들어올 때마다 확인한다(로그인, 마을 복귀 등).
     if (typeof global.showScreen === 'function') {
@@ -70,12 +93,18 @@
         return result;
       };
     }
+
+    startWatcher();
   }
 
   global.YuksamSpecPrompt = Object.freeze({
     REQUIRED_LEVEL,
+    DELAY_MS,
+    WATCH_MS,
     needsSpec,
     promptIfNeeded,
+    startWatcher,
+    stopWatcher,
     install,
   });
 

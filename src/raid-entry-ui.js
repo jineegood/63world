@@ -10,18 +10,25 @@
   if (global.__YUKSAM_RAID_ENTRY_UI_V1__) return;
   global.__YUKSAM_RAID_ENTRY_UI_V1__ = true;
 
-  const FLOOR_GROUPS = Object.freeze([
-    Object.freeze({ id:1, label:'1–10층', recommended:'추천 레벨 Lv.5', unlocked:true }),
-    Object.freeze({ id:2, label:'11–20층', recommended:'추천 레벨 Lv.6', unlocked:false }),
-    Object.freeze({ id:3, label:'21–30층', recommended:'추천 레벨 Lv.7', unlocked:false }),
-    Object.freeze({ id:4, label:'31–40층', recommended:'추천 레벨 Lv.8', unlocked:false }),
-    Object.freeze({ id:5, label:'41–50층', recommended:'추천 레벨 Lv.9', unlocked:false }),
-    Object.freeze({ id:6, label:'51–60층', recommended:'추천 레벨 Lv.10', unlocked:false }),
-    Object.freeze({ id:7, label:'61–63층', recommended:'난이도 ??레벨', unlocked:false }),
-  ]);
-
   const doc = () => global.document;
   const call = (name, ...args) => (typeof global[name] === 'function' ? global[name](...args) : undefined);
+  const progress = () => global.YuksamRaidProgress;
+  const player = () => (typeof game !== 'undefined' ? game?.player : null) || null;
+
+  /* 구간 목록은 진행도 모듈이 갖고 있다.
+     앞 구간을 깨면 다음 구간이 열리므로 열림 여부는 그때그때 계산한다. */
+  function floorGroups() {
+    const P = progress();
+    if (!P) return [{ id:1, label:'1–10층', recommended:'추천 레벨 Lv.5', unlocked:true, needs:0 }];
+    const highest = P.highestUnlockedGroup(player());
+    return P.GROUPS.map((group) => ({
+      id:group.id,
+      label:group.label,
+      recommended:`추천 레벨 Lv.${group.recommendedLevel}`,
+      unlocked:group.id <= highest,
+      needs:group.id - 1,
+    }));
+  }
 
   function ensureStyles() {
     const document = doc();
@@ -92,13 +99,18 @@
   }
 
   function floorCardsHtml() {
-    return FLOOR_GROUPS.map((group) => `
+    return floorGroups().map((group) => {
+      const lockNote = group.needs > 0
+        ? `🔒 ${progress()?.labelFor(group.needs) || `${group.needs}구간`}을 먼저 깨야 합니다`
+        : '🔒 잠김';
+      return `
       <button class="raid-floor-card${group.unlocked ? '' : ' locked'}"
         data-raid-floor-group="${group.id}" ${group.unlocked ? '' : 'disabled aria-disabled="true"'}>
         <strong>${group.label}</strong>
         <span>${group.recommended}</span>
-        ${group.unlocked ? '' : '<span class="raid-floor-lock">🔒 향후 업데이트</span>'}
-      </button>`).join('');
+        ${group.unlocked ? '' : `<span class="raid-floor-lock">${lockNote}</span>`}
+      </button>`;
+    }).join('');
   }
 
   function openFloorSelection() {
@@ -106,7 +118,8 @@
     if (typeof global.openModal !== 'function') return false;
     global.openModal(`
       <h2>도전할 층 선택</h2>
-      <p class="raid-entry-intro">방장이 도전할 구간을 고르면 <strong>4자리 초대 코드</strong>가 만들어집니다.</p>
+      <p class="raid-entry-intro">방장이 도전할 구간을 고르면 <strong>4자리 초대 코드</strong>가 만들어집니다.<br>
+        앞 구간을 깨야 다음 구간이 열리고, <strong>파티원 3명이 모두 열어야</strong> 함께 들어갈 수 있어요.</p>
       <div class="panel-card">
         <div class="raid-floor-grid">${floorCardsHtml()}</div>
         <p id="raidEntryError" class="raid-entry-error" role="alert"></p>
@@ -114,8 +127,9 @@
       </div>
     `, { type:'raidFloorSelect', pause:true });
 
+    const groups = floorGroups();
     doc().querySelectorAll('[data-raid-floor-group]').forEach((button) => {
-      const group = FLOOR_GROUPS.find((item) => item.id === Number(button.dataset.raidFloorGroup));
+      const group = groups.find((item) => item.id === Number(button.dataset.raidFloorGroup));
       if (!group?.unlocked) return;
       button.onclick = () => openNetworkLobby({ mode:'create', floorGroup:group.id }, button);
     });
@@ -184,7 +198,7 @@
   }
 
   global.YuksamRaidEntryUi = Object.freeze({
-    FLOOR_GROUPS,
+    floorGroups,
     normalizeInviteCode,
     open,
     openFloorSelection,

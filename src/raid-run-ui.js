@@ -115,7 +115,12 @@
       .raid-post.empty .raid-post-title{position:absolute;top:10px;left:0;right:0}
       .raid-post.filled{border:1px solid rgba(148,163,184,.4);background:rgba(15,23,42,.78);
         justify-content:flex-start}
+      /* 파란 테두리는 "지금 이 화면을 보고 있는 사람"의 캐릭터 표시다.
+         각자 자기 화면에서 자기 캐릭터만 파랗게 보인다. */
+      .raid-post.filled.mine,
       .raid-post.filled.on{border-color:#38bdf8;box-shadow:0 0 0 2px rgba(56,189,248,.35)}
+      /* 방장이 배치하려고 고른 캐릭터는 노란 점선으로 따로 표시한다(방장 화면에만). */
+      .raid-post.filled.picking{outline:2px dashed rgba(251,191,36,.85);outline-offset:2px}
       .raid-post.ready{border-color:#4ade80;box-shadow:0 0 0 2px rgba(74,222,128,.35)}
       /* 자리 이름은 크게 — 한눈에 앞/가운데/뒤를 알 수 있게 */
       .raid-post-title{font-size:39px;font-weight:900;color:#e2e8f0;line-height:1.1}
@@ -139,7 +144,10 @@
       .raid-bench{display:flex;gap:10px;flex-wrap:wrap;min-height:110px}
       .raid-bench-card{cursor:pointer;border:1px solid rgba(148,163,184,.35);border-radius:12px;
         background:rgba(15,23,42,.7);padding:6px 10px 8px;text-align:center}
+      .raid-bench-card.mine,
       .raid-bench-card.on{border-color:#38bdf8;box-shadow:0 0 0 2px rgba(56,189,248,.35)}
+      .raid-unlock-note{margin-top:8px;color:#fbbf24;font-weight:900}
+      .raid-bench-card.picking{outline:2px dashed rgba(251,191,36,.85);outline-offset:2px}
       /* "준비를 눌러주세요!" 는 대기칸 한가운데에 크게 */
       .raid-bench-empty{font-size:30px;font-weight:900;color:#7dd3fc;
         flex:1;display:flex;align-items:center;justify-content:center;text-align:center}
@@ -340,6 +348,9 @@
       costume:{ ...(profile.costume || {}) },
       activePet:profile.activePet || '',
       weaponTier:Math.max(0, Math.min(4, Math.trunc(Number(profile.weaponTier) || 0))),
+      /* 이 학생이 깬 던전 구간. 서버 프로필에서 온다.
+         파티원 셋이 모두 열어야 그 구간에 들어갈 수 있는지 판단하는 데 쓴다. */
+      raidTopGroup:Math.max(0, Math.trunc(Number(profile.raidTopGroup) || 0)),
       isPlayer:id === String(raidIdentity()?.userId || ''),
     };
   }
@@ -349,6 +360,33 @@
       .filter((row) => row && row.active !== false)
       .sort((a, b) => Number(a.joinOrder || a.join_order || 0) - Number(b.joinOrder || b.join_order || 0))
       .map(roomMemberToCombatMember);
+  }
+
+  /* ---------- 구간 해금 ---------- */
+
+  const progressApi = () => global.YuksamRaidProgress;
+
+  /* 지금 방이 도전 중인 구간 번호(1~7). 혼자 연습할 때는 1. */
+  function currentFloorGroup() {
+    const room = networkSession?.room;
+    const raw = room?.floorGroup ?? room?.floor_group;
+    const group = Math.max(1, Math.trunc(Number(raw) || 0));
+    return progressApi()?.groupById(group) ? group : 1;
+  }
+
+  function currentStartFloor() {
+    return progressApi()?.floorForGroup(currentFloorGroup()) || 1;
+  }
+
+  function currentGroupLabel() {
+    return progressApi()?.labelFor(currentFloorGroup()) || '1–10층';
+  }
+
+  /* 파티 셋이 모두 이 구간을 열었는지. 한 명이라도 못 열었으면 이름을 돌려준다. */
+  function partyUnlockState() {
+    const P = progressApi();
+    if (!P) return { ok:true, lockedNames:[] };
+    return P.partyUnlockCheck(roomMembers(), currentFloorGroup());
   }
 
   /* 캔버스 하나에 캐릭터 한 명을 그린다. 대형 화면과 전투 화면이 함께 쓴다. */
@@ -784,7 +822,9 @@
     const savedFormation = seated && roster.every((member) => rowById(member.id)?.slot === placement[member.id]);
     const allReady = roster.length === 3 && roster.every((member) => rowById(member.id)?.ready === true);
     const myReady = rowById(me)?.ready === true;
-    const countdown = syncNetworkLobbyCountdown(savedFormation && allReady);
+    /* 구간을 못 연 사람이 있으면 카운트다운도 시작하지 않는다. */
+    const partyUnlocked = roster.length === 3 ? partyUnlockState().ok : false;
+    const countdown = syncNetworkLobbyCountdown(savedFormation && allReady && partyUnlocked);
 
     if (!networkSelectedMemberId || !memberById(networkSelectedMemberId)) {
       networkSelectedMemberId = roster[0]?.id || null;
@@ -799,8 +839,11 @@
           ${host && roster.length === 3 ? `<button class="raid-plus" data-network-slot="${slot}">+</button>` : ''}
         </div>`;
       const ready = rowById(member.id)?.ready === true;
+      /* 파란 테두리는 '나', 노란 점선은 방장이 배치하려고 고른 사람. */
+      const marks = `${isMine(member) ? ' mine' : ''}`
+        + `${host && networkSelectedMemberId === member.id ? ' picking' : ''}`;
       return `
-        <div class="raid-post filled ${networkSelectedMemberId === member.id ? 'on' : ''} ${ready ? 'ready' : ''}">
+        <div class="raid-post filled${marks} ${ready ? 'ready' : ''}">
           <div class="raid-post-title">${label}</div>
           <div class="raid-figure" ${host ? `data-network-pick="${esc(member.id)}"` : ''}>
             ${networkMemberCanvas(member)}
@@ -813,7 +856,9 @@
 
     const waitingCards = waiting.map((member) => {
       const ready = rowById(member.id)?.ready === true;
-      return `<div class="raid-bench-card ${networkSelectedMemberId === member.id ? 'on' : ''} ${ready ? 'ready' : ''}"
+      const marks = `${isMine(member) ? ' mine' : ''}`
+        + `${host && networkSelectedMemberId === member.id ? ' picking' : ''}`;
+      return `<div class="raid-bench-card${marks} ${ready ? 'ready' : ''}"
           ${host ? `data-network-pick="${esc(member.id)}"` : ''}>
         ${networkMemberCanvas(member)}
         <div class="raid-figure-name">${networkHostCrown(member)}${esc(member.name)}${isMine(member) ? ' (나)' : ''}</div>
@@ -824,16 +869,21 @@
       <div class="raid-room-member empty">친구를 기다리는 중…<small>${roster.length + index + 1}/3 자리</small></div>
     `).join('');
 
+    /* 셋이 다 모이면 이 구간을 모두 열었는지 먼저 알려 준다.
+       한 명이라도 못 열었으면 출발 자체가 막히므로 미리 보여 줘야 한다. */
+    const unlock = roster.length === 3 ? partyUnlockState() : { ok:true, lockedNames:[] };
     const status = message || (roster.length < 3
       ? `친구 ${3 - roster.length}명이 더 들어오면 대형을 정할 수 있어요.`
-      : !savedFormation
-        ? (host ? '캐릭터를 골라 앞·가운데·뒤에 한 명씩 배치해 주세요.' : '방장이 대형을 정하고 있어요.')
-        : !allReady
-          ? '대형이 정해졌습니다. 각자 준비를 눌러 주세요.'
-          : (countdown > 0 ? `${countdown}초 후 자동으로 출발합니다!` : '던전으로 출발하는 중입니다…'));
+      : !unlock.ok
+        ? `${unlock.lockedNames.join(', ')} 님이 아직 ${currentGroupLabel()} 구간을 열지 못했습니다. 앞 구간을 먼저 깨야 해요.`
+        : !savedFormation
+          ? (host ? '캐릭터를 골라 앞·가운데·뒤에 한 명씩 배치해 주세요.' : '방장이 대형을 정하고 있어요.')
+          : !allReady
+            ? '대형이 정해졌습니다. 각자 준비를 눌러 주세요.'
+            : (countdown > 0 ? `${countdown}초 후 자동으로 출발합니다!` : '던전으로 출발하는 중입니다…'));
 
     call('openModal', `
-      <h2>1–10층 파티 대기실</h2>
+      <h2>${esc(currentGroupLabel())} 파티 대기실</h2>
       <div class="raid-room-head">
         <div class="raid-room-code"><span>초대 코드</span><strong>${esc(networkSession.room.code || '----')}</strong></div>
         <div class="raid-room-count">${roster.length} / 3명</div>
@@ -845,7 +895,7 @@
           <div class="raid-bench">${waitingCards}${emptyWaiting || (!waiting.length ? '<div class="raid-bench-empty">모두 자리를 정했습니다!</div>' : '')}</div>
         </div>
         ${allReady ? `<div class="raid-countdown">${countdown > 0 ? `${countdown}초 후 출발!` : '출발!'}</div>` : ''}
-        <p class="raid-room-status ${allReady ? 'good' : (roster.length < 3 ? 'warn' : '')}">${esc(status)}</p>
+        <p class="raid-room-status ${allReady && unlock.ok ? 'good' : (roster.length < 3 || !unlock.ok ? 'warn' : '')}">${esc(status)}</p>
         <div class="raid-room-actions">
           ${host && roster.length === 3 && !savedFormation ? '<button class="primary" id="raidSaveFormationBtn" disabled>대형 확정</button>' : ''}
           ${savedFormation ? `<button class="primary" id="raidReadyBtn">${myReady ? '준비 취소' : '준비'}</button>` : ''}
@@ -907,9 +957,15 @@
       renderNetworkLobby('세 명의 캐릭터 정보를 모두 불러오지 못했습니다.');
       return;
     }
+    /* 구간 해금 — 셋이 모두 열어야 들어간다. */
+    const unlock = partyUnlockState();
+    if (!unlock.ok) {
+      renderNetworkLobby(`${unlock.lockedNames.join(', ')} 님이 아직 ${currentGroupLabel()} 구간을 열지 못했습니다.`);
+      return;
+    }
     networkStarting = true;
     try {
-      active = runApi().createRun({ floor:1, members });
+      active = runApi().createRun({ floor:currentStartFloor(), members });
       const assignments = Object.fromEntries(members.map((member) => [member.id, member.slot]));
       const confirmed = active.confirmFormation(assignments);
       if (!confirmed.ok) throw new Error(confirmed.reason || '대형을 불러오지 못했습니다.');
@@ -1008,6 +1064,14 @@
     session.beginningRound = true;
     try {
       const members = roomMembers();
+      /* 서버는 세 명분의 문제를 한꺼번에 받아야 한다. 한 명이라도 빠지면
+         "요청이 올바르지 않습니다"로 막히므로 여기서 먼저 이유를 알려 준다. */
+      if (members.length !== 3) {
+        session.beginningRound = false;
+        panelMessage = '파티원 한 명의 접속이 끊겼습니다. 다시 연결되면 문제가 나옵니다…';
+        if (G()?.modalState?.type === 'raidBattle') renderBattle();
+        return;
+      }
       const selected = pickDistinctQuestions(members.length);
       const questionByUser = Object.fromEntries(members.map((member, index) => [
         String(member.id), publicRaidQuestion(selected[index]),
@@ -1095,7 +1159,7 @@
       const monsterState = snapshot.monster ? { ...snapshot.monster, raidRound:snapshot.round } : {};
       const currentFloor = snapshot.phase === 'battle'
         ? displayFloorForProgress(snapshot, 1)
-        : ENCOUNTER_FLOORS[Math.max(0, Math.min(ENCOUNTER_FLOORS.length - 1, snapshot.encounterIndex - 1))];
+        : encounterFloors()[Math.max(0, Math.min(3, snapshot.encounterIndex - 1))];
       const data = await session.client.publishRound(session.room.id, round, {
         nextPhase,
         encounterIndex:snapshot.encounterIndex,
@@ -1447,18 +1511,31 @@
     return worlds;
   }
 
-  /* 한 구간의 네 조우 지점은 3·5·8·10층이다.
+  /* 한 구간의 네 조우 지점은 그 구간의 3·5·8·10번째 층이다.
+     11–20층 구간이면 13·15·18·20층이 된다.
      이동 중에는 직전 조우층에서 다음 조우층까지 자연스럽게 숫자가 올라간다. */
-  const ENCOUNTER_FLOORS = Object.freeze([3, 5, 8, 10]);
-  const ENCOUNTER_START_FLOORS = Object.freeze([1, 3, 5, 8]);
+  const ENCOUNTER_OFFSETS = Object.freeze([3, 5, 8, 10]);
+  const ENCOUNTER_START_OFFSETS = Object.freeze([1, 3, 5, 8]);
+
+  function encounterFloors() {
+    const base = currentStartFloor() - 1;
+    return ENCOUNTER_OFFSETS.map((offset) => base + offset);
+  }
+
+  function encounterStartFloors() {
+    const base = currentStartFloor() - 1;
+    return ENCOUNTER_START_OFFSETS.map((offset) => base + offset);
+  }
 
   function displayFloorForProgress(snapshot, progress = 0) {
+    const floors = encounterFloors();
+    const starts = encounterStartFloors();
     const index = Math.max(0, Math.min(
-      ENCOUNTER_FLOORS.length - 1,
+      floors.length - 1,
       Math.floor(Number(snapshot?.encounterIndex) || 0),
     ));
-    const start = ENCOUNTER_START_FLOORS[index];
-    const target = ENCOUNTER_FLOORS[index];
+    const start = starts[index];
+    const target = floors[index];
     if (snapshot?.phase === 'battle') return target;
     const ratio = Math.max(0, Math.min(1, Number(progress) || 0));
     return Math.max(start, Math.min(target, Math.floor(start + (target - start) * ratio + 0.35)));
@@ -2759,28 +2836,38 @@
     const reward = snap.reward || {};
     const g = G();
 
+    const group = currentFloorGroup();
+    const groupLabel = currentGroupLabel();
+    const P = progressApi();
+    const nextLabel = P && group < P.LAST_GROUP ? P.labelFor(group + 1) : '';
+    let unlockedNext = false;
+
     if (cleared && g?.player) {
       call('addExp', reward.exp || 0);
       call('addGold', reward.gold || 0);
       if (reward.building) g.player.building = (g.player.building || 0) + reward.building;
+      /* 이 구간을 깼으니 다음 구간을 연다. */
+      unlockedNext = !!P && P.recordClear(g.player, group) && !!nextLabel;
       call('savePlayer');
       call('updateHud');
     }
 
+    const bossName = snap.monster?.name || '구간의 보스';
     call('playSfx', cleared ? 'quest' : 'hit');
     call('openModal', `
-      <h2>${cleared ? '🏆 1–10층 돌파!' : '전멸…'}</h2>
+      <h2>${cleared ? `🏆 ${esc(groupLabel)} 돌파!` : '전멸…'}</h2>
       <div class="panel-card">
         ${cleared
-          ? `<p>63빌딩 관리자를 쓰러뜨렸습니다!</p>
-             <p>EXP +${reward.exp || 0} · Gold +${reward.gold || 0} · 빌딩 +${reward.building || 0}</p>`
+          ? `<p>${esc(bossName)}을(를) 쓰러뜨렸습니다!</p>
+             <p>EXP +${reward.exp || 0} · Gold +${reward.gold || 0} · 빌딩 +${reward.building || 0}</p>
+             ${unlockedNext ? `<p class="raid-unlock-note">🔓 <strong>${esc(nextLabel)}</strong> 구간이 열렸습니다!</p>` : ''}`
           : '<p>다음에는 대형을 바꿔서 다시 도전해 보세요.</p>'}
         <div class="answer-row"><button class="primary" id="raidDoneBtn">확인</button></div>
       </div>
     `, { type:'raidResult', pause:true });
 
     call('appendChatMessage', 'system', '63빌딩 던전',
-      cleared ? '1–10층 구간을 돌파했습니다!' : '1–10층 구간에서 전멸했습니다.');
+      cleared ? `${groupLabel} 구간을 돌파했습니다!` : `${groupLabel} 구간에서 전멸했습니다.`);
 
     const doneBtn = global.document.getElementById('raidDoneBtn');
     if (doneBtn) {

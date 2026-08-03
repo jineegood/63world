@@ -23,6 +23,23 @@
     SERVER_ERROR:'던전 서버가 응답하지 않습니다. 잠시 뒤 다시 시도해 주세요.',
   });
 
+  /* 실패한 단계를 사람이 읽는 말로 붙여 준다.
+     같은 문구라도 어디서 막혔는지 알아야 원인을 찾을 수 있다. */
+  const STEP_NAMES = Object.freeze({
+    create:'방 만들기',
+    join:'방 참가',
+    resume:'방 복구',
+    sync:'상태 동기화',
+    setFormation:'대형 저장',
+    ready:'준비',
+    start:'던전 출발',
+    beginRound:'문제 발급',
+    submit:'답 제출',
+    publishRound:'전투 결과 반영',
+    heartbeat:'접속 유지',
+    leave:'방 나가기',
+  });
+
   function create({ client, getIdentity }) {
     if (!client?.functions?.invoke || typeof getIdentity !== 'function') {
       throw new TypeError('Raid party client dependencies are required.');
@@ -97,8 +114,14 @@
           await wait(350);
           continue;
         }
-        const failure = new Error(MESSAGES[code] || MESSAGES.SERVER_ERROR);
+        /* 어느 단계에서 막혔는지 함께 보여 준다.
+           "던전 요청이 올바르지 않습니다"만 뜨면 방 만들기인지 문제 발급인지
+           알 수가 없어 원인을 찾지 못한다. */
+        const step = STEP_NAMES[String(body?.op || '')] || String(body?.op || '');
+        const base = MESSAGES[code] || MESSAGES.SERVER_ERROR;
+        const failure = new Error(step ? `${base} (${step})` : base);
         failure.code = code || 'SERVER_ERROR';
+        failure.op = String(body?.op || '');
         throw failure;
       }
       return null;

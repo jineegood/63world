@@ -198,6 +198,9 @@ export function buildAuthoritativePvpProfile({ userId, displayName, data:rawData
     defense:Math.max(0, Math.round(Number(total.방어) || 0)),
     activePet,
     weaponTier,
+    /* 63빌딩 던전에서 깬 구간 중 가장 높은 번호(0~7).
+       앞 구간을 깬 사람만 다음 구간에 들어갈 수 있는지 서버가 판단하는 데 쓴다. */
+    raidTopGroup:Math.max(0, Math.min(7, Math.trunc(Number(data.raidTopGroup) || 0))),
     map:boundedText(data.map || 'town', 40) || 'town',
   };
 }
