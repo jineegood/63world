@@ -119,8 +119,8 @@
          각자 자기 화면에서 자기 캐릭터만 파랗게 보인다. */
       .raid-post.filled.mine,
       .raid-post.filled.on{border-color:#38bdf8;box-shadow:0 0 0 2px rgba(56,189,248,.35)}
-      /* 방장이 배치하려고 고른 캐릭터는 노란 점선으로 따로 표시한다(방장 화면에만). */
-      .raid-post.filled.picking{outline:2px dashed rgba(251,191,36,.85);outline-offset:2px}
+      /* 방장이 배치하려고 고른 캐릭터는 은은하게 밝히기만 한다(테두리는 안 건드린다). */
+      .raid-post.filled.picking{background:rgba(56,189,248,.14)}
       .raid-post.ready{border-color:#4ade80;box-shadow:0 0 0 2px rgba(74,222,128,.35)}
       /* 자리 이름은 크게 — 한눈에 앞/가운데/뒤를 알 수 있게 */
       .raid-post-title{font-size:39px;font-weight:900;color:#e2e8f0;line-height:1.1}
@@ -147,7 +147,7 @@
       .raid-bench-card.mine,
       .raid-bench-card.on{border-color:#38bdf8;box-shadow:0 0 0 2px rgba(56,189,248,.35)}
       .raid-unlock-note{margin-top:8px;color:#fbbf24;font-weight:900}
-      .raid-bench-card.picking{outline:2px dashed rgba(251,191,36,.85);outline-offset:2px}
+      .raid-bench-card.picking{background:rgba(56,189,248,.14)}
       /* "준비를 눌러주세요!" 는 대기칸 한가운데에 크게 */
       .raid-bench-empty{font-size:30px;font-weight:900;color:#7dd3fc;
         flex:1;display:flex;align-items:center;justify-content:center;text-align:center}

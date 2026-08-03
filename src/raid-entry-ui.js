@@ -24,7 +24,8 @@
     return P.GROUPS.map((group) => ({
       id:group.id,
       label:group.label,
-      recommended:`추천 레벨 Lv.${group.recommendedLevel}`,
+      /* 마지막 61–63층은 얼마나 어려운지 아직 밝히지 않는다. */
+      recommended:group.id === P.LAST_GROUP ? '추천 레벨 ???' : `추천 레벨 Lv.${group.recommendedLevel}`,
       unlocked:group.id <= highest,
       needs:group.id - 1,
     }));
@@ -48,19 +49,55 @@
         font-weight:900;letter-spacing:8px;padding:9px 6px!important;font-variant-numeric:tabular-nums}
       .raid-code-input::placeholder{letter-spacing:4px;color:#64748b}
       .raid-entry-error{min-height:20px;margin:5px 0 0;color:#fca5a5;font-size:13px;font-weight:800;text-align:center}
-      .raid-floor-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;margin:14px 0}
-      .raid-floor-card{min-height:104px;border-radius:14px;border:1px solid rgba(56,189,248,.65);
-        background:linear-gradient(145deg,rgba(14,74,108,.96),rgba(12,40,67,.96));color:#f0f9ff;
-        display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;cursor:pointer}
-      .raid-floor-card:hover{filter:brightness(1.15);transform:translateY(-1px)}
-      .raid-floor-card strong{font-size:25px}.raid-floor-card span{font-size:13px;color:#bae6fd;font-weight:800}
-      .raid-floor-card.locked{background:linear-gradient(145deg,#080b11,#151922);border-color:#303643;
-        color:#626b79;cursor:not-allowed;filter:none;transform:none;box-shadow:inset 0 0 28px rgba(0,0,0,.5)}
-      .raid-floor-card.locked span{color:#545d6b}.raid-floor-lock{font-size:11px!important;color:#737c89!important}
+      /* 층 선택 — 빌딩을 올려다보는 모양.
+         아래가 1–10층이고 위로 갈수록 높은 층이다(그래서 column-reverse).
+         한 칸이 건물 한 층처럼 보이도록 가로로 길게 눕히고 위아래로 쌓는다. */
+      .raid-floor-grid{display:flex;flex-direction:column-reverse;gap:5px;margin:14px 0}
+      .raid-floor-card{min-height:56px;border-radius:7px;border:1px solid rgba(255,255,255,.16);
+        color:#f8fafc;display:grid;grid-template-columns:auto 1fr auto;align-items:center;
+        gap:12px;padding:9px 16px;text-align:left;cursor:pointer;position:relative;
+        box-shadow:0 2px 0 rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.12)}
+      /* 위층일수록 폭이 살짝 좁아 탑처럼 보인다. */
+      .raid-floor-card[data-raid-floor-group="2"]{width:98%;margin:0 auto}
+      .raid-floor-card[data-raid-floor-group="3"]{width:96%;margin:0 auto}
+      .raid-floor-card[data-raid-floor-group="4"]{width:94%;margin:0 auto}
+      .raid-floor-card[data-raid-floor-group="5"]{width:92%;margin:0 auto}
+      .raid-floor-card[data-raid-floor-group="6"]{width:90%;margin:0 auto}
+      .raid-floor-card[data-raid-floor-group="7"]{width:87%;margin:0 auto;border-radius:7px 7px 12px 12px}
+      /* 난이도 색 — 아래는 시원한 파랑, 올라갈수록 보라·주황·붉은색으로 달아오른다. */
+      .raid-floor-card.tier1{background:linear-gradient(180deg,#1d6ea8,#144b73)}
+      .raid-floor-card.tier2{background:linear-gradient(180deg,#1a7f97,#125767)}
+      .raid-floor-card.tier3{background:linear-gradient(180deg,#4a5aa8,#2f3a70)}
+      .raid-floor-card.tier4{background:linear-gradient(180deg,#6b46a8,#452c6e)}
+      .raid-floor-card.tier5{background:linear-gradient(180deg,#9a4a86,#652f57)}
+      .raid-floor-card.tier6{background:linear-gradient(180deg,#b25334,#732f1c)}
+      .raid-floor-card.tier7{background:linear-gradient(180deg,#8c1d1d,#4a0d0d);
+        border-color:rgba(252,165,165,.5);box-shadow:0 2px 0 rgba(0,0,0,.5),
+        inset 0 1px 0 rgba(255,255,255,.12), 0 0 16px rgba(220,38,38,.35)}
+      .raid-floor-card:hover{filter:brightness(1.18);transform:translateY(-1px)}
+      .raid-floor-card strong{font-size:20px;letter-spacing:-.02em;white-space:nowrap}
+      .raid-floor-card span{font-size:12px;color:rgba(255,255,255,.86);font-weight:800}
+      /* 난이도 눈금 — 층이 올라갈수록 채워지는 칸이 늘어난다. */
+      .raid-floor-heat{display:flex;gap:3px;justify-self:end}
+      .raid-floor-heat i{width:7px;height:14px;border-radius:2px;background:rgba(255,255,255,.18)}
+      .raid-floor-heat i.on{background:rgba(255,255,255,.9)}
+      .raid-floor-card.locked{background:linear-gradient(180deg,#12161d,#0a0d12);border-color:#2b313b;
+        color:#5c6673;cursor:not-allowed;filter:none;transform:none;
+        box-shadow:0 2px 0 rgba(0,0,0,.4), inset 0 0 24px rgba(0,0,0,.55)}
+      .raid-floor-card.locked span{color:#4d5764}
+      .raid-floor-card.locked .raid-floor-heat i{background:rgba(255,255,255,.09)}
+      .raid-floor-card.locked .raid-floor-heat i.on{background:rgba(255,255,255,.22)}
+      .raid-floor-lock{font-size:11px!important;color:#6b7482!important}
+      /* 맨 아래 바닥선 — 빌딩이 땅에 서 있는 느낌 */
+      .raid-floor-ground{height:8px;border-radius:0 0 10px 10px;margin:0 auto;width:100%;
+        background:linear-gradient(180deg,#2a3340,#141a22);box-shadow:0 3px 10px rgba(0,0,0,.5)}
       .raid-floor-actions{display:flex;justify-content:center;margin-top:8px}
       @media (max-width:720px){
-        .raid-entry-actions,.raid-floor-grid{grid-template-columns:1fr}
+        .raid-entry-actions{grid-template-columns:1fr}
         .raid-entry-card{min-height:150px}
+        .raid-floor-card{grid-template-columns:auto 1fr;padding:8px 12px;min-height:50px}
+        .raid-floor-card strong{font-size:17px}
+        .raid-floor-heat{display:none}
       }
     `;
     document.head.appendChild(style);
@@ -98,19 +135,32 @@
     }
   }
 
+  /* 난이도 눈금 일곱 칸. 층이 올라갈수록 채워진 칸이 늘어난다. */
+  function heatHtml(level) {
+    return `<span class="raid-floor-heat">${
+      Array.from({ length:7 }, (_, index) => `<i class="${index < level ? 'on' : ''}"></i>`).join('')
+    }</span>`;
+  }
+
   function floorCardsHtml() {
-    return floorGroups().map((group) => {
+    const groups = floorGroups();
+    const cards = groups.map((group) => {
       const lockNote = group.needs > 0
         ? `🔒 ${progress()?.labelFor(group.needs) || `${group.needs}구간`}을 먼저 깨야 합니다`
         : '🔒 잠김';
+      const note = group.unlocked
+        ? `<span>${group.recommended}</span>`
+        : `<span class="raid-floor-lock">${lockNote}</span>`;
       return `
-      <button class="raid-floor-card${group.unlocked ? '' : ' locked'}"
+      <button class="raid-floor-card tier${group.id}${group.unlocked ? '' : ' locked'}"
         data-raid-floor-group="${group.id}" ${group.unlocked ? '' : 'disabled aria-disabled="true"'}>
         <strong>${group.label}</strong>
-        <span>${group.recommended}</span>
-        ${group.unlocked ? '' : `<span class="raid-floor-lock">${lockNote}</span>`}
+        ${note}
+        ${heatHtml(group.id)}
       </button>`;
     }).join('');
+    // 아래에서 위로 쌓이므로(column-reverse) 바닥선은 목록 맨 앞에 둔다.
+    return `<div class="raid-floor-ground"></div>${cards}`;
   }
 
   function openFloorSelection() {

@@ -195,6 +195,18 @@ test('자리 미정인 실제 세 명은 모두 대기칸에 보이고 같은 �
   assert.match(rendered, /id="raidSaveFormationBtn" disabled/);
 });
 
+test('대기실 파란 테두리는 내 캐릭터 표시이고 점선은 쓰지 않는다', () => {
+  // 각자 자기 화면에서 자기 캐릭터만 파랗게 보인다(방장 고정이 아니다).
+  assert.match(uiSource, /isMine\(member\) \? ' mine' : ''/);
+  assert.match(uiSource, /\.raid-post\.filled\.mine,\s*\n\s*\.raid-post\.filled\.on\{border-color:#38bdf8/);
+  // 방장은 왕관으로만 구분한다.
+  assert.match(uiSource, /raid-host-crown[^>]*>👑 방장/);
+  // 대기실 카드에는 점선을 쓰지 않는다(제작자 요청).
+  const lobbyStyles = uiSource.match(/\.raid-post\.filled[\s\S]*?\.raid-bench-empty/)?.[0] || '';
+  assert.notEqual(lobbyStyles, '');
+  assert.doesNotMatch(lobbyStyles, /dashed/, '대기실 카드에 점선이 남아 있으면 안 된다');
+});
+
 test('던전 모달은 공용 X를 숨기고 방 나가기·포기 버튼을 사용한다', () => {
   assert.match(uiSource, /#modal:has\(#modalContent \[class\*="raid-"\]\)[\s\S]*?#modalClose\{display:none!important\}/);
   assert.match(uiSource, /id="raidNetworkLeaveBtn">방 나가기/);

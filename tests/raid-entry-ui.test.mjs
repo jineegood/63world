@@ -125,7 +125,39 @@ test('아직 아무것도 못 깼으면 일곱 구간 중 1–10층만 열린다
   // 잠긴 구간은 무엇을 먼저 깨야 하는지 알려 준다.
   assert.equal((h.html().match(/먼저 깨야 합니다/g) || []).length, 6);
   assert.match(h.html(), /1–10층을 먼저 깨야 합니다/);
-  assert.match(source, /\.raid-floor-card\.locked\{background:linear-gradient\([^;]*#080b11/);
+  assert.match(source, /\.raid-floor-card\.locked\{background:linear-gradient\([^;]*#12161d/);
+});
+
+test('마지막 61–63층은 추천 레벨을 밝히지 않는다', () => {
+  const h = createHarness({ clearedGroup:7 });
+  h.context.YuksamRaidEntryUi.openFloorSelection();
+  assert.match(h.html(), /추천 레벨 \?\?\?/);
+  // 나머지 여섯 구간은 숫자로 알려 준다.
+  assert.equal((h.html().match(/추천 레벨 Lv\.\d+/g) || []).length, 6);
+  assert.equal((h.html().match(/추천 레벨 \?\?\?/g) || []).length, 1);
+});
+
+test('층 선택은 빌딩처럼 아래에서 위로 쌓이고 올라갈수록 색이 뜨거워진다', () => {
+  const h = createHarness({ clearedGroup:7 });
+  h.context.YuksamRaidEntryUi.openFloorSelection();
+
+  // 1–10층이 맨 아래에 오도록 세로로 뒤집어 쌓는다.
+  assert.match(source, /\.raid-floor-grid\{display:flex;flex-direction:column-reverse/);
+  // 바닥선이 있어야 건물이 땅에 서 있는 것처럼 보인다.
+  assert.match(h.html(), /<div class="raid-floor-ground"><\/div>/);
+
+  // 일곱 구간이 각자 다른 난이도 색을 가진다.
+  for (let tier = 1; tier <= 7; tier += 1) {
+    assert.match(h.html(), new RegExp(`raid-floor-card tier${tier}\\b`), `${tier}층 색 지정`);
+    assert.match(source, new RegExp(`\\.raid-floor-card\\.tier${tier}\\{background:linear-gradient`), `tier${tier} 색 정의`);
+  }
+  // 맨 위 구간은 붉은 경고색이어야 한다.
+  assert.match(source, /\.raid-floor-card\.tier7\{background:linear-gradient\(180deg,#8c1d1d/);
+
+  // 난이도 눈금은 층이 올라갈수록 채워진 칸이 늘어난다.
+  const filled = [...h.html().matchAll(/<span class="raid-floor-heat">(.*?)<\/span>/g)]
+    .map((match) => (match[1].match(/class="on"/g) || []).length);
+  assert.deepEqual(filled, [1, 2, 3, 4, 5, 6, 7]);
 });
 
 test('앞 구간을 깨면 바로 다음 구간이 열린다', () => {
