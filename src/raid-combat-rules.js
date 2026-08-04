@@ -1094,8 +1094,8 @@
       events.push({
         kind:'monster-counter-stance', status:'counter', planName:plan.name, mode:plan.counter,
         text:plan.counter === 'all'
-          ? `${monster.name}의 ${plan.name}! 다음에 맞을 때마다 파티 전체에 반격합니다.`
-          : `${monster.name}의 ${plan.name}! 다음에 때린 사람에게 반격합니다.`,
+          ? `${monster.name}의 ${plan.name}! 다음에 맞을 때마다 50% 확률로 파티 전체에 반격합니다.`
+          : `${monster.name}의 ${plan.name}! 다음에 때린 사람에게 50% 확률로 반격합니다.`,
       });
     }
     if (plan.chargeNext && findPlanByName(monster, plan.chargeNext)) {

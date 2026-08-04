@@ -659,3 +659,46 @@ test('던전 안쪽을 실제 브라우저에서 3인 방 경로로 끝까지 �
   }
   assert.match(result.stdout, /요약: PASS \d+ \/ FAIL 0/);
 });
+
+test('세 화면이 같은 몬스터를 만난다', () => {
+  /* 실제 사고: 한 명은 빌딩 스톰프, 나머지 둘은 고장 난 전화기가 나왔다.
+     같은 레벨에 두 마리가 있는 자리를 각자 Math.random으로 뽑았기 때문이다.
+     방 id에서 만든 같은 난수로 뽑아 셋이 반드시 같은 목록을 쓴다. */
+  assert.match(uiSource, /R\.rollEncounters\(currentStartFloor\(\), R\.seededRng\(`encounters\|\$\{roomSeed\}`\)\)/);
+  assert.match(uiSource, /createRun\(\{[\s\S]*?encounterIds,\s*\n\s*\}\)/);
+
+  // 같은 씨앗이면 같은 목록, 다른 방이면 다른 목록이 나와야 한다.
+  const context = vm.createContext({ window:{} });
+  vm.runInContext(rulesSource, context, { filename:'raid-rules.js' });
+  const R = context.window.YuksamRaidRules;
+  const roll = (roomId) => [...R.rollEncounters(1, R.seededRng(`encounters|${roomId}`))];
+  assert.deepEqual(roll('room-abc'), roll('room-abc'), '같은 방이면 같은 몬스터');
+  const many = new Set(['a', 'b', 'c', 'd', 'e', 'f'].map((id) => roll(id).join(',')));
+  assert.ok(many.size > 1, '방이 다르면 몬스터 구성도 달라져야 한다');
+});
+
+test('치명타 소리는 아군·몬스터 가리지 않고 난다', () => {
+  /* 예전에는 아군 치명타가 스킬 소리에 가려 아예 안 났고,
+     몬스터 치명타도 음원이 없으면 평타 소리로 떨어졌다. */
+  const block = uiSource.match(/function playEventSound\(event\)[\s\S]*?\n  \}/)?.[0] || '';
+  assert.notEqual(block, '');
+  assert.match(block, /event\.critical === true && event\.missed !== true/);
+  assert.match(block, /call\('playSfx', 'critical'\)/);
+  // 같은 소리를 두 번 겹치지 않는다.
+  assert.match(block, /event\.audioId !== 'critical'/);
+});
+
+test('사망음은 배경음악에 묻히지 않을 만큼 크다', () => {
+  const defeat = gameSource.match(/if \(name === 'defeat'\) \{[\s\S]*?\n  \}/)?.[0] || '';
+  assert.notEqual(defeat, '');
+  // 예전 음량 .16으로는 던전 음악에 묻혔다.
+  assert.doesNotMatch(defeat, /'sine', \.16\)/);
+  assert.match(defeat, /playTone\(110, \.30, 'sawtooth', \.34\)/);
+});
+
+test('반격 안내에 50% 확률이 적혀 있다', () => {
+  assert.match(uiSource, /때릴 때마다 50% 확률로 파티 전체가 반격을 받습니다/);
+  assert.match(uiSource, /때릴 때마다 50% 확률로 때린 사람이 반격을 받습니다/);
+  assert.match(combatSource, /50% 확률로 파티 전체에 반격합니다/);
+  assert.match(combatSource, /50% 확률로 반격합니다/);
+});

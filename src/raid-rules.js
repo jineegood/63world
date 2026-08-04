@@ -257,7 +257,7 @@
     },
     // ── Lv.6 ─────────────────────────────────────────────
     buildingStomp: {
-      id:'buildingStomp', name:'빌딩 스톰프', level:6, hp:368, attack:19,
+      id:'buildingStomp', name:'빌딩 스톰프', level:6, hp:294, attack:19,
       desc:'건물을 통째로 흔드는 거구.',
       pattern:[
         { name:'대지 찍기', kind:'all', stun:true },

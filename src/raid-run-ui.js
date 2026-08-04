@@ -937,10 +937,20 @@
     try {
       /* 방 id를 기술 순서의 씨앗으로 쓴다. 셋이 같은 값을 넣으므로
          각자 계산해도 같은 순서가 나온다(다음 턴 예고가 어긋나지 않는다). */
+      /* 같은 레벨에 두 마리가 있는 자리는 무작위로 하나를 뽑는다.
+         여기서 뽑기를 각자 Math.random으로 하면 화면마다 다른 몬스터가
+         나온다(실제 사고: 한 명은 빌딩 스톰프, 둘은 고장 난 전화기).
+         방 id에서 만든 같은 난수로 뽑아 셋이 반드시 같은 목록을 쓴다. */
+      const roomSeed = String(networkSession.room?.id || '');
+      const R = rules();
+      const encounterIds = typeof R.rollEncounters === 'function' && typeof R.seededRng === 'function'
+        ? R.rollEncounters(currentStartFloor(), R.seededRng(`encounters|${roomSeed}`))
+        : null;
       active = runApi().createRun({
         floor:currentStartFloor(),
         members,
-        patternSeed:String(networkSession.room?.id || ''),
+        patternSeed:roomSeed,
+        encounterIds,
       });
       const assignments = Object.fromEntries(members.map((member) => [member.id, member.slot]));
       const confirmed = active.confirmFormation(assignments);
@@ -2050,7 +2060,9 @@
     if (empower > 0) badges.push({ key:'empower', label:`강화 ${empower}`, tooltip:`공격력이 올라간 상태입니다. 남은 ${empower}턴` });
     if (monster?.counterMode) badges.push({
       key:'counter', label:'반격',
-      tooltip:monster.counterMode === 'all' ? '때릴 때마다 파티 전체가 반격을 받습니다.' : '때린 사람이 반격을 받습니다.',
+      tooltip:monster.counterMode === 'all'
+        ? '때릴 때마다 50% 확률로 파티 전체가 반격을 받습니다.'
+        : '때릴 때마다 50% 확률로 때린 사람이 반격을 받습니다.',
     });
     if (monster?.chargedPlanName) badges.push({
       key:'charge', label:'예고',
@@ -2335,8 +2347,20 @@
   /* 소리는 게임의 오디오 목록을 그대로 쓴다. 없으면 조용히 넘어간다. */
   function playEventSound(event) {
     if (!event) return;
+
+    /* 치명타 소리는 누가 터뜨렸든 반드시 난다.
+       예전에는 아군 치명타는 스킬 소리에 가려 아예 안 났고, 몬스터 치명타도
+       'critical' 음원이 없으면 그냥 평타 소리로 떨어졌다.
+       playSfx('critical')은 사냥터와 같은 전용 경로라 화면 번쩍임까지 함께 온다. */
+    if (event.critical === true && event.missed !== true) {
+      call('playSfx', 'critical');
+    }
+
     if (event.audioId) {
-      playAsset(event.audioId, event.audioId === 'miss' ? 'miss' : 'hit');
+      /* 치명타 소리를 이미 냈으면 같은 소리를 두 번 겹치지 않는다. */
+      if (event.audioId !== 'critical') {
+        playAsset(event.audioId, event.audioId === 'miss' ? 'miss' : 'hit');
+      }
       return;
     }
     if (event.kind === 'party-hit') call('playSfx', 'hit');

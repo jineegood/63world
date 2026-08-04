@@ -990,7 +990,14 @@ function playSynthSfx(name) {
   if (name === 'slash') { playTone(760, .045, 'sawtooth', .18); setTimeout(() => playTone(310, .085, 'triangle', .18), 38); return; }
   if (name === 'magic') { [620, 930, 1240].forEach((f, i) => setTimeout(() => playTone(f, .11, 'sine', .16 - i*.025), i * 62)); return; }
   if (name === 'shadow') { playTone(210, .18, 'sawtooth', .16); setTimeout(() => playTone(330, .14, 'triangle', .10), 90); return; }
-  if (name === 'defeat') { [220, 196, 174, 130].forEach((f, i) => setTimeout(() => playTone(f, .22, 'sine', .16), i * 180)); return; }
+  /* 사망음은 낮은 사인파라 배경음악에 잘 묻혔다. 음량을 키우고 앞에 굵은
+     한 방을 넣어 '쓰러졌다'가 확실히 들리게 한다(제작자 요청). */
+  if (name === 'defeat') {
+    playTone(110, .30, 'sawtooth', .34);
+    [220, 196, 174, 130].forEach((f, i) => setTimeout(() => playTone(f, .26, 'sine', .34), i * 180));
+    setTimeout(() => playTone(87, .34, 'triangle', .26), 240);
+    return;
+  }
   if (name === 'victory') { [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => playTone(f, .16, 'triangle', .22), i * 115)); return; }
   if (name === 'world') { [196, 293.66, 392, 587.33, 783.99, 1046.5].forEach((f, i) => setTimeout(() => playTone(f, .18, i % 2 ? 'triangle' : 'sine', .15), i * 85)); return; }
   if (name === 'levelup') { [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => setTimeout(() => playTone(f, .18, 'triangle', .24 - i*.025), i * 80)); setTimeout(() => playTone(1975.5, .28, 'sine', .10), 430); return; }
