@@ -26,10 +26,6 @@
   const esc = (value) => (core().escapeHtml ? core().escapeHtml(value) : String(value == null ? '' : value));
   const norm = (value) => (core().normalize ? core().normalize(value) : String(value == null ? '' : value).trim());
 
-  /* 혼자 도는 버전에서는 동료 자리도 내가 배치한다.
-     나중에 셋이 실제로 함께할 때는 false가 되어 자기 캐릭터만 옮길 수 있다. */
-  let soloMode = true;
-
   /* 셋 다 준비되면 세는 시간(초)과 한 칸의 길이(밀리초). 검사에서는 짧게 줄인다. */
   let READY_COUNTDOWN = 5;
   let COUNTDOWN_STEP_MS = 1000;
@@ -278,57 +274,6 @@
     global.document.head.appendChild(style);
   }
 
-  /* ---------- 파티 만들기 ---------- */
-
-  /* 혼자 도는 버전이라 나머지 두 자리를 동료가 채운다.
-     동료 능력치는 내 능력치를 기준으로 맞춰 레벨이 올라도 균형이 유지된다. */
-  /* 동료 외형은 매번 달라지면 어색하므로 고정해 둔다. */
-  const ALLY_LOOKS = {
-    ally_guard:{ shirt:'#b45309', pants:'#334155', hair:'#312116', hairStyle:'short', skin:'#ffe0c4', accessory:'none' },
-    ally_priest:{ shirt:'#4f46e5', pants:'#3f3f46', hair:'#5b3422', hairStyle:'curlyLong', skin:'#fff1df', accessory:'scarf' },
-  };
-
-  function buildParty() {
-    const g = G();
-    const player = g?.player;
-    if (!player) return null;
-
-    const stats = call('computeTotalStats') || {};
-    const attackStat = player.class === 'mage' ? stats.지능
-      : player.class === 'priest' ? stats.정신
-      : stats.힘;
-    const attack = Math.max(4, Math.floor(Number(attackStat) || 6));
-    const maxHp = Math.max(12, Math.floor(Number(call('maxHpForPlayer', player)) || 30));
-
-    return [
-      {
-        id:'me', name:player.name || '나', klass:player.class, spec:player.spec || '',
-        slot:'front', maxHp, hp:maxHp, attack, isPlayer:true,
-        appearance:player.appearance,
-        equipment:player.equipment,
-        costume:player.costume,
-        skills:{ ...(player.skills || {}) },
-        cooldowns:{ ...(player.skillCooldowns || {}) },
-        activePet:player.activePet || '',
-        weaponTier:Math.max(0, Math.min(4,
-          Math.trunc(Number(global.getEquippedWeaponTierStyle?.(player)?.tier) || 0))),
-      },
-      {
-        id:'ally_guard', name:'훈련병 도윤', klass:'warrior', spec:'방어',
-        slot:'middle', maxHp:Math.round(maxHp * 1.15), hp:Math.round(maxHp * 1.15),
-        attack:Math.max(3, Math.round(attack * 0.85)),
-        skills:{ warrior_basic_guard:1 },
-        appearance:ALLY_LOOKS.ally_guard,
-      },
-      {
-        id:'ally_priest', name:'수련사제 하린', klass:'priest', spec:'신성',
-        slot:'back', maxHp:Math.round(maxHp * 0.85), hp:Math.round(maxHp * 0.85),
-        attack:Math.max(3, Math.round(attack * 0.8)),
-        skills:{ priest_holy_absorb_v24:1 },
-        appearance:ALLY_LOOKS.ally_priest,
-      },
-    ];
-  }
 
   function roomMemberToCombatMember(row) {
     const profile = row?.profile || row?.profile_snapshot || {};
@@ -623,7 +568,6 @@
     networkDraftPlacement = {};
     networkSelectedMemberId = null;
     networkStarting = false;
-    soloMode = true;
   }
 
   function raidQuestionDeadlineMs() {
@@ -703,7 +647,6 @@
         : await client.create({ floorGroup:Number(options.floorGroup) || 1 });
       if (!data?.room?.id) throw new Error('대기실 정보를 받지 못했습니다.');
       resetNetworkSession();
-      soloMode = false;
       networkSession = {
         client,
         room:data.room,
@@ -1442,179 +1385,6 @@
      - 아래: 아직 자리를 못 잡은 캐릭터들이 서 있는 대기칸.
      캐릭터를 먼저 고른 뒤 옮기고 싶은 칸의 + 를 누르면 그리로 간다.
      이미 배치된 캐릭터도 다른 빈칸이나 대기칸으로 다시 보낼 수 있다. */
-  function openFormationScreen() {
-    ensureStyles();
-    const R = rules();
-    const roster = active.snapshot().members;
-    // 자리를 처음부터 다시 정하도록 전부 대기칸에서 시작한다.
-    const placement = Object.fromEntries(roster.map((m) => [m.id, null]));
-    let selected = roster[0]?.id || null;
-
-    const memberById = (id) => roster.find((m) => m.id === id) || null;
-    const inSlot = (slot) => roster.find((m) => placement[m.id] === slot) || null;
-    const waiting = () => roster.filter((m) => !placement[m.id]);
-
-    /* 준비를 누른 사람들. 셋 다 준비되면 카운트다운이 시작된다. */
-    const readyIds = new Set();
-    let countdown = 0;
-    let countdownTimer = null;
-
-    /* 실제로 셋이 함께 할 때는 자기 캐릭터만 옮길 수 있어야 한다.
-       지금은 혼자 도는 버전이라 동료도 내가 배치한다. */
-    function canControl(id) {
-      if (soloMode) return true;
-      return !!memberById(id)?.isPlayer;
-    }
-
-    /* 준비 버튼. 내가 맡은 캐릭터를 준비 상태로 표시한다. */
-    function markReady() {
-      const mine = soloMode ? roster : roster.filter((m) => m.isPlayer);
-      mine.forEach((m) => readyIds.add(m.id));
-      render();
-      if (roster.every((m) => readyIds.has(m.id))) startCountdown();
-    }
-
-    /* 셋 다 준비되면 5초를 세고 출발한다. */
-    function startCountdown() {
-      if (countdownTimer) return;
-      countdown = READY_COUNTDOWN;
-      render();
-      const tick = () => {
-        countdown -= 1;
-        if (countdown <= 0) {
-          countdownTimer = null;
-          countdown = 0;
-          const result = active.confirmFormation(placement);
-          if (!result.ok) { render(result.reason); return; }
-          playTravelScene();
-          return;
-        }
-        render();
-        countdownTimer = global.setTimeout(tick, COUNTDOWN_STEP_MS);
-      };
-      countdownTimer = global.setTimeout(tick, COUNTDOWN_STEP_MS);
-    }
-
-    function moveSelectedTo(slot) {
-      if (!selected) return;
-      if (slot) {
-        const occupant = inSlot(slot);
-        // 이미 누가 서 있으면 서로 자리를 맞바꾼다(꽉 찼을 때도 바꿀 수 있게).
-        if (occupant && occupant.id !== selected) placement[occupant.id] = placement[selected];
-      }
-      placement[selected] = slot;
-      render();
-    }
-
-    function memberCanvasHtml(member, size) {
-      return `<canvas class="raid-face" data-member="${esc(member.id)}" width="${size}" height="${size}"></canvas>`;
-    }
-
-    function slotHtml(slot) {
-      const member = inSlot(slot);
-      const label = esc(R.slotLabel(slot));
-      if (!member) {
-        return `
-          <div class="raid-post empty" data-slot="${slot}">
-            <div class="raid-post-title">${label}</div>
-            <button class="raid-plus" data-slot="${slot}" title="${label}에 세우기">+</button>
-          </div>`;
-      }
-      const ready = readyIds.has(member.id);
-      return `
-        <div class="raid-post filled ${selected === member.id ? 'on' : ''} ${ready ? 'ready' : ''}" data-slot="${slot}">
-          <div class="raid-post-title">${label}</div>
-          <div class="raid-figure" data-pick="${esc(member.id)}">
-            ${memberCanvasHtml(member, 132)}
-            <div class="raid-figure-name">${esc(member.name)}${member.isPlayer ? ' (나)' : ''}</div>
-            <div class="raid-figure-sub">${esc(member.spec || '전문화 없음')}</div>
-          </div>
-          ${ready ? '<div class="raid-ready-badge">Ready!</div>' : ''}
-        </div>`;
-    }
-
-    function render(message = '') {
-      const bench = waiting();
-      const benchHtml = bench.length
-        ? bench.map((member) => `
-            <div class="raid-bench-card ${selected === member.id ? 'on' : ''}" data-pick="${esc(member.id)}">
-              ${memberCanvasHtml(member, 120)}
-              <div class="raid-figure-name">${esc(member.name)}${member.isPlayer ? ' (나)' : ''}</div>
-              <div class="raid-figure-sub">${esc(member.spec || '전문화 없음')} · HP ${member.maxHp}</div>
-            </div>`).join('')
-        : '<div class="raid-bench-empty">준비를 눌러주세요!</div>';
-
-      const seated = R.SLOTS.every((slot) => !!inSlot(slot));
-      const allReady = seated && roster.every((m) => readyIds.has(m.id));
-
-      call('openModal', `
-        <h2>${esc(active.snapshot().title)}</h2>
-        <div class="panel-card raid-formation">
-          <p class="raid-hint">캐릭터를 고른 뒤 세우고 싶은 자리의 <strong>+</strong>를 누르세요. 이미 세운 캐릭터도 다시 옮길 수 있습니다.</p>
-          <!-- 전투 배치와 같은 순서로 보여 준다: 왼쪽이 뒤, 오른쪽이 앞 -->
-          <div class="raid-posts">${[...R.SLOTS].reverse().map(slotHtml).join('')}</div>
-          <div class="raid-bench-wrap">
-            <div class="raid-bench-head">
-              <span>대기 중</span>
-              <button class="raid-plus small" data-slot="" title="대기칸으로 보내기">+</button>
-            </div>
-            <div class="raid-bench">${benchHtml}</div>
-          </div>
-          ${countdown > 0 ? `<div class="raid-countdown">${countdown}초 뒤 출발!</div>` : ''}
-          ${message ? `<p class="raid-error">${esc(message)}</p>` : ''}
-          <div class="raid-actions">
-            <button class="primary" id="raidStartBtn" ${seated && !allReady ? '' : 'disabled'}>${
-              allReady ? '출발 준비 완료' : (seated ? '준비' : '세 자리를 모두 채우세요')
-            }</button>
-            <button class="ghost" id="raidCancelBtn">돌아가기</button>
-          </div>
-        </div>
-      `, { type:'raidFormation', pause:true });
-
-      paintAll('.raid-face', memberById, 1.35, { moving:true });
-
-      global.document.querySelectorAll('[data-pick]').forEach((node) => {
-        node.onclick = () => {
-          const id = node.dataset.pick;
-          if (!canControl(id)) { render('다른 사람의 캐릭터는 옮길 수 없습니다.'); return; }
-          selected = id;
-          render();
-        };
-      });
-      global.document.querySelectorAll('.raid-plus').forEach((button) => {
-        button.onclick = () => {
-          if (countdown > 0) return;   // 카운트다운 중에는 자리를 바꿀 수 없다
-          if (!selected) { render('먼저 옮길 캐릭터를 고르세요.'); return; }
-          if (!canControl(selected)) { render('다른 사람의 캐릭터는 옮길 수 없습니다.'); return; }
-          // 자리를 바꾸면 준비를 다시 눌러야 한다.
-          readyIds.clear();
-          moveSelectedTo(button.dataset.slot || null);
-        };
-      });
-
-      const startBtn = global.document.getElementById('raidStartBtn');
-      if (startBtn) {
-        startBtn.onclick = () => {
-          /* 여기서는 '확인만' 한다. confirmFormation은 진행 상태를 바꾸므로
-             카운트다운이 끝난 뒤 딱 한 번만 부른다. */
-          const seatedMembers = roster.map((m) => ({ ...m, slot:placement[m.id] }));
-          const check = R.validateFormation(seatedMembers);
-          if (!check.ok) { render(check.reason); return; }
-          markReady();
-        };
-      }
-      const cancelBtn = global.document.getElementById('raidCancelBtn');
-      if (cancelBtn) {
-        cancelBtn.onclick = () => {
-          if (countdownTimer) { global.clearInterval(countdownTimer); countdownTimer = null; }
-          leaveDungeonNow();
-        };
-      }
-    }
-
-    render();
-    startFormationAnimation(memberById);
-  }
 
   /* ---------- 던전 맵 (화면 전체) ---------- */
 
@@ -3004,99 +2774,12 @@
     return manifest.classBasicSounds?.[member?.klass] || null;
   }
 
+  /* 던전은 셋이 함께 하는 기능뿐이라 답 제출도 방을 거친다. */
   function submitAnswer(given) {
-    if (busy || !active || active.phase !== 'battle') return;
-    if (networkSession) {
-      submitNetworkAnswer(given);
-      return;
-    }
-    busy = true;
-
-    const correct = norm(given) === norm(question?.answer);
-    const answers = active.rollAllyAnswers();
-    active.snapshot().members.filter((member) => !isMine(member)).forEach((member) => {
-      const correctAnswer = answers[member.id] === true;
-      const needsHealing = member.spec === '신성'
-        && active.snapshot().members.some((target) => target.hp > 0 && target.hp < target.maxHp)
-        && !(member.cooldowns?.priest_holy_absorb_v24 > 0);
-      answers[member.id] = {
-        correct:correctAnswer,
-        actionId:needsHealing ? 'priest_holy_absorb_v24' : 'basic',
-      };
-    });
-    answers.me = {
-      correct,
-      actionId:chosenAction === 'attack' ? 'basic' : String(chosenAction || '').replace(/^active:/, ''),
-    };
-
-    const snapBefore = active.snapshot();
-    const result = active.resolveRound(answers);
-    if (!result.ok) {
-      busy = false;
-      panelMode = 'menu';
-      panelMessage = result.reason || '무엇을 할까?';
-      renderBattle();
-      return;
-    }
-
-    /* 사냥터 전투처럼, 틀리면 정답을 초록색으로 잠깐 보여 준 뒤 공격이 이어진다. */
-    if (!correct && typeof global.YuksamWrongAnswerReview?.reveal === 'function') {
-      const host = global.document.querySelector('.raid-combat .panel-card');
-      if (host) {
-        global.YuksamWrongAnswerReview.reveal({
-          root: host,
-          correctAnswer: question?.answer,
-          onComplete: () => {
-            showPlaybackPanel('전투 중…');
-            runRound(result, correct, snapBefore);
-          },
-        });
-        return;
-      }
-    }
-    showPlaybackPanel('전투 중…');
-    runRound(result, correct, snapBefore);
+    if (busy || !active || active.phase !== 'battle' || !networkSession) return;
+    submitNetworkAnswer(given);
   }
 
-  function runRound(result, correct, snapBefore) {
-    if (!active) return;
-    syncMyRaidCooldowns();
-
-    // 정답/오답을 먼저 알려 준 뒤 공격이 이어진다(일반 전투와 같은 순서).
-    const opening = {
-      kind:correct ? 'answer-correct' : 'answer-wrong',
-      text:correct ? '정답!' : `오답입니다! 정답은 ${question?.answer} (피해가 절반만 들어갑니다)`,
-    };
-
-    /* 파티원 공격에는 각자의 직업 소리를 붙인다.
-       턴 순서는 캐릭1 → 캐릭2 → 캐릭3 → 적 공격이다. */
-    const withSounds = result.events.map((event) => {
-      if (event.kind !== 'party-hit' || event.missed) return event;
-      const member = snapBefore.members.find((m) => m.id === event.memberId);
-      const audioId = attackAudioIdFor(member);
-      return audioId && !event.audioId ? { ...event, audioId } : event;
-    });
-
-    playEvents([opening, ...withSounds], () => {
-      if (!active) return;
-      if (result.wiped || result.cleared) { finishRun(); return; }
-      /* 몬스터를 쓰러뜨렸으면 곧바로 이동으로 넘어간다.
-         이때 문제와 행동 버튼을 반드시 지워야 한다(예전에 남아 있던 버그). */
-      if (result.monsterDown) {
-        question = null;
-        chosenAction = null;
-        panelMode = 'playing';
-        playTravelScene();
-        return;
-      }
-      question = pickQuestion();
-      chosenAction = null;
-      busy = false;
-      panelMode = 'menu';
-      panelMessage = '무엇을 할까?';
-      renderBattle();
-    });
-  }
 
   /* ---------- 끝맺음 ---------- */
 
@@ -4030,29 +3713,12 @@
     });
   }
 
-  function startRun(floor = 1) {
-    const members = buildParty();
-    if (!members) { call('toast', '캐릭터 정보를 불러오지 못했습니다.'); return false; }
-    try {
-      active = runApi().createRun({ floor, members });
-    } catch (error) {
-      call('toast', String(error && error.message || error));
-      return false;
-    }
-    question = null;
-    busy = false;
-    walkProgress = 1;
-    // 먼저 던전 안으로 실제로 이동한 뒤, 로비에서 대형을 짠다.
-    enterDungeonMap(() => openFormationScreen());
-    return true;
-  }
 
   installDungeonRenderer();
   installDungeonAudio();
   installStuckGuards();
 
   global.YuksamRaidRunUi = Object.freeze({
-    startRun,
     openNetworkLobby,
     isRunning:() => !!active,
     /* 전투 로그를 재생하는 중인지. 재생 중에는 다음 답을 받지 않는다. */

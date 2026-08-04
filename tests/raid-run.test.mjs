@@ -286,20 +286,6 @@ test('쓰러진 동료는 다음 라운드에 때리지도 맞지도 않는다',
   assert.ok(!next.events.some((e) => e.kind === 'monster-hit' && e.memberId === 'me'));
 });
 
-test('동료 정답은 밖에서 준 무작위 값으로 정해지고 나만 빠진다', () => {
-  const always = makeRun({ rng:PLAIN });
-  const answers = always.rollAllyAnswers();
-  assert.deepEqual(Object.keys(answers).sort(), ['ally1', 'ally2']);
-  assert.equal(answers.ally1, true);
-  assert.equal(answers.ally2, true);
-  assert.equal('me' in answers, false, '내 정답은 내가 직접 푼다');
-
-  const never = makeRun({ rng:() => 0.99 });
-  const missed = never.rollAllyAnswers();
-  assert.equal(missed.ally1, false);
-  assert.equal(missed.ally2, false);
-});
-
 test('힐러가 있으면 라운드마다 가장 다친 동료가 회복된다', () => {
   const run = api.YuksamRaidRun.createRun({
     floor:1,

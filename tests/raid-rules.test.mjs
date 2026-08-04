@@ -418,14 +418,6 @@ test('보스급 몬스터는 전체 공격과 단일 공격을 섞어 쓴다', (
   });
 });
 
-test('동료 정답 판정은 밖에서 준 무작위 값만 쓴다', () => {
-  // 서버가 같은 값으로 같은 결과를 다시 만들 수 있어야 한다.
-  assert.equal(rules.allyAnswersCorrectly(() => 0), true);
-  assert.equal(rules.allyAnswersCorrectly(() => 0.99), false);
-  assert.equal(rules.allyAnswersCorrectly(() => rules.ALLY_CORRECT_RATE - 0.01), true);
-  assert.equal(rules.allyAnswersCorrectly(() => rules.ALLY_CORRECT_RATE), false);
-});
-
 test('전멸과 몬스터 처치를 올바르게 알아본다', () => {
   assert.equal(rules.isPartyWiped(party()), false);
   assert.equal(rules.isPartyWiped(party({ a:{ hp:0 }, b:{ hp:0 } })), false);

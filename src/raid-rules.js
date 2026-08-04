@@ -500,7 +500,7 @@
   /* 한 층에서 순서대로 만나는 몬스터들. 마지막이 레이드 보스다. */
   /* 이 층에서 순서대로 만나는 몬스터들. 마지막이 그 층의 보스다.
      ids 를 넘기면 그 목록을 그대로 쓴다(방 시작 때 한 번 뽑아 저장한 목록).
-     안 넘기면 그 자리에서 뽑는다 — 혼자 도는 경우에만 쓴다. */
+     안 넘기면 그 자리에서 뽑는다. */
   function floorEncounters(floor, ids = null) {
     const def = getFloor(floor);
     if (!def) return [];
@@ -638,16 +638,6 @@
     return found ? normalizeAttackPlan(found) : null;
   }
 
-  /* ---------- 혼자 도는 버전의 동료 ---------- */
-
-  /* 3명이 모이기 전에도 던전을 돌아 볼 수 있도록 동료 둘을 붙인다.
-     동료는 정해진 확률로 정답을 맞힌다. rng는 밖에서 받는다. */
-  const ALLY_CORRECT_RATE = 0.7;
-
-  function allyAnswersCorrectly(rng) {
-    const roll = typeof rng === 'function' ? Number(rng()) : Math.random();
-    return roll < ALLY_CORRECT_RATE;
-  }
 
   /* ---------- 승패 판정 ---------- */
 
@@ -684,7 +674,6 @@
     MONSTERS,
     LEVEL_ROSTER,
     FLOORS,
-    ALLY_CORRECT_RATE,
     PARTY_POWER,
     SINGLE_TARGET_BONUS,
     MONSTER_DAMAGE_MULTIPLIER,
@@ -716,7 +705,6 @@
     attackKindForRound,
     attackPlanForRound,
     planByName,
-    allyAnswersCorrectly,
     isPartyWiped,
     isMonsterDown,
     resolvePartyCombatRound,

@@ -419,14 +419,6 @@
       return wiped ? { ok:true, events, wiped:true } : { ok:true, events, attackKind:kind };
     }
 
-    /* 동료(혼자 도는 버전)의 정답 여부를 굴린다. */
-    function rollAllyAnswers() {
-      const answers = {};
-      state.members.filter((m) => !m.isPlayer && m.hp > 0).forEach((member) => {
-        answers[member.id] = R.allyAnswersCorrectly(rng);
-      });
-      return answers;
-    }
 
     function snapshot() {
       return {
@@ -554,7 +546,6 @@
       confirmFormation,
       arriveAtEncounter,
       resolveRound,
-      rollAllyAnswers,
       snapshot,
       importSnapshot,
       get phase() { return state.phase; },

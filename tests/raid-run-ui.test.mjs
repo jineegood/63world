@@ -129,7 +129,10 @@ test('화면은 피해 판정을 재정의하지 않고 진행·전투 규칙에
   assert.doesNotMatch(uiSource, /CRIT_CHANCE\s*=|CRIT_MULTIPLIER\s*=|MISS_CHANCE\s*=/);
   assert.doesNotMatch(uiSource, /HEAL_RATIO\s*=|TRAVEL_RECOVERY\s*=/);
   assert.match(uiSource, /active\.resolveRound\(submissions\)/);
-  assert.match(uiSource, /active\.resolveRound\(answers\)/);
+  /* 던전은 셋이 함께 하는 기능뿐이라 답 제출도 반드시 방을 거친다.
+     혼자 도는 경로(NPC 동료 둘)는 게임에서 쓰이지 않아 걷어냈다. */
+  assert.match(uiSource, /if \(busy \|\| !active \|\| active\.phase !== 'battle' \|\| !networkSession\) return;/);
+  assert.doesNotMatch(uiSource, /rollAllyAnswers|buildParty|startRun|soloMode/);
   assert.match(runSource, /R\.resolvePartyCombatRound\(/);
   assert.match(rulesSource, /global\.YuksamRaidCombatRules/);
 });
