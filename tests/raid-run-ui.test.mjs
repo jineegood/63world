@@ -635,3 +635,27 @@ test('로딩 전환이 끝난 뒤에만 다음 던전 화면을 연다', () => {
   assert.match(uiSource, /const LOADING_TAIL_MS = \d+/);
   assert.match(uiSource, /global\.setTimeout\(\(\) => onReady\?\.\(\), LOADING_TAIL_MS\)/);
 });
+
+test('던전 안쪽을 실제 브라우저에서 3인 방 경로로 끝까지 돌린다', { timeout:90000 }, () => {
+  /* 예전에는 '혼자 도는 경로'로 던전 안을 검사했는데, 그 경로가 게임에서
+     쓰이지 않아 걷어냈다. 이제 가짜 방 서버를 붙여 진짜 3인 경로를 태운다.
+     대기실 → 대형 → 출발 → 복도 → 전투 → 재생 → 포기 → 갇힘 구조까지. */
+  const script = join(root, 'tools', 'browser-smoke', 'try_raid_party.js');
+  const result = spawnSync(process.execPath, [script, root], { encoding:'utf8', timeout:80000 });
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  for (const line of [
+    '내 캐릭터에만 파란 테두리가 붙는다',
+    '출발하면 던전 맵으로 들어간다',
+    '복도 배경이 실제로 흘러간다',
+    '복도 끝에서 전투가 시작된다',
+    '체력창이 각 캐릭터 머리 위에 붙는다',
+    '정답을 넣으면 몬스터 체력이 줄어든다',
+    '몬스터를 잡으면 다음 조우로 넘어간다',
+    '포기하면 마을로 돌아간다',
+    '진행 없이 던전에 있으면 자동으로 마을로 나온다',
+    '비동기 오류 없음',
+  ]) {
+    assert.ok(result.stdout.includes(`PASS: ${line}`), `${line}\n${result.stdout}`);
+  }
+  assert.match(result.stdout, /요약: PASS \d+ \/ FAIL 0/);
+});
