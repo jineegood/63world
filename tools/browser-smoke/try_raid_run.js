@@ -225,24 +225,29 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   await sleep(80);
   check('전투 기록은 따로 상자를 두지 않는다', !window.document.querySelector('.raid-log'));
   await waitIdle();
-  check('정답을 넣으면 몬스터 체력이 줄어든다', ui.peek().monster.hp < hpBefore,
-    `${hpBefore} -> ${ui.peek().monster.hp}`);
   check('파티원이 공격할 때 앞으로 나갔다 돌아온다', sawPartyLunge);
-  check('몬스터가 반격할 때 앞으로 나갔다 돌아온다', sawMonsterLunge);
   check('몬스터가 그림으로 그려진다', !!window.document.getElementById('raidMonsterCanvas'));
 
-  /* 몬스터도 10% 확률로 빗나가므로 한 라운드만 보면 흔들린다.
-     몇 라운드 안에 앞줄이 실제로 맞는지 확인한다. */
+  /* 기술 순서는 무작위다. 첫 턴이 회복·보호막 같은 '공격하지 않는 턴'이면
+     몬스터가 때리지도 않고 체력도 도로 찬다. 그래서 한 라운드만 보면
+     검사가 들쭉날쭉해진다 — 몇 라운드 안에 일어나는지로 확인한다. */
+  let monsterHurt = ui.peek().monster.hp < hpBefore;
   let frontHurt = false;
-  for (let i = 0; i < 6 && !frontHurt; i += 1) {
-    const front = ui.peek().members.find((m) => m.slot === 'front');
-    if (front.hp < front.maxHp) { frontHurt = true; break; }
-    if (ui.peek().phase !== 'battle') break;
+  for (let i = 0; i < 8 && !(monsterHurt && frontHurt && sawMonsterLunge); i += 1) {
+    const snap = ui.peek();
+    if (snap.monster.hp < snap.monster.maxHp) monsterHurt = true;
+    const front = snap.members.find((m) => m.slot === 'front');
+    if (front.hp < front.maxHp) frontHurt = true;
+    if (snap.phase !== 'battle') break;
     await attackOnce();
     await waitIdle();
     await sleep(20);
   }
-  const frontNow = ui.peek().members.find((m) => m.slot === 'front');
+  const lastSnap = ui.peek();
+  check('정답을 넣으면 몬스터 체력이 줄어든다', monsterHurt,
+    `${hpBefore} -> ${lastSnap.monster.hp}/${lastSnap.monster.maxHp}`);
+  check('몬스터가 반격할 때 앞으로 나갔다 돌아온다', sawMonsterLunge);
+  const frontNow = lastSnap.members.find((m) => m.slot === 'front');
   check('앞줄에 선 캐릭터가 반격을 맞는다', frontHurt,
     `${frontNow.name} ${frontNow.hp}/${frontNow.maxHp}`);
 

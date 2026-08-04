@@ -320,7 +320,7 @@
   const DEFAULT_EFFECT = Object.freeze({
     ALL_ATTACK_MULTIPLIER:0.5,
     POISON_TURNS:2, STUN_TURNS:1, CHILL_TURNS:1, DRAIN_RATIO:1,
-    EMPOWER_MULTIPLIER:1.5, COUNTER_RATIO:1, CHARGE_MULTIPLIER:2,
+    EMPOWER_MULTIPLIER:1.5, COUNTER_RATIO:1, COUNTER_CHANCE:0.5, CHARGE_MULTIPLIER:2,
   });
 
   function effectTable(raidRules) {
@@ -450,10 +450,12 @@
 
   /* 반격 자세인 몬스터를 때렸을 때 되돌아오는 피해.
      세기는 그 몬스터의 '전체 공격' 한 대와 같다(집중 배율 없음). */
-  function resolveCounter({ attacker, members, monster, monsterAttack, raidRules, effect, events }) {
+  function resolveCounter({ attacker, members, monster, monsterAttack, raidRules, effect, events, rng }) {
     if (!monster.counterMode || monster.hp <= 0) return;
     const ratio = Math.max(0, number(effect.COUNTER_RATIO, 1));
     if (!(ratio > 0)) return;
+    /* 맞을 때마다 무조건 되받아치면 너무 강해서 절반의 확률로만 반격한다. */
+    if (roll(rng) >= Math.max(0, Math.min(1, number(effect.COUNTER_CHANCE, 0.5)))) return;
     const victims = monster.counterMode === 'all'
       ? members.filter((member) => member.hp > 0)
       : [attacker].filter((member) => member && member.hp > 0);
@@ -1151,7 +1153,7 @@
         resolveCounter({
           attacker:member, members:party, monster:target,
           monsterAttack:monsterAttack ?? target.attack,
-          raidRules, effect, events,
+          raidRules, effect, events, rng,
         });
       }
     }

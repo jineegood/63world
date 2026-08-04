@@ -423,8 +423,11 @@ test('기절한 몬스터는 다음 턴 예고 대신 쉰다고 알려 준다', 
   assert.notEqual(block, '');
   assert.match(block, /Number\(monster\?\.stunTurns\)/);
   assert.match(block, /다음 턴은 쉽니다/);
-  // 예고 문구는 재생 도중에도 다시 그려야 한다.
-  assert.match(uiSource, /hintNode\.textContent = hint\.text/);
+  /* 예고는 한 턴이 다 끝나고 다음 문제가 나올 때만 바뀐다.
+     재생 도중에 바꾸면 아직 이번 턴이 끝나지도 않았는데 다음 기술 이름이
+     먼저 떠서 이상하다(제작자 지적). */
+  assert.doesNotMatch(uiSource, /hintNode\.textContent = hint\.text/);
+  assert.match(uiSource, /const nextHint = nextPlanHint\(truth, nextPlan\)/);
 });
 
 test('던전도 사냥터의 투사체 연출 엔진을 그대로 쓴다', () => {
@@ -583,12 +586,18 @@ test('시트의 17마리가 모두 이모티콘 대신 직접 그린 모델을 �
 });
 
 test('새로 그린 몬스터는 사냥터 스프라이트를 빌려 쓰거나 직접 그린다', () => {
-  // 버섯·슬라임·스톰프 계열은 사냥터 그림을 그대로 재사용한다(같은 세계관).
+  // 버섯·슬라임 계열은 사냥터 그림을 그대로 재사용한다(같은 세계관).
   assert.match(uiSource, /function borrowSprite\(name, ctx, cx, cy, scale, tint\)/);
-  for (const sprite of ['drawMushroomSprite', 'drawSlimeSprite', 'drawStompSprite']) {
+  for (const sprite of ['drawMushroomSprite', 'drawSlimeSprite']) {
     assert.match(uiSource, new RegExp(`borrowSprite\\('${sprite}'`), `${sprite}를 빌려 써야 한다`);
     assert.match(gameSource, new RegExp(`function ${sprite}\\(`), `${sprite}가 game.js에 있어야 한다`);
   }
+  /* 빌딩 스톰프는 사냥터 그림을 확대해 쓰니 화면 밖으로 넘쳐 알아보기
+     어려웠다. 철판·리벳으로 직접 그려 크기를 맞춘다. */
+  const stomp = uiSource.match(/buildingStomp\(ctx, cx, cy, t\)[\s\S]*?\n    \},/)?.[0] || '';
+  assert.notEqual(stomp, '');
+  assert.doesNotMatch(stomp, /borrowSprite/, '스톰프는 더 이상 확대해 빌려 쓰지 않는다');
+  assert.match(stomp, /리벳/);
 });
 
 test('던전 전용 음악은 던전 맵에서만 재생된다', () => {

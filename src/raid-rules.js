@@ -82,8 +82,10 @@
     const roll = typeof rng === 'function' ? rng : Math.random;
 
     const targets = kind === 'all' ? alive : [pickTarget(alive)].filter(Boolean);
-    // 한 명만 노리는 공격은 전체 공격보다 한 방이 더 아프다.
-    const focus = kind === 'all' ? 1 : SINGLE_TARGET_BONUS;
+    /* 한 명만 노리는 공격은 전체 공격보다 한 방이 더 아프다.
+       전체 공격은 셋을 한꺼번에 때리므로 한 사람 몫을 낮춘다(제작자 조정).
+       스킬을 쓰는 3인 전투 계산기와 같은 값을 써야 결과가 갈리지 않는다. */
+    const focus = kind === 'all' ? PATTERN_EFFECT.ALL_ATTACK_MULTIPLIER : SINGLE_TARGET_BONUS;
     const hits = targets.map((member) => {
       const multiplier = damageMultiplier(member.slot);
       if (roll() < MISS_CHANCE) {
@@ -236,7 +238,7 @@
   const MONSTERS = Object.freeze({
     // ── Lv.5 ─────────────────────────────────────────────
     mushroomKing: {
-      id:'mushroomKing', name:'버섯돌이킹', level:5, hp:192, attack:13,
+      id:'mushroomKing', name:'버섯돌이킹', level:5, hp:154, attack:13,
       desc:'버섯돌이들의 왕. 포자를 뿌려 독을 남긴다.',
       pattern:[
         { name:'버섯 박치기', kind:'single', target:'back' },
@@ -245,7 +247,7 @@
       ],
     },
     paperPigeon: {
-      id:'paperPigeon', name:'종이비둘기', level:5, hp:224, attack:16,
+      id:'paperPigeon', name:'종이비둘기', level:5, hp:179, attack:16,
       desc:'서류 뭉치가 새처럼 접혀 날아다닌다.',
       pattern:[
         { name:'종이부리 쪼기', kind:'single', target:'front' },
@@ -255,7 +257,7 @@
     },
     // ── Lv.6 ─────────────────────────────────────────────
     buildingStomp: {
-      id:'buildingStomp', name:'빌딩 스톰프', level:6, hp:460, attack:19,
+      id:'buildingStomp', name:'빌딩 스톰프', level:6, hp:368, attack:19,
       desc:'건물을 통째로 흔드는 거구.',
       pattern:[
         { name:'대지 찍기', kind:'all', stun:true },
@@ -264,7 +266,7 @@
       ],
     },
     brokenPhone: {
-      id:'brokenPhone', name:'고장 난 전화기', level:6, hp:270, attack:16,
+      id:'brokenPhone', name:'고장 난 전화기', level:6, hp:216, attack:16,
       desc:'끊이지 않는 벨소리로 정신을 흔든다.',
       pattern:[
         { name:'수화기 강타', kind:'single', target:'front' },
@@ -274,7 +276,7 @@
     },
     // ── Lv.7 ─────────────────────────────────────────────
     pollutedSlime: {
-      id:'pollutedSlime', name:'오염된 슬라임', level:7, hp:248, attack:13,
+      id:'pollutedSlime', name:'오염된 슬라임', level:7, hp:198, attack:13,
       desc:'빌딩 배수구에서 자란 오염 덩어리.',
       pattern:[
         { name:'산성 몸통박치기', kind:'single', target:'random', poison:4 },
@@ -284,7 +286,7 @@
       ],
     },
     rampageCopier: {
-      id:'rampageCopier', name:'폭주 복사기', level:7, hp:340, attack:19,
+      id:'rampageCopier', name:'폭주 복사기', level:7, hp:272, attack:19,
       desc:'멈추지 않고 스스로를 복사한다.',
       pattern:[
         { name:'용지 절단', kind:'single', hits:2, target:'front' },
@@ -294,7 +296,7 @@
     },
     // ── Lv.8 ─────────────────────────────────────────────
     officeGhost: {
-      id:'officeGhost', name:'사무실 유령', level:8, hp:420, attack:22,
+      id:'officeGhost', name:'사무실 유령', level:8, hp:336, attack:22,
       desc:'야근하다 사라진 직원의 그림자.',
       pattern:[
         { name:'야근의 손길', kind:'single', target:'front' },
@@ -304,7 +306,7 @@
       ],
     },
     guardBot: {
-      id:'guardBot', name:'경비 로봇', level:8, hp:400, attack:21,
+      id:'guardBot', name:'경비 로봇', level:8, hp:320, attack:21,
       desc:'로비를 지키는 낡은 경비 로봇.',
       pattern:[
         { name:'진압봉 타격', kind:'single', target:'back' },
@@ -315,7 +317,7 @@
     },
     // ── Lv.9 ─────────────────────────────────────────────
     blackoutShade: {
-      id:'blackoutShade', name:'정전 그림자', level:9, hp:500, attack:26,
+      id:'blackoutShade', name:'정전 그림자', level:9, hp:400, attack:26,
       desc:'정전된 층에 고인 어둠.',
       pattern:[
         { name:'암전 습격', kind:'single', target:'back' },
@@ -326,7 +328,7 @@
       ],
     },
     emergencyExitGhost: {
-      id:'emergencyExitGhost', name:'비상구 귀신', level:9, hp:440, attack:24,
+      id:'emergencyExitGhost', name:'비상구 귀신', level:9, hp:352, attack:24,
       desc:'비상구 유도등 뒤에 숨어 있다.',
       pattern:[
         { name:'비상문 충돌', kind:'single', target:'front', stun:true },
@@ -337,7 +339,7 @@
     },
     // ── Lv.10 ────────────────────────────────────────────
     towerWarden: {
-      id:'towerWarden', name:'63빌딩 관리자', level:10, hp:580, attack:29,
+      id:'towerWarden', name:'63빌딩 관리자', level:10, hp:464, attack:29,
       desc:'빌딩의 모든 층을 관리해 온 존재.',
       pattern:[
         { name:'관리봉 휘두르기', kind:'single', target:'front' },
@@ -348,7 +350,7 @@
       ],
     },
     elevatorSoul: {
-      id:'elevatorSoul', name:'엘리베이터 영혼', level:10, hp:540, attack:29,
+      id:'elevatorSoul', name:'엘리베이터 영혼', level:10, hp:432, attack:29,
       desc:'멈춘 엘리베이터에 갇힌 혼.',
       pattern:[
         { name:'급상승 충격', kind:'single', hits:2, target:'middle' },
@@ -358,7 +360,7 @@
     },
     // ── Lv.11 ────────────────────────────────────────────
     windowWraith: {
-      id:'windowWraith', name:'유리창 망령', level:11, hp:680, attack:32,
+      id:'windowWraith', name:'유리창 망령', level:11, hp:544, attack:32,
       desc:'깨진 유리창에 비친 형상.',
       pattern:[
         { name:'유리 파편', kind:'single', hits:2, target:'front' },
@@ -367,7 +369,7 @@
       ],
     },
     engineIronGiant: {
-      id:'engineIronGiant', name:'기계실 철갑거인', level:11, hp:650, attack:32,
+      id:'engineIronGiant', name:'기계실 철갑거인', level:11, hp:520, attack:32,
       desc:'기계실을 지키는 철갑 거인.',
       pattern:[
         { name:'강철 주먹', kind:'single', target:'middle', stun:true },
@@ -378,7 +380,7 @@
     },
     // ── Lv.12~14 (각 한 마리, 확정 출현) ──────────────────
     ominousFloorManager: {
-      id:'ominousFloorManager', name:'불길한 층간 관리자', level:12, hp:820, attack:37,
+      id:'ominousFloorManager', name:'불길한 층간 관리자', level:12, hp:656, attack:37,
       desc:'층과 층 사이를 관리하는 존재.',
       pattern:[
         { name:'층간 소음 경고', kind:'single', target:'front', stun:true },
@@ -389,7 +391,7 @@
       ],
     },
     nonexistentFloorLord: {
-      id:'nonexistentFloorLord', name:'존재하지 않는 층의 지배자', level:13, hp:1100, attack:42,
+      id:'nonexistentFloorLord', name:'존재하지 않는 층의 지배자', level:13, hp:880, attack:42,
       desc:'있어서는 안 되는 층을 다스린다.',
       pattern:[
         { name:'존재 삭제', kind:'single', target:'front', stun:true },
@@ -400,7 +402,7 @@
       ],
     },
     rooftopMyeongjinRobot: {
-      id:'rooftopMyeongjinRobot', name:'옥상의 명진쌤 로봇', level:14, hp:1600, attack:48,
+      id:'rooftopMyeongjinRobot', name:'옥상의 명진쌤 로봇', level:14, hp:1280, attack:48,
       desc:'옥상에서 기다리는 마지막 관문.',
       pattern:[
         { name:'출석 점검', kind:'single', hits:3, target:'front', stun:true },
@@ -528,6 +530,7 @@
     DRAIN_RATIO:1,           // 흡혈은 준 피해만큼 몬스터가 회복
     EMPOWER_MULTIPLIER:1.5,  // 강화 중인 몬스터의 공격력
     COUNTER_RATIO:1,         // 반격 한 대 = 그 몬스터의 전체 공격 한 대
+    COUNTER_CHANCE:0.5,      // 반격은 절반의 확률로만 되돌아온다(제작자 조정)
     CHARGE_MULTIPLIER:2,     // 예고한 기술은 두 배로 들어온다
   });
 

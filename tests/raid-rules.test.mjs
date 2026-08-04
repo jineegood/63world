@@ -85,10 +85,11 @@ test('전체 공격은 입력 순서와 무관하게 앞→가운데→뒤로 �
   assert.equal(result.kind, 'all');
   assert.equal(result.hits.length, 3);
   assert.deepEqual(Array.from(result.hits, (hit) => hit.memberId), ['a', 'b', 'c']);
+  /* 전체 공격은 셋을 한꺼번에 때리므로 한 사람 몫에 0.5를 곱한다(제작자 조정). */
   const byId = Object.fromEntries(result.hits.map((h) => [h.memberId, h.damage]));
-  assert.equal(byId.a, 15); // 앞줄 10 * 1.5
-  assert.equal(byId.b, 10); // 중간 10 * 1.0
-  assert.equal(byId.c, 6);  // 뒷줄 10 * 0.6
+  assert.equal(byId.a, 8); // 앞줄 10 * 1.5 * 0.5 = 7.5 → 8
+  assert.equal(byId.b, 5); // 중간 10 * 1.0 * 0.5
+  assert.equal(byId.c, 3); // 뒷줄 10 * 0.6 * 0.5
   // 앞줄이 뒷줄보다 확실히 더 아파야 한다.
   assert.ok(byId.a > byId.b && byId.b > byId.c);
 });

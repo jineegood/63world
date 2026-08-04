@@ -1320,6 +1320,16 @@
     };
   }
 
+  /* 밀린 라운드 수에 따라 로그 재생 속도를 정한다.
+     밀리지 않았으면 원래 속도(학생이 읽을 시간), 밀렸으면 점점 빠르게. */
+  const NORMAL_EVENT_MS = 1500;
+
+  function setPlaybackPace(behindRounds) {
+    if (logSpeedOverride !== null) return;   // 검사에서 지정한 속도는 건드리지 않는다
+    if (behindRounds <= 0) { eventDelayMs = NORMAL_EVENT_MS; return; }
+    eventDelayMs = behindRounds >= 2 ? 120 : 420;
+  }
+
   function playNextNetworkRound() {
     const session = networkSession;
     if (!session || session.playbackActive || !active) return;
@@ -1329,6 +1339,13 @@
     /* 붙잡아 둔 출발점이 있으면 거기서부터 깎기 시작한다.
        (이 줄이 없으면 방장이 올린 '끝난 뒤' 값에서 또 빼게 된다.) */
     if (entry.baseline) view = { ...entry.baseline };
+
+    /* 따라잡기 — 재생할 라운드가 밀려 있으면 한 화면만 계속 뒤처져
+       "혼자 아직 첫 몬스터를 잡고 있는" 상태가 된다. 밀린 만큼 빠르게
+       넘겨 다음 문제 전에 반드시 세 화면이 같은 자리에 서게 한다. */
+    const behindRounds = session.playbackQueue?.length || 0;
+    setPlaybackPace(behindRounds);
+
     const me = String(raidIdentity()?.userId || '');
     const answerEvent = entry.events.find((event) => event.kind === 'round-answer' && String(event.memberId) === me);
     const combatEvents = entry.events.filter((event) => event.kind !== 'round-answer');
@@ -1353,15 +1370,21 @@
         } else {
           const localMember = myActiveRaidMember();
           const down = !!localMember && localMember.hp <= 0;
-          busy = down;
-          panelMode = down ? 'playing' : 'menu';
-          panelMessage = down
-            ? '쓰러져 있어 이번 전투에서는 행동하지 않습니다. 친구들을 기다리는 중…'
-            : isNetworkHost() && ['travel', 'effects'].includes(session.room?.phase)
-              ? '다음 문제를 준비하는 중…'
-              : '무엇을 할까?';
+          /* 아직 보여 줄 라운드가 밀려 있으면 행동 메뉴를 내주면 안 된다.
+             내주면 이미 죽은 몬스터를 다시 공격하게 되고, 그 화면만
+             한 조우씩 뒤처져 "혼자 아직 첫 몬스터를 잡고 있는" 상태가 된다. */
+          const behind = !!session.playbackQueue?.length;
+          busy = down || behind;
+          panelMode = down || behind ? 'playing' : 'menu';
+          panelMessage = behind
+            ? '친구들의 전투를 따라가는 중…'
+            : down
+              ? '쓰러져 있어 이번 전투에서는 행동하지 않습니다. 친구들을 기다리는 중…'
+              : isNetworkHost() && ['travel', 'effects'].includes(session.room?.phase)
+                ? '다음 문제를 준비하는 중…'
+                : '무엇을 할까?';
           renderBattle();
-          if (isNetworkHost()) beginNetworkRound();
+          if (isNetworkHost() && !behind) beginNetworkRound();
         }
         playNextNetworkRound();
       }, { syncAtEnd:false });
@@ -2831,6 +2854,8 @@
      한 줄이 나오면 이전 줄은 지워진다(일반 전투와 같다).
      각 줄은 최소 1.5초씩 보여 준다 — 학생이 읽을 시간이 필요하다. */
   let eventDelayMs = 1500;
+  /* 검사에서 setLogSpeed로 지정한 속도. 지정돼 있으면 따라잡기가 건드리지 않는다. */
+  let logSpeedOverride = null;
 
   /* 이 한 줄이 일어난 만큼만 표시용 체력을 움직인다.
      그래서 "때릴 때마다 체력바가 쭉 빠지는" 모습이 나온다. */
@@ -2887,9 +2912,12 @@
     if (!snap?.monster || !view) return;
     const doc = global.document;
 
-    // 문구
-    const heading = doc.querySelector('.raid-combat .panel-card h3');
-    if (heading) heading.innerHTML = raidMessageHtml(panelMessage || '');
+    /* 문구는 전투 로그를 보여 주는 중에만 고친다.
+       문제를 읽고 있을 때 여기서 덮어쓰면 문제가 '무엇을 할까?'로 바뀌어 버린다. */
+    if (panelMode === 'playing') {
+      const heading = doc.querySelector('.raid-combat .panel-card h3');
+      if (heading) heading.innerHTML = raidMessageHtml(panelMessage || '');
+    }
 
     // 몬스터 체력
     const monsterHp = Math.max(0, view.monsterHp);
@@ -2912,28 +2940,18 @@
         const fill = box.querySelector('.hpfill');
         const num = box.querySelector('.raid-ally-num');
         if (fill) fill.style.width = `${pct}%`;
-        if (num) num.innerHTML = `${hp}/${member.maxHp}${shieldBadgeHtml(shield)}`;
+        /* 'HP' 글자를 빼먹으면 갱신될 때마다 글자가 붙었다 없어졌다 한다. */
+        if (num) num.innerHTML = `HP ${hp}/${member.maxHp}${shieldBadgeHtml(shield)}`;
         box.classList.toggle('down', hp <= 0);
       }
       const sprite = memberSpriteNode(member.id);
       if (sprite) sprite.classList.toggle('down', hp <= 0);
     });
 
-    /* 다음 턴 예고 — 기절·예고가 재생 도중에 바뀌므로 여기서도 다시 그린다.
-       예전에는 라운드가 시작될 때 그린 문구가 그대로 남아, 기절로 취소된
-       기술을 계속 "다음은 B"라고 알려 주고 있었다. */
-    const hintNode = doc.querySelector('.raid-next-hint');
-    if (hintNode) {
-      /* 예고는 반드시 서버가 준 값(스냅샷)만 보고 만든다.
-         재생 중에만 쓰는 표시용 상태를 섞으면 세 화면의 예고가 서로 달라진다.
-         (배지는 로그를 따라가야 하니 표시용을 쓰고, 예고는 아니다.) */
-      const hint = nextPlanHint(
-        snap.monster,
-        rules().attackPlanForRound(snap.monster, snap.round, snap.patternSeed),
-      );
-      hintNode.textContent = hint.text;
-      hintNode.classList.toggle('warn', !!hint.warn);
-    }
+    /* 다음 턴 예고는 여기서 고치지 않는다.
+       한 턴(우리 공격 + 몬스터 반격)이 다 끝나고 다음 문제가 나올 때
+       renderBattle이 새로 그린다. 재생 도중에 바꾸면 아직 이번 턴이
+       끝나지도 않았는데 다음 기술 이름이 먼저 떠서 이상해 보인다. */
 
     /* 몬스터 상태 배지(기절·냉기·강화·예고 …).
        기절·냉기는 표시용 값을 얹어 로그가 흐르는 동안 실제로 보이게 한다. */
@@ -3273,22 +3291,72 @@
 
     /* ── Lv.6 ───────────────────────────────────────── */
 
-    /* 빌딩 스톰프 — 사냥터 스톰프를 콘크리트 색으로 */
+    /* 빌딩 스톰프 — 사냥터 스톰프의 철갑 판.
+       사냥터 그림을 확대해 쓰니 화면 밖으로 넘쳐 알아보기 어려웠다.
+       크기를 줄이고 철판·리벳·이음매를 직접 그려 '쇠로 된 스톰프'로 만든다. */
     buildingStomp(ctx, cx, cy, t) {
-      const stomp = Math.abs(Math.sin(t * 1.8)) * 8;
+      const stomp = Math.abs(Math.sin(t * 1.8)) * 6;
       ctx.save();
       ctx.translate(0, stomp);
-      if (!borrowSprite('drawStompSprite', ctx, cx, cy, 1.6, '#94a3b8')) {
-        box(ctx, cx - 44, cy - 40, 88, 84, '#6b7280', 10);
-        eyes(ctx, cx, cy - 12, 16, 6, '#fca5a5');
-      }
-      // 콘크리트 조각
-      ctx.fillStyle = 'rgba(203,213,225,.85)';
-      [[-58, 40], [56, 46], [-30, 56]].forEach(([dx, dy], i) => {
+
+      // 다리 — 짧고 굵은 철기둥
+      box(ctx, cx - 30, cy + 26, 20, 30, '#3f4854', 4);
+      box(ctx, cx + 10, cy + 26, 20, 30, '#3f4854', 4);
+      box(ctx, cx - 34, cy + 52, 28, 9, '#2b323b', 3);
+      box(ctx, cx + 6, cy + 52, 28, 9, '#2b323b', 3);
+
+      // 몸통 — 위가 좁은 철판. 사냥터 스톰프의 다부진 실루엣은 유지한다.
+      const steel = ctx.createLinearGradient(cx, cy - 46, cx, cy + 30);
+      steel.addColorStop(0, '#aab4c2');
+      steel.addColorStop(0.45, '#7d8896');
+      steel.addColorStop(1, '#48515d');
+      ctx.fillStyle = steel;
+      ctx.beginPath();
+      ctx.moveTo(cx - 38, cy - 34);
+      ctx.lineTo(cx + 38, cy - 34);
+      ctx.lineTo(cx + 46, cy + 28);
+      ctx.lineTo(cx - 46, cy + 28);
+      ctx.closePath();
+      ctx.fill();
+
+      // 철판 이음매
+      ctx.strokeStyle = 'rgba(30,37,46,.75)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(cx - 42, cy - 4); ctx.lineTo(cx + 42, cy - 4);
+      ctx.moveTo(cx, cy - 34); ctx.lineTo(cx, cy - 4);
+      ctx.stroke();
+
+      // 리벳
+      ctx.fillStyle = '#cfd8e3';
+      [[-32, -24], [32, -24], [-38, 18], [38, 18], [-14, 8], [14, 8]].forEach(([dx, dy]) => {
+        ctx.beginPath();
+        ctx.arc(cx + dx, cy + dy, 2.6, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // 팔 — 짧은 철괴
+      ctx.strokeStyle = '#5c6673';
+      ctx.lineWidth = 13;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(cx - 40, cy - 18); ctx.lineTo(cx - 60, cy + 14);
+      ctx.moveTo(cx + 40, cy - 18); ctx.lineTo(cx + 60, cy + 14);
+      ctx.stroke();
+
+      // 머리 — 낮게 얹힌 철모, 붉은 시야창
+      box(ctx, cx - 24, cy - 58, 48, 26, '#6b7684', 6);
+      box(ctx, cx - 28, cy - 62, 56, 7, '#525c69', 3);
+      ctx.fillStyle = `rgba(248,113,113,${(0.6 + 0.35 * Math.sin(t * 3.4)).toFixed(3)})`;
+      ctx.fillRect(cx - 16, cy - 50, 32, 8);
+
+      // 발밑에서 튀는 쇳조각
+      ctx.fillStyle = 'rgba(148,163,184,.8)';
+      [[-52, 56], [50, 60], [-22, 64]].forEach(([dx, dy], i) => {
         ctx.save();
         ctx.translate(cx + dx, cy + dy);
         ctx.rotate(t * 1.2 + i);
-        ctx.fillRect(-7, -5, 14, 10);
+        ctx.fillRect(-5, -3, 10, 6);
         ctx.restore();
       });
       ctx.restore();
@@ -3993,7 +4061,10 @@
     leaveNow:() => leaveDungeonNow(),
     rescueIfStranded:() => rescueIfStranded(),
     /* 전투 로그 재생 속도(밀리초). 검사에서는 빠르게 돌린다. */
-    setLogSpeed:(ms) => { eventDelayMs = Math.max(0, Number(ms) || 0); },
+    setLogSpeed:(ms) => {
+      logSpeedOverride = Math.max(0, Number(ms) || 0);
+      eventDelayMs = logSpeedOverride;
+    },
     /* 이동 연출 상태(검사용) — 배경이 얼마나 흘렀는지, 조우 연출이 어디까지 왔는지 */
     travelScrollForTest:() => travelScroll(),
     encounterProgressForTest:() => encounterProgress(),

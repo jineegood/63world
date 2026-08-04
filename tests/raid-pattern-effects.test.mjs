@@ -269,14 +269,32 @@ test('반격 자세인 몬스터를 때리면 되받아친다', () => {
   });
   assert.equal(boss.counterMode, 'single');
 
+  /* 반격은 절반의 확률로만 되돌아온다(제작자 조정).
+     굴림 0.1(< 0.5)이면 반격한다. */
   const before = attacker.hp;
   const countered = turn({
-    members:[attacker], target:boss, plan:wait,
+    members:[attacker], target:boss, plan:wait, rng:constant(0.1),
     submissions:{ dummy:{ correct:true, actionId:'basic' } },
   });
   assert.ok(countered.events.some((event) => event.kind === 'monster-counter'), '반격 로그가 있어야 한다');
   assert.ok(attacker.hp < before);
   assert.equal(boss.counterMode, null, '반격 자세는 몬스터의 다음 턴에 풀린다');
+});
+
+test('반격은 절반의 확률로만 되돌아온다', () => {
+  const attacker = dummy({ attack:100 });
+  const boss = monster({ attack:20 });
+  turn({
+    members:[attacker], target:boss,
+    plan:{ name:'반격 자세', kind:'none', counter:'single' }, submissions:idle,
+  });
+  // 굴림 0.9(>= 0.5)이면 때려도 반격이 오지 않는다.
+  const quiet = turn({
+    members:[attacker], target:boss, plan:wait, rng:constant(0.9),
+    submissions:{ dummy:{ correct:true, actionId:'basic' } },
+  });
+  assert.ok(!quiet.events.some((event) => event.kind === 'monster-counter'), '이번에는 반격하지 않는다');
+  assert.equal(raid.PATTERN_EFFECT.COUNTER_CHANCE, 0.5);
 });
 
 test('예고한 기술은 다음 턴에 반드시 두 배 피해로 나온다', () => {
