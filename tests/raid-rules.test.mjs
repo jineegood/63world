@@ -282,9 +282,7 @@ test('구간마다 시트가 정한 횟수만큼 싸우고 마지막이 그 구�
   rules.availableFloors().forEach((floor) => {
     const encounters = rules.floorEncounters(floor);
     /* 대부분 네 번이지만 61~63층은 세 개 층뿐이라 세 번이다(시트 그대로). */
-    const planned = [...rules.getFloor(floor).plan]
-      .reduce((sum, step) => sum + (step.mode === 'both' ? 2 : 1), 0);
-    assert.equal(encounters.length, planned, `${floor}층 조우 수`);
+    assert.equal(encounters.length, rules.getFloor(floor).encounters.length, `${floor}층 조우 수`);
     assert.equal(encounters[encounters.length - 1].isBoss, true);
     assert.ok(encounters.slice(0, -1).every((e) => !e.isBoss));
     // 레벨이 내려가지 않고 올라가기만 해야 학생이 점점 어려워진다고 느낀다.
@@ -294,16 +292,29 @@ test('구간마다 시트가 정한 횟수만큼 싸우고 마지막이 그 구�
   });
 });
 
-test('두 마리 중 하나를 뽑는 자리는 무작위 값에 따라 갈린다', () => {
-  // rollEncounters는 밖에서 준 난수만 쓴다 — 서버가 같은 목록을 다시 만들 수 있어야 한다.
-  const low = rules.rollEncounters(1, () => 0);
-  const high = rules.rollEncounters(1, () => 0.99);
-  assert.deepEqual([...low].slice(0, 2), ['mushroomKing', 'paperPigeon']);
-  assert.notDeepEqual([...low], [...high], '뽑기 자리가 난수에 따라 달라져야 한다');
-  // 뽑아 둔 목록을 그대로 넘기면 그 순서대로 나온다(방 전원이 같은 몬스터를 본다).
-  const fixed = rules.floorEncounters(1, ['guardBot', 'officeGhost']);
-  assert.deepEqual(fixed.map((m) => m.id), ['guardBot', 'officeGhost']);
-  assert.equal(fixed[1].isBoss, true);
+test('층마다 만나는 몬스터가 못박혀 있어 무작위가 없다', () => {
+  /* 예전에는 같은 레벨 두 마리 중 하나를 무작위로 뽑았는데, 그 뽑기가
+     화면마다 갈라져 셋이 서로 다른 몬스터를 만나는 사고가 났다.
+     이제 층마다 정해져 있어 몇 번을 불러도 같은 목록이 나온다. */
+  const first = [...rules.rollEncounters(1)];
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    assert.deepEqual([...rules.rollEncounters(1)], first, '부를 때마다 같아야 한다');
+  }
+  // 난수를 억지로 넣어도 결과가 바뀌지 않는다.
+  assert.deepEqual([...rules.rollEncounters(1, () => 0)], first);
+  assert.deepEqual([...rules.rollEncounters(1, () => 0.99)], first);
+
+  // 층마다 배정표가 실제로 있고, 그 안의 id는 모두 실제 몬스터다.
+  rules.availableFloors().forEach((floor) => {
+    const ids = [...rules.getFloor(floor).encounters];
+    assert.ok(ids.length >= 3, `${floor}층 조우 수`);
+    ids.forEach((id) => assert.ok(rules.MONSTERS[id], `${floor}층의 ${id}`));
+  });
+
+  // 목록을 직접 넘기면 그 순서대로 나온다(방에서 뽑아 둔 목록을 그대로 쓸 때).
+  const given = rules.floorEncounters(1, ['guardBot', 'officeGhost']);
+  assert.deepEqual([...given.map((m) => m.id)], ['guardBot', 'officeGhost']);
+  assert.equal(given[1].isBoss, true);
 });
 
 test('기술 순서는 무작위지만 씨앗이 같으면 언제나 같은 순서다', () => {

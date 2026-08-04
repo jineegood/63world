@@ -53,6 +53,7 @@
 
     const channels = new Set();
     let requestSequence = 0;
+    let lastTraceId = '';
 
     function identity() {
       const value = getIdentity();
@@ -85,6 +86,9 @@
     }
 
     async function readErrorCode(error, data) {
+      /* 서버가 붙여 주는 추적 번호도 같이 챙긴다. 원인을 알 수 없는 오류가
+         났을 때 이 번호로 서버 기록을 찾을 수 있다. */
+      if (typeof data?.traceId === 'string') lastTraceId = data.traceId;
       if (typeof data?.error === 'string' && data.error) return data.error;
       const context = error?.context;
       if (typeof context?.error === 'string' && context.error) return context.error;
@@ -92,6 +96,7 @@
         try {
           const response = typeof context.clone === 'function' ? context.clone() : context;
           const payload = await response.json();
+          if (typeof payload?.traceId === 'string') lastTraceId = payload.traceId;
           if (typeof payload?.error === 'string' && payload.error) return payload.error;
         } catch {}
       }
@@ -125,7 +130,10 @@
            알 수가 없어 원인을 찾지 못한다. */
         const step = STEP_NAMES[String(body?.op || '')] || String(body?.op || '');
         const base = MESSAGES[code] || MESSAGES.SERVER_ERROR;
-        const failure = new Error(step ? `${base} (${step})` : base);
+        /* 원인을 알 수 없는 오류에는 추적 번호를 붙인다.
+           이 번호를 알려 주면 서버 기록에서 그 요청을 바로 찾을 수 있다. */
+        const trace = code === 'SERVER_ERROR' && lastTraceId ? ` [${lastTraceId.slice(0, 8)}]` : '';
+        const failure = new Error(`${step ? `${base} (${step})` : base}${trace}`);
         failure.code = code || 'SERVER_ERROR';
         failure.op = String(body?.op || '');
         throw failure;
@@ -146,10 +154,19 @@
       } catch (error) {
         if (error?.code !== 'ALREADY_IN_ROOM') throw error;
         const existing = await invoke({ op:'resume' }, { verifySession:true });
-        const stale = existing?.room?.id && existing.room.phase === 'lobby';
-        if (stale && body?.op === 'create') {
-          await invoke({ op:'leave', roomId:existing.room.id, requestId:requestId('leave') });
-          return invoke({ ...body, requestId:requestId('create') }, { verifySession:true });
+        /* '방 만들기'는 새로 시작하겠다는 뜻이다. 예전 방이 어떤 상태든
+           정리하고 새 방을 만든다. 그러지 않으면 방을 만든 적도 없는데
+           예전에 하던 전투가 그대로 이어져 버린다(실제 사고).
+           끊겼다 돌아오는 복구는 게임을 켤 때 자동으로 따로 처리한다. */
+        if (body?.op === 'create' && existing?.room?.id) {
+          try {
+            await invoke({ op:'leave', roomId:existing.room.id, requestId:requestId('leave') });
+            return await invoke({ ...body, requestId:requestId('create') }, { verifySession:true });
+          } catch (retryError) {
+            /* 정리에 실패했으면 새로 만들지 못한다. 오류로 끝내지 말고
+               들어가 있던 방으로 돌려보내 준다(그래야 갇히지 않는다). */
+            if (retryError?.code !== 'ALREADY_IN_ROOM') throw retryError;
+          }
         }
         return existing ? { ...existing, resumed:true } : existing;
       }

@@ -490,6 +490,18 @@
       syncViewToTruth();
       if (G()?.modalState?.type === 'raidBattle') updateBattleView();
     }
+
+    /* 끝났는데 결과 화면이 안 뜨는 사람이 없게 한다.
+       실제 사고: 둘은 '1–10층 돌파' 축하와 보상을 받았는데 한 명만 아무것도
+       뜨지 않고 진행이 멈췄다. 재생이 밀리는 사이 완료 처리를 놓친 것이다.
+       방이 끝났다고 말하면, 보여 줄 로그를 다 보여 준 뒤 반드시 마무리한다. */
+    if (active && ['cleared', 'wiped'].includes(phase)
+      && !networkSession.playbackActive && !networkSession.playbackQueue?.length
+      && G()?.modalState?.type !== 'raidResult') {
+      importNetworkTruth();
+      finishRun();
+      return;
+    }
     if (active?.phase === 'battle' && ['question', 'waiting'].includes(phase)) {
       startRaidQuestionTimer();
     } else if (raidQuestionTimerInterval) {
@@ -568,6 +580,7 @@
     networkDraftPlacement = {};
     networkSelectedMemberId = null;
     networkStarting = false;
+    finishedRunKey = '';   // 다음 판은 다시 결과 화면을 띄울 수 있어야 한다
   }
 
   function raidQuestionDeadlineMs() {
@@ -1203,6 +1216,14 @@
     }
   }
 
+  /* 서버가 말하는 조우 번호의 몬스터 '정체'를 목록에서 그대로 가져온다.
+     목록은 층마다 정해져 있어 세 화면이 언제나 같은 답을 얻는다. */
+  function encounterDefAt(index) {
+    const snap = active?.snapshot?.();
+    const list = rules()?.floorEncounters?.(currentStartFloor(), snap?.encounterIds) || [];
+    return list[Math.max(0, Math.min(list.length - 1, Math.trunc(Number(index) || 0)))] || null;
+  }
+
   function importNetworkTruth() {
     if (!networkSession || !active || typeof active.importSnapshot !== 'function') return;
     const room = networkSession.room || {};
@@ -1210,13 +1231,31 @@
     const phase = ['question', 'waiting', 'resolving', 'effects'].includes(room.phase)
       ? 'battle'
       : ['travel', 'cleared', 'wiped'].includes(room.phase) ? room.phase : current.phase;
-    const monster = room.monsterState && Object.keys(room.monsterState).length
-      ? { ...(current.monster || {}), ...room.monsterState }
-      : current.monster;
+
+    /* 몬스터의 정체는 반드시 '서버가 말하는 조우 번호'에서 정한다.
+       예전에는 내 화면이 들고 있던 몬스터에 방장의 상태를 덮어썼다. 그래서
+       내가 아직 못 잡았는데 방장은 다음 몬스터로 넘어간 순간, 이름은 옛
+       몬스터인데 체력은 새 몬스터인 뒤섞인 몬스터가 만들어졌다.
+       (종이비둘기가 죽은 모습으로 남거나, 복도에서 만난 몬스터와 전투 중인
+       몬스터가 다른 사고가 여기서 났다.) */
+    const serverIndex = Math.max(0, Math.trunc(Number(room.encounterIndex) || 0));
+    const def = encounterDefAt(serverIndex);
+    const state = room.monsterState && Object.keys(room.monsterState).length ? room.monsterState : null;
+    let monster;
+    if (def) {
+      /* 상태가 그 몬스터의 것일 때만 얹는다. 아니면 새 몬스터를 온전한
+         체력으로 세운다 — 다음 조우가 시작된 것이기 때문이다. */
+      monster = state && String(state.id || '') === String(def.id)
+        ? { ...def, ...state }
+        : { ...def, hp:def.hp, maxHp:def.hp };
+    } else {
+      monster = state ? { ...(current.monster || {}), ...state } : current.monster;
+    }
+
     active.importSnapshot({
       phase,
-      encounterIndex:Number(room.encounterIndex) || 0,
-      round:Number(monster?.raidRound ?? current.round) || 0,
+      encounterIndex:serverIndex,
+      round:Number(state?.raidRound ?? current.round) || 0,
       monster,
       members:roomMembers(),
     });
@@ -2807,8 +2846,14 @@
 
   /* ---------- 끝맺음 ---------- */
 
+  /* 결과 화면과 보상은 한 판에 한 번만. 여러 경로에서 불릴 수 있어 잠근다. */
+  let finishedRunKey = '';
+
   function finishRun() {
     if (!active) return;
+    const key = `${networkSession?.room?.id || 'solo'}|${active.snapshot().phase}`;
+    if (finishedRunKey === key) return;
+    finishedRunKey = key;
     stopRaidQuestionTimer();
     const snap = active.snapshot();
     const cleared = snap.phase === 'cleared';

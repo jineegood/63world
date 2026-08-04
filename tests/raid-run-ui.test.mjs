@@ -662,19 +662,46 @@ test('던전 안쪽을 실제 브라우저에서 3인 방 경로로 끝까지 �
 
 test('세 화면이 같은 몬스터를 만난다', () => {
   /* 실제 사고: 한 명은 빌딩 스톰프, 나머지 둘은 고장 난 전화기가 나왔다.
-     같은 레벨에 두 마리가 있는 자리를 각자 Math.random으로 뽑았기 때문이다.
-     방 id에서 만든 같은 난수로 뽑아 셋이 반드시 같은 목록을 쓴다. */
-  assert.match(uiSource, /R\.rollEncounters\(currentStartFloor\(\), R\.seededRng\(`encounters\|\$\{roomSeed\}`\)\)/);
-  assert.match(uiSource, /createRun\(\{[\s\S]*?encounterIds,\s*\n\s*\}\)/);
-
-  // 같은 씨앗이면 같은 목록, 다른 방이면 다른 목록이 나와야 한다.
+     이제 층마다 몬스터가 못박혀 있어 갈라질 여지가 없다. */
   const context = vm.createContext({ window:{} });
   vm.runInContext(rulesSource, context, { filename:'raid-rules.js' });
   const R = context.window.YuksamRaidRules;
-  const roll = (roomId) => [...R.rollEncounters(1, R.seededRng(`encounters|${roomId}`))];
-  assert.deepEqual(roll('room-abc'), roll('room-abc'), '같은 방이면 같은 몬스터');
-  const many = new Set(['a', 'b', 'c', 'd', 'e', 'f'].map((id) => roll(id).join(',')));
-  assert.ok(many.size > 1, '방이 다르면 몬스터 구성도 달라져야 한다');
+  R.availableFloors().forEach((floor) => {
+    const a = [...R.floorEncounters(floor).map((m) => m.id)];
+    const b = [...R.floorEncounters(floor).map((m) => m.id)];
+    assert.deepEqual(a, b, `${floor}층은 언제나 같은 몬스터`);
+    assert.deepEqual(a, [...R.getFloor(floor).encounters], `${floor}층 배정표와 일치`);
+  });
+
+  /* 몬스터의 정체는 내 화면이 들고 있던 것이 아니라 서버가 말하는
+     조우 번호에서 정한다. 그러지 않으면 이름은 옛 몬스터인데 체력은 새
+     몬스터인 뒤섞인 몬스터가 만들어진다. */
+  assert.match(uiSource, /function encounterDefAt\(index\)/);
+  const block = uiSource.match(/function importNetworkTruth\(\)[\s\S]*?\n  \}/)?.[0] || '';
+  assert.notEqual(block, '');
+  assert.match(block, /const def = encounterDefAt\(serverIndex\);/);
+  assert.match(block, /String\(state\.id \|\| ''\) === String\(def\.id\)/);
+  assert.doesNotMatch(block, /\{ \.\.\.\(current\.monster \|\| \{\}\), \.\.\.room\.monsterState \}/);
+});
+
+test('끝난 판은 누구도 결과 화면을 놓치지 않고, 보상은 한 번만 준다', () => {
+  /* 실제 사고: 둘은 돌파 축하와 보상을 받았는데 한 명만 아무것도 뜨지 않고
+     진행이 멈췄다. 방이 끝났다고 하면 로그를 다 보여 준 뒤 반드시 마무리한다. */
+  assert.match(uiSource, /\['cleared', 'wiped'\]\.includes\(phase\)\s*\n\s*&& !networkSession\.playbackActive && !networkSession\.playbackQueue\?\.length/);
+  assert.match(uiSource, /modalState\?\.type !== 'raidResult'/);
+  // 여러 경로에서 불려도 보상이 두 번 들어가면 안 된다.
+  assert.match(uiSource, /let finishedRunKey = ''/);
+  assert.match(uiSource, /if \(finishedRunKey === key\) return;/);
+  assert.match(uiSource, /finishedRunKey = '';   \/\/ 다음 판은 다시 결과 화면을 띄울 수 있어야 한다/);
+});
+
+test('방 만들기는 예전 방을 정리하고 새로 시작한다', () => {
+  /* 실제 사고: 방 만들기를 눌렀는데 예전에 하던 전투가 그대로 이어졌다.
+     복구는 게임을 켤 때 자동으로 하는 것이고, 방 만들기는 새 판이다. */
+  const clientSource = read('src/raid-party-client.js');
+  assert.match(clientSource, /if \(body\?\.op === 'create' && existing\?\.room\?\.id\) \{/);
+  assert.match(clientSource, /op:'leave', roomId:existing\.room\.id/);
+  assert.doesNotMatch(clientSource, /const stale = existing\?\.room\?\.id && existing\.room\.phase === 'lobby'/);
 });
 
 test('치명타 소리는 아군·몬스터 가리지 않고 난다', () => {

@@ -89,7 +89,12 @@ test('create and join automatically resume the authenticated active room', async
 
   assert.equal(created.room.id, 'room-existing');
   assert.equal(joined.room.id, 'room-existing');
-  assert.deepEqual(calls.map((body) => body.op), ['create', 'resume', 'join', 'resume']);
+  /* 방 참가는 이미 들어가 있는 방으로 돌아간다(끊겼다 돌아온 경우).
+     방 만들기는 새로 시작하겠다는 뜻이라 예전 방을 정리하고 다시 만든다.
+     여기서는 정리해도 계속 막히는 서버를 흉내 내므로, 오류로 끝내지 않고
+     들어가 있던 방으로 돌려보내야 한다(갇히면 안 된다). */
+  assert.deepEqual(calls.map((body) => body.op),
+    ['create', 'resume', 'leave', 'create', 'join', 'resume']);
   assert.equal(calls.every((body) => !('userId' in body)), true);
 });
 

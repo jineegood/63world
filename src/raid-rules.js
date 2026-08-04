@@ -433,62 +433,57 @@
      'both'  = 그 레벨 두 마리를 모두 순서대로
      'pick'  = 그 레벨에서 한 마리를 무작위로
      'fixed' = 한 마리뿐이라 확정 */
+  /* 층마다 만나는 몬스터를 아예 못박아 둔다.
+     예전에는 같은 레벨 두 마리 중 하나를 무작위로 뽑았는데, 그 뽑기가
+     화면마다 갈라져 '복도에서는 오염된 슬라임인데 실제로는 폭주 복사기'
+     같은 사고가 났다. 정해 두면 갈라질 여지가 없다(제작자 요청). */
   const FLOORS = Object.freeze({
     1: Object.freeze({
       floor:1, title:'63빌딩 1~10층', range:'1–10층', recommendedLevel:5,
-      plan:Object.freeze([{ level:5, mode:'both' }, { level:6, mode:'pick' }, { level:7, mode:'pick' }]),
+      encounters:Object.freeze(['mushroomKing', 'paperPigeon', 'brokenPhone', 'pollutedSlime']),
       reward:Object.freeze({ exp:40, gold:180, building:20 }),
     }),
     11: Object.freeze({
       floor:11, title:'63빌딩 11~20층', range:'11–20층', recommendedLevel:6,
-      plan:Object.freeze([{ level:6, mode:'both' }, { level:7, mode:'pick' }, { level:8, mode:'pick' }]),
+      encounters:Object.freeze(['brokenPhone', 'buildingStomp', 'pollutedSlime', 'officeGhost']),
       reward:Object.freeze({ exp:60, gold:240, building:26 }),
     }),
     21: Object.freeze({
       floor:21, title:'63빌딩 21~30층', range:'21–30층', recommendedLevel:7,
-      plan:Object.freeze([{ level:7, mode:'both' }, { level:8, mode:'pick' }, { level:9, mode:'pick' }]),
+      encounters:Object.freeze(['pollutedSlime', 'rampageCopier', 'guardBot', 'blackoutShade']),
       reward:Object.freeze({ exp:85, gold:300, building:32 }),
     }),
     31: Object.freeze({
       floor:31, title:'63빌딩 31~40층', range:'31–40층', recommendedLevel:8,
-      plan:Object.freeze([{ level:8, mode:'both' }, { level:9, mode:'pick' }, { level:10, mode:'pick' }]),
+      encounters:Object.freeze(['guardBot', 'officeGhost', 'emergencyExitGhost', 'towerWarden']),
       reward:Object.freeze({ exp:115, gold:380, building:40 }),
     }),
     41: Object.freeze({
       floor:41, title:'63빌딩 41~50층', range:'41–50층', recommendedLevel:9,
-      plan:Object.freeze([{ level:9, mode:'both' }, { level:10, mode:'pick' }, { level:11, mode:'pick' }]),
+      encounters:Object.freeze(['blackoutShade', 'emergencyExitGhost', 'elevatorSoul', 'windowWraith']),
       reward:Object.freeze({ exp:150, gold:460, building:48 }),
     }),
     51: Object.freeze({
       floor:51, title:'63빌딩 51~60층', range:'51–60층', recommendedLevel:10,
-      plan:Object.freeze([{ level:10, mode:'both' }, { level:11, mode:'pick' }, { level:12, mode:'fixed' }]),
+      encounters:Object.freeze(['towerWarden', 'elevatorSoul', 'engineIronGiant', 'ominousFloorManager']),
       reward:Object.freeze({ exp:200, gold:560, building:58 }),
     }),
     61: Object.freeze({
       floor:61, title:'63빌딩 61~63층', range:'61–63층', recommendedLevel:12,
-      // 고레벨은 한 마리뿐이라 세 번 조우로 끝난다.
-      plan:Object.freeze([{ level:12, mode:'fixed' }, { level:13, mode:'fixed' }, { level:14, mode:'fixed' }]),
+      // 마지막 구간은 세 마리로 끝낸다.
+      encounters:Object.freeze(['ominousFloorManager', 'nonexistentFloorLord', 'rooftopMyeongjinRobot']),
       reward:Object.freeze({ exp:300, gold:800, building:80 }),
     }),
   });
 
   /* 방을 시작할 때 딱 한 번 뽑아 서버 방 상태에 저장할 조우 목록.
      세 학생이 같은 목록을 봐야 하므로 각자 다시 뽑으면 안 된다. */
-  function rollEncounters(floor, rng = Math.random) {
+  /* 이 층에서 만나는 몬스터 id 목록. 이제 층마다 정해져 있어 무작위가 없다.
+     rng 인자는 예전 호출부와의 호환을 위해 받기만 하고 쓰지 않는다. */
+  function rollEncounters(floor) {
     const def = getFloor(floor);
-    if (!def) return [];
-    const ids = [];
-    def.plan.forEach((step) => {
-      const roster = LEVEL_ROSTER[step.level] || [];
-      if (!roster.length) return;
-      if (step.mode === 'both') { ids.push(...roster); return; }
-      if (step.mode === 'fixed') { ids.push(roster[0]); return; }
-      const pick = Math.floor(Number(rng()) * roster.length);
-      ids.push(roster[Math.min(roster.length - 1, Math.max(0, pick))]);
-    });
-    return ids;
+    return def ? [...def.encounters] : [];
   }
-
   function getFloor(floor) {
     return FLOORS[Number(floor)] || null;
   }
