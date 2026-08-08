@@ -75,9 +75,9 @@ run(process.argv[2], async ({ window, $, click, sleep, asyncErrors }) => {
   const ready = document.getElementById('raidReadyBtn');
   check('대형을 저장하면 준비 버튼이 나온다', !!ready);
   if (ready?.onclick) await ready.onclick();
-  await sleep(120);
   check('전원 준비되면 카운트다운이 뜬다', !!document.querySelector('.raid-countdown'),
     document.querySelector('.raid-countdown')?.textContent);
+  await sleep(120);
 
   // ===== 출발 · 복도 이동 =====
   let waitMap = 0;

@@ -13,6 +13,10 @@ const individualQuestionsMigration = fs.readFileSync(
   path.join(root, 'supabase/migrations/202608020001_raid_individual_questions_v1.sql'),
   'utf8',
 );
+const playbackBarrierMigration = fs.readFileSync(
+  path.join(root, 'supabase/migrations/202608090001_raid_playback_barrier_v1.sql'),
+  'utf8',
+);
 const serviceUrl = pathToFileURL(path.join(root, 'supabase/functions/_shared/raid-room-service.mjs'));
 const errorUrl = pathToFileURL(path.join(root, 'supabase/functions/_shared/raid-room-error.mjs'));
 const storeUrl = pathToFileURL(path.join(root, 'supabase/functions/_shared/raid-room-store.mjs'));
@@ -71,6 +75,63 @@ test('all state mutations are service-only RPCs with database locks and host-aut
   assert.match(migration, /private_publish_raid_round_v1[\s\S]*for update[\s\S]*v_room\.host_id\s*<>\s*p_user_id[\s\S]*HOST_ONLY/i);
   assert.match(migration, /primary key \(room_id, round_no, user_id\)/i);
   assert.match(migration, /unique \(user_id, request_id\)/i);
+});
+
+test('세 화면의 전투 연출이 모두 끝나야 서버가 다음 문제를 연다', () => {
+  assert.match(playbackBarrierMigration, /add column if not exists playback_round integer not null default 0/i);
+  assert.match(playbackBarrierMigration, /private_ack_raid_playback_v1[\s\S]*greatest\(playback_round, p_round_no\)/i);
+  assert.match(playbackBarrierMigration, /member\.playback_round < old\.round_no/i);
+  assert.match(playbackBarrierMigration, /raise exception[\s\S]*PLAYBACK_PENDING/i);
+  assert.match(playbackBarrierMigration, /create trigger raid_playback_barrier_v1/i);
+});
+
+test('서버 sync는 방 version이 바뀌면 파티원과 이벤트를 다시 읽는다', async () => {
+  const { createRaidRoomService } = await import(serviceUrl.href);
+  let roomReads = 0;
+  let memberReads = 0;
+  let eventReads = 0;
+  const rooms = [
+    { id:'room-1', hostId:'a', phase:'effects', round:1, version:1, nextSequence:2 },
+    { id:'room-1', hostId:'a', phase:'effects', round:1, version:2, nextSequence:5 },
+    { id:'room-1', hostId:'a', phase:'effects', round:1, version:2, nextSequence:5 },
+  ];
+  const service = createRaidRoomService({
+    store:{
+      getRoomForUser:async () => structuredClone(rooms[Math.min(roomReads++, rooms.length - 1)]),
+      listMembers:async () => {
+        memberReads += 1;
+        return [{ userId:'a', state:{ hp:roomReads >= 2 ? 7 : 10 } }];
+      },
+      listEventsAfter:async () => {
+        eventReads += 1;
+        return roomReads >= 2 ? [{ sequenceNo:4, round:1, event:{ monsterHp:7 } }] : [];
+      },
+    },
+  });
+
+  const result = await service.handle('a', { op:'sync', roomId:'room-1', afterSequence:0 });
+  assert.equal(result.room.version, 2);
+  assert.equal(result.members[0].state.hp, 7);
+  assert.equal(result.events[0].sequenceNo, 4);
+  assert.equal(memberReads, 2);
+  assert.equal(eventReads, 2);
+});
+
+test('전투 연출 완료 번호는 인증된 자기 자리만 서버에 기록한다', async () => {
+  const { createRaidRoomService } = await import(serviceUrl.href);
+  const acknowledgements = [];
+  const stableRoom = { id:'room-1', hostId:'a', phase:'effects', round:3, version:4, nextSequence:9 };
+  const service = createRaidRoomService({
+    now:() => 12345,
+    store:{
+      ackPlayback:async (value) => acknowledgements.push(value),
+      getRoomForUser:async () => structuredClone(stableRoom),
+      listMembers:async () => [{ userId:'b', playbackRound:3 }],
+      listEventsAfter:async () => [],
+    },
+  });
+  await service.handle('b', { op:'ackPlayback', roomId:'room-1', round:3, afterSequence:8 });
+  assert.deepEqual(acknowledgements, [{ roomId:'room-1', userId:'b', round:3, seenAt:12345 }]);
 });
 
 test('service ignores caller combat stats and loads the authenticated profile from storage', async () => {
@@ -202,7 +263,11 @@ test('resume restores the authenticated active room snapshot from sequence zero'
   assert.equal(restored.room.id, 'room-active');
   assert.equal(restored.members.length, 3);
   assert.equal(restored.events.length, 1);
-  assert.deepEqual(calls.at(-1), ['events', 'room-active', 0]);
+  assert.equal(
+    calls.some((entry) => JSON.stringify(entry) === JSON.stringify(['events', 'room-active', 0])),
+    true,
+    '일관성 재확인을 하더라도 이벤트는 sequence 0부터 읽어야 한다',
+  );
 });
 
 test('create and join recover the existing active room when storage reports ALREADY_IN_ROOM', async () => {
@@ -351,7 +416,10 @@ test('문제 발급이 막히면 이유마다 다른 코드를 돌려준다', as
 
 test('새 이유 코드들도 학생에게 보여 줄 수 있는 공개 코드다', async () => {
   const { publicRaidRoomErrorCode } = await import(errorUrl.href);
-  for (const code of ['QUESTION_INVALID', 'ANSWER_INVALID', 'QUESTION_COUNT', 'ANSWER_COUNT', 'MEMBER_MISMATCH']) {
+  for (const code of [
+    'QUESTION_INVALID', 'ANSWER_INVALID', 'QUESTION_COUNT', 'ANSWER_COUNT',
+    'MEMBER_MISMATCH', 'PLAYBACK_PENDING',
+  ]) {
     assert.equal(publicRaidRoomErrorCode({ code:'P0001', message:code }), code, code);
   }
 });

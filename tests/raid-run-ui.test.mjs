@@ -47,6 +47,12 @@ function networkUiHarness({ mode = 'create', identityUserId = 'alice' } = {}) {
       return () => calls.push(['unsubscribe', roomId]);
     },
     async heartbeat() { return structuredClone(response); },
+    async ackPlayback(roomId, round) {
+      calls.push(['ackPlayback', roomId, round]);
+      const mine = members.find((member) => member.userId === identityUserId);
+      if (mine) mine.playbackRound = Math.max(Number(mine.playbackRound) || 0, Number(round) || 0);
+      return structuredClone(response);
+    },
     async leave() { calls.push(['leave']); return { left:true }; },
   };
   const game = { modalState:null, player:{ name:'앨리스' } };
@@ -282,6 +288,25 @@ test('Realtime 알림과 heartbeat는 모두 같은 sync 경로로 방 상태를
   assert.match(uiSource, /stopNetworkTransport\(\)/);
 });
 
+test('늦게 도착한 옛 방 상태와 결과 재전송이 체력을 두 번 바꾸지 않는다', () => {
+  assert.match(uiSource, /incomingVersion < currentVersion/);
+  assert.match(uiSource, /if \(!staleSnapshot && incomingRoom\) networkSession\.room = incomingRoom/);
+  assert.match(uiSource, /if \(networkRefreshPending\) \{[\s\S]*networkRefreshAgain = true/);
+  assert.match(uiSource, /while \(networkSession === session && networkRefreshAgain\)/);
+  assert.match(uiSource, /session\.pendingRoundPublishes\.get\(round\)/);
+  assert.match(uiSource, /requestId:`raid-publish-\$\{session\.room\.id\}-\$\{round\}`/);
+  assert.match(uiSource, /pending\.result,[\s\S]*pending\.requestId/);
+});
+
+test('세 명이 전투 로그를 모두 본 뒤에만 다음 문제나 복도로 넘어간다', () => {
+  assert.match(uiSource, /function acknowledgeNetworkPlayback\(round\)/);
+  assert.match(uiSource, /session\.client\.ackPlayback\(session\.room\.id, safeRound/);
+  assert.match(uiSource, /function allMembersFinishedPlayback\(round, session = networkSession\)/);
+  assert.match(uiSource, /members\.length === 3 && members\.every/);
+  assert.match(uiSource, /친구들의 전투 연출이 끝나기를 기다리는 중/);
+  assert.match(uiSource, /if \(!allMembersFinishedPlayback\(round, session\)\) \{/);
+});
+
 test('새로고침 뒤에는 진행 중인 방과 현재 전투 장면을 이어서 복원한다', () => {
   assert.match(uiSource, /create:\(\{ floorGroup = 1 \} = \{\}\) => enterOrResume|client\.create/);
   assert.match(uiSource, /\['question', 'waiting', 'resolving', 'effects'\]\.includes\(roomPhase\)/);
@@ -480,9 +505,10 @@ test('몬스터와 세 캐릭터의 체력·보호막·상태를 전투 로그 �
   assert.match(uiSource, /return value > 0 \? ` <span class="shield-badge">🛡 \$\{value\}<\/span>` : '';/);
   assert.match(uiSource, /panelMessage = event\.text \|\| ''/);
   assert.match(uiSource, /function applyEventToView\(event\)/);
-  assert.match(uiSource, /view\.monsterShield = Math\.max/);
-  assert.match(uiSource, /view\.monsterHp = Math\.max/);
-  assert.match(uiSource, /view\.memberShields\[event\.memberId\] = Math\.max/);
+  assert.match(uiSource, /exactEventNumber\(event, 'remainingShield'\)/);
+  assert.match(uiSource, /exactEventNumber\(event, 'monsterHp'\)/);
+  assert.match(uiSource, /exactEventNumber\(event, 'memberHp'\)/);
+  assert.match(uiSource, /'monster-execute'/);
   assert.match(uiSource, /function playEvents\(events, onDone, \{ syncAtEnd = true \} = \{\}\)/);
   assert.match(uiSource, /playEventSound\(event\);\s*\n\s*updateBattleView\(\);/);
   assert.match(uiSource, /let eventDelayMs = 1500/);
@@ -498,17 +524,19 @@ test('세 화면의 체력 숫자가 어긋나지 않는다', () => {
   const end = uiSource.indexOf('function captureViewBaseline()');
   assert.ok(start > 0 && end > start, 'handleNetworkEvents를 찾지 못했다');
   const handler = uiSource.slice(start, end);
-  /* 출발점을 붙잡는 일이 importNetworkTruth() 호출보다 먼저여야 한다.
-     (설명 주석에도 같은 이름이 나오므로 실제 호출 줄로 비교한다.) */
+  /* 출발점을 붙잡고, 재생 중에는 다음 몬스터의 서버 상태를 미리
+     덮어쓰지 않아야 한다. */
   const capturedAt = handler.indexOf('const baseline = idle ? captureViewBaseline()');
-  const importedAt = handler.indexOf('\n    importNetworkTruth();');
-  assert.ok(capturedAt > 0 && importedAt > capturedAt,
-    '서버 값을 덮어쓰기 전에 출발점을 붙잡아야 한다');
+  assert.ok(capturedAt > 0, '전투 로그의 출발점을 붙잡아야 한다');
+  assert.doesNotMatch(handler, /\n    importNetworkTruth\(\);/,
+    '이전 몬스터 로그를 재생하는 동안 다음 몬스터 상태를 미리 넣으면 안 된다');
   assert.match(uiSource, /if \(entry\.baseline\) view = \{ \.\.\.entry\.baseline \};/);
 
-  /* 재생할 라운드가 남아 있는 동안에는 서버 값으로 되돌리지 않는다.
-     되돌리면 다음 라운드에서 또 두 번 깎인다. */
-  assert.match(uiSource, /if \(!session\.playbackQueue\?\.length\) syncViewToTruth\(\);/);
+  /* 재생할 라운드가 남아 있는 동안에는 화면 전환을 하지 않고,
+     마지막 로그 뒤에는 세 명의 완료 확인을 기다린다. */
+  assert.match(uiSource, /if \(session\.playbackQueue\?\.length\) \{/);
+  assert.match(uiSource, /acknowledgeNetworkPlayback\(entry\.round\);/);
+  assert.match(uiSource, /continueAfterNetworkPlayback\(\);/);
   assert.match(uiSource, /\}, \{ syncAtEnd:false \}\);/);
 
   /* 로그를 몇 줄 놓치더라도 조용한 순간에 반드시 서버 값과 맞춘다. */
@@ -687,8 +715,9 @@ test('세 화면이 같은 몬스터를 만난다', () => {
 test('끝난 판은 누구도 결과 화면을 놓치지 않고, 보상은 한 번만 준다', () => {
   /* 실제 사고: 둘은 돌파 축하와 보상을 받았는데 한 명만 아무것도 뜨지 않고
      진행이 멈췄다. 방이 끝났다고 하면 로그를 다 보여 준 뒤 반드시 마무리한다. */
-  assert.match(uiSource, /\['cleared', 'wiped'\]\.includes\(phase\)\s*\n\s*&& !networkSession\.playbackActive && !networkSession\.playbackQueue\?\.length/);
-  assert.match(uiSource, /modalState\?\.type !== 'raidResult'/);
+  assert.match(uiSource, /PLAYBACK_BARRIER_PHASES = new Set\(\['effects', 'travel', 'cleared', 'wiped'\]\)/);
+  assert.match(uiSource, /allMembersFinishedPlayback\(round, session\)/);
+  assert.match(uiSource, /if \(active\.phase === 'cleared' \|\| active\.phase === 'wiped'\) \{/);
   // 여러 경로에서 불려도 보상이 두 번 들어가면 안 된다.
   assert.match(uiSource, /let finishedRunKey = ''/);
   assert.match(uiSource, /if \(finishedRunKey === key\) return;/);

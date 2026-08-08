@@ -162,6 +162,7 @@ class FakeRaidRoomStore {
       ready:member.ready,
       profile_snapshot:clone(member.profile),
       combat_state:clone(member.state),
+      playback_round:member.playbackRound,
       active:member.active,
     };
   }
@@ -210,6 +211,7 @@ class FakeRaidRoomStore {
       ready:false,
       profile:clone(profile),
       state:{ hp:maxHp, maxHp, shield:0, cooldowns:{}, statuses:{} },
+      playbackRound:0,
       lastSeenAt:now,
       active:true,
     };
@@ -297,6 +299,9 @@ class FakeRaidRoomStore {
   async beginRound({ roomId, userId, questionPublic, answerKey, begunAt }) {
     const room = this.requireHost(roomId, userId);
     if (room.phase !== 'travel' && room.phase !== 'effects') fail('ROUND_CLOSED');
+    if (room.round > 0 && this.roomMembers(roomId).some((member) => member.playbackRound < room.round)) {
+      fail('PLAYBACK_PENDING');
+    }
     room.phase = 'answering';
     room.round += 1;
     room.question = clone(questionPublic);
@@ -361,6 +366,15 @@ class FakeRaidRoomStore {
 
   async heartbeat({ roomId, userId, seenAt }) {
     this.requireMember(roomId, userId).lastSeenAt = seenAt;
+  }
+
+  async ackPlayback({ roomId, userId, round, seenAt }) {
+    const room = this.requireRoom(roomId);
+    if (round > room.round) fail('ROUND_CHANGED');
+    const member = this.requireMember(roomId, userId);
+    member.playbackRound = Math.max(member.playbackRound, round);
+    member.lastSeenAt = seenAt;
+    this.hub.broadcast('raid_room_members_v1', 'UPDATE', this.memberDatabaseRow(member));
   }
 
   async leaveRoom({ roomId, userId }) {
@@ -527,4 +541,21 @@ test('three authenticated browser sessions create, join, form, start and resolve
     assert.deepEqual(view.events, published.events);
     assert.deepEqual(view.members, published.members);
   }
+
+  await assert.rejects(
+    alice.beginRound(roomId, { byUser:questions }, JSON.stringify(answers)),
+    (error) => error?.code === 'PLAYBACK_PENDING',
+    '한 화면이라도 전투 로그를 덜 봤으면 다음 문제를 열면 안 된다',
+  );
+  await alice.ackPlayback(roomId, 1);
+  await bob.ackPlayback(roomId, 1);
+  await assert.rejects(
+    alice.beginRound(roomId, { byUser:questions }, JSON.stringify(answers)),
+    (error) => error?.code === 'PLAYBACK_PENDING',
+    '두 명만 완료해도 아직 기다려야 한다',
+  );
+  await cara.ackPlayback(roomId, 1);
+  const nextRound = await alice.beginRound(roomId, { byUser:questions }, JSON.stringify(answers));
+  assert.equal(nextRound.room.round, 2);
+  assert.equal(nextRound.room.phase, 'answering');
 });

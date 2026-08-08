@@ -27,11 +27,12 @@ module.exports = function createFakeRaidRoom({
   let answerKeys = {};
 
   const members = [
-    { roomId:room.id, userId:meId, joinOrder:1, slot:null, ready:false, active:true,
+    { roomId:room.id, userId:meId, joinOrder:1, slot:null, ready:false, active:true, playbackRound:0,
       profile:{ userId:meId, name:meName, ...profileOf() },
       state:{ hp:1, maxHp:1, shield:0, cooldowns:{}, statuses:{} } },
     ...OTHERS.map((other, index) => ({
       roomId:room.id, userId:other.userId, joinOrder:index + 2, slot:null, ready:false, active:true,
+      playbackRound:0,
       profile:{
         userId:other.userId, name:other.name, className:other.klass, spec:other.spec,
         /* 검사에서는 몬스터를 빨리 잡아 다음 조우까지 흐름을 보는 게 목적이라
@@ -141,6 +142,11 @@ module.exports = function createFakeRaidRoom({
       room.monsterState = result.monsterState || {};
       room.question = null;
       room.version += 1;
+      /* 화면 하나짜리 스모크 검사에서는 가짜 친구 둘이 연출도 곧바로
+         다 봤다고 처리한다. 실제 학생 화면은 ackPlayback을 직접 보낸다. */
+      members.forEach((member) => {
+        if (member.userId !== meId) member.playbackRound = Math.max(member.playbackRound || 0, round);
+      });
       (result.events || []).forEach((event) => {
         sequence += 1;
         events.push({ sequenceNo:sequence, round, event:clone(event) });
@@ -154,6 +160,13 @@ module.exports = function createFakeRaidRoom({
       });
       notify();
       return snapshot(0);
+    },
+
+    async ackPlayback(roomId, round, afterSequence) {
+      const me = members.find((entry) => entry.userId === meId);
+      if (me) me.playbackRound = Math.max(me.playbackRound || 0, Number(round) || 0);
+      notify();
+      return snapshot(afterSequence);
     },
 
     async heartbeat(roomId, afterSequence) { return snapshot(afterSequence); },

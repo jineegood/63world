@@ -48,21 +48,24 @@ test('raid room client exposes the complete three-player room API through one au
   await api.start('room-1');
   await api.beginRound('room-1', { prompt:'1+1=?', choices:['1', '2'] }, '2');
   await api.submit('room-1', 1, 'basic', '2');
-  await api.publishRound('room-1', 1, { nextPhase:'effects', events:[] });
+  await api.publishRound('room-1', 1, { nextPhase:'effects', events:[] }, 'stable-publish-1');
+  await api.ackPlayback('room-1', 1, 12);
   await api.heartbeat('room-1', 12);
   await api.leave('room-1');
 
-  assert.equal(invokes.length, 12);
+  assert.equal(invokes.length, 13);
   assert.equal(invokes.every((entry) => entry.name === 'raid-room-v1'), true);
   assert.deepEqual(invokes.map((entry) => entry.body.op), [
     'create', 'join', 'resume', 'sync', 'setFormation', 'ready', 'start',
-    'beginRound', 'submit', 'publishRound', 'heartbeat', 'leave',
+    'beginRound', 'submit', 'publishRound', 'ackPlayback', 'heartbeat', 'leave',
   ]);
   assert.equal(invokes[0].body.floorGroup, 1);
   assert.equal(invokes[1].body.code, '1234');
   assert.equal(invokes.every((entry) => !('profile' in entry.body)), true);
   assert.equal(invokes[3].body.afterSequence, 9);
+  assert.equal(invokes[9].body.requestId, 'stable-publish-1');
   assert.equal(invokes[10].body.afterSequence, 12);
+  assert.equal(invokes[11].body.afterSequence, 12);
   assert.equal(invokes.every((entry) => !('userId' in entry.body)), true);
 });
 

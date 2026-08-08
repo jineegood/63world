@@ -156,12 +156,29 @@ export function createRaidRoomService({ store, now = Date.now } = {}) {
 
   async function sync(userId, rawRoomId, rawAfterSequence = 0) {
     const id = roomId(rawRoomId);
-    const room = await store.getRoomForUser(id, userId);
+    let room = await store.getRoomForUser(id, userId);
     if (!room) failRaidRoom('NOT_MEMBER');
-    const [members, events] = await Promise.all([
-      store.listMembers(id),
-      store.listEventsAfter(id, afterSequence(rawAfterSequence)),
-    ]);
+    let members = [];
+    let events = [];
+    let stableSnapshot = false;
+    /* publish는 방·파티원·이벤트를 한 트랜잭션에서 바꾼다. 하지만 이 함수가
+       그 사이를 여러 조회로 읽으면 '옛 방 + 새 체력'이 한 응답에 섞일 수 있다.
+       방 version/nextSequence를 앞뒤로 확인해 같은 시점의 묶음만 반환한다. */
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      [members, events] = await Promise.all([
+        store.listMembers(id),
+        store.listEventsAfter(id, afterSequence(rawAfterSequence)),
+      ]);
+      const confirmed = await store.getRoomForUser(id, userId);
+      if (!confirmed) failRaidRoom('NOT_MEMBER');
+      stableSnapshot = (Number(confirmed.version) || 0) === (Number(room.version) || 0)
+        && (Number(confirmed.nextSequence) || 0) === (Number(room.nextSequence) || 0);
+      room = confirmed;
+      if (stableSnapshot) break;
+    }
+    if (!stableSnapshot) {
+      failRaidRoom('TEMPORARY_UNAVAILABLE');
+    }
     const privateQuestion = object(room.question?.byUser)?.[String(userId)] || room.question;
     const result = { room:{ ...room, question:privateQuestion || null }, members, events };
     if (room.hostId === userId && room.phase === 'resolving') {
@@ -316,6 +333,18 @@ export function createRaidRoomService({ store, now = Date.now } = {}) {
           publishedAt:now(),
         });
         return sync(userId, id, 0);
+      }
+      case 'ackPlayback': {
+        const id = roomId(body.roomId);
+        const round = Math.trunc(Number(body.round) || 0);
+        if (round < 0) failRaidRoom('INVALID_REQUEST');
+        await store.ackPlayback({
+          roomId:id,
+          userId,
+          round,
+          seenAt:now(),
+        });
+        return sync(userId, id, body.afterSequence);
       }
       case 'heartbeat': {
         const id = roomId(body.roomId);

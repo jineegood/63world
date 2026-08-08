@@ -18,6 +18,7 @@
     NOT_READY:'모든 파티원이 준비되어야 출발할 수 있습니다.',
     ROUND_CHANGED:'이미 다음 전투 순서로 넘어갔습니다.',
     ROUND_CLOSED:'지금은 답을 제출할 수 없습니다.',
+    PLAYBACK_PENDING:'친구들의 전투 연출이 끝나기를 기다리는 중입니다.',
     /* 문제 발급이 막힌 이유들 — 예전에는 전부 한 문구로 뭉뚱그려져 있었다. */
     QUESTION_INVALID:'문제를 만들지 못했습니다. 선생님이 문제집을 확인해 주세요.',
     ANSWER_INVALID:'문제의 정답이 비어 있습니다. 선생님이 문제집을 확인해 주세요.',
@@ -42,6 +43,7 @@
     beginRound:'문제 발급',
     submit:'답 제출',
     publishRound:'전투 결과 반영',
+    ackPlayback:'전투 연출 확인',
     heartbeat:'접속 유지',
     leave:'방 나가기',
   });
@@ -245,10 +247,13 @@
         op:'submit', roomId, round, actionId, answer,
         requestId:requestId('submit'),
       }),
-      publishRound:(roomId, round, result) => invoke({
+      publishRound:(roomId, round, result, stableRequestId = '') => invoke({
         op:'publishRound', roomId, round, result,
-        requestId:requestId('publish'),
+        requestId:String(stableRequestId || requestId('publish')).slice(0, 100),
       }, { verifySession:true }),
+      ackPlayback:(roomId, round, afterSequence = 0) => invoke({
+        op:'ackPlayback', roomId, round, afterSequence,
+      }),
       heartbeat:(roomId, afterSequence = 0) => invoke({ op:'heartbeat', roomId, afterSequence }),
       leave:(roomId) => invoke({
         op:'leave', roomId, requestId:requestId('leave'),

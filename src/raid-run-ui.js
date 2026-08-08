@@ -41,6 +41,7 @@
   let networkUnsubscribe = null;
   let networkHeartbeatTimer = null;
   let networkRefreshPending = false;
+  let networkRefreshAgain = false;
   let networkDraftPlacement = {};
   let networkSelectedMemberId = null;
   let networkStarting = false;
@@ -320,6 +321,25 @@
       .map(roomMemberToCombatMember);
   }
 
+  function memberPlaybackRound(row) {
+    return Math.max(0, Math.trunc(Number(row?.playbackRound ?? row?.playback_round) || 0));
+  }
+
+  /* heartbeat와 realtime 조회가 겹치면 오래된 응답이 나중에 도착할 수 있다.
+     같은 방 버전에서는 전투 상태가 같으므로, 재생 완료 번호만 절대로
+     뒤로 가지 않게 합친다. */
+  function mergeNetworkMembers(currentRows, incomingRows) {
+    const currentById = new Map((currentRows || []).map((row) => [
+      String(row?.userId || row?.user_id || ''), row,
+    ]));
+    return (incomingRows || []).map((row) => {
+      const id = String(row?.userId || row?.user_id || '');
+      const previous = currentById.get(id);
+      const playbackRound = Math.max(memberPlaybackRound(previous), memberPlaybackRound(row));
+      return { ...row, playbackRound, playback_round:playbackRound };
+    });
+  }
+
   /* ---------- 구간 해금 ---------- */
 
   const progressApi = () => global.YuksamRaidProgress;
@@ -453,9 +473,19 @@
 
   function setNetworkData(data, { initial = false } = {}) {
     if (!networkSession || !data) return;
-    if (data.room) networkSession.room = data.room;
-    if (Array.isArray(data.members)) networkSession.members = data.members;
-    if (data.answerKeys && networkSession.room?.round) {
+    const incomingRoom = data.room || null;
+    const currentVersion = Math.max(0, Number(networkSession.room?.version) || 0);
+    const incomingVersion = Math.max(0, Number(incomingRoom?.version) || 0);
+    /* 먼저 보낸 heartbeat가 늦게 돌아와 최신 publish 결과를 덮으면
+       한 화면만 이전 체력·이전 단계로 돌아간다. 방 version이 낮은 응답은
+       이벤트만 챙기고 상태 스냅샷으로는 절대 사용하지 않는다. */
+    const staleSnapshot = !!incomingRoom && currentVersion > 0 && incomingVersion > 0
+      && incomingVersion < currentVersion;
+    if (!staleSnapshot && incomingRoom) networkSession.room = incomingRoom;
+    if (!staleSnapshot && Array.isArray(data.members)) {
+      networkSession.members = mergeNetworkMembers(networkSession.members, data.members);
+    }
+    if (!staleSnapshot && data.answerKeys && networkSession.room?.round) {
       networkSession.answerKeys = networkSession.answerKeys || {};
       networkSession.answerKeys[networkSession.room.round] = { ...data.answerKeys };
     }
@@ -477,7 +507,17 @@
     } else {
       handleNetworkEvents(events);
     }
-    networkSession.submissions = Array.isArray(data.submissions) ? data.submissions : [];
+    if (!staleSnapshot) {
+      networkSession.submissions = Array.isArray(data.submissions) ? data.submissions : [];
+      /* 결과 전송 응답을 잃어도 다음 sync에서 서버 반영을 확인하면
+         보관해 둔 재시도 자료를 정리한다. */
+      if (networkSession.room?.phase !== 'resolving' && networkSession.pendingRoundPublishes) {
+        const serverRound = Math.max(0, Number(networkSession.room?.round) || 0);
+        [...networkSession.pendingRoundPublishes.keys()]
+          .filter((round) => round <= serverRound)
+          .forEach((round) => networkSession.pendingRoundPublishes.delete(round));
+      }
+    }
 
     const phase = networkSession.room?.phase || 'lobby';
     if (phase !== 'lobby') cancelNetworkLobbyCountdown();
@@ -485,8 +525,12 @@
     /* 보정 — 재생이 모두 끝난 조용한 순간에는 화면 값을 서버 값과 맞춘다.
        실시간 알림과 폴링이 겹쳐 로그 몇 줄을 놓치더라도, 다음 문제가 나오기
        전에 세 화면의 숫자가 반드시 같아진다. */
+    const waitingForPlaybackBarrier = playbackBarrierNeeded(networkSession)
+      && !allMembersFinishedPlayback(Number(networkSession.room?.round) || 0, networkSession);
     if (active && !networkSession.playbackActive && !networkSession.playbackQueue?.length
+      && !waitingForPlaybackBarrier
       && ['question', 'waiting', 'travel', 'effects'].includes(phase)) {
+      importNetworkTruth();
       syncViewToTruth();
       if (G()?.modalState?.type === 'raidBattle') updateBattleView();
     }
@@ -495,18 +539,23 @@
        실제 사고: 둘은 '1–10층 돌파' 축하와 보상을 받았는데 한 명만 아무것도
        뜨지 않고 진행이 멈췄다. 재생이 밀리는 사이 완료 처리를 놓친 것이다.
        방이 끝났다고 말하면, 보여 줄 로그를 다 보여 준 뒤 반드시 마무리한다. */
-    if (active && ['cleared', 'wiped'].includes(phase)
-      && !networkSession.playbackActive && !networkSession.playbackQueue?.length
-      && G()?.modalState?.type !== 'raidResult') {
-      importNetworkTruth();
-      finishRun();
-      return;
-    }
     if (active?.phase === 'battle' && ['question', 'waiting'].includes(phase)) {
       startRaidQuestionTimer();
     } else if (raidQuestionTimerInterval) {
       updateRaidQuestionTimer();
       stopRaidQuestionTimer();
+    }
+    /* 세 화면이 함께 복도를 출발해도 백그라운드 탭의 RAF는 느릴 수 있다.
+       서버가 이미 문제/판정 단계라면 느린 화면의 복도 연출을 취소하고
+       현재 전투로 즉시 따라잡는다. */
+    if (active?.phase === 'battle' && ['question', 'waiting', 'resolving'].includes(phase)
+      && !networkSession.playbackActive && !networkSession.playbackQueue?.length
+      && G()?.currentMap === MAP_KEY && G()?.modalState?.type !== 'raidBattle') {
+      travelAnimationToken += 1;
+      encounterMonster = null;
+      encounterStartedAt = 0;
+      walkProgress = 1;
+      openBattleScreen({ resumed:true });
     }
     if (phase === 'cancelled') {
       stopNetworkTransport();
@@ -526,24 +575,41 @@
       return;
     }
     if (!active && !networkStarting) beginNetworkRun();
+    if (active && !networkSession.playbackActive && !networkSession.playbackQueue?.length
+      && ['effects', 'travel', 'cleared', 'wiped'].includes(phase)) {
+      continueAfterNetworkPlayback();
+    }
     if (['question', 'waiting'].includes(phase)) maybeAutoSubmitDeadNetworkTurn();
     if (phase === 'resolving') maybeResolveNetworkRound();
   }
 
   async function refreshNetworkRoom() {
-    if (!networkSession || networkRefreshPending) return;
+    if (!networkSession) return;
+    if (networkRefreshPending) {
+      /* 조회 중 도착한 realtime 알림을 버리지 않는다. 현재 조회가 끝나자마자
+         한 번 더 읽어 새 phase와 이벤트를 가져온다. */
+      networkRefreshAgain = true;
+      return;
+    }
     const session = networkSession;
     networkRefreshPending = true;
-    try {
-      const data = await session.client.sync(session.room.id, session.lastSequence || 0);
-      if (networkSession !== session) return;
-      setNetworkData(data);
-    } catch (error) {
-      if (networkSession === session && session.room?.phase === 'lobby') {
-        renderNetworkLobby(error?.message || '방 정보를 다시 불러오는 중입니다.');
+    do {
+      networkRefreshAgain = false;
+      try {
+        const data = await session.client.sync(session.room.id, session.lastSequence || 0);
+        if (networkSession !== session) return;
+        setNetworkData(data);
+      } catch (error) {
+        if (networkSession === session && session.room?.phase === 'lobby') {
+          renderNetworkLobby(error?.message || '방 정보를 다시 불러오는 중입니다.');
+        }
       }
-    } finally {
+    } while (networkSession === session && networkRefreshAgain);
+    if (networkSession === session) {
       networkRefreshPending = false;
+    } else {
+      networkRefreshPending = false;
+      networkRefreshAgain = false;
     }
   }
 
@@ -576,7 +642,10 @@
     stopNetworkTransport();
     cancelNetworkLobbyCountdown();
     stopRaidQuestionTimer();
+    travelAnimationToken += 1;
     networkSession = null;
+    networkRefreshPending = false;
+    networkRefreshAgain = false;
     networkDraftPlacement = {};
     networkSelectedMemberId = null;
     networkStarting = false;
@@ -669,6 +738,9 @@
         handledRounds:new Set(),
         resolvingRounds:new Set(),
         deadSubmittedRounds:new Set(),
+        pendingRoundPublishes:new Map(),
+        ackingPlaybackRounds:new Set(),
+        travelPlaybackKeys:new Set(),
       };
       setNetworkData(data, { initial:true });
       startNetworkTransport();
@@ -989,6 +1061,13 @@
       enterDungeonMap(() => {
         networkStarting = false;
         if (!active || networkSession?.room?.phase === 'cancelled') return;
+        /* 새로고침으로 전투 결과 연출을 건너뛴 화면도 현재 라운드를
+           확인했다고 서버에 알린 뒤 다른 두 화면과 같은 경계에서 이어 간다. */
+        if (playbackBarrierNeeded()) {
+          if (active.phase === 'battle') openBattleScreen({ resumed:true });
+          continueAfterNetworkPlayback();
+          return;
+        }
         if (active.phase === 'travel') {
           playTravelScene();
           return;
@@ -1152,62 +1231,181 @@
     }]));
   }
 
+  const PLAYBACK_BARRIER_PHASES = new Set(['effects', 'travel', 'cleared', 'wiped']);
+
+  function playbackBarrierNeeded(session = networkSession) {
+    const round = Math.max(0, Number(session?.room?.round) || 0);
+    return !!session && round > 0 && PLAYBACK_BARRIER_PHASES.has(session.room?.phase);
+  }
+
+  function allMembersFinishedPlayback(round, session = networkSession) {
+    const members = (session?.members || []).filter((row) => row && row.active !== false);
+    return members.length === 3 && members.every((row) => memberPlaybackRound(row) >= round);
+  }
+
+  function showPlaybackBarrierWait() {
+    busy = true;
+    panelMode = 'playing';
+    panelMessage = '친구들의 전투 연출이 끝나기를 기다리는 중…';
+    if (G()?.modalState?.type === 'raidBattle') {
+      updateBattleView();
+      return;
+    }
+    call('openModal', `
+      <h2>던전 동기화 중</h2>
+      <div class="panel-card"><p class="raid-room-status">친구들의 전투 연출이 끝나기를 기다리는 중…</p></div>
+    `, { type:'raidSyncWait', pause:true });
+  }
+
+  function acknowledgeNetworkPlayback(round) {
+    const session = networkSession;
+    const safeRound = Math.max(0, Math.trunc(Number(round) || 0));
+    if (!session || safeRound < 1 || typeof session.client?.ackPlayback !== 'function') return;
+    const me = String(raidIdentity()?.userId || '');
+    const mine = (session.members || []).find((row) => String(row?.userId || row?.user_id || '') === me);
+    if (memberPlaybackRound(mine) >= safeRound) return;
+    session.ackingPlaybackRounds = session.ackingPlaybackRounds || new Set();
+    if (session.ackingPlaybackRounds.has(safeRound)) return;
+    session.ackingPlaybackRounds.add(safeRound);
+    Promise.resolve(session.client.ackPlayback(session.room.id, safeRound, session.lastSequence || 0))
+      .then((data) => {
+        if (networkSession === session) setNetworkData(data);
+      })
+      .catch(() => {
+        /* 다음 realtime/heartbeat 때 다시 시도한다. 진행을 먼저 열지는 않는다. */
+        if (networkSession === session) global.setTimeout(refreshNetworkRoom, 350);
+      })
+      .finally(() => {
+        if (networkSession === session) session.ackingPlaybackRounds.delete(safeRound);
+      });
+  }
+
+  /* 전투 결과를 다 본 세 화면이 같은 경계에서 다음 문제·복도로 넘어간다.
+     크롬의 백그라운드 탭이 느려도 먼저 끝난 탭이 혼자 진행하지 않는다. */
+  function continueAfterNetworkPlayback() {
+    const session = networkSession;
+    if (!session || !active || session.playbackActive || session.playbackQueue?.length) return false;
+    const round = Math.max(0, Number(session.room?.round) || 0);
+    if (playbackBarrierNeeded(session)) {
+      acknowledgeNetworkPlayback(round);
+      if (!allMembersFinishedPlayback(round, session)) {
+        showPlaybackBarrierWait();
+        return false;
+      }
+    }
+
+    importNetworkTruth();
+    syncViewToTruth();
+    syncMyRaidCooldowns();
+    question = null;
+    chosenAction = null;
+
+    if (active.phase === 'cleared' || active.phase === 'wiped') {
+      finishRun();
+      return true;
+    }
+    if (active.phase === 'travel') {
+      const travelKey = `${round}:${active.snapshot().encounterIndex}`;
+      session.travelPlaybackKeys = session.travelPlaybackKeys || new Set();
+      if (!session.travelPlaybackKeys.has(travelKey)) {
+        session.travelPlaybackKeys.add(travelKey);
+        playTravelScene();
+      }
+      return true;
+    }
+
+    const localMember = myActiveRaidMember();
+    const down = !!localMember && localMember.hp <= 0;
+    busy = down;
+    panelMode = down ? 'playing' : 'menu';
+    panelMessage = down
+      ? '쓰러져 있어 이번 전투에서는 행동하지 않습니다. 친구들을 기다리는 중…'
+      : isNetworkHost() && ['travel', 'effects'].includes(session.room?.phase)
+        ? '다음 문제를 준비하는 중…'
+        : '무엇을 할까?';
+    renderBattle();
+    /* 방장 캐릭터가 쓰러져도 남은 두 사람의 라운드는 방장이 열어야 한다. */
+    if (isNetworkHost()) beginNetworkRound();
+    return true;
+  }
+
   async function maybeResolveNetworkRound() {
     const session = networkSession;
     const round = Math.max(1, Number(session?.room?.round) || 1);
-    if (!session || !isNetworkHost() || !active || active.phase !== 'battle') return;
+    const hasPendingResult = !!session?.pendingRoundPublishes?.has(round);
+    if (!session || !isNetworkHost() || !active || (!hasPendingResult && active.phase !== 'battle')) return;
     if (session.room?.phase !== 'resolving' || session.resolvingRounds.has(round)) return;
     const inputs = Array.isArray(session.submissions) ? session.submissions : [];
     if (inputs.length !== 3) return;
     session.resolvingRounds.add(round);
 
     try {
-      const downAtRoundStart = new Set(active.snapshot().members
-        .filter((member) => member.hp <= 0)
-        .map((member) => String(member.id)));
-      const submissions = Object.fromEntries(inputs.map((entry) => [String(entry.userId), {
-        correct:entry.correct === true,
-        actionId:String(entry.actionId || 'basic'),
-      }]));
-      const result = active.resolveRound(submissions);
-      if (!result.ok) throw new Error(result.reason || '전투 판정을 완료하지 못했습니다.');
-      const snapshot = active.snapshot();
-      const answerEvents = inputs.map((entry) => {
-        const skipped = downAtRoundStart.has(String(entry.userId));
-        const storedAnswers = session.answerKeys?.[round];
-        const correctAnswer = String(
-          storedAnswers && typeof storedAnswers === 'object'
-            ? storedAnswers[String(entry.userId)] ?? storedAnswers.default ?? ''
-            : storedAnswers ?? '',
-        );
-        return {
-          kind:'round-answer',
-          memberId:String(entry.userId),
-          correct:skipped || entry.correct === true,
-          skipped,
-          timedOut:skipped ? false : entry.timedOut === true,
-          correctAnswer:skipped ? '' : correctAnswer,
-          text:skipped
-            ? '쓰러져 있어 이번 전투에서는 행동하지 않습니다.'
-            : entry.correct === true
-              ? '정답!'
-              : `오답입니다! 정답은 ${correctAnswer || '확인 중'} (피해가 절반만 들어갑니다)`,
+      session.pendingRoundPublishes = session.pendingRoundPublishes || new Map();
+      let pending = session.pendingRoundPublishes.get(round);
+      if (!pending) {
+        /* resolveRound은 로컬 상태를 실제로 변경한다. 결과 전송이 끊겼다고
+           다시 호출하면 방장 화면만 같은 공격을 두 번 계산한다. 최초 계산
+           결과를 보관하고 이후에는 같은 자료와 같은 요청 번호만 재전송한다. */
+        const downAtRoundStart = new Set(active.snapshot().members
+          .filter((member) => member.hp <= 0)
+          .map((member) => String(member.id)));
+        const submissions = Object.fromEntries(inputs.map((entry) => [String(entry.userId), {
+          correct:entry.correct === true,
+          actionId:String(entry.actionId || 'basic'),
+        }]));
+        const result = active.resolveRound(submissions);
+        if (!result.ok) throw new Error(result.reason || '전투 판정을 완료하지 못했습니다.');
+        const snapshot = active.snapshot();
+        const answerEvents = inputs.map((entry) => {
+          const skipped = downAtRoundStart.has(String(entry.userId));
+          const storedAnswers = session.answerKeys?.[round];
+          const correctAnswer = String(
+            storedAnswers && typeof storedAnswers === 'object'
+              ? storedAnswers[String(entry.userId)] ?? storedAnswers.default ?? ''
+              : storedAnswers ?? '',
+          );
+          return {
+            kind:'round-answer',
+            memberId:String(entry.userId),
+            correct:skipped || entry.correct === true,
+            skipped,
+            timedOut:skipped ? false : entry.timedOut === true,
+            correctAnswer:skipped ? '' : correctAnswer,
+            text:skipped
+              ? '쓰러져 있어 이번 전투에서는 행동하지 않습니다.'
+              : entry.correct === true
+                ? '정답!'
+                : `오답입니다! 정답은 ${correctAnswer || '확인 중'} (피해가 절반만 들어갑니다)`,
+          };
+        });
+        const nextPhase = snapshot.phase === 'battle' ? 'effects' : snapshot.phase;
+        const monsterState = snapshot.monster ? { ...snapshot.monster, raidRound:snapshot.round } : {};
+        const currentFloor = snapshot.phase === 'battle'
+          ? displayFloorForProgress(snapshot, 1)
+          : encounterFloors()[Math.max(0, Math.min(3, snapshot.encounterIndex - 1))];
+        pending = {
+          requestId:`raid-publish-${session.room.id}-${round}`,
+          result:{
+            nextPhase,
+            encounterIndex:snapshot.encounterIndex,
+            currentFloor,
+            monsterState,
+            memberStates:publishMemberStates(snapshot),
+            events:[...answerEvents, ...(result.events || [])],
+          },
         };
-      });
-      const nextPhase = snapshot.phase === 'battle' ? 'effects' : snapshot.phase;
-      const monsterState = snapshot.monster ? { ...snapshot.monster, raidRound:snapshot.round } : {};
-      const currentFloor = snapshot.phase === 'battle'
-        ? displayFloorForProgress(snapshot, 1)
-        : encounterFloors()[Math.max(0, Math.min(3, snapshot.encounterIndex - 1))];
-      const data = await session.client.publishRound(session.room.id, round, {
-        nextPhase,
-        encounterIndex:snapshot.encounterIndex,
-        currentFloor,
-        monsterState,
-        memberStates:publishMemberStates(snapshot),
-        events:[...answerEvents, ...(result.events || [])],
-      });
-      if (networkSession === session) setNetworkData(data);
+        session.pendingRoundPublishes.set(round, pending);
+      }
+      const data = await session.client.publishRound(
+        session.room.id,
+        round,
+        pending.result,
+        pending.requestId,
+      );
+      if (networkSession === session) {
+        session.pendingRoundPublishes.delete(round);
+        setNetworkData(data);
+      }
     } catch (error) {
       session.resolvingRounds.delete(round);
       panelMode = 'playing';
@@ -1241,11 +1439,12 @@
     const serverIndex = Math.max(0, Math.trunc(Number(room.encounterIndex) || 0));
     const def = encounterDefAt(serverIndex);
     const state = room.monsterState && Object.keys(room.monsterState).length ? room.monsterState : null;
+    const stateMatchesEncounter = !!def && !!state && String(state.id || '') === String(def.id);
     let monster;
     if (def) {
       /* 상태가 그 몬스터의 것일 때만 얹는다. 아니면 새 몬스터를 온전한
          체력으로 세운다 — 다음 조우가 시작된 것이기 때문이다. */
-      monster = state && String(state.id || '') === String(def.id)
+      monster = stateMatchesEncounter
         ? { ...def, ...state }
         : { ...def, hp:def.hp, maxHp:def.hp };
     } else {
@@ -1255,7 +1454,8 @@
     active.importSnapshot({
       phase,
       encounterIndex:serverIndex,
-      round:Number(state?.raidRound ?? current.round) || 0,
+      /* 죽은 이전 몬스터의 raidRound를 다음 몬스터에 넘기지 않는다. */
+      round:stateMatchesEncounter ? (Number(state?.raidRound) || 0) : 0,
       monster,
       members:roomMembers(),
     });
@@ -1295,7 +1495,9 @@
       queue.push({ round, events, baseline:first ? baseline : null });
       first = false;
     });
-    importNetworkTruth();
+    /* 최종 서버 상태는 로그 재생이 모두 끝난 뒤에만 가져온다.
+       여기서 먼저 다음 몬스터로 바꾸면, 이전 몬스터 사망 로그를 보여 주는
+       동안 이름은 이전 몬스터인데 HP 기준은 다음 몬스터가 된다. */
     playNextNetworkRound();
   }
 
@@ -1347,38 +1549,21 @@
       playEvents([opening, ...combatEvents], () => {
         if (networkSession !== session || !active) return;
         session.playbackActive = false;
-        /* 아직 재생할 라운드가 남아 있으면 화면 값을 서버 값으로 되돌리지 않는다.
-           되돌리면 다음 라운드의 출발점이 '그 라운드가 끝난 뒤' 값이 되어
-           체력이 두 번 깎인다. 마지막 라운드까지 다 보여 준 뒤에만 맞춘다. */
-        if (!session.playbackQueue?.length) syncViewToTruth();
         syncMyRaidCooldowns();
         question = null;
         chosenAction = null;
-        if (active.phase === 'cleared' || active.phase === 'wiped') {
-          finishRun();
-        } else if (active.phase === 'travel') {
+        acknowledgeNetworkPlayback(entry.round);
+        /* 예전 연결에서 밀린 라운드가 남아 있다면 화면 전환보다 재생을
+           먼저 끝낸다. 마지막 라운드 뒤에만 세 명 완료 장벽을 확인한다. */
+        if (session.playbackQueue?.length) {
+          busy = true;
           panelMode = 'playing';
-          playTravelScene();
-        } else {
-          const localMember = myActiveRaidMember();
-          const down = !!localMember && localMember.hp <= 0;
-          /* 아직 보여 줄 라운드가 밀려 있으면 행동 메뉴를 내주면 안 된다.
-             내주면 이미 죽은 몬스터를 다시 공격하게 되고, 그 화면만
-             한 조우씩 뒤처져 "혼자 아직 첫 몬스터를 잡고 있는" 상태가 된다. */
-          const behind = !!session.playbackQueue?.length;
-          busy = down || behind;
-          panelMode = down || behind ? 'playing' : 'menu';
-          panelMessage = behind
-            ? '친구들의 전투를 따라가는 중…'
-            : down
-              ? '쓰러져 있어 이번 전투에서는 행동하지 않습니다. 친구들을 기다리는 중…'
-              : isNetworkHost() && ['travel', 'effects'].includes(session.room?.phase)
-                ? '다음 문제를 준비하는 중…'
-                : '무엇을 할까?';
-          renderBattle();
-          if (isNetworkHost() && !behind) beginNetworkRound();
+          panelMessage = '친구들의 전투를 따라가는 중…';
+          updateBattleView();
+          playNextNetworkRound();
+          return;
         }
-        playNextNetworkRound();
+        continueAfterNetworkPlayback();
       }, { syncAtEnd:false });
     };
 
@@ -1441,6 +1626,7 @@
   const LOADING_TAIL_MS = 820;   // 로딩 오버레이가 완전히 걷힐 때까지 기다리는 시간
   let walkStartedAt = 0;   // 이동 연출 시작 시각
   let walkProgress = 1;    // 0=출발 지점, 1=몬스터 앞
+  let travelAnimationToken = 0;
   let returnMap = 'town';
   let returnPos = null;
 
@@ -1860,6 +2046,7 @@
     walkProgress = 0;
     encounterMonster = null;
     encounterStartedAt = 0;
+    const travelToken = ++travelAnimationToken;
 
     // 다음에 만날 몬스터를 미리 알아 둔다(등장 연출에 필요).
     const R = rules();
@@ -1867,19 +2054,19 @@
     const upcoming = R.floorEncounters(snap.floor)[snap.encounterIndex] || null;
 
     const tick = () => {
-      if (!active) return;
+      if (!active || travelToken !== travelAnimationToken) return;
       const now = (global.performance ? performance.now() : Date.now());
       walkProgress = Math.min(1, (now - walkStartedAt) / WALK_MS);
 
       // 걷기가 끝나면 몬스터가 복도 끝에서 나타난다.
       if (walkProgress >= 1 && !encounterStartedAt) {
-        if (!upcoming) { finishTravel(); return; }
+        if (!upcoming) { finishTravel(travelToken); return; }
         encounterMonster = upcoming;
         encounterStartedAt = now;
         playEncounterSound();
       }
 
-      if (encounterStartedAt && encounterProgress() >= 1) { finishTravel(); return; }
+      if (encounterStartedAt && encounterProgress() >= 1) { finishTravel(travelToken); return; }
 
       if (global.requestAnimationFrame) global.requestAnimationFrame(tick);
       else global.setTimeout(tick, 32);
@@ -1889,11 +2076,17 @@
     else global.setTimeout(tick, 32);
   }
 
-  function finishTravel() {
+  function finishTravel(travelToken = travelAnimationToken) {
+    if (!active || travelToken !== travelAnimationToken) return;
     encounterMonster = null;
     encounterStartedAt = 0;
     const arrival = active.arriveAtEncounter();
-    if (!arrival.ok) return;
+    if (!arrival.ok) {
+      /* 다른 화면이 먼저 도착해 서버가 이미 문제 단계라면 남은 복도
+         연출을 버리고 서버가 가리키는 전투 화면으로 따라간다. */
+      if (networkSession && active.phase === 'battle') openBattleScreen({ resumed:true });
+      return;
+    }
     if (arrival.cleared) { finishRun(); return; }
     openBattleScreen();
   }
@@ -2690,37 +2883,66 @@
   /* 검사에서 setLogSpeed로 지정한 속도. 지정돼 있으면 따라잡기가 건드리지 않는다. */
   let logSpeedOverride = null;
 
+  function exactEventNumber(event, key) {
+    if (!event || !Object.prototype.hasOwnProperty.call(event, key)) return null;
+    const value = Number(event[key]);
+    return Number.isFinite(value) ? value : null;
+  }
+
   /* 이 한 줄이 일어난 만큼만 표시용 체력을 움직인다.
      그래서 "때릴 때마다 체력바가 쭉 빠지는" 모습이 나온다. */
   function applyEventToView(event) {
     if (!view || !event) return;
-    if (['party-hit', 'monster-dot', 'party-retaliation'].includes(event.kind) && !event.missed) {
-      view.monsterShield = Math.max(0, view.monsterShield - (Number(event.shieldDamage) || 0));
-      view.monsterHp = Math.max(0, view.monsterHp - (Number(event.hpDamage ?? event.damage ?? event.amount) || 0));
+    if (['party-hit', 'monster-dot', 'party-retaliation', 'monster-execute'].includes(event.kind) && !event.missed) {
+      const exactShield = exactEventNumber(event, 'remainingShield');
+      const exactHp = exactEventNumber(event, 'monsterHp');
+      view.monsterShield = exactShield === null
+        ? Math.max(0, view.monsterShield - (Number(event.shieldDamage) || 0))
+        : Math.max(0, exactShield);
+      view.monsterHp = exactHp === null
+        ? Math.max(0, view.monsterHp - (Number(event.hpDamage ?? event.damage ?? event.amount) || 0))
+        : Math.max(0, exactHp);
       if (Number(event.heal) > 0 && event.targetMemberId) {
-        view.members[event.targetMemberId] = (view.members[event.targetMemberId] || 0) + Number(event.heal);
+        const exactMemberHp = exactEventNumber(event, 'memberHp');
+        view.members[event.targetMemberId] = exactMemberHp === null
+          ? (view.members[event.targetMemberId] || 0) + Number(event.heal)
+          : Math.max(0, exactMemberHp);
       }
     } else if (['monster-hit', 'member-dot', 'monster-counter'].includes(event.kind) && !event.missed) {
       const before = view.members[event.memberId] ?? 0;
-      view.memberShields[event.memberId] = Math.max(
-        0,
-        (view.memberShields[event.memberId] || 0) - (Number(event.shieldDamage) || 0),
-      );
-      view.members[event.memberId] = Math.max(0, before - (Number(event.hpDamage ?? event.damage) || 0));
+      const exactShield = exactEventNumber(event, 'remainingShield');
+      const exactHp = exactEventNumber(event, 'memberHp');
+      view.memberShields[event.memberId] = exactShield === null
+        ? Math.max(0, (view.memberShields[event.memberId] || 0) - (Number(event.shieldDamage) || 0))
+        : Math.max(0, exactShield);
+      view.members[event.memberId] = exactHp === null
+        ? Math.max(0, before - (Number(event.hpDamage ?? event.damage) || 0))
+        : Math.max(0, exactHp);
     } else if (event.kind === 'monster-heal') {
-      view.monsterHp = view.monsterHp + (Number(event.amount) || 0);
+      const exactHp = exactEventNumber(event, 'monsterHp');
+      view.monsterHp = exactHp === null
+        ? view.monsterHp + (Number(event.amount) || 0)
+        : Math.max(0, exactHp);
     } else if (event.kind === 'monster-shield') {
-      view.monsterShield = (Number(view.monsterShield) || 0) + (Number(event.amount) || 0);
+      const exactShield = exactEventNumber(event, 'shield');
+      view.monsterShield = exactShield === null
+        ? (Number(view.monsterShield) || 0) + (Number(event.amount) || 0)
+        : Math.max(0, exactShield);
     } else if (event.kind === 'party-heal') {
       const id = event.targetMemberId || event.memberId;
       const before = view.members[id] ?? 0;
-      view.members[id] = before + (event.amount || 0);
+      const exactHp = exactEventNumber(event, 'memberHp');
+      view.members[id] = exactHp === null ? before + (event.amount || 0) : Math.max(0, exactHp);
     } else if (event.kind === 'party-buff' && event.heal > 0) {
       const before = view.members[event.memberId] ?? 0;
-      view.members[event.memberId] = before + Number(event.heal || 0);
+      const exactHp = exactEventNumber(event, 'memberHp');
+      view.members[event.memberId] = exactHp === null ? before + Number(event.heal || 0) : Math.max(0, exactHp);
     } else if (event.kind === 'party-shield') {
       const id = event.targetMemberId || event.memberId;
-      view.memberShields[id] = (view.memberShields[id] || 0) + Number(event.amount || 0);
+      const exactShield = exactEventNumber(event, 'shield');
+      view.memberShields[id] = exactShield === null
+        ? (view.memberShields[id] || 0) + Number(event.amount || 0)
+        : Math.max(0, exactShield);
     } else if (event.kind === 'member-revive') {
       view.members[event.memberId] = Math.max(1, Number(event.memberHp ?? event.amount) || 1);
     }
