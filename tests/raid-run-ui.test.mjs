@@ -231,7 +231,7 @@ test('온라인 대기실은 정확히 세 명·대형 저장·전원 준비 후
   assert.match(block, /networkSession\.client\.setFormation/);
   assert.match(block, /networkSession\.client\.ready/);
   // 구간을 못 연 사람이 있으면 카운트다운도 시작하지 않는다.
-  assert.match(block, /syncNetworkLobbyCountdown\(savedFormation && allReady && partyUnlocked\)/);
+  assert.match(block, /syncNetworkLobbyCountdown\(savedFormation && allReady && partyUnlocked && partyDiverse\)/);
   assert.match(block, /partyUnlockState\(\)/);
   assert.doesNotMatch(block, /raidNetworkStartBtn|3명 출발!/);
   assert.match(uiSource, /if \(isNetworkHost\(\)\) startNetworkRoomAfterCountdown\(\)/);
@@ -273,6 +273,24 @@ test('준비 취소가 동기화되면 진행 중이던 자동 출발 카운트�
   assert.doesNotMatch(host.html(), /초 후 출발!/);
 });
 
+test('같은 전문화 세 명은 준비할 수 없고 자동 출발도 시작되지 않는다', async () => {
+  const host = networkUiHarness();
+  fillReadyNetworkRoster(host);
+  for (const member of host.members) {
+    member.profile.className = 'warrior';
+    member.profile.spec = '무기';
+  }
+  host.context.YuksamRaidRunUi.setCountdownSpeed(2, 1);
+  assert.equal(await host.context.YuksamRaidRunUi.openNetworkLobby({ mode:'create', floorGroup:1 }), true);
+
+  assert.match(host.html(), /더 다양한 직업군으로 파티를 구성해야 합니다!/);
+  assert.match(host.html(), /id="raidReadyBtn" disabled>준비 불가<\/button>/);
+  assert.doesNotMatch(host.html(), /초 후 출발!/);
+  await new Promise((resolve) => setTimeout(resolve, 25));
+  assert.equal(host.calls.filter(([kind]) => kind === 'start').length, 0);
+  assert.equal(host.calls.filter(([kind, name]) => kind === 'sfx' && name === 'open').length, 0);
+});
+
 test('대기 캐릭터 카드에서 근거가 불분명한 공격 숫자를 보여주지 않는다', () => {
   const block = uiSource.match(/function renderNetworkLobby\([\s\S]*?\n  \}\n\n  function isNetworkHost/)?.[0] || '';
   assert.match(block, /Lv\.\$\{member\.level\}/);
@@ -302,9 +320,27 @@ test('세 명이 전투 로그를 모두 본 뒤에만 다음 문제나 복도�
   assert.match(uiSource, /function acknowledgeNetworkPlayback\(round\)/);
   assert.match(uiSource, /session\.client\.ackPlayback\(session\.room\.id, safeRound/);
   assert.match(uiSource, /function allMembersFinishedPlayback\(round, session = networkSession\)/);
-  assert.match(uiSource, /members\.length === 3 && members\.every/);
+  assert.match(uiSource, /terminal \? members\.length > 0 : members\.length === 3/);
   assert.match(uiSource, /친구들의 전투 연출이 끝나기를 기다리는 중/);
   assert.match(uiSource, /if \(!allMembersFinishedPlayback\(round, session\)\) \{/);
+});
+
+test('최종 보상창에서 한 명이 먼저 나가도 남은 화면은 연출 대기에 갇히지 않는다', () => {
+  const harness = networkUiHarness();
+  const ready = harness.context.YuksamRaidRunUi.playbackReadyForTest;
+  const member = (userId, playbackRound) => ({ userId, active:true, playbackRound });
+
+  const twoFinished = [member('alice', 7), member('bob', 7)];
+  assert.equal(ready(7, { room:{ phase:'effects' }, members:twoFinished }), false,
+    '진행 중에는 한 명이 빠졌다고 장벽을 열면 안 된다');
+  assert.equal(ready(7, { room:{ phase:'cleared' }, members:twoFinished }), true,
+    '클리어 뒤에는 확인을 누르고 나간 사람 때문에 남은 둘이 갇히면 안 된다');
+  assert.equal(ready(7, { room:{ phase:'wiped' }, members:twoFinished }), true,
+    '전멸 결과창도 같은 방식으로 안전하게 끝나야 한다');
+  assert.equal(ready(7, {
+    room:{ phase:'cleared' },
+    members:[member('alice', 7), member('bob', 6)],
+  }), false, '남아 있는 사람의 연출이 실제로 끝나기 전에는 열면 안 된다');
 });
 
 test('새로고침 뒤에는 진행 중인 방과 현재 전투 장면을 이어서 복원한다', () => {
@@ -617,18 +653,27 @@ test('시트의 17마리가 모두 이모티콘 대신 직접 그린 모델을 �
 });
 
 test('새로 그린 몬스터는 사냥터 스프라이트를 빌려 쓰거나 직접 그린다', () => {
-  // 버섯·슬라임 계열은 사냥터 그림을 그대로 재사용한다(같은 세계관).
-  assert.match(uiSource, /function borrowSprite\(name, ctx, cx, cy, scale, tint\)/);
-  for (const sprite of ['drawMushroomSprite', 'drawSlimeSprite']) {
-    assert.match(uiSource, new RegExp(`borrowSprite\\('${sprite}'`), `${sprite}를 빌려 써야 한다`);
-    assert.match(gameSource, new RegExp(`function ${sprite}\\(`), `${sprite}가 game.js에 있어야 한다`);
-  }
+  // 버섯 계열은 사냥터 그림을 그대로 재사용한다(같은 세계관).
+  assert.match(uiSource, /function borrowSprite\(name, ctx, cx, cy, scale\)/);
+  assert.match(uiSource, /borrowSprite\('drawMushroomSprite'/);
+  assert.match(gameSource, /function drawMushroomSprite\(/);
   /* 빌딩 스톰프는 사냥터 그림을 확대해 쓰니 화면 밖으로 넘쳐 알아보기
      어려웠다. 철판·리벳으로 직접 그려 크기를 맞춘다. */
   const stomp = uiSource.match(/buildingStomp\(ctx, cx, cy, t\)[\s\S]*?\n    \},/)?.[0] || '';
   assert.notEqual(stomp, '');
   assert.doesNotMatch(stomp, /borrowSprite/, '스톰프는 더 이상 확대해 빌려 쓰지 않는다');
   assert.match(stomp, /리벳/);
+});
+
+test('오염된 슬라임은 몸과 오염 방울이 보라색 계열이다', () => {
+  const slime = uiSource.match(/pollutedSlime\(ctx, cx, cy, t\)[\s\S]*?\n    \},/)?.[0] || '';
+  assert.notEqual(slime, '');
+  assert.doesNotMatch(slime, /borrowSprite|fillRect/);
+  assert.match(slime, /#ddd6fe/);
+  assert.match(slime, /#9333ea/);
+  assert.match(slime, /#581c87/);
+  assert.match(slime, /#c084fc/);
+  assert.doesNotMatch(slime, /#65a30d|#a3e635/);
 });
 
 test('던전 전용 음악은 던전 맵에서만 재생된다', () => {
@@ -719,10 +764,21 @@ test('끝난 판은 누구도 결과 화면을 놓치지 않고, 보상은 한 �
   assert.match(uiSource, /PLAYBACK_BARRIER_PHASES = new Set\(\['effects', 'travel', 'cleared', 'wiped'\]\)/);
   assert.match(uiSource, /allMembersFinishedPlayback\(round, session\)/);
   assert.match(uiSource, /if \(active\.phase === 'cleared' \|\| active\.phase === 'wiped'\) \{/);
+  assert.match(uiSource, /networkSession\.completion = data\.completion/);
   // 여러 경로에서 불려도 보상이 두 번 들어가면 안 된다.
   assert.match(uiSource, /let finishedRunKey = ''/);
   assert.match(uiSource, /if \(finishedRunKey === key\) return;/);
   assert.match(uiSource, /finishedRunKey = '';   \/\/ 다음 판은 다시 결과 화면을 띄울 수 있어야 한다/);
+  const finish = uiSource.match(/function finishRun\(\) \{[\s\S]*?\/\* ---------- 밖에서 부르는 입구/)?.[0] || '';
+  assert.match(finish, /if \(cleared && session && !completion\?\.player\)/,
+    '서버 보상 정보가 오기 전에는 결과 처리를 잠그지 않는다');
+  assert.match(finish, /applyAuthoritySnapshotFromServerV3/,
+    '온라인 보상은 서버의 절대 저장값으로 맞춘다');
+  assert.match(finish, /completion\.awarded !== true/);
+  assert.match(finish, /첫 클리어 보상은 이미 받았습니다/);
+  const onlineBranch = finish.match(/if \(session\) \{[\s\S]*?\} else \{/)?.[0] || '';
+  assert.doesNotMatch(onlineBranch, /addExp|addGold|reward\.building/,
+    '온라인 완료 응답을 다시 받아도 로컬 가산으로 중복 지급하면 안 된다');
 });
 
 test('방 만들기는 예전 방을 정리하고 새로 시작한다', () => {

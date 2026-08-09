@@ -68,6 +68,47 @@ function rpcArgs(value) {
   return Object.fromEntries(Object.entries(value).filter(([, child]) => child !== undefined));
 }
 
+function safeInteger(value, minimum = 0, maximum = Number.MAX_SAFE_INTEGER) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return minimum;
+  return Math.max(minimum, Math.min(maximum, Math.trunc(number)));
+}
+
+function raidCompletion(claim, profileData, progress, roomId, floorGroup) {
+  const data = profileData && typeof profileData === 'object' && !Array.isArray(profileData)
+    ? profileData
+    : {};
+  const currentRoomAward = !!claim
+    && claim.legacy_assumed_paid !== true
+    && String(claim.source_room_id || '') === String(roomId || '');
+  const reward = currentRoomAward ? {
+    exp:safeInteger(claim.exp_reward),
+    gold:safeInteger(claim.gold_reward),
+    building:safeInteger(claim.building_reward),
+  } : { exp:0, gold:0, building:0 };
+  return {
+    roomId:String(roomId || ''),
+    floorGroup:safeInteger(floorGroup, 1, 7),
+    awarded:currentRoomAward,
+    firstClear:currentRoomAward,
+    reward,
+    levelGain:currentRoomAward ? safeInteger(claim.level_gain, 0, 9) : 0,
+    fullyHealed:currentRoomAward && claim.fully_healed === true,
+    player:{
+      exp:safeInteger(data.exp),
+      gold:safeInteger(data.gold),
+      building:safeInteger(data.building),
+      level:safeInteger(data.level, 1, 10),
+      skillPoints:safeInteger(data.skillPoints),
+      hp:safeInteger(data.hp),
+      maxHp:safeInteger(data.maxHp, 1, 100000),
+      raidTopGroup:safeInteger(progress?.top_group, 0, 7),
+      raidRewardVersion:safeInteger(data.raidRewardVersion, 0, 7),
+      fullyHealed:currentRoomAward && claim.fully_healed === true,
+    },
+  };
+}
+
 export function createSupabaseRaidRoomStore(client) {
   if (!client?.from || !client?.rpc) throw new TypeError('A Supabase service client is required.');
 
@@ -100,6 +141,24 @@ export function createSupabaseRaidRoomStore(client) {
         ...profile,
         raidTopGroup:Math.max(0, Math.min(7, Math.trunc(Number(progress?.top_group) || 0))),
       };
+    },
+
+    async getRaidCompletion(roomId, userId, floorGroup) {
+      const safeFloorGroup = safeInteger(floorGroup, 1, 7);
+      const [claimResult, profileResult, progressResult] = await Promise.all([
+        client.from('raid_reward_claims_v1')
+          .select('source_room_id,exp_reward,gold_reward,building_reward,level_gain,fully_healed,legacy_assumed_paid')
+          .eq('user_id', userId).eq('floor_group', safeFloorGroup).maybeSingle(),
+        client.from('player_profiles_v2')
+          .select('data').eq('user_id', userId).maybeSingle(),
+        client.from('raid_progress_v1')
+          .select('top_group').eq('user_id', userId).maybeSingle(),
+      ]);
+      const claim = check(claimResult);
+      const profile = check(profileResult);
+      const progress = check(progressResult);
+      if (!profile) return null;
+      return raidCompletion(claim, profile.data, progress, roomId, safeFloorGroup);
     },
 
     async createRoom(value) {
@@ -250,4 +309,4 @@ export function createSupabaseRaidRoomStore(client) {
   });
 }
 
-export const RaidRoomStoreRows = Object.freeze({ roomRow, memberRow, eventRow });
+export const RaidRoomStoreRows = Object.freeze({ roomRow, memberRow, eventRow, raidCompletion });

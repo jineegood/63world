@@ -14,6 +14,7 @@
     NOT_MEMBER:'이 던전 방에 참여한 계정이 아닙니다.',
     HOST_ONLY:'방장만 할 수 있습니다.',
     PARTY_INCOMPLETE:'3명이 모두 모여야 출발할 수 있습니다.',
+    PARTY_COMPOSITION_INVALID:'더 다양한 직업군으로 파티를 구성해야 합니다!',
     FORMATION_INVALID:'앞·가운데·뒤에 한 명씩 배치해 주세요.',
     NOT_READY:'모든 파티원이 준비되어야 출발할 수 있습니다.',
     ROUND_CHANGED:'이미 다음 전투 순서로 넘어갔습니다.',

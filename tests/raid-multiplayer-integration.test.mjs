@@ -403,9 +403,9 @@ function createBrowserRaidClient(hub, service, userId, displayName) {
 test('three authenticated browser sessions create, join, form, start and resolve one synchronized raid round', async (t) => {
   const hub = new FakeRealtimeHub();
   const profiles = {
-    alice:{ userId:'alice', name:'앨리스', className:'warrior', maxHp:42, attack:10, skills:{ warrior_weapon_breaker:1 } },
-    bob:{ userId:'bob', name:'밥', className:'mage', maxHp:31, attack:12, skills:{ mage_basic_double:1 } },
-    cara:{ userId:'cara', name:'카라', className:'priest', maxHp:36, attack:8, skills:{ priest_basic_heal:1 } },
+    alice:{ userId:'alice', name:'앨리스', className:'warrior', spec:'무기', maxHp:42, attack:10, skills:{ warrior_weapon_breaker:1 } },
+    bob:{ userId:'bob', name:'밥', className:'mage', spec:'화염', maxHp:31, attack:12, skills:{ mage_basic_double:1 } },
+    cara:{ userId:'cara', name:'카라', className:'priest', spec:'신성', maxHp:36, attack:8, skills:{ priest_basic_heal:1 } },
   };
   const store = new FakeRaidRoomStore(hub, profiles);
   let clock = Date.UTC(2026, 7, 1, 9, 0, 0);
@@ -558,4 +558,36 @@ test('three authenticated browser sessions create, join, form, start and resolve
   const nextRound = await alice.beginRound(roomId, { byUser:questions }, JSON.stringify(answers));
   assert.equal(nextRound.room.round, 2);
   assert.equal(nextRound.room.phase, 'answering');
+
+  /* 최종 보상창에서는 세 명이 연출을 다 본 뒤 한 명부터 확인을 누른다.
+     서버는 그 사람만 active 목록에서 빼고 완료된 방은 그대로 둔다. */
+  await alice.submit(roomId, 2, 'basic', '42');
+  await bob.submit(roomId, 2, 'basic', '64');
+  await cara.submit(roomId, 2, 'basic', '81');
+  const finalResolving = await alice.sync(roomId);
+  const finalMemberStates = Object.fromEntries(finalResolving.members.map((member) => [
+    member.userId,
+    member.state,
+  ]));
+  await alice.publishRound(roomId, 2, {
+    nextPhase:'cleared',
+    encounterIndex:4,
+    currentFloor:10,
+    monsterState:{ id:'mushroom-king', hp:0, maxHp:100, statuses:{} },
+    memberStates:finalMemberStates,
+    events:[{ kind:'monster-defeated', name:'버섯돌이킹' }],
+  });
+  await alice.ackPlayback(roomId, 2);
+  await bob.ackPlayback(roomId, 2);
+  await cara.ackPlayback(roomId, 2);
+  await alice.leave(roomId);
+
+  const [bobAfterAliceLeft, caraAfterAliceLeft] = await Promise.all([
+    bob.sync(roomId), cara.sync(roomId),
+  ]);
+  for (const view of [bobAfterAliceLeft, caraAfterAliceLeft]) {
+    assert.equal(view.room.phase, 'cleared', '한 명이 확인해도 완료된 방이 취소되면 안 된다');
+    assert.equal(view.members.length, 2, '확인을 누른 사람은 활성 명단에서 빠진다');
+    assert.ok(view.members.every((member) => member.playbackRound >= 2));
+  }
 });

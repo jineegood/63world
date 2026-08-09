@@ -26,6 +26,14 @@ function object(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
 }
 
+/* 방 참가 때 저장한 profile은 서버가 만든 값이다. 출발 직전에 이 값을 다시
+   읽어 같은 전문화 세 명이나 빈 전문화가 섞인 편법을 서버에서도 막는다. */
+function hasDiversePartySpecializations(roster) {
+  if (!Array.isArray(roster) || roster.length !== 3) return false;
+  const specs = roster.map((member) => text(member?.profile?.spec, 12)).filter(Boolean);
+  return specs.length === 3 && new Set(specs).size >= 2;
+}
+
 function byteLength(value) {
   return new TextEncoder().encode(String(value || '')).byteLength;
 }
@@ -181,6 +189,12 @@ export function createRaidRoomService({ store, now = Date.now } = {}) {
     }
     const privateQuestion = object(room.question?.byUser)?.[String(userId)] || room.question;
     const result = { room:{ ...room, question:privateQuestion || null }, members, events };
+    /* A cleared room and its first-clear reward receipt are committed together.
+       Return only this authenticated member's canonical resource totals so every
+       client can SET its UI state instead of adding an untrusted local reward. */
+    if (room.phase === 'cleared' && typeof store.getRaidCompletion === 'function') {
+      result.completion = await store.getRaidCompletion(id, userId, room.floorGroup);
+    }
     if (room.hostId === userId && room.phase === 'resolving') {
       const submitted = await store.listRoundJudgements(id, room.round);
       const byUser = new Map(submitted.map((entry) => [String(entry.userId), entry]));
@@ -279,6 +293,9 @@ export function createRaidRoomService({ store, now = Date.now } = {}) {
         const room = await store.getRoomForUser(id, userId);
         if (!room) failRaidRoom('NOT_MEMBER');
         const roster = await store.listMembers(id);
+        if (roster.length === 3 && !hasDiversePartySpecializations(roster)) {
+          failRaidRoom('PARTY_COMPOSITION_INVALID');
+        }
         const targetGroup = Math.max(FIRST_FLOOR_GROUP, Math.trunc(Number(room.floorGroup) || 1));
         if (roster.some((member) => targetGroup > unlockedFloorGroup(member?.profile))) {
           failRaidRoom('FLOOR_LOCKED');

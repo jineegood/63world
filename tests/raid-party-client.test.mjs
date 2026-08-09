@@ -156,3 +156,27 @@ test('known server codes are shown instead of a generic connection failure', asy
     error.code === 'ROOM_FULL' && error.message.includes('3명')
   ));
 });
+
+test('같은 전문화 세 명의 서버 거절 문구를 그대로 안내한다', async () => {
+  const window = { setTimeout:(callback) => callback() };
+  vm.runInNewContext(source, { window, globalThis:window });
+  const response = {
+    clone() { return this; },
+    async json() { return { error:'PARTY_COMPOSITION_INVALID' }; },
+  };
+  const api = window.YuksamRaidPartyClient.create({
+    client:{
+      auth:{ getUser:async () => ({ data:{ user:{ id:'a' } }, error:null }) },
+      functions:{ invoke:async () => ({
+        data:null,
+        error:{ message:'Edge Function returned a non-2xx status code', context:response },
+      }) },
+    },
+    getIdentity:() => ({ userId:'a' }),
+  });
+
+  await assert.rejects(api.start('room-1'), (error) => (
+    error.code === 'PARTY_COMPOSITION_INVALID'
+      && error.message.includes('더 다양한 직업군으로 파티를 구성해야 합니다!')
+  ));
+});

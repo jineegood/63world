@@ -21,6 +21,10 @@ const progressAuthorityMigration = fs.readFileSync(
   path.join(root, 'supabase/migrations/202608090002_raid_progress_authority_v1.sql'),
   'utf8',
 );
+const firstClearRewardMigration = fs.readFileSync(
+  path.join(root, 'supabase/migrations/202608090003_raid_first_clear_rewards_v1.sql'),
+  'utf8',
+);
 const serviceUrl = pathToFileURL(path.join(root, 'supabase/functions/_shared/raid-room-service.mjs'));
 const errorUrl = pathToFileURL(path.join(root, 'supabase/functions/_shared/raid-room-error.mjs'));
 const storeUrl = pathToFileURL(path.join(root, 'supabase/functions/_shared/raid-room-store.mjs'));
@@ -98,6 +102,28 @@ test('던전 클리어 해금은 서버가 저장하고 과거 완료 방도 자
   assert.match(progressAuthorityMigration, /revoke all on table public\.raid_progress_v1 from public, anon, authenticated/i);
 });
 
+test('던전 보상은 캐릭터·구간별 최초 한 번만 서버가 원자 지급한다', () => {
+  assert.match(firstClearRewardMigration, /create table if not exists public\.raid_reward_claims_v1/i);
+  assert.match(firstClearRewardMigration, /primary key \(user_id, floor_group\)/i);
+  assert.match(firstClearRewardMigration, /on conflict \(user_id, floor_group\) do nothing/i);
+  assert.match(firstClearRewardMigration, /member\.room_id = new\.id and member\.active/i);
+  assert.match(firstClearRewardMigration, /when 1 then 40[\s\S]*when 7 then 300/i, 'EXP는 기존 값을 쓴다');
+  assert.match(firstClearRewardMigration, /when 1 then 90[\s\S]*when 7 then 400/i, 'Gold는 절반이다');
+  assert.match(firstClearRewardMigration, /when 1 then 10[\s\S]*when 7 then 40/i, '빌딩은 절반이다');
+  assert.match(firstClearRewardMigration, /v_level_gain \* 2/i);
+  assert.match(firstClearRewardMigration, /fully_healed = \(v_level_gain > 0\)/i);
+  assert.match(firstClearRewardMigration, /update public\.player_profiles_v2[\s\S]*set data = v_profile_data/i);
+  assert.match(firstClearRewardMigration, /legacy_assumed_paid[\s\S]*first_legacy_clear/i);
+  assert.match(firstClearRewardMigration, /member\.left_at is null or member\.left_at >= room\.finished_at/i);
+  assert.match(firstClearRewardMigration, /update public\.player_profiles_v2 profile[\s\S]*raidRewardVersion[\s\S]*count\(\*\)[\s\S]*raid_reward_claims_v1/i);
+  assert.match(firstClearRewardMigration, /private_guard_raid_progress_profile_v1[\s\S]*v_incoming_reward_version < v_reward_version/i);
+  for (const key of ['exp', 'gold', 'building', 'level', 'skillPoints', 'hp', 'maxHp']) {
+    assert.match(firstClearRewardMigration, new RegExp(`'${key}'`));
+  }
+  assert.match(firstClearRewardMigration, /v_profile_data[\s\S]*raidRewardVersion[\s\S]*v_reward_version/i);
+  assert.match(firstClearRewardMigration, /revoke all on table public\.raid_reward_claims_v1 from public, anon, authenticated/i);
+});
+
 test('서버 sync는 방 version이 바뀌면 파티원과 이벤트를 다시 읽는다', async () => {
   const { createRaidRoomService } = await import(serviceUrl.href);
   let roomReads = 0;
@@ -128,6 +154,33 @@ test('서버 sync는 방 version이 바뀌면 파티원과 이벤트를 다시 �
   assert.equal(result.events[0].sequenceNo, 4);
   assert.equal(memberReads, 2);
   assert.equal(eventReads, 2);
+});
+
+test('클리어 sync는 로그인한 학생 자신의 서버 보상 결과를 붙인다', async () => {
+  const { createRaidRoomService } = await import(serviceUrl.href);
+  const completion = {
+    roomId:'room-1', floorGroup:1, awarded:true, firstClear:true,
+    reward:{ exp:40, gold:90, building:10 }, levelGain:1, fullyHealed:true,
+    player:{ exp:40, level:3, skillPoints:4, gold:110, building:10, hp:26, maxHp:26, raidRewardVersion:1, fullyHealed:true },
+  };
+  const room = {
+    id:'room-1', hostId:'a', floorGroup:1, phase:'cleared', round:4,
+    version:9, nextSequence:20,
+  };
+  const service = createRaidRoomService({
+    store:{
+      getRoomForUser:async () => structuredClone(room),
+      listMembers:async () => [{ userId:'a' }, { userId:'b' }, { userId:'c' }],
+      listEventsAfter:async () => [],
+      getRaidCompletion:async (roomId, userId, floorGroup) => {
+        assert.deepEqual([roomId, userId, floorGroup], ['room-1', 'b', 1]);
+        return structuredClone(completion);
+      },
+    },
+  });
+
+  const result = await service.handle('b', { op:'sync', roomId:'room-1', afterSequence:19 });
+  assert.deepEqual(result.completion, completion);
 });
 
 test('전투 연출 완료 번호는 인증된 자기 자리만 서버에 기록한다', async () => {
@@ -220,20 +273,52 @@ test('셋 중 한 명이라도 구간을 못 열었으면 출발할 수 없다',
       startRoom:async (value) => { started.push(value.roomId); },
     },
   });
-  const member = (userId, cleared) => ({ userId, profile:{ name:userId, raidTopGroup:cleared } });
+  const member = (userId, cleared, spec) => ({ userId, profile:{ name:userId, raidTopGroup:cleared, spec } });
 
   // 셋 다 2구간까지 깼으면 3구간에 들어갈 수 있다.
-  await withRoster([member('a', 2), member('b', 2), member('c', 2)])
+  await withRoster([member('a', 2, '무기'), member('b', 2, '화염'), member('c', 2, '신성')])
     .handle('a', { op:'start', roomId:'room-1', requestId:'s1' });
   assert.deepEqual(started, ['room-1']);
 
   // 한 명이 뒤처져 있으면 막힌다.
   await assert.rejects(
-    withRoster([member('a', 2), member('b', 0), member('c', 2)])
+    withRoster([member('a', 2, '무기'), member('b', 0, '화염'), member('c', 2, '신성')])
       .handle('a', { op:'start', roomId:'room-1', requestId:'s2' }),
     (error) => error.code === 'FLOOR_LOCKED',
   );
   assert.deepEqual(started, ['room-1'], '막혔으면 출발시키지 않는다');
+});
+
+test('서버는 같은 전문화 세 명의 직접 출발 요청도 거부한다', async () => {
+  const { createRaidRoomService } = await import(serviceUrl.href);
+  const started = [];
+  const makeService = (specs) => createRaidRoomService({
+    now:() => 1000,
+    store:{
+      getRoomForUser:async () => ({ id:'room-1', hostId:'a', phase:'lobby', floorGroup:1, round:0 }),
+      listMembers:async () => specs.map((spec, index) => ({
+        userId:String.fromCharCode(97 + index),
+        profile:{ name:String.fromCharCode(65 + index), raidTopGroup:0, spec },
+      })),
+      listEventsAfter:async () => [],
+      startRoom:async (value) => { started.push(value.roomId); },
+    },
+  });
+
+  await assert.rejects(
+    makeService(['무기', '무기', '무기']).handle('a', { op:'start', roomId:'room-1', requestId:'same-spec' }),
+    (error) => error.code === 'PARTY_COMPOSITION_INVALID',
+  );
+  await assert.rejects(
+    makeService(['신성', '신성', '']).handle('a', { op:'start', roomId:'room-1', requestId:'blank-spec' }),
+    (error) => error.code === 'PARTY_COMPOSITION_INVALID',
+    '빈 전문화로 제한을 피할 수 없어야 한다',
+  );
+  assert.deepEqual(started, []);
+
+  await makeService(['무기', '무기', '신성'])
+    .handle('a', { op:'start', roomId:'room-1', requestId:'mixed-spec' });
+  assert.deepEqual(started, ['room-1'], '두 명이 같아도 한 명이 다르면 출발할 수 있다');
 });
 
 test('초대 코드는 숫자 네 자리여야 한다', async () => {
@@ -383,6 +468,37 @@ test('Supabase store uses server-owned raid progress instead of editable player 
   const store = createSupabaseRaidRoomStore(client);
   const profile = await store.getAuthoritativeProfile('student-a');
   assert.equal(profile.raidTopGroup, 1);
+});
+
+test('완료 응답은 최초 클리어만 보상을 표시하고 반복 클리어도 canonical player를 준다', async () => {
+  const { RaidRoomStoreRows } = await import(storeUrl.href);
+  const claim = {
+    source_room_id:'first-room', exp_reward:40, gold_reward:90, building_reward:10,
+    level_gain:2, fully_healed:true, legacy_assumed_paid:false,
+  };
+  const player = {
+    exp:45, gold:110, building:10, level:3, skillPoints:4,
+    hp:30, maxHp:30, raidRewardVersion:1,
+  };
+
+  const first = RaidRoomStoreRows.raidCompletion(
+    claim, player, { top_group:1 }, 'first-room', 1,
+  );
+  assert.equal(first.awarded, true);
+  assert.deepEqual(first.reward, { exp:40, gold:90, building:10 });
+  assert.equal(first.levelGain, 2);
+  assert.equal(first.player.fullyHealed, true);
+  assert.equal(first.player.raidTopGroup, 1);
+  assert.equal(first.player.raidRewardVersion, 1);
+
+  const repeat = RaidRoomStoreRows.raidCompletion(
+    claim, { ...player, gold:123 }, { top_group:1 }, 'repeat-room', 1,
+  );
+  assert.equal(repeat.awarded, false);
+  assert.deepEqual(repeat.reward, { exp:0, gold:0, building:0 });
+  assert.equal(repeat.levelGain, 0);
+  assert.equal(repeat.player.gold, 123, '반복 클리어도 현재 서버 값을 돌려준다');
+  assert.equal(repeat.player.fullyHealed, false);
 });
 
 test('only the host receives private correctness judgements after all submissions', async () => {

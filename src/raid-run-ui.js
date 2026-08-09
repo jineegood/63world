@@ -29,6 +29,7 @@
   /* 셋 다 준비되면 세는 시간(초)과 한 칸의 길이(밀리초). 검사에서는 짧게 줄인다. */
   let READY_COUNTDOWN = 5;
   let COUNTDOWN_STEP_MS = 1000;
+  const PARTY_COMPOSITION_MESSAGE = '더 다양한 직업군으로 파티를 구성해야 합니다!';
 
   let active = null;      // 지금 돌고 있는 판
   let question = null;    // 지금 화면에 뜬 문제
@@ -321,6 +322,18 @@
       .map(roomMemberToCombatMember);
   }
 
+  /* 같은 전문화 세 명만 모이면 각 역할의 차이가 사라진다.
+     빈 전문화도 우회 수단이 되지 않도록 세 명 모두 전문화가 있고,
+     그중 둘 이상이 서로 달라야 준비할 수 있게 한다. */
+  function partyCompositionState(members = roomMembers()) {
+    const roster = Array.isArray(members) ? members.filter(Boolean) : [];
+    const specs = roster.map((member) => norm(member?.spec)).filter(Boolean);
+    return {
+      ok:roster.length === 3 && specs.length === 3 && new Set(specs).size >= 2,
+      specs,
+    };
+  }
+
   function memberPlaybackRound(row) {
     return Math.max(0, Math.trunc(Number(row?.playbackRound ?? row?.playback_round) || 0));
   }
@@ -498,6 +511,9 @@
     if (!staleSnapshot && data.answerKeys && networkSession.room?.round) {
       networkSession.answerKeys = networkSession.answerKeys || {};
       networkSession.answerKeys[networkSession.room.round] = { ...data.answerKeys };
+    }
+    if (!staleSnapshot && data.completion && typeof data.completion === 'object') {
+      networkSession.completion = data.completion;
     }
     if (networkSession.room?.question) {
       networkSession.lastQuestion = publicRaidQuestion(networkSession.room.question);
@@ -754,6 +770,7 @@
         pendingRoundPublishes:new Map(),
         ackingPlaybackRounds:new Set(),
         travelPlaybackKeys:new Set(),
+        completion:null,
       };
       setNetworkData(data, { initial:true });
       startNetworkTransport();
@@ -804,6 +821,7 @@
     const rows = (networkSession.members || []).filter((row) => row && row.active !== false);
     const slots = rows.map((row) => row.slot).filter(Boolean);
     return rows.length === 3
+      && partyCompositionState(rows.map(roomMemberToCombatMember)).ok
       && rows.every((row) => row.ready === true)
       && slots.length === 3
       && new Set(slots).size === 3;
@@ -890,9 +908,10 @@
     const savedFormation = seated && roster.every((member) => rowById(member.id)?.slot === placement[member.id]);
     const allReady = roster.length === 3 && roster.every((member) => rowById(member.id)?.ready === true);
     const myReady = rowById(me)?.ready === true;
+    const partyDiverse = partyCompositionState(roster).ok;
     /* 구간을 못 연 사람이 있으면 카운트다운도 시작하지 않는다. */
     const partyUnlocked = roster.length === 3 ? partyUnlockState().ok : false;
-    const countdown = syncNetworkLobbyCountdown(savedFormation && allReady && partyUnlocked);
+    const countdown = syncNetworkLobbyCountdown(savedFormation && allReady && partyUnlocked && partyDiverse);
 
     if (!networkSelectedMemberId || !memberById(networkSelectedMemberId)) {
       networkSelectedMemberId = roster[0]?.id || null;
@@ -942,7 +961,9 @@
     const unlock = roster.length === 3 ? partyUnlockState() : { ok:true, lockedNames:[] };
     const status = message || (roster.length < 3
       ? `친구 ${3 - roster.length}명이 더 들어오면 대형을 정할 수 있어요.`
-      : !unlock.ok
+      : !partyDiverse
+        ? PARTY_COMPOSITION_MESSAGE
+        : !unlock.ok
         ? `${unlock.lockedNames.join(', ')} 님이 아직 ${currentGroupLabel()} 구간을 열지 못했습니다. 앞 구간을 먼저 깨야 해요.`
         : !savedFormation
           ? (host ? '캐릭터를 골라 앞·가운데·뒤에 한 명씩 배치해 주세요.' : '방장이 대형을 정하고 있어요.')
@@ -962,11 +983,11 @@
           <div class="raid-bench-head"><span>대기 중</span></div>
           <div class="raid-bench">${waitingCards}${emptyWaiting || (!waiting.length ? '<div class="raid-bench-empty">모두 자리를 정했습니다!</div>' : '')}</div>
         </div>
-        ${allReady ? `<div class="raid-countdown">${countdown > 0 ? `${countdown}초 후 출발!` : '출발!'}</div>` : ''}
-        <p class="raid-room-status ${allReady && unlock.ok ? 'good' : (roster.length < 3 || !unlock.ok ? 'warn' : '')}">${esc(status)}</p>
+        ${allReady && partyDiverse && unlock.ok ? `<div class="raid-countdown">${countdown > 0 ? `${countdown}초 후 출발!` : '출발!'}</div>` : ''}
+        <p class="raid-room-status ${allReady && unlock.ok && partyDiverse ? 'good' : (roster.length < 3 || !unlock.ok || !partyDiverse ? 'warn' : '')}">${esc(status)}</p>
         <div class="raid-room-actions">
           ${host && roster.length === 3 && !savedFormation ? '<button class="primary" id="raidSaveFormationBtn" disabled>대형 확정</button>' : ''}
-          ${savedFormation ? `<button class="primary" id="raidReadyBtn">${myReady ? '준비 취소' : '준비'}</button>` : ''}
+          ${savedFormation ? `<button class="primary" id="raidReadyBtn" ${partyDiverse ? '' : 'disabled'}>${partyDiverse ? (myReady ? '준비 취소' : '준비') : '준비 불가'}</button>` : ''}
           <button class="ghost" id="raidNetworkLeaveBtn">방 나가기</button>
         </div>
       </div>
@@ -1005,6 +1026,10 @@
     }
     const ready = global.document.getElementById('raidReadyBtn');
     if (ready) ready.onclick = async () => {
+      if (!partyCompositionState().ok) {
+        renderNetworkLobby(PARTY_COMPOSITION_MESSAGE);
+        return;
+      }
       ready.disabled = true;
       try { setNetworkData(await networkSession.client.ready(networkSession.room.id, !myReady)); }
       catch (error) { renderNetworkLobby(error?.message || '준비 상태를 바꾸지 못했습니다.'); }
@@ -1253,7 +1278,13 @@
 
   function allMembersFinishedPlayback(round, session = networkSession) {
     const members = (session?.members || []).filter((row) => row && row.active !== false);
-    return members.length === 3 && members.every((row) => memberPlaybackRound(row) >= round);
+    const terminal = ['cleared', 'wiped'].includes(session?.room?.phase);
+    /* 진행 중에는 반드시 원래 파티 3명이 모두 끝내야 한다. 다만 최종 결과를
+       본 한 명이 확인을 눌러 서버 방을 나가면 그 사람은 active 목록에서 빠진다.
+       이미 끝난 방에서까지 계속 3명을 요구하면 남은 둘의 보상창이 동기화
+       대기창으로 되돌아가므로, 종료 단계에서는 남아 있는 사람들만 기다린다. */
+    const rosterReady = terminal ? members.length > 0 : members.length === 3;
+    return rosterReady && members.every((row) => memberPlaybackRound(row) >= round);
   }
 
   function showPlaybackBarrierWait() {
@@ -3108,13 +3139,33 @@
 
   function finishRun() {
     if (!active) return;
-    const key = `${networkSession?.room?.id || 'solo'}|${active.snapshot().phase}`;
+    const snap = active.snapshot();
+    const cleared = snap.phase === 'cleared';
+    const session = networkSession;
+    const completion = cleared && session ? session.completion : null;
+    /* 온라인 보상은 방 클리어와 같은 서버 트랜잭션에서 확정된다. 아주 짧은
+       순서 차이로 완료 정보가 아직 안 왔다면 로컬에서 먼저 더하지 않고 다시
+       동기화한다. 결과 잠금도 이 뒤에 걸어야 보상창을 영원히 놓치지 않는다. */
+    if (cleared && session && !completion?.player) {
+      if (!session.completionRefreshPending) {
+        session.completionRefreshPending = true;
+        global.setTimeout(() => {
+          if (networkSession !== session) return;
+          session.completionRefreshPending = false;
+          refreshNetworkRoom();
+        }, 180);
+      }
+      return;
+    }
+
+    const key = `${session?.room?.id || 'solo'}|${snap.phase}`;
     if (finishedRunKey === key) return;
     finishedRunKey = key;
     stopRaidQuestionTimer();
-    const snap = active.snapshot();
-    const cleared = snap.phase === 'cleared';
-    const reward = snap.reward || {};
+    const reward = cleared && session
+      ? (completion.reward || { exp:0, gold:0, building:0 })
+      : (snap.reward || {});
+    const alreadyRewarded = !!(cleared && session && completion.awarded !== true);
     const g = G();
 
     const group = currentFloorGroup();
@@ -3124,9 +3175,18 @@
     let unlockedNext = false;
 
     if (cleared && g?.player) {
-      call('addExp', reward.exp || 0);
-      call('addGold', reward.gold || 0);
-      if (reward.building) g.player.building = (g.player.building || 0) + reward.building;
+      if (session) {
+        /* 서버의 절대값으로 맞춘다. 같은 완료 응답이 다시 와도 보상이 더해지지
+           않으며, 이 함수가 레벨업 연출·스킬 포인트·완전 회복까지 처리한다. */
+        call('applyAuthoritySnapshotFromServerV3', {
+          ...completion.player,
+          fullyHealed:completion.fullyHealed === true || completion.player.fullyHealed === true,
+        });
+      } else {
+        call('addExp', reward.exp || 0);
+        call('addGold', reward.gold || 0);
+        if (reward.building) g.player.building = (g.player.building || 0) + reward.building;
+      }
       /* 이 구간을 깼으니 다음 구간을 연다. */
       unlockedNext = !!P && P.recordClear(g.player, group) && !!nextLabel;
       call('savePlayer');
@@ -3140,7 +3200,9 @@
       <div class="panel-card">
         ${cleared
           ? `<p>${esc(bossName)}을(를) 쓰러뜨렸습니다!</p>
-             <p>EXP +${reward.exp || 0} · Gold +${reward.gold || 0} · 빌딩 +${reward.building || 0}</p>
+             ${alreadyRewarded
+               ? '<p class="raid-unlock-note">이 구간의 첫 클리어 보상은 이미 받았습니다.</p>'
+               : `<p>EXP +${reward.exp || 0} · Gold +${reward.gold || 0} · 빌딩 +${reward.building || 0}</p>`}
              ${unlockedNext ? `<p class="raid-unlock-note">🔓 <strong>${esc(nextLabel)}</strong> 구간이 열렸습니다!</p>` : ''}`
           : '<p>다음에는 대형을 바꿔서 다시 도전해 보세요.</p>'}
         <div class="answer-row"><button class="primary" id="raidDoneBtn">확인</button></div>
@@ -3195,7 +3257,7 @@
 
   /* 사냥터에 이미 있는 몬스터 그림을 빌려 쓴다.
      같은 계열(버섯·슬라임·스톰프)은 새로 그리는 것보다 재사용이 자연스럽다. */
-  function borrowSprite(name, ctx, cx, cy, scale, tint) {
+  function borrowSprite(name, ctx, cx, cy, scale) {
     const draw = global[name];
     if (typeof draw !== 'function') return false;
     ctx.save();
@@ -3206,14 +3268,6 @@
       draw(ctx, cx, cy, { type:'raid', chasing:false, spawnX:cx }, 1.9);
     } catch (_) { ctx.restore(); return false; }
     ctx.restore();
-    if (tint) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'source-atop';
-      ctx.globalAlpha = 0.32;
-      ctx.fillStyle = tint;
-      ctx.fillRect(cx - 90, cy - 110, 180, 190);
-      ctx.restore();
-    }
     return true;
   }
 
@@ -3403,18 +3457,42 @@
 
     /* ── Lv.7 ───────────────────────────────────────── */
 
-    /* 오염된 슬라임 — 사냥터 슬라임을 독색으로 + 방울 */
+    /* 오염된 슬라임 — 사각 틴트 없이 보라색 몸체를 직접 그린다. */
     pollutedSlime(ctx, cx, cy, t) {
       ctx.save();
-      if (!borrowSprite('drawSlimeSprite', ctx, cx, cy + 6, 1.7, '#65a30d')) {
-        blob(ctx, cx, cy + 10, 48, 38, '#65a30d');
-        eyes(ctx, cx, cy, 15, 5, '#111827');
-      }
+      const squash = 1 + Math.sin(t * 4) * 0.08;
+      ctx.translate(cx, cy + 8 + Math.sin(t * 3) * 3);
+      ctx.scale(1 / squash, squash);
+      const purple = ctx.createRadialGradient(-12, -16, 6, 0, 0, 58);
+      purple.addColorStop(0, '#ddd6fe');
+      purple.addColorStop(0.55, '#9333ea');
+      purple.addColorStop(1, '#581c87');
+      ctx.fillStyle = purple;
+      ctx.beginPath();
+      ctx.moveTo(-50, 14);
+      ctx.quadraticCurveTo(-38, -44, 0, -52);
+      ctx.quadraticCurveTo(40, -44, 52, 14);
+      ctx.quadraticCurveTo(28, 46, -30, 38);
+      ctx.quadraticCurveTo(-50, 32, -50, 14);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.52)';
+      ctx.beginPath();
+      ctx.ellipse(-18, -24, 13, 7, -0.5, 0, Math.PI * 2);
+      ctx.fill();
+      eyes(ctx, 0, -1, 16, 5, '#111827');
+      ctx.strokeStyle = '#111827';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 12, 10, 0.15, Math.PI - 0.15);
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.save();
       // 떨어지는 오염 방울
       for (let i = 0; i < 3; i += 1) {
         const p = ((t * 0.8 + i * 0.33) % 1);
         ctx.globalAlpha = 1 - p;
-        blob(ctx, cx - 34 + i * 34, cy + 30 + p * 34, 5, 7, '#a3e635');
+        blob(ctx, cx - 34 + i * 34, cy + 30 + p * 34, 5, 7, '#c084fc');
       }
       ctx.globalAlpha = 1;
       ctx.restore();
@@ -4076,5 +4154,6 @@
     peek:() => (active ? active.snapshot() : null),
     currentQuestion:() => question,
     submitAnswerForTest:(value) => submitAnswer(value),
+    playbackReadyForTest:(round, session) => allMembersFinishedPlayback(round, session),
   });
 })(typeof window !== 'undefined' ? window : globalThis);

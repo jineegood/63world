@@ -441,38 +441,38 @@
     1: Object.freeze({
       floor:1, title:'63빌딩 1~10층', range:'1–10층', recommendedLevel:5,
       encounters:Object.freeze(['mushroomKing', 'paperPigeon', 'brokenPhone', 'pollutedSlime']),
-      reward:Object.freeze({ exp:40, gold:180, building:20 }),
+      reward:Object.freeze({ exp:40, gold:90, building:10 }),
     }),
     11: Object.freeze({
       floor:11, title:'63빌딩 11~20층', range:'11–20층', recommendedLevel:6,
       encounters:Object.freeze(['brokenPhone', 'buildingStomp', 'pollutedSlime', 'officeGhost']),
-      reward:Object.freeze({ exp:60, gold:240, building:26 }),
+      reward:Object.freeze({ exp:60, gold:120, building:13 }),
     }),
     21: Object.freeze({
       floor:21, title:'63빌딩 21~30층', range:'21–30층', recommendedLevel:7,
       encounters:Object.freeze(['pollutedSlime', 'rampageCopier', 'guardBot', 'blackoutShade']),
-      reward:Object.freeze({ exp:85, gold:300, building:32 }),
+      reward:Object.freeze({ exp:85, gold:150, building:16 }),
     }),
     31: Object.freeze({
       floor:31, title:'63빌딩 31~40층', range:'31–40층', recommendedLevel:8,
       encounters:Object.freeze(['guardBot', 'officeGhost', 'emergencyExitGhost', 'towerWarden']),
-      reward:Object.freeze({ exp:115, gold:380, building:40 }),
+      reward:Object.freeze({ exp:115, gold:190, building:20 }),
     }),
     41: Object.freeze({
       floor:41, title:'63빌딩 41~50층', range:'41–50층', recommendedLevel:9,
       encounters:Object.freeze(['blackoutShade', 'emergencyExitGhost', 'elevatorSoul', 'windowWraith']),
-      reward:Object.freeze({ exp:150, gold:460, building:48 }),
+      reward:Object.freeze({ exp:150, gold:230, building:24 }),
     }),
     51: Object.freeze({
       floor:51, title:'63빌딩 51~60층', range:'51–60층', recommendedLevel:10,
       encounters:Object.freeze(['towerWarden', 'elevatorSoul', 'engineIronGiant', 'ominousFloorManager']),
-      reward:Object.freeze({ exp:200, gold:560, building:58 }),
+      reward:Object.freeze({ exp:200, gold:280, building:29 }),
     }),
     61: Object.freeze({
       floor:61, title:'63빌딩 61~63층', range:'61–63층', recommendedLevel:12,
       // 마지막 구간은 세 마리로 끝낸다.
       encounters:Object.freeze(['ominousFloorManager', 'nonexistentFloorLord', 'rooftopMyeongjinRobot']),
-      reward:Object.freeze({ exp:300, gold:800, building:80 }),
+      reward:Object.freeze({ exp:300, gold:400, building:40 }),
     }),
   });
 

@@ -490,6 +490,10 @@ window.applyAuthoritySnapshotFromServerV3 = function applyAuthoritySnapshotFromS
   game.player.skillPoints = safeInteger(snapshot.skillPoints, game.player.skillPoints);
   game.player.gold = safeInteger(snapshot.gold, game.player.gold);
   game.player.building = safeInteger(snapshot.building, game.player.building);
+  game.player.raidRewardVersion = Math.min(7, safeInteger(
+    snapshot.raidRewardVersion,
+    safeInteger(game.player.raidRewardVersion, 0),
+  ));
   ensurePlayerHp();
   if (snapshot.fullyHealed) {
     game.player.hp = game.player.maxHp;
@@ -497,7 +501,10 @@ window.applyAuthoritySnapshotFromServerV3 = function applyAuthoritySnapshotFromS
     game.player.hp = Math.min(game.player.maxHp, safeInteger(snapshot.hp, game.player.hp));
   }
   const gainedLevels = Math.max(0, game.player.level - beforeLevel);
-  if (gainedLevels > 0) triggerLevelUpEffect(gainedLevels);
+  if (gainedLevels > 0) {
+    triggerLevelUpEffect(gainedLevels);
+    if (game.player.level >= 5 && !game.player.spec) setTimeout(openSpecModal, 1800);
+  }
   updateHud();
   savePlayer();
   return true;
@@ -563,6 +570,9 @@ function normalizePlayer(p) {
     /* 63빌딩 던전에서 완료한 가장 높은 구간. 로그인 정리 과정에서도
        반드시 보존해야 다음 구간 해금이 서버 저장에서 사라지지 않는다. */
     raidTopGroup: Math.max(0, Math.min(7, Math.trunc(Number(p.raidTopGroup ?? p.raid_top_group) || 0))),
+    /* 서버가 지급한 던전 최초 보상을 늦게 도착한 옛 저장이 덮지 못하게 하는
+       영수증 버전. 일반 저장에서도 보존되어야 서버가 최신 저장을 구분한다. */
+    raidRewardVersion: Math.max(0, Math.min(7, Math.trunc(Number(p.raidRewardVersion) || 0))),
     updatedAt: p.updatedAt || Date.now(),
     records: (function(){
       const r = p.records || {};
@@ -628,6 +638,7 @@ function createNewPlayer(name) {
     skillCooldowns: {},
     skillPoints: 0,
     raidTopGroup: 0,
+    raidRewardVersion: 0,
     updatedAt: Date.now(),
   });
 }

@@ -98,9 +98,20 @@ test('로그인 정리 과정에서도 저장된 던전 해금값을 보존한�
   assert.notEqual(normalizer, '');
   assert.match(normalizer, /raidTopGroup:\s*Math\.max\(0, Math\.min\(7,/);
   assert.match(normalizer, /p\.raidTopGroup \?\? p\.raid_top_group/);
+  assert.match(normalizer, /raidRewardVersion:\s*Math\.max\(0, Math\.min\(7,/);
 
   const creator = gameSource.match(/function createNewPlayer\(name\)[\s\S]*?\n}/)?.[0] || '';
   assert.match(creator, /raidTopGroup:\s*0/);
+  assert.match(creator, /raidRewardVersion:\s*0/);
+});
+
+test('서버 보상 스냅샷은 영수증 버전을 보존하고 레벨 5 전문화 안내도 복구한다', () => {
+  const apply = gameSource.match(/window\.applyAuthoritySnapshotFromServerV3[\s\S]*?\n};/)?.[0] || '';
+  assert.notEqual(apply, '');
+  assert.match(apply, /snapshot\.raidRewardVersion/);
+  assert.match(apply, /game\.player\.raidRewardVersion/);
+  assert.match(apply, /game\.player\.level >= 5 && !game\.player\.spec/);
+  assert.match(apply, /setTimeout\(openSpecModal, 1800\)/);
 });
 
 test('화면·저장·서버를 건드리지 않는 순수 규칙이다', () => {

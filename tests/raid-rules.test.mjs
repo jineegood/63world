@@ -258,6 +258,19 @@ test('시트의 일곱 구간이 모두 있고 그 밖의 층은 없는 것으�
   assert.equal([...rules.floorEncounters(2)].length, 0);
 });
 
+test('던전 경험치는 유지하고 골드와 빌딩 보상은 절반으로 줄어 있다', () => {
+  const rewards = Array.from(rules.availableFloors(), (floor) => ({ ...rules.getFloor(floor).reward }));
+  assert.deepEqual(rewards, [
+    { exp:40, gold:90, building:10 },
+    { exp:60, gold:120, building:13 },
+    { exp:85, gold:150, building:16 },
+    { exp:115, gold:190, building:20 },
+    { exp:150, gold:230, building:24 },
+    { exp:200, gold:280, building:29 },
+    { exp:300, gold:400, building:40 },
+  ]);
+});
+
 test('몬스터 17마리가 시트 그대로 들어 있고 레벨별 출현표와 맞는다', () => {
   const ids = Object.keys(rules.MONSTERS);
   assert.equal(ids.length, 17, '시트의 몬스터는 17마리다');
