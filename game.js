@@ -3416,6 +3416,50 @@ const worldNavigationRegistry = YuksamWorldNavigationRegistry.create({
 function getCurrentMapColliders() { return worldNavigationRegistry.getColliders(); }
 function checkAutoTransitions() { worldNavigationRegistry.runTransition(); }
 
+const worldPositionGuardV1 = YuksamWorldNavigationRegistry.createPositionGuard({
+  getMap:() => game.currentMap,
+  getPosition:() => game.player,
+  getBounds:() => {
+    const world = worldDefs[game.currentMap];
+    if (!world) return null;
+    return {
+      width:world.width,
+      height:world.height,
+      minX:38,
+      minY:48,
+      maxX:world.width - 38,
+      maxY:world.height - 48,
+    };
+  },
+  isWalkable:(x, y) => canPlayerMoveTo(x, y),
+  getFallback:() => worldDefs[game.currentMap]?.playerSpawn,
+  setPosition:(position) => {
+    if (!game.player) return;
+    game.player.x = position.x;
+    game.player.y = position.y;
+    game.player.map = game.currentMap;
+  },
+  step:8,
+  nearbyRadius:96,
+  maxSearchRadius:640,
+});
+
+function reconcileWorldPlayerPositionV1(source = 'frame') {
+  if (!game.player) return { recovered:false, reason:'no-player' };
+  const result = worldPositionGuardV1.reconcile({ source });
+  if (!result.recovered) return result;
+  window.cancelClickMovementV1?.({ clearArrivalLock:true });
+  game.isMoving = false;
+  savePlayer();
+  console.warn('[63world] blocked player position recovered', {
+    map:game.currentMap,
+    reason:result.reason,
+    x:result.position.x,
+    y:result.position.y,
+  });
+  return result;
+}
+
 
 let lastSavedPositionAt = 0;
 function savePlayerPositionThrottled() {
@@ -3506,6 +3550,7 @@ function startGame(existing = false, options = {}) {
   }
   if (game.currentMap === 'forest' || game.currentMap === 'desert' || game.currentMap === 'swamp' || game.currentMap === 'bossRoom' || game.currentMap === 'equipmentShop' || game.currentMap === 'buildingShopInterior') $('returnTownBtn').classList.remove('hidden');
   else $('returnTownBtn').classList.add('hidden');
+  reconcileWorldPlayerPositionV1('start-game');
   resetForestMonsters(game.currentMap);
   closeModal();
   updateHud();
@@ -4359,6 +4404,7 @@ function syncAudioFileBgm() {
 
 function update(dt) {
   if (!game.player || !screens.game.classList.contains('active')) return;
+  reconcileWorldPlayerPositionV1('base-update');
   if (!isPaused()) {
     const speed = 3.2 * Math.min(dt / 16.67, 2);
     let dx = 0;
@@ -5500,6 +5546,7 @@ function updateQuestTracker() {
   const oldUpdateFn = update;
   update = function updateV17(dt) {
     if (!game.player || !screens.game.classList.contains('active')) return;
+    reconcileWorldPlayerPositionV1('update');
     if (!isPaused()) {
       const speed = 3.2 * (game.adminSpeedBoost ? 5 : 1) * Math.min(dt / 16.67, 2);
       let dx = 0, dy = 0;

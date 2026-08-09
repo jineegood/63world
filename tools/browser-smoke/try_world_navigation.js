@@ -78,6 +78,58 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   check('pet spawn remains walkable', canMove('petShopInterior', worlds.petShopInterior.playerSpawn) === true);
   check('upgrade blacksmith blocks movement', canMove('upgradeShopInterior', worlds.upgradeShopInterior.blacksmith) === false);
 
+  const safeBeforeGuard = { x:1100, y:1100 };
+  setMap('town', safeBeforeGuard);
+  const safeGuardResult = window.eval("reconcileWorldPlayerPositionV1('browser-safe-check')");
+  check('position guard leaves ordinary open ground untouched',
+    safeGuardResult.recovered === false && G.player.x === safeBeforeGuard.x && G.player.y === safeBeforeGuard.y);
+
+  setMap('town', { x:raid.TOWER.x, y:raid.TOWER.y - 16 });
+  const blockedGuardResult = window.eval("reconcileWorldPlayerPositionV1('browser-blocked-check')");
+  check('position guard frees a player embedded in the 63 tower',
+    blockedGuardResult.recovered === true && window.eval(`canPlayerMoveTo(${G.player.x}, ${G.player.y})`) === true,
+    `reason=${blockedGuardResult.reason}, x=${G.player.x}, y=${G.player.y}`);
+
+  G.player.x = Number.NaN;
+  G.player.y = Number.POSITIVE_INFINITY;
+  const invalidGuardResult = window.eval("reconcileWorldPlayerPositionV1('browser-invalid-check')");
+  check('position guard repairs invalid saved coordinates',
+    invalidGuardResult.recovered === true && Number.isFinite(G.player.x) && Number.isFinite(G.player.y));
+
+  const guardedDoors = [
+    { door:worlds.town.shop, expected:'equipmentShop' },
+    { door:worlds.town.buildingShop, expected:'buildingShopInterior' },
+    { door:worlds.town.petShop, expected:'petShopInterior' },
+    { door:worlds.town.upgradeShop, expected:'upgradeShopInterior' },
+  ];
+  const guardedDoorFailures = [];
+  guardedDoors.forEach(({ door, expected }) => {
+    const approach = { x:door.doorX, y:door.doorY + 30 };
+    setMap('town', approach);
+    const guardResult = window.eval("reconcileWorldPlayerPositionV1('browser-door-check')");
+    const remained = G.player.x === approach.x && G.player.y === approach.y;
+    window.eval('checkAutoTransitions()');
+    if (guardResult.recovered || !remained || G.currentMap !== expected) {
+      guardedDoorFailures.push(`${expected}:${guardResult.reason}:${G.currentMap}`);
+    }
+  });
+  check('position guard does not bounce reachable automatic door approaches',
+    guardedDoorFailures.length === 0, guardedDoorFailures.join(', '));
+
+  const forestReturnPortal = window.eval("ensureStagePortals('forest').returnPortal");
+  const portalPoints = [worlds.town.portal, { x:forestReturnPortal.x + 90, y:forestReturnPortal.y }];
+  const portalFailures = [];
+  portalPoints.forEach((portal, index) => {
+    const map = index === 0 ? 'town' : 'forest';
+    setMap(map, portal);
+    const guardResult = window.eval("reconcileWorldPlayerPositionV1('browser-portal-check')");
+    if (guardResult.recovered || G.player.x !== portal.x || G.player.y !== portal.y) {
+      portalFailures.push(`${map}:${guardResult.reason}`);
+    }
+  });
+  check('position guard leaves walkable portal positions in place',
+    portalFailures.length === 0, portalFailures.join(', '));
+
   check('town pet door enters pet interior', transition('town', { x:worlds.town.petShop.doorX, y:worlds.town.petShop.doorY }).map === 'petShopInterior');
   check('town upgrade door enters upgrade interior', transition('town', { x:worlds.town.upgradeShop.doorX, y:worlds.town.upgradeShop.doorY }).map === 'upgradeShopInterior');
   check('town equipment door enters equipment shop', transition('town', { x:worlds.town.shop.doorX, y:worlds.town.shop.doorY }).map === 'equipmentShop');

@@ -476,6 +476,14 @@ test('던전 전투 규칙은 기절·더블 어택·힐·보호막·쿨타임�
   assert.match(uiSource, /function monsterStatusBadgesHtml\(monster\)/);
   assert.match(uiSource, /if \(event\.status === 'stun'\) statuses\.stunTurns = Math\.max/);
   assert.match(uiSource, /event\.kind === 'monster-skip' && event\.status === 'stun'/);
+  /* 아군 상태도 최종 라운드가 아니라 피격 순간에 체력창 DOM으로 옮긴다. */
+  assert.match(combatSource, /hitEvent\.memberStatuses = \{ \.\.\.\(member\.statuses \|\| \{\}\) \};/);
+  assert.match(uiSource, /memberStatuses:Object\.fromEntries\(snap\.members\.map/);
+  assert.match(uiSource, /function applyMemberStatusesToView\(event\)/);
+  assert.match(uiSource, /event\.kind === 'monster-hit' && event\.memberStatuses/);
+  assert.match(uiSource, /applyMemberStatusesToView\(event\);/);
+  assert.match(uiSource, /box\.querySelector\('\[data-raid-status-member\]'\)/);
+  assert.match(uiSource, /status\.innerHTML = memberStatusBadgesHtml\(/);
   assert.match(uiSource, /event\.kind === 'party-heal'/);
   assert.match(uiSource, /event\.kind === 'party-shield'/);
 });
@@ -653,16 +661,19 @@ test('시트의 17마리가 모두 이모티콘 대신 직접 그린 모델을 �
 });
 
 test('새로 그린 몬스터는 사냥터 스프라이트를 빌려 쓰거나 직접 그린다', () => {
-  // 버섯 계열은 사냥터 그림을 그대로 재사용한다(같은 세계관).
+  // 같은 계열은 사냥터 그림을 그대로 재사용한다(같은 세계관).
   assert.match(uiSource, /function borrowSprite\(name, ctx, cx, cy, scale\)/);
   assert.match(uiSource, /borrowSprite\('drawMushroomSprite'/);
   assert.match(gameSource, /function drawMushroomSprite\(/);
-  /* 빌딩 스톰프는 사냥터 그림을 확대해 쓰니 화면 밖으로 넘쳐 알아보기
-     어려웠다. 철판·리벳으로 직접 그려 크기를 맞춘다. */
+  /* 빌딩 스톰프도 나무 몸통·얼굴·잎은 원본을 쓰되, 예전 1.6배처럼
+     잘리지 않도록 0.75배 외부 배율을 쓴다. 창문·보강띠만 덧붙인다. */
   const stomp = uiSource.match(/buildingStomp\(ctx, cx, cy, t\)[\s\S]*?\n    \},/)?.[0] || '';
   assert.notEqual(stomp, '');
-  assert.doesNotMatch(stomp, /borrowSprite/, '스톰프는 더 이상 확대해 빌려 쓰지 않는다');
-  assert.match(stomp, /리벳/);
+  assert.match(gameSource, /function drawStompSprite\(/);
+  assert.match(stomp, /borrowSprite\('drawStompSprite', ctx, cx, cy, 0\.75\)/);
+  assert.match(stomp, /windowGlow/);
+  assert.match(stomp, /보강띠/);
+  assert.doesNotMatch(stomp, /const steel|붉은 시야창/, '원본과 다른 철제 로봇 몸통을 다시 만들면 안 된다');
 });
 
 test('오염된 슬라임은 몸과 오염 방울이 보라색 계열이다', () => {

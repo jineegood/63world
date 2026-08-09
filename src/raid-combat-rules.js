@@ -981,16 +981,21 @@
       const critical = roll(rng) < criticalChance;
       if (critical) incoming = Math.max(1, Math.ceil(incoming * 1.8));
       const applied = applyDamageToMember(member, incoming);
-      events.push({
+      const hitEvent = {
         kind:'monster-hit', memberId:member.id, memberName:member.name,
         hitIndex, hitCount,
         slot:member.slot, missed:false, critical, ...applied,
         audioId:critical ? 'critical' : 'enemyAttack',
         text:`${critical ? '치명타! ' : ''}${member.name}이(가) ${applied.totalDamage}의 피해를 받았습니다.`,
-      });
+      };
+      events.push(hitEvent);
 
       /* 시트에 적힌 이 기술의 부가 효과(독·기절·냉기·흡혈)를 여기서 건다. */
       applyPlanStatuses(member, monster, plan, effect, events);
+      /* 화면은 전투 로그를 한 줄씩 재생하므로 라운드 마지막 스냅샷만 보면
+         상태 배지가 너무 늦게 나타난다. 피격 이벤트에 그 순간의 상태를 함께
+         실어, 피해 숫자가 뜨는 바로 그때 체력창 배지도 갱신하게 한다. */
+      hitEvent.memberStatuses = { ...(member.statuses || {}) };
       if (plan.drain) drained += Math.round(applied.totalDamage * Math.max(0, number(effect.DRAIN_RATIO, 1)));
 
       if (member.hp > 0) {

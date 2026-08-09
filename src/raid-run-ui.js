@@ -1558,6 +1558,8 @@
       monsterShield:view.monsterShield,
       members:{ ...(view.members || {}) },
       memberShields:{ ...(view.memberShields || {}) },
+      memberStatuses:Object.fromEntries(Object.entries(view.memberStatuses || {})
+        .map(([id, statuses]) => [id, { ...(statuses || {}) }])),
       monsterStatuses:{ ...(view.monsterStatuses || {}) },
     };
   }
@@ -2331,11 +2333,15 @@
   }
 
   function memberStatusHtml(member) {
+    return `<div class="combat-badges-v38 raid-status-row" data-raid-status-member="${esc(member?.id || '')}">${memberStatusBadgesHtml(member)}</div>`;
+  }
+
+  function memberStatusBadgesHtml(member) {
     const badges = commonStatusBadges(member?.statuses || {});
     /* 던전 몬스터의 실명 패턴 — 남은 횟수만큼 공격이 그냥 빗나간다. */
     const blind = Math.max(0, Number(member?.statuses?.blindHits) || 0);
     if (blind > 0) badges.push({ key:'blind', label:`실명 ${blind}`, tooltip:`다음 공격 ${blind}회가 50% 확률로 빗나갑니다.` });
-    return `<div class="combat-badges-v38 raid-status-row" data-raid-status-member="${esc(member?.id || '')}">${badges.map(statusBadgeHtml).join('')}</div>`;
+    return badges.map(statusBadgeHtml).join('');
   }
 
   function monsterStatusHtml(monster) {
@@ -2535,6 +2541,7 @@
       monsterShield:Math.max(0, Number(snap.monster.shield) || 0),
       members: Object.fromEntries(snap.members.map((m) => [m.id, m.hp])),
       memberShields:Object.fromEntries(snap.members.map((m) => [m.id, Math.max(0, Number(m.shield) || 0)])),
+      memberStatuses:Object.fromEntries(snap.members.map((m) => [m.id, { ...(m.statuses || {}) }])),
       /* 몬스터 상태는 체력처럼 '표시용'을 따로 둔다.
          기절은 걸린 그 라운드 안에서 몬스터 턴에 바로 소모되기 때문에,
          최종 상태만 보면 배지가 한 번도 보이지 않는다. 사냥터에서는
@@ -2604,6 +2611,7 @@
       ...m,
       hp: Math.max(0, view?.members?.[m.id] ?? m.hp),
       shield:Math.max(0, view?.memberShields?.[m.id] ?? m.shield ?? 0),
+      statuses:{ ...(view?.memberStatuses?.[m.id] || m.statuses || {}) },
     }));
     const percent = Math.max(0, Math.round((monster.hp / monster.maxHp) * 100));
     const nextPlan = rules().attackPlanForRound(truth, snap.round, snap.patternSeed);
@@ -2955,6 +2963,44 @@
     return Number.isFinite(value) ? value : null;
   }
 
+  /* 서버의 최종 스냅샷을 기다리지 않고, 피격 로그가 재생되는 바로 그 순간
+     해당 학생의 상태 배지를 갱신한다. 새 이벤트는 monster-hit에 정확한 상태
+     사본을 싣고, 배포 전 방에서 온 옛 이벤트는 아래 개별 상태 로그로 보정한다. */
+  function applyMemberStatusesToView(event) {
+    const memberId = String(event?.memberId || event?.targetMemberId || '');
+    if (!view || !memberId) return;
+    const current = { ...(view.memberStatuses?.[memberId] || {}) };
+    let next = null;
+
+    if (event.kind === 'monster-hit' && event.memberStatuses && typeof event.memberStatuses === 'object') {
+      next = { ...event.memberStatuses };
+    } else if (event.kind === 'member-status') {
+      next = current;
+      const turns = Math.max(1, Number(event.turns) || 1);
+      if (event.status === 'poison') {
+        next.poisonTurns = Math.max(Number(next.poisonTurns) || 0, turns);
+        next.poisonDamage = Math.max(Number(next.poisonDamage) || 0, Number(event.amount) || 0);
+      } else if (event.status === 'stun') {
+        next.stunTurns = Math.max(Number(next.stunTurns) || 0, turns);
+      } else if (event.status === 'chill') {
+        next.chillTurns = Math.max(Number(next.chillTurns) || 0, turns);
+      }
+    } else if (event.kind === 'member-dot' && event.status === 'poison') {
+      next = current;
+      next.poisonTurns = Math.max(0, Number(event.turns) || 0);
+      if (next.poisonTurns <= 0) next.poisonDamage = 0;
+    } else if (event.kind === 'party-skip' && event.status === 'stun') {
+      next = current;
+      next.stunTurns = Math.max(0, (Number(next.stunTurns) || 0) - 1);
+    } else if (event.kind === 'party-cleanse') {
+      next = { ...current, poisonTurns:0, poisonDamage:0, stunTurns:0 };
+    }
+
+    if (!next) return;
+    view.memberStatuses = view.memberStatuses || {};
+    view.memberStatuses[memberId] = next;
+  }
+
   /* 이 한 줄이 일어난 만큼만 표시용 체력을 움직인다.
      그래서 "때릴 때마다 체력바가 쭉 빠지는" 모습이 나온다. */
   function applyEventToView(event) {
@@ -3013,6 +3059,8 @@
       view.members[event.memberId] = Math.max(1, Number(event.memberHp ?? event.amount) || 1);
     }
 
+    applyMemberStatusesToView(event);
+
     /* 몬스터 상태 배지도 로그 한 줄에 맞춰 켜고 끈다.
        기절이 걸린 줄에서 배지가 켜지고, 몬스터가 건너뛰는 줄에서 꺼진다. */
     const statuses = view.monsterStatuses || (view.monsterStatuses = {});
@@ -3060,9 +3108,16 @@
       if (box) {
         const fill = box.querySelector('.hpfill');
         const num = box.querySelector('.raid-ally-num');
+        const status = box.querySelector('[data-raid-status-member]');
         if (fill) fill.style.width = `${pct}%`;
         /* 'HP' 글자를 빼먹으면 갱신될 때마다 글자가 붙었다 없어졌다 한다. */
         if (num) num.innerHTML = `HP ${hp}/${member.maxHp}${shieldBadgeHtml(shield)}`;
+        if (status) {
+          status.innerHTML = memberStatusBadgesHtml({
+            ...member,
+            statuses:{ ...(view.memberStatuses?.[member.id] || member.statuses || {}) },
+          });
+        }
         box.classList.toggle('down', hp <= 0);
       }
       const sprite = memberSpriteNode(member.id);
@@ -3354,73 +3409,43 @@
 
     /* ── Lv.6 ───────────────────────────────────────── */
 
-    /* 빌딩 스톰프 — 사냥터 스톰프의 철갑 판.
-       사냥터 그림을 확대해 쓰니 화면 밖으로 넘쳐 알아보기 어려웠다.
-       크기를 줄이고 철판·리벳·이음매를 직접 그려 '쇠로 된 스톰프'로 만든다. */
+    /* 빌딩 스톰프 — 사냥터 스톰프의 나무 몸·얼굴·잎을 그대로 쓴다.
+       화면에 맞는 크기로만 줄이고, 아래쪽 창문과 보강띠로 빌딩형임을 구분한다. */
     buildingStomp(ctx, cx, cy, t) {
       const stomp = Math.abs(Math.sin(t * 1.8)) * 6;
       ctx.save();
       ctx.translate(0, stomp);
+      if (!borrowSprite('drawStompSprite', ctx, cx, cy, 0.75)) {
+        const trunk = ctx.createLinearGradient(cx, cy - 50, cx, cy + 58);
+        trunk.addColorStop(0, '#a56636');
+        trunk.addColorStop(1, '#5b321e');
+        box(ctx, cx - 38, cy - 48, 76, 110, trunk, 20);
+        blob(ctx, cx - 18, cy - 64, 26, 23, '#2f6c39');
+        blob(ctx, cx + 14, cy - 68, 30, 25, '#2f6c39');
+        blob(ctx, cx + 39, cy - 48, 23, 21, '#2f6c39');
+        eyes(ctx, cx, cy - 3, 13, 4, '#2f1f16');
+      }
 
-      // 다리 — 짧고 굵은 철기둥
-      box(ctx, cx - 30, cy + 26, 20, 30, '#3f4854', 4);
-      box(ctx, cx + 10, cy + 26, 20, 30, '#3f4854', 4);
-      box(ctx, cx - 34, cy + 52, 28, 9, '#2b323b', 3);
-      box(ctx, cx + 6, cy + 52, 28, 9, '#2b323b', 3);
-
-      // 몸통 — 위가 좁은 철판. 사냥터 스톰프의 다부진 실루엣은 유지한다.
-      const steel = ctx.createLinearGradient(cx, cy - 46, cx, cy + 30);
-      steel.addColorStop(0, '#aab4c2');
-      steel.addColorStop(0.45, '#7d8896');
-      steel.addColorStop(1, '#48515d');
-      ctx.fillStyle = steel;
-      ctx.beginPath();
-      ctx.moveTo(cx - 38, cy - 34);
-      ctx.lineTo(cx + 38, cy - 34);
-      ctx.lineTo(cx + 46, cy + 28);
-      ctx.lineTo(cx - 46, cy + 28);
-      ctx.closePath();
-      ctx.fill();
-
-      // 철판 이음매
-      ctx.strokeStyle = 'rgba(30,37,46,.75)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(cx - 42, cy - 4); ctx.lineTo(cx + 42, cy - 4);
-      ctx.moveTo(cx, cy - 34); ctx.lineTo(cx, cy - 4);
-      ctx.stroke();
-
-      // 리벳
-      ctx.fillStyle = '#cfd8e3';
-      [[-32, -24], [32, -24], [-38, 18], [38, 18], [-14, 8], [14, 8]].forEach(([dx, dy]) => {
-        ctx.beginPath();
-        ctx.arc(cx + dx, cy + dy, 2.6, 0, Math.PI * 2);
-        ctx.fill();
+      // 얼굴과 나무결은 가리지 않고 몸통 아래에만 빌딩 창문을 단다.
+      const windowGlow = 0.72 + Math.sin(t * 2.8) * 0.16;
+      ctx.fillStyle = `rgba(125,211,252,${windowGlow.toFixed(3)})`;
+      [[-27, 25], [11, 25], [-27, 42], [11, 42]].forEach(([dx, dy]) => {
+        ctx.fillRect(cx + dx, cy + dy, 16, 10);
       });
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(cx - 28, cy + 24, 18, 12);
+      ctx.strokeRect(cx + 10, cy + 24, 18, 12);
+      ctx.strokeRect(cx - 28, cy + 41, 18, 12);
+      ctx.strokeRect(cx + 10, cy + 41, 18, 12);
 
-      // 팔 — 짧은 철괴
-      ctx.strokeStyle = '#5c6673';
-      ctx.lineWidth = 13;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(cx - 40, cy - 18); ctx.lineTo(cx - 60, cy + 14);
-      ctx.moveTo(cx + 40, cy - 18); ctx.lineTo(cx + 60, cy + 14);
-      ctx.stroke();
-
-      // 머리 — 낮게 얹힌 철모, 붉은 시야창
-      box(ctx, cx - 24, cy - 58, 48, 26, '#6b7684', 6);
-      box(ctx, cx - 28, cy - 62, 56, 7, '#525c69', 3);
-      ctx.fillStyle = `rgba(248,113,113,${(0.6 + 0.35 * Math.sin(t * 3.4)).toFixed(3)})`;
-      ctx.fillRect(cx - 16, cy - 50, 32, 8);
-
-      // 발밑에서 튀는 쇳조각
-      ctx.fillStyle = 'rgba(148,163,184,.8)';
-      [[-52, 56], [50, 60], [-22, 64]].forEach(([dx, dy], i) => {
-        ctx.save();
-        ctx.translate(cx + dx, cy + dy);
-        ctx.rotate(t * 1.2 + i);
-        ctx.fillRect(-5, -3, 10, 6);
-        ctx.restore();
+      // 아래 보강띠와 작은 리벳만 더해 원래 스톰프와 자연스럽게 구분한다.
+      box(ctx, cx - 36, cy + 55, 72, 8, '#64748b', 3);
+      ctx.fillStyle = '#cbd5e1';
+      [-27, -9, 9, 27].forEach((dx) => {
+        ctx.beginPath();
+        ctx.arc(cx + dx, cy + 59, 1.8, 0, Math.PI * 2);
+        ctx.fill();
       });
       ctx.restore();
     },

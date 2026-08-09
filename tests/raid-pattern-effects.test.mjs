@@ -125,6 +125,23 @@ test('독은 다음 몬스터 턴마다 피해를 주고 정해진 턴 뒤에 �
   assert.equal(target.statuses.poisonDamage, 0, '다 닳으면 독이 완전히 사라진다');
 });
 
+test('몬스터 피격 이벤트는 그 순간 적용된 상태를 함께 전한다', () => {
+  const target = dummy();
+  const result = turn({
+    members:[target],
+    plan:{ name:'포자', kind:'all', poison:5 },
+    submissions:idle,
+  });
+  const hitIndex = result.events.findIndex((event) => event.kind === 'monster-hit' && !event.missed);
+  const statusIndex = result.events.findIndex((event) => event.kind === 'member-status' && event.status === 'poison');
+  const hit = result.events[hitIndex];
+
+  assert.ok(hitIndex >= 0 && statusIndex > hitIndex, '피격 뒤에 상태 설명 로그가 이어져야 한다');
+  assert.equal(hit.memberStatuses?.poisonTurns, 2,
+    '피해 숫자가 뜨는 순간 체력창이 쓸 정확한 상태도 피격 이벤트에 있어야 한다');
+  assert.equal(hit.memberStatuses?.poisonDamage, 5);
+});
+
 test('기절한 파티원은 다음 턴에 행동하지 못한다', () => {
   const target = dummy();
   turn({ members:[target], plan:{ name:'강타', kind:'single', stun:true }, submissions:idle });

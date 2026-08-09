@@ -73,6 +73,103 @@ test('registry module is independent from game, DOM, map data, distance, and aud
   assert.doesNotMatch(source, /\bgame\b|\bdocument\b|worldDefs|distance\(|playSfx|\bAudio\b/);
 });
 
+test('position guard leaves ordinary walkable movement untouched', () => {
+  const player = { x:80, y:90 };
+  let writes = 0;
+  let collisionChecks = 0;
+  const guard = loadFactory().createPositionGuard({
+    getMap:() => 'town',
+    getPosition:() => player,
+    getBounds:() => ({ width:500, height:400, minX:30, minY:40, maxX:470, maxY:360 }),
+    isWalkable:() => { collisionChecks += 1; return true; },
+    setPosition:() => { writes += 1; },
+  });
+
+  const result = guard.reconcile();
+  assert.equal(result.recovered, false);
+  assert.equal(result.reason, 'safe');
+  assert.equal(writes, 0);
+  assert.equal(player.x, 80);
+  assert.equal(player.y, 90);
+  assert.equal(collisionChecks, 1);
+
+  const sameFrameResult = guard.reconcile();
+  assert.equal(sameFrameResult.recovered, false);
+  assert.equal(writes, 0);
+  assert.equal(collisionChecks, 1);
+});
+
+test('position guard moves a player embedded in a structure to nearby open ground', () => {
+  const player = { x:120, y:120 };
+  const blocked = (x, y) => x >= 80 && x <= 160 && y >= 80 && y <= 160;
+  const recoveries = [];
+  const guard = loadFactory().createPositionGuard({
+    getMap:() => 'town',
+    getPosition:() => player,
+    getBounds:() => ({ width:500, height:400, minX:30, minY:40, maxX:470, maxY:360 }),
+    isWalkable:(x, y) => !blocked(x, y),
+    setPosition:(position) => Object.assign(player, position),
+    onRecover:(event) => recoveries.push(event),
+    step:8,
+    nearbyRadius:96,
+  });
+
+  const result = guard.reconcile({ source:'keyboard' });
+  assert.equal(result.recovered, true);
+  assert.equal(result.reason, 'nearest');
+  assert.equal(blocked(player.x, player.y), false);
+  assert.ok(Math.hypot(player.x - 120, player.y - 120) <= 96);
+  assert.equal(recoveries.length, 1);
+  assert.equal(recoveries[0].source, 'keyboard');
+});
+
+test('position guard falls back to the last safe point when a deep teleport is blocked', () => {
+  const player = { x:50, y:60 };
+  const guard = loadFactory().createPositionGuard({
+    getMap:() => 'town',
+    getPosition:() => player,
+    getBounds:() => ({ width:600, height:500, minX:30, minY:40, maxX:570, maxY:460 }),
+    isWalkable:(x, y) => !(x >= 100 && x <= 500 && y >= 100 && y <= 400),
+    setPosition:(position) => Object.assign(player, position),
+    step:8,
+    nearbyRadius:48,
+  });
+
+  guard.reconcile();
+  player.x = 300;
+  player.y = 250;
+  const result = guard.reconcile({ source:'portal' });
+  assert.equal(result.recovered, true);
+  assert.equal(result.reason, 'last-safe');
+  assert.equal(player.x, 50);
+  assert.equal(player.y, 60);
+});
+
+test('position guard uses the current map spawn when a saved coordinate is invalid', () => {
+  const player = { x:Number.NaN, y:Number.POSITIVE_INFINITY };
+  const guard = loadFactory().createPositionGuard({
+    getMap:() => 'forest',
+    getPosition:() => player,
+    getBounds:() => ({ width:800, height:600, minX:30, minY:40, maxX:770, maxY:560 }),
+    isWalkable:() => true,
+    getFallback:() => ({ x:90, y:520 }),
+    setPosition:(position) => Object.assign(player, position),
+  });
+
+  const result = guard.reconcile({ source:'load' });
+  assert.equal(result.recovered, true);
+  assert.equal(result.reason, 'fallback');
+  assert.equal(player.x, 90);
+  assert.equal(player.y, 520);
+});
+
+test('game runs the position guard before keyboard and click movement and on character load', () => {
+  assert.match(gameSource, /YuksamWorldNavigationRegistry\.createPositionGuard\(/);
+  assert.match(gameSource, /function updateV17\(dt\) \{[\s\S]{0,240}reconcileWorldPlayerPositionV1\('update'\);[\s\S]{0,700}clickMovementControllerV1\.update\(/);
+  assert.match(gameSource, /reconcileWorldPlayerPositionV1\('start-game'\);\s*resetForestMonsters/);
+  assert.match(gameSource, /window\.cancelClickMovementV1\?\.\(\{ clearArrivalLock:true \}\)/);
+});
+
 test('real browser preserves collider, movement, and transition behavior', { timeout:30000 }, () => {
   const script = join(root, 'tools', 'browser-smoke', 'try_world_navigation.js');
   const result = spawnSync(process.execPath, [script, root], { encoding:'utf8', timeout:25000 });
@@ -85,7 +182,7 @@ test('real browser preserves collider, movement, and transition behavior', { tim
   assert.match(result.stdout, /PASS: equipment exit returns beside its town door/);
   assert.match(result.stdout, /PASS: final room suppresses all automatic transitions/);
   // 63빌딩 던전 충돌 검사 2개가 늘어 30개 → 32개가 되었다.
-  assert.match(result.stdout, /RESULT: PASS 32 \/ FAIL 0/);
+  assert.match(result.stdout, /RESULT: PASS 37 \/ FAIL 0/);
 });
 
 test('production uses one navigation boundary without versioned wrappers', () => {
