@@ -38,6 +38,7 @@
   let formationAnimationToken = 0;
   let raidPetAnchor = null;
   let networkSession = null;
+  let giveUpConfirmOpen = false;
   let raidPartyClient = null;
   let networkUnsubscribe = null;
   let networkHeartbeatTimer = null;
@@ -532,6 +533,10 @@
       networkSession.lastQuestion = publicRaidQuestion(networkSession.room.question);
       question = networkSession.lastQuestion;
     }
+    /* 포기 확인창은 선생님/학생이 직접 예·아니오를 고를 때까지 유지한다.
+       heartbeat나 Realtime 응답이 전투창을 다시 그리면 버튼을 누를 수 없었다.
+       이벤트 sequence는 소비하지 않아, '아니오' 뒤 다음 sync에서 빠짐없이 재생된다. */
+    if (giveUpConfirmOpen || G()?.modalState?.type === 'raidGiveUp') return;
     const events = Array.isArray(data.events) ? data.events : [];
     if (initial) {
       networkSession.lastSequence = events.reduce(
@@ -4403,6 +4408,7 @@
     active = null;
     question = null;
     busy = false;
+    giveUpConfirmOpen = false;
     walkProgress = 1;
     raidPetAnchor = null;
   }
@@ -4425,9 +4431,11 @@
 
   /* 실수로 눌러 판을 날리지 않도록 한 번 물어본다. */
   function confirmGiveUp() {
+    if (giveUpConfirmOpen) return;
     const openModal = global.openModal;
     if (typeof openModal !== 'function') { leaveDungeonNow(); return; }
     const snapshot = active ? active.snapshot() : null;
+    giveUpConfirmOpen = true;
     openModal(`
       <h2>포기</h2>
       <div class="panel-card">
@@ -4442,9 +4450,13 @@
 
     const yes = global.document.getElementById('raidGiveUpYes');
     const no = global.document.getElementById('raidGiveUpNo');
-    if (yes) yes.onclick = () => leaveDungeonNow();
+    if (yes) yes.onclick = () => {
+      giveUpConfirmOpen = false;
+      leaveDungeonNow();
+    };
     if (no) {
       no.onclick = () => {
+        giveUpConfirmOpen = false;
         // 전투로 되돌아간다. 행동 메뉴부터 다시 고르게 한다.
         if (!active) { leaveDungeonNow(); return; }
         busy = false;

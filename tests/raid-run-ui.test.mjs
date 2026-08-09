@@ -483,6 +483,17 @@ test('전투 패널은 일반 사냥처럼 공격·스킬·포기 뒤에 문제�
   assert.match(uiSource, /정말로 포기하시겠습니까\?/);
 });
 
+test('포기 확인창은 heartbeat와 Realtime 동기화가 전투창으로 덮지 않는다', () => {
+  assert.match(uiSource, /let giveUpConfirmOpen = false/);
+  const syncBlock = uiSource.match(/function setNetworkData\(data,[\s\S]*?\n  \}/)?.[0] || '';
+  assert.notEqual(syncBlock, '');
+  const guard = syncBlock.indexOf("if (giveUpConfirmOpen || G()?.modalState?.type === 'raidGiveUp') return;");
+  const events = syncBlock.indexOf('const events = Array.isArray(data.events)');
+  assert.ok(guard >= 0 && events > guard, `포기창 잠금이 이벤트 재생보다 앞서야 한다: ${guard}, ${events}`);
+  assert.match(uiSource, /if \(giveUpConfirmOpen\) return;/);
+  assert.match(uiSource, /giveUpConfirmOpen = false;\s*\n\s*leaveDungeonNow\(\)/);
+});
+
 test('답 제출 직후 입력 UI를 없애고 세 명의 결과를 기다린다', () => {
   assert.match(uiSource, /function showPlaybackPanel\(message = '전투 중…'\)/);
   assert.match(uiSource, /querySelector\('\.raid-combat > \.panel-card'\)/);

@@ -76,6 +76,20 @@ test('교사 던전 치트는 현재 몬스터를 서버 결과 한 번으로 �
   assert.equal(result.events.at(-1).kind, 'monster-down');
 });
 
+test('한 몬스터 전투에서 얻은 보호막은 다음 몬스터 전에 모두 사라진다', () => {
+  const run = makeRun();
+  run.confirmFormation({ me:'front', ally1:'middle', ally2:'back' });
+  run.arriveAtEncounter();
+  run.members.forEach((entry, index) => { entry.shield = 10 + index; });
+  const result = run.resolveRound({}, { forceMonsterDefeat:true });
+  assert.equal(result.monsterDown, true);
+  assert.equal(run.phase, 'travel');
+  assert.deepEqual(Array.from(run.snapshot().members, (entry) => entry.shield), [0, 0, 0],
+    '서버에 travel 상태를 올리기 전부터 보호막이 0이어야 한다');
+  run.arriveAtEncounter();
+  assert.deepEqual(Array.from(run.snapshot().members, (entry) => entry.shield), [0, 0, 0]);
+});
+
 test('대형이 잘못되면 출발하지 못한다', () => {
   const run = makeRun();
   const bad = run.confirmFormation({ me:'front', ally1:'front', ally2:'back' });
