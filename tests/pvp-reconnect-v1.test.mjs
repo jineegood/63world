@@ -439,9 +439,10 @@ test('first PvP profile use shows one tutorial with green key phrases before ope
 
   await window.openRemoteProfileV1('b');
   assert.equal(calls.includes('profile'), false);
+  assert.deepEqual(calls, ['seen']);
   for (const [step, phrases] of [
     [0, ['오른쪽 클릭', '대전 신청']],
-    [1, ['20초']],
+    [1, ['30초']],
     [2, ['30면체 주사위', '항복']],
   ]) {
     window.__pvpTutorialStepV1(step);
@@ -458,6 +459,8 @@ test('first PvP profile use shows one tutorial with green key phrases before ope
 
 test('game persists the one-time PvP tutorial flag on the player record', () => {
   const source = fs.readFileSync(path.join(root, 'game.js'), 'utf8');
+  const normalizer = source.match(/function normalizePlayer\(p\)[\s\S]*?\n}/)?.[0] || '';
   assert.match(source, /shouldShowPvpTutorialV1\s*=\s*\(\)\s*=>\s*!!game\.player\s*&&\s*!game\.player\.pvpTutorialSeen/);
   assert.match(source, /markPvpTutorialSeenV1[\s\S]{0,180}pvpTutorialSeen\s*=\s*true[\s\S]{0,180}savePlayer/);
+  assert.match(normalizer, /pvpTutorialSeen:\s*p\.pvpTutorialSeen\s*===\s*true/);
 });

@@ -216,8 +216,9 @@
       .raid-question-timer.danger{color:#fecaca;border-color:#fb7185}
       .raid-question-timer[hidden]{display:none}
       @keyframes raidTimerPulse{from{transform:translateX(-50%) scale(1)}to{transform:translateX(-50%) scale(1.06)}}
-      .raid-next-hint{font-size:11px;color:#9fb3cd;margin-top:3px}
-      .raid-next-hint.warn{color:#fbbf24;font-weight:800}
+      .raid-next-hint{font-size:11px;color:#fbbf24;margin-top:3px}
+      .raid-next-hint.warn{font-weight:800}
+      .raid-next-technique{color:#fbbf24;font-weight:950}
       .raid-status-row{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
       .raid-status-badge{display:inline-flex;padding:2px 6px;border-radius:999px;font-size:10px;
         font-weight:900;background:rgba(30,41,59,.92);border:1px solid rgba(148,163,184,.45);color:#e2e8f0}
@@ -559,6 +560,16 @@
     const phase = networkSession.room?.phase || 'lobby';
     if (phase !== 'lobby') cancelNetworkLobbyCountdown();
 
+    /* 세 답이 모두 모인 뒤에는 더 이상 친구의 문제 풀이를 기다리는 단계가
+       아니다. 서버가 결과를 확정하는 짧은 구간임을 정확히 안내한다. */
+    if (active?.phase === 'battle' && phase === 'resolving'
+      && !networkSession.playbackActive && !networkSession.playbackQueue?.length) {
+      busy = true;
+      panelMode = 'playing';
+      panelMessage = networkQuestionWaitMessage();
+      if (G()?.modalState?.type === 'raidBattle') renderBattle();
+    }
+
     /* 보정 — 재생이 모두 끝난 조용한 순간에는 화면 값을 서버 값과 맞춘다.
        실시간 알림과 폴링이 겹쳐 로그 몇 줄을 놓치더라도, 다음 문제가 나오기
        전에 세 화면의 숫자가 반드시 같아진다. */
@@ -797,6 +808,12 @@
     return 'open';
   }
 
+  function networkQuestionWaitMessage({ submitted = false, down = false } = {}) {
+    if (!submitted) return '서버 대기중…';
+    const downNotice = down ? '쓰러져 있어 이번 전투에서는 행동하지 않습니다. ' : '';
+    return `${downNotice}친구들의 문제 풀이를 기다리는 중…`;
+  }
+
   /* wait/effects 화면에서 곧바로 question 스냅샷으로 건너뛰어도 입력 잠금이
      남지 않게 하는 단일 복구 지점이다. 이미 답을 보낸 라운드는 반대로 절대
      입력창을 다시 열지 않는다. */
@@ -827,7 +844,7 @@
       busy = true;
       chosenAction = null;
       panelMode = 'playing';
-      panelMessage = '서버 대기중…';
+      panelMessage = networkQuestionWaitMessage();
       if (G()?.modalState?.type === 'raidBattle') {
         renderBattle();
         acknowledgeNetworkQuestionReady(round);
@@ -842,7 +859,7 @@
     if (gate === 'submitted') {
       busy = true;
       panelMode = 'playing';
-      panelMessage = '서버 대기중…';
+      panelMessage = networkQuestionWaitMessage({ submitted:true, down });
       if (G()?.modalState?.type === 'raidBattle') renderBattle();
       return true;
     }
@@ -1294,7 +1311,7 @@
     busy = true;
     chosenAction = null;
     panelMode = 'playing';
-    panelMessage = '쓰러져 있어 이번 전투에서는 행동하지 않습니다. 서버 대기중…';
+    panelMessage = networkQuestionWaitMessage({ submitted:true, down:true });
     if (G()?.modalState?.type === 'raidBattle') renderBattle();
 
     session.deadSubmittedRounds = session.deadSubmittedRounds || new Set();
@@ -1803,7 +1820,7 @@
       : String(chosenAction || '').replace(/^active:/, '') || 'basic';
     session.submittedRounds = session.submittedRounds || new Set();
     session.submittedRounds.add(round);
-    showPlaybackPanel('답을 제출했습니다. 서버 대기중…');
+    showPlaybackPanel(`답을 제출했습니다. ${networkQuestionWaitMessage({ submitted:true })}`);
     try {
       await session.client.submit(session.room.id, round, actionId, String(given ?? ''));
       const data = await session.client.sync(session.room.id, session.lastSequence || 0);
@@ -2714,6 +2731,27 @@
      패턴이 정해져 있으니 학생이 미리 자리를 바꾸거나 보호막을 준비할 수 있다. */
   const SLOT_WORD = { front:'앞', middle:'가운데', back:'뒤' };
 
+  /* 예고 문구의 기술 이름은 패턴 종류와 관계없이 반드시 이 공통 경로를 거친다.
+     예전에는 전체 공격/상태이상만 warn 클래스가 붙어 노란색이고,
+     점액 방패나 야근의 손길 같은 지원·단일 기술은 회색으로 보였다. */
+  function namedNextPlanHint(technique, suffix, { prefix = '다음은 ', warn = false } = {}) {
+    const safeTechnique = String(technique || '공격');
+    const safePrefix = String(prefix || '');
+    const safeSuffix = String(suffix || '');
+    return {
+      warn,
+      prefix:safePrefix,
+      technique:safeTechnique,
+      suffix:safeSuffix,
+      text:`${safePrefix}${safeTechnique}${safeSuffix}`,
+    };
+  }
+
+  function nextPlanHintHtml(hint) {
+    if (!hint?.technique) return esc(hint?.text || '');
+    return `${esc(hint.prefix)}<strong class="raid-next-technique">${esc(hint.technique)}</strong>${esc(hint.suffix)}`;
+  }
+
   function nextPlanHint(monster, plan) {
     /* 기절한 몬스터는 다음 턴을 통째로 건너뛴다. 예정돼 있던 기술도 취소되고
        그 다음 턴에는 새로 뽑는다. 그러니 기술 이름을 보여 주면 거짓말이 된다. */
@@ -2722,7 +2760,9 @@
       return { warn:false, text:`기절 ${stun}턴 — 다음 턴은 쉽니다` };
     }
     if (monster?.chargedPlanName) {
-      return { warn:true, text:`⚠ 다음은 ${monster.chargedPlanName} — 두 배 피해!` };
+      return namedNextPlanHint(monster.chargedPlanName, ' — 두 배 피해!', {
+        prefix:'⚠ 다음은 ', warn:true,
+      });
     }
     const name = plan?.name && plan.name !== '공격' ? plan.name : null;
     const extras = [];
@@ -2740,16 +2780,20 @@
         : plan.counter ? '반격 자세'
         : plan.chargeNext ? '기술 예고'
         : '숨 고르기';
-      return { warn:false, text:`다음은 ${name || support} — ${support}` };
+      return namedNextPlanHint(name || support, ` — ${support}`);
     }
     if (plan?.kind === 'all') {
       const hits = plan.hits > 1 ? `${plan.hits}연속 ` : '';
-      return { warn:true, text:`⚠ 다음은 ${name ? `${name} — ` : ''}${hits}전체 공격!${tail}` };
+      return namedNextPlanHint(name || `${hits}전체 공격`, name ? ` — ${hits}전체 공격!${tail}` : `!${tail}`, {
+        prefix:'⚠ 다음은 ', warn:true,
+      });
     }
     const where = SLOT_WORD[plan?.target] || '앞';
     const hits = plan?.hits > 1 ? `${plan.hits}연속 ` : '';
     const aim = plan?.target === 'random' ? '무작위 한 명' : `${where}자리`;
-    return { warn:!!tail, text:`다음은 ${name ? `${name} — ` : ''}${hits}${aim}${tail}` };
+    return namedNextPlanHint(name || `${hits}${aim}`, name ? ` — ${hits}${aim}${tail}` : tail, {
+      warn:!!tail,
+    });
   }
 
   function renderBattle() {
@@ -2788,7 +2832,7 @@
             ${monsterStatusHtml(monster)}
             <div class="hpbar"><div class="hpfill" style="width:${percent}%"></div></div>
             <div class="raid-next-hint ${nextHint.warn ? 'warn' : ''}">
-              ${esc(nextHint.text)}
+              ${nextPlanHintHtml(nextHint)}
             </div>
           </div>
           ${partySpriteHtml(members)}
@@ -4352,5 +4396,8 @@
     submitAnswerForTest:(value) => submitAnswer(value),
     playbackReadyForTest:(round, session) => allMembersFinishedPlayback(round, session),
     questionGateDecisionForTest:(state) => networkQuestionGateDecision(state),
+    questionWaitMessageForTest:(state) => networkQuestionWaitMessage(state),
+    nextPlanHintForTest:(monster, plan) => nextPlanHint(monster, plan),
+    nextPlanHintHtmlForTest:(hint) => nextPlanHintHtml(hint),
   });
 })(typeof window !== 'undefined' ? window : globalThis);

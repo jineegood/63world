@@ -146,19 +146,19 @@ function applyDamage(sourceKey, targetKey, state, amount, active, events) {
   });
 }
 
-function applyBlockTraining(targetKey, state, events) {
-  const target = state[targetKey];
-  if (target.className !== 'warrior') return;
-  const rank = Math.max(0, Math.trunc(Number(target.skills.warrior_basic_guard) || 0));
+function applyBlockTraining(ownerKey, state, events) {
+  const owner = state[ownerKey];
+  if (owner.className !== 'warrior') return;
+  const rank = Math.max(0, Math.trunc(Number(owner.skills.warrior_basic_guard) || 0));
   const rates = PVP_SKILLS.warrior_basic_guard?.guardShieldPct || [];
   const rate = Number(rates[rank] || 0);
-  if (!(target.hp > 0) || !(rank > 0) || !(rate > 0)) return;
-  const amount = Math.max(1, Math.floor(target.hp * rate));
-  target.shield += amount;
+  if (!(owner.hp > 0) || !(rank > 0) || !(rate > 0)) return;
+  const amount = Math.max(1, Math.floor(owner.hp * rate));
+  owner.shield += amount;
   events.push({
     kind:'shield',
-    source:targetKey,
-    target:targetKey,
+    source:ownerKey,
+    target:ownerKey,
     skillId:'warrior_basic_guard',
     passive:true,
     amount,
@@ -246,8 +246,13 @@ export function resolveRound({ match, a, b, randomInt }) {
       correct:entry.correct === true,
       prevented:state[sourceKey].statuses.stun > 0 ? 'stun' : null,
     });
-    applyBlockTraining(targetKey, state, events);
     applyAction(sourceKey, targetKey, entry, state, events);
+    /* 일반 사냥과 같은 순서: 막기 훈련은 상대에게 맞기 직전 갑자기
+       생기는 방어 보너스가 아니라, 자신의 행동을 마친 뒤 다음 반격을
+       대비해 만드는 보호막이다. 전투가 끝났다면 불필요하게 생성하지 않는다. */
+    if (state[sourceKey].hp > 0 && state[targetKey].hp > 0) {
+      applyBlockTraining(sourceKey, state, events);
+    }
   }
   tickState(state.a);
   tickState(state.b);

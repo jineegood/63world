@@ -43,6 +43,13 @@ test('current game data snapshot captures online-planning support data', () => {
   assert.ok(snapshot.questions.length >= 8, 'default questions should be present');
 });
 
+test('all specialization ultimate skills unlock at level 10', () => {
+  const snapshot = readSnapshot();
+  const ultimates = Object.values(snapshot.skills).filter((skill) => skill?.kind === 'ultimate' && skill?.specOnly);
+  assert.equal(ultimates.length, 6);
+  assert.deepEqual([...new Set(ultimates.map((skill) => skill.unlockLevel))], [10]);
+});
+
 test('old master workbook is removed and current master workbook exists', () => {
   assert.equal(existsSync(oldWorkbookPath), false, 'old v25 workbook should be removed');
   assert.equal(existsSync(currentWorkbookPath), true, 'new v35 workbook should exist');

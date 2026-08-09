@@ -350,6 +350,24 @@ test('대기 화면에서 새 question으로 바로 건너뛰어도 세 클라�
   assert.match(uiSource, /session\.submittedRounds\?\.has\(round\)/);
 });
 
+test('문제 답변 대기와 서버 동기화 대기를 서로 다른 문구로 안내한다', () => {
+  const harness = networkUiHarness();
+  const message = harness.context.YuksamRaidRunUi.questionWaitMessageForTest;
+  assert.equal(message({ submitted:false }), '서버 대기중…',
+    '문제와 공통 제한시각을 준비하는 동안은 서버 대기라고 안내해야 한다');
+  assert.equal(message({ submitted:true }), '친구들의 문제 풀이를 기다리는 중…',
+    '내 답을 낸 뒤에는 무엇을 기다리는지 분명히 알려야 한다');
+  assert.equal(
+    message({ submitted:true, down:true }),
+    '쓰러져 있어 이번 전투에서는 행동하지 않습니다. 친구들의 문제 풀이를 기다리는 중…',
+    '쓰러진 파티원의 자동 제출도 친구 답변 대기로 구분해야 한다',
+  );
+  assert.match(uiSource, /phase === 'resolving'[\s\S]*?panelMessage = networkQuestionWaitMessage\(\)/,
+    '세 답이 모두 모여 서버가 결과를 계산할 때는 서버 대기로 돌아가야 한다');
+  assert.match(uiSource, /panelMessage = networkQuestionWaitMessage\(\{ submitted:true, down \}\)/);
+  assert.match(uiSource, /showPlaybackPanel\(`답을 제출했습니다\. \$\{networkQuestionWaitMessage\(\{ submitted:true \}\)\}`\)/);
+});
+
 test('최종 보상창에서 한 명이 먼저 나가도 남은 화면은 연출 대기에 갇히지 않는다', () => {
   const harness = networkUiHarness();
   const ready = harness.context.YuksamRaidRunUi.playbackReadyForTest;
@@ -403,7 +421,7 @@ test('쓰러진 학생은 문제를 받지 않고 서버 제출만 자동 처리
   assert.match(autoSkip, /member\.hp > 0/);
   assert.match(autoSkip, /session\.deadSubmittedRounds\.has\(round\)/);
   assert.match(autoSkip, /session\.client\.submit\(session\.room\.id, round, 'basic', ''\)/);
-  assert.match(autoSkip, /이번 전투에서는 행동하지 않습니다/);
+  assert.match(autoSkip, /networkQuestionWaitMessage\(\{ submitted:true, down:true \}\)/);
   assert.match(uiSource, /skipped:skipped \|\| entry\.correct === true|correct:skipped \|\| entry\.correct === true/);
   assert.match(uiSource, /answerEvent\?\.skipped !== true/);
 });
@@ -469,7 +487,7 @@ test('답 제출 직후 입력 UI를 없애고 세 명의 결과를 기다린다
   assert.match(uiSource, /function showPlaybackPanel\(message = '전투 중…'\)/);
   assert.match(uiSource, /querySelector\('\.raid-combat > \.panel-card'\)/);
   assert.match(uiSource, /panel\.innerHTML = `<h3>/);
-  assert.match(uiSource, /showPlaybackPanel\('답을 제출했습니다\. 서버 대기중…'\)/);
+  assert.match(uiSource, /showPlaybackPanel\(`답을 제출했습니다\. \$\{networkQuestionWaitMessage\(\{ submitted:true \}\)\}`\)/);
   assert.match(uiSource, /id="combatAnswer"/);
   assert.match(uiSource, /data-answer-key=/);
 });
@@ -525,6 +543,64 @@ test('기절한 몬스터는 다음 턴 예고 대신 쉰다고 알려 준다', 
      먼저 떠서 이상하다(제작자 지적). */
   assert.doesNotMatch(uiSource, /hintNode\.textContent = hint\.text/);
   assert.match(uiSource, /const nextHint = nextPlanHint\(truth, nextPlan\)/);
+});
+
+test('모든 다음 전투 예고는 같은 노란색 공통 서식을 쓴다', () => {
+  const { context } = networkUiHarness();
+  const ui = context.YuksamRaidRunUi;
+  const cases = [
+    {
+      name:'점액 방패',
+      monster:{},
+      plan:{ name:'점액 방패', kind:'none', shieldPct:0.3 },
+    },
+    {
+      name:'야근의 손길',
+      monster:{},
+      plan:{ name:'야근의 손길', kind:'single', target:'front', hits:1 },
+    },
+    {
+      name:'야광등 폭발',
+      monster:{},
+      plan:{ name:'야광등 폭발', kind:'all', hits:2 },
+    },
+    {
+      name:'대재앙',
+      monster:{ chargedPlanName:'대재앙' },
+      plan:{ name:'다른 기술', kind:'single', target:'back', hits:1 },
+    },
+  ];
+
+  cases.forEach(({ name, monster, plan }) => {
+    const hint = ui.nextPlanHintForTest(monster, plan);
+    const html = ui.nextPlanHintHtmlForTest(hint);
+    assert.equal(hint.technique, name);
+    assert.match(html, new RegExp(`<strong class="raid-next-technique">${name}</strong>`));
+    assert.equal((html.match(/raid-next-technique/g) || []).length, 1,
+      `${name}은 공통 기술명 서식을 정확히 한 번만 거쳐야 한다`);
+  });
+
+  const rulesContext = {};
+  rulesContext.window = rulesContext;
+  rulesContext.globalThis = rulesContext;
+  vm.runInNewContext(rulesSource, rulesContext, { filename:'raid-rules.js' });
+  const configuredPlans = Object.values(rulesContext.YuksamRaidRules.MONSTERS)
+    .flatMap((monster) => monster.pattern || []);
+  assert.ok(configuredPlans.length > 0);
+  configuredPlans.forEach((plan) => {
+    const hint = ui.nextPlanHintForTest({}, plan);
+    const html = ui.nextPlanHintHtmlForTest(hint);
+    assert.equal(hint.technique, plan.name, `${plan.name} 기술명이 예고에서 보존되어야 한다`);
+    assert.match(html, /<strong class="raid-next-technique">/,
+      `${plan.name}도 공통 노란색 기술명 서식을 써야 한다`);
+  });
+
+  assert.match(uiSource, /\.raid-next-hint\{font-size:11px;color:#fbbf24/,
+    '기술 종류와 관계없이 예고 문장 전체가 같은 노란색이어야 한다');
+  assert.match(uiSource, /\.raid-next-technique\{color:#fbbf24;font-weight:950\}/);
+  assert.doesNotMatch(uiSource, /\.raid-next-hint\.warn\{color:#fbbf24/,
+    '일부 패턴의 전체 문장만 노란색이 되는 옛 분기를 남기면 안 된다');
+  assert.match(uiSource, /\$\{nextPlanHintHtml\(nextHint\)\}/);
 });
 
 test('던전도 사냥터의 투사체 연출 엔진을 그대로 쓴다', () => {

@@ -1405,7 +1405,7 @@
       "reviveHealPct": 1,
       "reviveCooldown": 10,
       "passiveText": "전투당 1회 부활(HP 전체 회복)",
-      "unlockLevel": 9
+      "unlockLevel": 10
     },
     "warrior_weapon_mastery": {
       "id": "warrior_weapon_mastery",
@@ -1520,7 +1520,7 @@
         "charge": true,
         "chargeMult": 4.5
       },
-      "unlockLevel": 9
+      "unlockLevel": 10
     },
     "mage_basic_mana": {
       "id": "mage_basic_mana",
@@ -1735,7 +1735,7 @@
         "multiplier": 2.7,
         "chillTurns": 2
       },
-      "unlockLevel": 9
+      "unlockLevel": 10
     },
     "mage_fire_focus_v24": {
       "id": "mage_fire_focus_v24",
@@ -1861,7 +1861,7 @@
         "hits": 4,
         "hitMult": 0.8
       },
-      "unlockLevel": 9
+      "unlockLevel": 10
     },
     "priest_basic_faith": {
       "id": "priest_basic_faith",
@@ -2065,7 +2065,7 @@
         "multiplier": 2.3,
         "healRate": 0.75
       },
-      "unlockLevel": 9
+      "unlockLevel": 10
     },
     "priest_shadow_focus_v24": {
       "id": "priest_shadow_focus_v24",
@@ -2182,7 +2182,7 @@
         "multiplier": 2.6,
         "stacks": 4
       },
-      "unlockLevel": 9
+      "unlockLevel": 10
     }
   },
   "quests": {

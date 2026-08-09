@@ -251,13 +251,46 @@ test('shield absorbs damage before HP and effects are assigned stable event ids'
   assert.equal(resolved.events[1].absorbed, 20);
 });
 
-test('Block Training grants at least one shield before each incoming action', async () => {
+test('Block Training follows the hunting order: own action, shield, enemy counterattack', async () => {
   const rules = await import(rulesUrl.href);
   const resolved = rules.resolveRound({
     match:{ id:'match-guard', round:1 },
+    a:{
+      player:fighter('a', {
+        attack:10,
+        maxHp:20,
+        hp:20,
+        skills:{ warrior_basic_guard:1 },
+      }),
+      actionId:'basic',
+      correct:true,
+    },
+    b:{ player:fighter('b', { attack:10 }), actionId:'basic', correct:true },
+    randomInt:sequence([30, 1]),
+  });
+  const ownActionIndex = resolved.events.findIndex((event) => event.kind === 'action' && event.source === 'a');
+  const ownDamageIndex = resolved.events.findIndex((event) => event.kind === 'damage' && event.source === 'a');
+  const guardIndex = resolved.events.findIndex((event) => event.skillId === 'warrior_basic_guard');
+  const counterActionIndex = resolved.events.findIndex((event) => event.kind === 'action' && event.source === 'b');
+  const counterDamageIndex = resolved.events.findIndex((event) => event.kind === 'damage' && event.source === 'b');
+  assert.ok(ownActionIndex >= 0);
+  assert.ok(ownDamageIndex > ownActionIndex, '내 공격이 먼저 처리되어야 한다');
+  assert.ok(guardIndex > ownDamageIndex, '보호막은 내 행동이 끝난 뒤 생성되어야 한다');
+  assert.ok(counterActionIndex > guardIndex, '그 다음 상대 반격이 시작되어야 한다');
+  assert.ok(counterDamageIndex > counterActionIndex);
+  assert.equal(resolved.events[guardIndex].amount, 1);
+  assert.equal(resolved.events[guardIndex].source, 'a');
+  assert.equal(resolved.events[counterDamageIndex].absorbed, 1);
+});
+
+test('a slower Warrior cannot create Block Training before taking their own turn', async () => {
+  const rules = await import(rulesUrl.href);
+  const resolved = rules.resolveRound({
+    match:{ id:'match-guard-slower', round:1 },
     a:{ player:fighter('a', { attack:10 }), actionId:'basic', correct:true },
     b:{
       player:fighter('b', {
+        attack:10,
         maxHp:20,
         hp:20,
         skills:{ warrior_basic_guard:1 },
@@ -267,14 +300,29 @@ test('Block Training grants at least one shield before each incoming action', as
     },
     randomInt:sequence([30, 1]),
   });
-  const firstActionIndex = resolved.events.findIndex((event) => event.kind === 'action' && event.source === 'a');
+  const incomingDamageIndex = resolved.events.findIndex((event) => event.kind === 'damage' && event.source === 'a');
+  const ownDamageIndex = resolved.events.findIndex((event) => event.kind === 'damage' && event.source === 'b');
   const guardIndex = resolved.events.findIndex((event) => event.skillId === 'warrior_basic_guard');
-  const firstDamageIndex = resolved.events.findIndex((event) => event.kind === 'damage' && event.source === 'a');
-  assert.ok(firstActionIndex >= 0);
-  assert.ok(guardIndex > firstActionIndex);
-  assert.ok(firstDamageIndex > guardIndex);
-  assert.equal(resolved.events[guardIndex].amount, 1);
-  assert.equal(resolved.events[firstDamageIndex].absorbed, 1);
+  assert.equal(resolved.events[incomingDamageIndex].absorbed, 0,
+    '자신이 아직 행동하지 않았으므로 선공 피해를 미리 막으면 안 된다');
+  assert.ok(guardIndex > ownDamageIndex, '막기 훈련은 자신의 행동 뒤에만 생성되어야 한다');
+  assert.equal(resolved.state.b.shield, 1, '다음 상대 공격을 대비한 보호막은 유지되어야 한다');
+});
+
+test('Block Training does not appear after its owner has already ended the duel', async () => {
+  const rules = await import(rulesUrl.href);
+  const resolved = rules.resolveRound({
+    match:{ id:'match-guard-finish', round:1 },
+    a:{
+      player:fighter('a', { attack:100, skills:{ warrior_basic_guard:1 } }),
+      actionId:'basic',
+      correct:true,
+    },
+    b:{ player:fighter('b', { hp:1, maxHp:1 }), actionId:'basic', correct:true },
+    randomInt:sequence([30, 1]),
+  });
+  assert.equal(resolved.winner, 'a');
+  assert.equal(resolved.events.some((event) => event.skillId === 'warrior_basic_guard'), false);
 });
 
 test('Block Training cannot activate for a non-warrior snapshot', async () => {

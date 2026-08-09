@@ -503,6 +503,58 @@ strong { font-weight: 900; }
 .range-row { display: grid; grid-template-columns: 120px 1fr 48px; gap: 12px; align-items: center; }
 .range-row input { margin: 0; }
 
+/* 환경설정에서 다시 열 수 있는 학생용 도움말. 공용 모달 크기는 바꾸지 않고
+   도움말 안쪽만 탭 형태로 정리한다. */
+.settings-actions-v1 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+button.help-launch-v1 {
+  color: #172033;
+  font-weight: 1000;
+  border-color: rgba(253,224,71,.95);
+  background: linear-gradient(135deg, #fde047, #86efac);
+  box-shadow: 0 8px 24px rgba(250,204,21,.24);
+}
+button.help-launch-v1:hover { filter: brightness(1.08); border-color: #fef08a; }
+.game-help-v1 { display: grid; gap: 14px; }
+.game-help-head-v1 { padding-right: 46px; }
+.game-help-head-v1 h2 { margin-bottom: 5px; color: #fef08a; }
+.game-help-head-v1 p { margin: 0; color: var(--muted); }
+.game-help-tabs-v1 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.help-tab-v1 {
+  min-height: 46px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: #cbd5e1;
+  font-size: 13px;
+  font-weight: 900;
+  border-color: rgba(148,163,184,.22);
+  background: rgba(255,255,255,.045);
+}
+.help-tab-v1 span { font-size: 17px; }
+.help-tab-v1:hover { border-color: rgba(125,211,252,.52); background: rgba(14,116,144,.18); }
+.help-tab-v1.active {
+  color: #ecfeff;
+  border-color: rgba(34,211,238,.78);
+  background: linear-gradient(135deg, rgba(8,145,178,.42), rgba(37,99,235,.28));
+  box-shadow: inset 0 0 0 1px rgba(125,211,252,.14);
+}
+.game-help-content-v1 { padding: 18px 20px; }
+.game-help-content-v1 h3 { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; color: #bae6fd; }
+.game-help-copy-v1 { line-height: 1.72; color: #e2e8f0; }
+.game-help-copy-v1 p { margin: 8px 0; }
+.game-help-copy-v1 ul { margin: 0; padding-left: 22px; display: grid; gap: 7px; }
+.game-help-copy-v1 .help-note-v1 { padding: 10px 12px; border-radius: 12px; background: rgba(34,197,94,.08); }
+.help-subsection-v1 + .help-subsection-v1 { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.08); }
+.help-subsection-v1 h4 { margin: 0 0 6px; color: #bae6fd; }
+@media (max-width: 720px) {
+  .game-help-tabs-v1 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 480px) {
+  .settings-actions-v1 { grid-template-columns: 1fr; }
+}
+
 .combat-layout { display: grid; gap: 16px; }
 .combat-stage { min-height: 300px; border-radius: 24px; background: linear-gradient(180deg, #244b68, #193049 48%, #2f4b2d 49%, #172916); border: 1px solid rgba(255,255,255,.10); position: relative; overflow: hidden; }
 .combat-sprite { position: absolute; display: grid; place-items: center; border-radius: 22px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08); box-shadow: 0 14px 36px rgba(0,0,0,.30); }

@@ -67,6 +67,7 @@
     "test:reward-presentation-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 reward-presentation-v2",
     "test:tutorial-quests-polish-v2": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 tutorial-quests-polish-v2",
     "test:tutorial-highlight-v1": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 tutorial-highlight-v1",
+    "test:help-ui": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 help-ui",
     "test:multiplayer": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 multiplayer",
     "test:avatar-visual-sync": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 avatar-visual-sync",
     "test:safe-server-boundary-v2": "node --test tests/safe-server-boundary-v2.test.mjs",

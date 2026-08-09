@@ -565,6 +565,9 @@ function normalizePlayer(p) {
     quests: p.quests || {},
     skills: p.skills || {},
     skillCooldowns: p.skillCooldowns || {},
+    /* PVP 안내는 계정 전체가 아니라 이 캐릭터가 처음 다른 학생을 눌렀을 때만
+       한 번 보여 준다. 정규화 뒤에도 보존해야 재접속할 때 다시 뜨지 않는다. */
+    pvpTutorialSeen: p.pvpTutorialSeen === true,
     combatStatuses,
     skillPoints: Number.isFinite(Number(p.skillPoints)) ? Number(p.skillPoints) : Math.max(0, (Number(p.level) || 1) - 1),
     /* 63빌딩 던전에서 완료한 가장 높은 구간. 로그인 정리 과정에서도
@@ -1055,7 +1058,10 @@ function openSettingsModal() {
       <label><input type="checkbox" id="sfxEnabledBox" ${game.settings.sfxEnabled ? 'checked' : ''} /> 효과음 켜기</label>
       <div class="range-row"><span>효과음</span><input id="sfxVolumeRange" type="range" min="0" max="100" value="${Math.round(game.settings.sfxVolume * 100)}" /><b id="sfxVolumeText">${Math.round(game.settings.sfxVolume * 100)}</b></div>
       <p class="muted">로그인/캐릭터 생성/마을/사냥터별 배경음을 재생합니다.</p>
-      <button class="ghost wide" onclick="openAdminPanel()">관리자 창 열기</button>
+      <div class="settings-actions-v1">
+        <button class="help-launch-v1" onclick="openGameHelpV1()">❓ 도움말</button>
+        <button class="ghost" onclick="openAdminPanel()">🔐 관리자 모드</button>
+      </div>
     </div>
   `, { type: 'settings', pause: true });
   const bgmBox = $('bgmEnabledBox');
@@ -7268,12 +7274,12 @@ function updateQuestTracker() {
   Object.values(SKILL_DEFS).forEach((s) => { if (s) s.maxPoints = 1; });
   Object.assign(SKILL_DEFS, V24_SKILLS);
   const V24_IDS = new Set(Object.keys(V24_SKILLS));
-  // 선행조건 폐지 → 레벨 게이트: line 1~4=Lv1, 5~6=Lv5, 7~8=Lv7, 9=Lv9
+  // 선행조건 폐지 → 레벨 게이트: line 1~4=Lv1, 5~6=Lv5, 7~8=Lv7, 최종=Lv10
   Object.keys(V24_SKILLS).forEach((id) => {
     const s = SKILL_DEFS[id];
     if (!s) return;
     const line = Number(s.line) || 1;
-    s.unlockLevel = line <= 4 ? 1 : line <= 6 ? 5 : line <= 8 ? 7 : 9;
+    s.unlockLevel = line <= 4 ? 1 : line <= 6 ? 5 : line <= 8 ? 7 : 10;
   });
 
   function syncV24SkillPoints() {
@@ -7290,7 +7296,7 @@ function updateQuestTracker() {
     if (!skill) return 1;
     if (Number.isFinite(Number(skill.unlockLevel))) return Number(skill.unlockLevel);
     const line = Number(skill.line) || 1;
-    return line <= 4 ? 1 : line <= 6 ? 5 : line <= 8 ? 7 : 9;
+    return line <= 4 ? 1 : line <= 6 ? 5 : line <= 8 ? 7 : 10;
   }
   function skillBlockReasonV24(skill) {
     if (!game.player || !skill) return '스킬 정보를 확인할 수 없습니다.';
@@ -12834,7 +12840,7 @@ function updateQuestTracker() {
       if (specLocked) laneCls.push('spec-locked');
       const note = specLocked ? 'Lv.5 전문화 선택 후'
         : (isMine ? '나의 길!' : '다른 길을 선택했습니다');
-      const levelGroups = [5, 7, 9].map((level) => ({
+      const levelGroups = [5, 7, 10].map((level) => ({
         level,
         skills:list.filter((skill) => (Number(skill.unlockLevel) || 1) === level),
       }));
