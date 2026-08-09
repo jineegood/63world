@@ -51,7 +51,7 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   await sleep(20); // 교사 인증 확인이 async라 한 틱 기다린다
   chk(panel && !panel.classList.contains('hidden'), '토글 후 패널 펼침');
   const btnCount = panel ? panel.querySelectorAll('.cheat-panel-grid button').length : 0;
-  chk(btnCount === 11, '치트 버튼 11개 노출', 'n=' + btnCount);
+  chk(btnCount === 12, '치트 버튼 12개 노출', 'n=' + btnCount);
 
   // ===== (b2) 퀘스트 즉시 완료: accepted → ready =====
   const qid = Object.keys(window.QUEST_DEFS || {})[0] || 'testQuest';

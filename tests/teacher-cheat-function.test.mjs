@@ -13,6 +13,10 @@ const raidKillMigration = fs.readFileSync(
   path.join(root, 'supabase/migrations/202608090005_teacher_raid_kill_v1.sql'),
   'utf8',
 );
+const raidBalanceMigration = fs.readFileSync(
+  path.join(root, 'supabase/migrations/202608090006_raid_balance_and_teacher_progress_v1.sql'),
+  'utf8',
+);
 
 test('teacher cheat function verifies the caller and trusts app_metadata only', () => {
   assert.match(source, /Authorization/);
@@ -29,7 +33,20 @@ test('teacher cheat function accepts a narrow action list and one UUID target', 
   assert.match(source, /building200/);
   assert.match(source, /heal/);
   assert.match(source, /raidKill/);
+  assert.match(source, /raidAdvance/);
   assert.match(source, /\.eq\(['"]user_id['"], userId\)/);
+});
+
+test('dungeon progress cheat advances only server-owned progress without granting rewards', () => {
+  assert.match(source, /private_teacher_advance_raid_progress_v1/);
+  assert.match(raidBalanceMigration, /top_group = least\(7, public\.raid_progress_v1\.top_group \+ 1\)/i);
+  assert.match(raidBalanceMigration, /jsonb_build_object\('ok', true, 'raidTopGroup', v_top_group\)/i);
+  assert.doesNotMatch(
+    raidBalanceMigration.match(/create or replace function public\.private_teacher_advance_raid_progress_v1[\s\S]*?\$\$;/i)?.[0] || '',
+    /raid_reward_claims_v1|v_reward_exp|gold|building/i,
+  );
+  assert.match(raidBalanceMigration, /revoke all[\s\S]*private_teacher_advance_raid_progress_v1[\s\S]*authenticated/i);
+  assert.match(raidBalanceMigration, /grant execute[\s\S]*private_teacher_advance_raid_progress_v1[\s\S]*service_role/i);
 });
 
 test('dungeon instant kill is teacher-only and becomes one authoritative server round', () => {

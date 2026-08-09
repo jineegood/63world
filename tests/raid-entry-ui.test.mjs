@@ -170,6 +170,16 @@ test('앞 구간을 깨면 바로 다음 구간이 열린다', () => {
   assert.equal(h.floorButtons()[3].disabled, true);
 });
 
+test('방 만들기 층 목록은 실제로 깬 구간에만 Clear 표시를 붙인다', () => {
+  const h = createHarness({ clearedGroup:2 });
+  h.context.YuksamRaidEntryUi.openFloorSelection();
+  assert.equal((h.html().match(/class="raid-floor-clear">Clear!<\/em>/g) || []).length, 2);
+  assert.match(h.html(), /1–10층<em class="raid-floor-clear">Clear!<\/em>/);
+  assert.match(h.html(), /11–20층<em class="raid-floor-clear">Clear!<\/em>/);
+  assert.doesNotMatch(h.html(), /21–30층<em class="raid-floor-clear">Clear!<\/em>/);
+  assert.match(source, /\.raid-floor-clear\{[^}]*background:#86efac/);
+});
+
 test('마지막 구간까지 깨도 목록은 일곱 구간 그대로다', () => {
   const h = createHarness({ clearedGroup:7 });
   h.context.YuksamRaidEntryUi.openFloorSelection();

@@ -103,6 +103,7 @@ window.adminApplyCurrentStudentCheatV3 = async function adminApplyCurrentStudent
       gold3000:'Gold +3000',
       building200:'빌딩 +200',
       heal:'HP 100% 회복',
+      raidAdvance:`던전 ${Math.min(63, Number(result.snapshot?.raidTopGroup || 0) * 10)}층까지 Clear!`,
     };
     toast(`테스트: ${labels[action] || '치트 적용 완료'}`);
     appendChatMessage?.('system', '테스트', labels[action] || '치트 적용 완료');

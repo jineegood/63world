@@ -29,6 +29,10 @@ const questionReadyBarrierMigration = fs.readFileSync(
   path.join(root, 'supabase/migrations/202608090004_raid_question_ready_barrier_v1.sql'),
   'utf8',
 );
+const raidBalanceMigration = fs.readFileSync(
+  path.join(root, 'supabase/migrations/202608090006_raid_balance_and_teacher_progress_v1.sql'),
+  'utf8',
+);
 const serviceUrl = pathToFileURL(path.join(root, 'supabase/functions/_shared/raid-room-service.mjs'));
 const errorUrl = pathToFileURL(path.join(root, 'supabase/functions/_shared/raid-room-error.mjs'));
 const storeUrl = pathToFileURL(path.join(root, 'supabase/functions/_shared/raid-room-store.mjs'));
@@ -127,9 +131,9 @@ test('던전 보상은 캐릭터·구간별 최초 한 번만 서버가 원자 �
   assert.match(firstClearRewardMigration, /primary key \(user_id, floor_group\)/i);
   assert.match(firstClearRewardMigration, /on conflict \(user_id, floor_group\) do nothing/i);
   assert.match(firstClearRewardMigration, /member\.room_id = new\.id and member\.active/i);
-  assert.match(firstClearRewardMigration, /when 1 then 40[\s\S]*when 7 then 300/i, 'EXP는 기존 값을 쓴다');
-  assert.match(firstClearRewardMigration, /when 1 then 90[\s\S]*when 7 then 400/i, 'Gold는 절반이다');
-  assert.match(firstClearRewardMigration, /when 1 then 10[\s\S]*when 7 then 40/i, '빌딩은 절반이다');
+  assert.match(raidBalanceMigration, /when 1 then 20 when 2 then 20[\s\S]*when 7 then 50/i, 'EXP는 새 낮은 값이다');
+  assert.match(raidBalanceMigration, /when 1 then 90[\s\S]*when 7 then 400/i, 'Gold는 그대로다');
+  assert.match(raidBalanceMigration, /when 1 then 10[\s\S]*when 7 then 40/i, '빌딩은 그대로다');
   assert.match(firstClearRewardMigration, /v_level_gain \* 2/i);
   assert.match(firstClearRewardMigration, /fully_healed = \(v_level_gain > 0\)/i);
   assert.match(firstClearRewardMigration, /update public\.player_profiles_v2[\s\S]*set data = v_profile_data/i);
@@ -180,8 +184,8 @@ test('클리어 sync는 로그인한 학생 자신의 서버 보상 결과를 �
   const { createRaidRoomService } = await import(serviceUrl.href);
   const completion = {
     roomId:'room-1', floorGroup:1, awarded:true, firstClear:true,
-    reward:{ exp:40, gold:90, building:10 }, levelGain:1, fullyHealed:true,
-    player:{ exp:40, level:3, skillPoints:4, gold:110, building:10, hp:26, maxHp:26, raidRewardVersion:1, fullyHealed:true },
+    reward:{ exp:20, gold:90, building:10 }, levelGain:1, fullyHealed:true,
+    player:{ exp:20, level:2, skillPoints:2, gold:110, building:10, hp:24, maxHp:24, raidRewardVersion:1, fullyHealed:true },
   };
   const room = {
     id:'room-1', hostId:'a', floorGroup:1, phase:'cleared', round:4,
@@ -513,7 +517,7 @@ test('Supabase store uses server-owned raid progress instead of editable player 
 test('완료 응답은 최초 클리어만 보상을 표시하고 반복 클리어도 canonical player를 준다', async () => {
   const { RaidRoomStoreRows } = await import(storeUrl.href);
   const claim = {
-    source_room_id:'first-room', exp_reward:40, gold_reward:90, building_reward:10,
+    source_room_id:'first-room', exp_reward:20, gold_reward:90, building_reward:10,
     level_gain:2, fully_healed:true, legacy_assumed_paid:false,
   };
   const player = {
@@ -525,7 +529,7 @@ test('완료 응답은 최초 클리어만 보상을 표시하고 반복 클리�
     claim, player, { top_group:1 }, 'first-room', 1,
   );
   assert.equal(first.awarded, true);
-  assert.deepEqual(first.reward, { exp:40, gold:90, building:10 });
+  assert.deepEqual(first.reward, { exp:20, gold:90, building:10 });
   assert.equal(first.levelGain, 2);
   assert.equal(first.player.fullyHealed, true);
   assert.equal(first.player.raidTopGroup, 1);

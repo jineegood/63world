@@ -192,7 +192,7 @@ test('몬스터 반격은 대형에 따라 앞에 선 사람이 가장 아프다
   assert.equal(first.attackKind, 'single');
   assert.equal(hits.length, 1);
   assert.equal(hits[0].memberId, 'me');
-  // 앞자리 1.5배 + 한 명만 노리는 집중 보정
+  // 앞자리 1.5배만 적용하며 단일 공격 추가 배율은 1이다.
   const R = api.YuksamRaidRules;
   assert.equal(hits[0].damage, Math.round(monsterAttack * 1.5 * R.SINGLE_TARGET_BONUS));
 });
@@ -423,7 +423,7 @@ test('힐러가 빠지면 같은 능력치로도 1층을 넘기지 못한다', (
   assert.equal(result.phase, 'wiped', `힐러가 없으면 무너져야 한다 (${result.round}라운드에 ${result.phase})`);
 });
 
-test('대형을 거꾸로 세우면(약한 사람이 앞) 훨씬 위험해진다', () => {
+test('대형을 거꾸로 세우면(약한 사람이 앞) 체력이 더 위험해진다', () => {
   /* 앞줄이 1.5배를 맞으므로 누구를 앞에 세우는지가 실제로 결과를 바꿔야 한다.
      시트 이후로 몬스터마다 노리는 자리가 달라졌으므로, 앞자리를 노리는
      종이비둘기(종이부리 쪼기 → 앞)로 상대를 고정해 대형만 비교한다. */
@@ -440,11 +440,10 @@ test('대형을 거꾸로 세우면(약한 사람이 앞) 훨씬 위험해진다
     ...m, slot:m.id === 'healer' ? 'front' : m.id === 'dps' ? 'middle' : 'back',
   })), encounters);
 
-  /* 앞에 선 사람이 1.5배로 맞으므로, 튼튼한 탱커를 앞에 세우면 넘어가고
-     약한 힐러를 앞에 세우면 무너져야 한다. 대형이 실제로 결과를 가른다는 뜻이다. */
+  /* 단일 공격 추가 배율을 없앴으므로 두 대형 모두 클리어할 수는 있다.
+     그래도 앞에 선 사람이 1.5배를 맞아 약한 힐러를 앞에 세운 쪽이 더 위험해야 한다. */
   assert.equal(good.phase, 'cleared', `탱커를 앞에 세우면 깨야 한다 (${good.round}라운드에 ${good.phase})`);
-  assert.equal(bad.phase, 'wiped', `힐러를 앞에 세우면 무너져야 한다 (${bad.round}라운드에 ${bad.phase})`);
-  assert.ok(bad.lowestRatio <= good.lowestRatio,
+  assert.ok(bad.lowestRatio < good.lowestRatio,
     `거꾸로 선 대형이 더 위험해야 한다: 올바른 ${good.lowestRatio} vs 거꾸로 ${bad.lowestRatio}`);
 });
 

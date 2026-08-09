@@ -193,7 +193,7 @@
     async function applyStudentCheat(userId, action) {
       const targetUserId = validateUserId(userId);
       await requireTeacher();
-      const allowed = new Set(['exp20', 'exp100', 'gold3000', 'building200', 'heal']);
+      const allowed = new Set(['exp20', 'exp100', 'gold3000', 'building200', 'heal', 'raidAdvance']);
       if (!allowed.has(action)) throw error('CHEAT_FAILED');
       const { data, error:cheatError } = await client.functions.invoke('teacher-apply-cheat', {
         body:{ userId:targetUserId, action },

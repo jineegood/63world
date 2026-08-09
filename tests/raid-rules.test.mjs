@@ -61,13 +61,14 @@ test('몬스터는 앞줄부터 노리고, 앞이 쓰러지면 다음 줄로 넘
   assert.equal(rules.pickTarget(party({ a:{ hp:0 }, b:{ hp:0 }, c:{ hp:0 } })), null);
 });
 
-test('단일 공격은 앞 한 명만, 배율이 곱해져 들어간다', () => {
+test('단일 공격은 앞 한 명만 맞고 별도 집중 배율은 붙지 않는다', () => {
   const result = rules.resolveMonsterAttack({ members:party(), attack:10, kind:'single', rng:PLAIN });
   assert.equal(result.kind, 'single');
   assert.equal(result.hits.length, 1);
   assert.equal(result.hits[0].memberId, 'a');
-  // 앞자리 1.5배 + 한 명만 노리는 집중 보정
+  // 앞자리 1.5배만 적용하고 단일 공격 추가 배율은 1이다.
   assert.equal(result.hits[0].damage, Math.round(10 * 1.5 * rules.SINGLE_TARGET_BONUS));
+  assert.equal(rules.SINGLE_TARGET_BONUS, 1);
 });
 
 test('한 명만 노리는 공격이 전체 공격보다 한 방이 더 아프다', () => {
@@ -76,7 +77,7 @@ test('한 명만 노리는 공격이 전체 공격보다 한 방이 더 아프�
   const frontInAll = all.hits.find((h) => h.memberId === 'a');
   assert.ok(single.hits[0].damage > frontInAll.damage,
     `집중 공격이 더 아파야 한다: ${single.hits[0].damage} vs ${frontInAll.damage}`);
-  assert.ok(rules.SINGLE_TARGET_BONUS > 1);
+  assert.equal(rules.SINGLE_TARGET_BONUS, 1);
 });
 
 test('전체 공격은 입력 순서와 무관하게 앞→가운데→뒤로 살아 있는 모두가 맞는다', () => {
@@ -258,16 +259,16 @@ test('시트의 일곱 구간이 모두 있고 그 밖의 층은 없는 것으�
   assert.equal([...rules.floorEncounters(2)].length, 0);
 });
 
-test('던전 경험치는 유지하고 골드와 빌딩 보상은 절반으로 줄어 있다', () => {
+test('던전 경험치는 낮추고 골드와 빌딩 보상은 기존 값을 유지한다', () => {
   const rewards = Array.from(rules.availableFloors(), (floor) => ({ ...rules.getFloor(floor).reward }));
   assert.deepEqual(rewards, [
-    { exp:40, gold:90, building:10 },
-    { exp:60, gold:120, building:13 },
-    { exp:85, gold:150, building:16 },
-    { exp:115, gold:190, building:20 },
-    { exp:150, gold:230, building:24 },
-    { exp:200, gold:280, building:29 },
-    { exp:300, gold:400, building:40 },
+    { exp:20, gold:90, building:10 },
+    { exp:20, gold:120, building:13 },
+    { exp:30, gold:150, building:16 },
+    { exp:30, gold:190, building:20 },
+    { exp:40, gold:230, building:24 },
+    { exp:40, gold:280, building:29 },
+    { exp:50, gold:400, building:40 },
   ]);
 });
 
@@ -387,9 +388,9 @@ test('시트의 공격력에 60%가 이미 들어 있어 계산에서 다시 곱
 
   // 시트 「예상 피해」와 실제 계산이 맞는지 대표로 몇 마리만 확인한다.
   const expected = {
-    mushroomKing:{ single:[31, 21, 12], all:[20, 13, 8] },
-    towerWarden:{ single:[70, 46, 28], all:[44, 29, 17] },
-    rooftopMyeongjinRobot:{ single:[115, 77, 46], all:[72, 48, 29] },
+    mushroomKing:{ single:[20, 13, 8], all:[20, 13, 8] },
+    towerWarden:{ single:[44, 29, 17], all:[44, 29, 17] },
+    rooftopMyeongjinRobot:{ single:[72, 48, 29], all:[72, 48, 29] },
   };
   Object.entries(expected).forEach(([id, want]) => {
     const attack = rules.MONSTERS[id].attack;

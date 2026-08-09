@@ -253,7 +253,7 @@ test('all shields have a minimum value of one and split shield damage from HP da
     maxHp:5, hp:5, attack:1, spec:'방어',
     skills:{ warrior_def_stance:1 },
   });
-  const target = monster({ attack:1 });
+  const target = monster({ attack:2 });
   const result = resolve({
     members:[tank], target,
     submissions:{ tank:{ correct:true, actionId:'warrior_def_stance' } },
@@ -262,8 +262,7 @@ test('all shields have a minimum value of one and split shield damage from HP da
   const hit = result.events.find((event) => event.kind === 'monster-hit' && !event.missed);
   assert.equal(shield.amount, 1);
   assert.equal(hit.shieldDamage, 1);
-  /* 시트의 「기본 공격력」에 60% 상향이 이미 들어 있어 계산에서 다시 곱하지 않는다.
-     그래서 예전보다 남는 HP 피해가 작다. */
+  /* 방어 태세의 피해 감소 뒤에도 보호막을 넘는 피해가 남도록 공격력 2로 검사한다. */
   assert.equal(hit.hpDamage, 1, '보호막이 막고 남은 피해는 HP에 들어가야 한다');
 });
 
@@ -321,7 +320,7 @@ test('frost status halves the next monster attack and is consumed by one turn', 
     submissions:{ mage:{ correct:true, actionId:'mage_frost_lance_v24' } },
   });
   const hit = result.events.find((event) => event.kind === 'monster-hit' && !event.missed);
-  assert.equal(hit.requestedDamage, 12, '집중 공격도 냉기로 절반이 되어야 한다');
+  assert.equal(hit.requestedDamage, 8, '추가 집중 배율 없는 단일 공격도 냉기로 절반이 되어야 한다');
   assert.equal(target.chillTurns, 1, '강제 냉기 2턴 중 공격 한 번으로 1턴이 소비되어야 한다');
 });
 

@@ -146,6 +146,13 @@ test('applyStudentCheat accepts only fixed actions and delegates to the teacher 
   assert.deepEqual(JSON.parse(JSON.stringify(invoke[2])), {
     body:{ userId:studentId, action:'exp20' },
   });
+
+  const raidResult = await service.applyStudentCheat(studentId, 'raidAdvance');
+  assert.equal(raidResult.action, 'raidAdvance');
+  const raidInvoke = calls.filter(([name, fn]) => name === 'invoke' && fn === 'teacher-apply-cheat').at(-1);
+  assert.deepEqual(JSON.parse(JSON.stringify(raidInvoke[2])), {
+    body:{ userId:studentId, action:'raidAdvance' },
+  });
 });
 
 test('killRaidMonster delegates one server-authoritative raid kill for the current student', async () => {

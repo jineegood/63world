@@ -947,10 +947,10 @@
     for (let hitIndex = 0; hitIndex < hitCount; hitIndex += 1) {
       if (member.hp <= 0) break;
       /* 전체 공격은 셋을 한꺼번에 때리므로 한 사람이 받는 몫을 낮춘다.
-         단일 공격은 한 명에게 집중되므로 집중 배율을 곱한다. */
+         단일 공격은 별도 추가 배율 없이 자리 배율만 적용한다. */
       const focus = plan.kind === 'all'
         ? Math.max(0, number(effect.ALL_ATTACK_MULTIPLIER, 0.5))
-        : number(raidRules?.SINGLE_TARGET_BONUS, 1.35);
+        : number(raidRules?.SINGLE_TARGET_BONUS, 1);
       let incoming = Math.max(1, Math.round(
         Math.max(0, number(monsterAttack))
         * number(raidRules?.MONSTER_DAMAGE_MULTIPLIER, 1)

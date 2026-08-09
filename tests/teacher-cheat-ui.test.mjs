@@ -12,8 +12,17 @@ const data = fs.readFileSync(path.join(root, 'src/admin-data-v2.js'), 'utf8');
 test('resource cheat buttons delegate to the teacher-only server action', () => {
   assert.match(game, /adminApplyCurrentStudentCheatV3\?\.\(['"]exp20['"]\)/);
   assert.match(game, /adminApplyCurrentStudentCheatV3\?\.\(['"]gold3000['"]\)/);
+  assert.match(game, /adminApplyCurrentStudentCheatV3\?\.\(['"]raidAdvance['"]\)/);
+  assert.match(game, /snapshot\.raidTopGroup/);
+  assert.match(data, /['"]raidAdvance['"]/);
   assert.doesNotMatch(game, /testExpBtn['"]\)\.addEventListener\(['"]click['"],\s*\(\)\s*=>\s*\{\s*addExp/);
   assert.match(data, /functions\.invoke\(['"]teacher-apply-cheat['"]/);
+});
+
+test('dungeon progress cheat is visible as one ten-floor advance button', () => {
+  const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  assert.match(index, /id="testRaidProgressBtn"[^>]*>🏢 던전 \+10층<\/button>/);
+  assert.match(dashboard, /raidAdvance:`던전 \$\{Math\.min\(63,/);
 });
 
 test('cheat menu starts hidden and requires a restored teacher session', () => {

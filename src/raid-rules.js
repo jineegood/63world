@@ -82,7 +82,7 @@
     const roll = typeof rng === 'function' ? rng : Math.random;
 
     const targets = kind === 'all' ? alive : [pickTarget(alive)].filter(Boolean);
-    /* 한 명만 노리는 공격은 전체 공격보다 한 방이 더 아프다.
+    /* 한 명만 노리는 공격은 별도의 추가 배율 없이 자리 배율만 적용한다.
        전체 공격은 셋을 한꺼번에 때리므로 한 사람 몫을 낮춘다(제작자 조정).
        스킬을 쓰는 3인 전투 계산기와 같은 값을 써야 결과가 갈리지 않는다. */
     const focus = kind === 'all' ? PATTERN_EFFECT.ALL_ATTACK_MULTIPLIER : SINGLE_TARGET_BONUS;
@@ -111,8 +111,8 @@
 
   /* 일반 전투와 같은 감각을 내기 위한 치명타·빗나감.
      rng는 밖에서 받아 서버가 같은 결과를 재현할 수 있게 한다. */
-  /* 한 명만 노리는 공격은 전체 공격보다 한 방이 더 아프다. */
-  const SINGLE_TARGET_BONUS = 1.6;
+  /* 연속 단일 공격이 지나치게 치명적이지 않도록 추가 집중 배율은 쓰지 않는다. */
+  const SINGLE_TARGET_BONUS = 1;
 
   /* 예전에는 시트의 낮은 공격력에 여기서 60%를 더했다.
      지금 MONSTERS의 공격력은 최종 시트의 「기본 공격력」이고 그 60% 상향이
@@ -219,7 +219,7 @@
      출처: outputs/raid_roster_revision_20260802/63빌딩_기존몬스터_출현규칙_최종본.xlsx
      - hp / attack 은 시트의 「체력」·「기본 공격력」을 그대로 옮긴 값이다.
      - attack 에는 예전 60% 상향분이 이미 들어 있으므로 여기에 다시 곱하지 않는다.
-     - 단일 공격은 계산할 때 SINGLE_TARGET_BONUS(1.6)가 곱해진다(시트의 예상 피해와 일치).
+     - 단일 공격은 별도 추가 배율 없이 자리 배율만 적용한다.
 
      pattern 한 칸이 그 몬스터의 한 턴이다. 시트의 「패턴 N」을 그대로 옮겼다.
        kind      : 'single' | 'all' | 'none'   (none은 공격하지 않는 턴)
@@ -441,38 +441,38 @@
     1: Object.freeze({
       floor:1, title:'63빌딩 1~10층', range:'1–10층', recommendedLevel:5,
       encounters:Object.freeze(['mushroomKing', 'paperPigeon', 'brokenPhone', 'pollutedSlime']),
-      reward:Object.freeze({ exp:40, gold:90, building:10 }),
+      reward:Object.freeze({ exp:20, gold:90, building:10 }),
     }),
     11: Object.freeze({
       floor:11, title:'63빌딩 11~20층', range:'11–20층', recommendedLevel:6,
       encounters:Object.freeze(['brokenPhone', 'buildingStomp', 'pollutedSlime', 'officeGhost']),
-      reward:Object.freeze({ exp:60, gold:120, building:13 }),
+      reward:Object.freeze({ exp:20, gold:120, building:13 }),
     }),
     21: Object.freeze({
       floor:21, title:'63빌딩 21~30층', range:'21–30층', recommendedLevel:7,
       encounters:Object.freeze(['pollutedSlime', 'rampageCopier', 'guardBot', 'blackoutShade']),
-      reward:Object.freeze({ exp:85, gold:150, building:16 }),
+      reward:Object.freeze({ exp:30, gold:150, building:16 }),
     }),
     31: Object.freeze({
       floor:31, title:'63빌딩 31~40층', range:'31–40층', recommendedLevel:8,
       encounters:Object.freeze(['guardBot', 'officeGhost', 'emergencyExitGhost', 'towerWarden']),
-      reward:Object.freeze({ exp:115, gold:190, building:20 }),
+      reward:Object.freeze({ exp:30, gold:190, building:20 }),
     }),
     41: Object.freeze({
       floor:41, title:'63빌딩 41~50층', range:'41–50층', recommendedLevel:9,
       encounters:Object.freeze(['blackoutShade', 'emergencyExitGhost', 'elevatorSoul', 'windowWraith']),
-      reward:Object.freeze({ exp:150, gold:230, building:24 }),
+      reward:Object.freeze({ exp:40, gold:230, building:24 }),
     }),
     51: Object.freeze({
       floor:51, title:'63빌딩 51~60층', range:'51–60층', recommendedLevel:10,
       encounters:Object.freeze(['towerWarden', 'elevatorSoul', 'engineIronGiant', 'ominousFloorManager']),
-      reward:Object.freeze({ exp:200, gold:280, building:29 }),
+      reward:Object.freeze({ exp:40, gold:280, building:29 }),
     }),
     61: Object.freeze({
       floor:61, title:'63빌딩 61~63층', range:'61–63층', recommendedLevel:12,
       // 마지막 구간은 세 마리로 끝낸다.
       encounters:Object.freeze(['ominousFloorManager', 'nonexistentFloorLord', 'rooftopMyeongjinRobot']),
-      reward:Object.freeze({ exp:300, gold:400, building:40 }),
+      reward:Object.freeze({ exp:50, gold:400, building:40 }),
     }),
   });
 

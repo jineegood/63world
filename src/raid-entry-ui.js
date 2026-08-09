@@ -19,14 +19,16 @@
      앞 구간을 깨면 다음 구간이 열리므로 열림 여부는 그때그때 계산한다. */
   function floorGroups() {
     const P = progress();
-    if (!P) return [{ id:1, label:'1–10층', recommended:'추천 레벨 Lv.5', unlocked:true, needs:0 }];
+    if (!P) return [{ id:1, label:'1–10층', recommended:'추천 레벨 Lv.5', unlocked:true, cleared:false, needs:0 }];
     const highest = P.highestUnlockedGroup(player());
+    const cleared = P.clearedGroup(player());
     return P.GROUPS.map((group) => ({
       id:group.id,
       label:group.label,
       /* 마지막 61–63층은 얼마나 어려운지 아직 밝히지 않는다. */
       recommended:group.id === P.LAST_GROUP ? '추천 레벨 ???' : `추천 레벨 Lv.${group.recommendedLevel}`,
       unlocked:group.id <= highest,
+      cleared:group.id <= cleared,
       needs:group.id - 1,
     }));
   }
@@ -75,7 +77,11 @@
         border-color:rgba(252,165,165,.5);box-shadow:0 2px 0 rgba(0,0,0,.5),
         inset 0 1px 0 rgba(255,255,255,.12), 0 0 16px rgba(220,38,38,.35)}
       .raid-floor-card:hover{filter:brightness(1.18);transform:translateY(-1px)}
-      .raid-floor-card strong{font-size:20px;letter-spacing:-.02em;white-space:nowrap}
+      .raid-floor-card strong{font-size:20px;letter-spacing:-.02em;white-space:nowrap;
+        display:flex;align-items:center;gap:9px}
+      .raid-floor-clear{display:inline-flex;padding:3px 8px;border-radius:999px;font-size:11px;
+        line-height:1;font-style:normal;font-weight:1000;color:#052e16;background:#86efac;
+        border:1px solid #bbf7d0;box-shadow:0 0 12px rgba(74,222,128,.45)}
       .raid-floor-card span{font-size:12px;color:rgba(255,255,255,.86);font-weight:800}
       /* 난이도 눈금 — 층이 올라갈수록 채워지는 칸이 늘어난다. */
       .raid-floor-heat{display:flex;gap:3px;justify-self:end}
@@ -154,7 +160,7 @@
       return `
       <button class="raid-floor-card tier${group.id}${group.unlocked ? '' : ' locked'}"
         data-raid-floor-group="${group.id}" ${group.unlocked ? '' : 'disabled aria-disabled="true"'}>
-        <strong>${group.label}</strong>
+        <strong>${group.label}${group.cleared ? '<em class="raid-floor-clear">Clear!</em>' : ''}</strong>
         ${note}
         ${heatHtml(group.id)}
       </button>`;

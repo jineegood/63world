@@ -490,6 +490,10 @@ window.applyAuthoritySnapshotFromServerV3 = function applyAuthoritySnapshotFromS
   game.player.skillPoints = safeInteger(snapshot.skillPoints, game.player.skillPoints);
   game.player.gold = safeInteger(snapshot.gold, game.player.gold);
   game.player.building = safeInteger(snapshot.building, game.player.building);
+  game.player.raidTopGroup = Math.min(7, safeInteger(
+    snapshot.raidTopGroup,
+    safeInteger(game.player.raidTopGroup, 0),
+  ));
   game.player.raidRewardVersion = Math.min(7, safeInteger(
     snapshot.raidRewardVersion,
     safeInteger(game.player.raidRewardVersion, 0),
@@ -3937,6 +3941,7 @@ function bindEvents() {
   if ($('testExp100Btn')) $('testExp100Btn').addEventListener('click', () => window.adminApplyCurrentStudentCheatV3?.('exp100'));
   $('testGoldBtn').addEventListener('click', () => window.adminApplyCurrentStudentCheatV3?.('gold3000'));
   if ($('testBuildingBtn')) $('testBuildingBtn').addEventListener('click', () => window.adminApplyCurrentStudentCheatV3?.('building200'));
+  if ($('testRaidProgressBtn')) $('testRaidProgressBtn').addEventListener('click', () => window.adminApplyCurrentStudentCheatV3?.('raidAdvance'));
   $('returnTownBtn').addEventListener('click', () => { if (game.currentMap === 'forest' || game.currentMap === 'desert' || game.currentMap === 'swamp') confirmStageReturn(); else if (game.currentMap === 'bossRoom') returnToStageFromBossRoom(); else returnTownWithLoading(); });
   if ($('chatInput')) $('chatInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); sendChatMessage(); } });
 
