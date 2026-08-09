@@ -1885,10 +1885,17 @@
 
   function ensureDungeonMap() {
     const worlds = global.YuksamData && global.YuksamData.worldDefs;
-    if (!worlds || worlds[MAP_KEY]) return worlds;
+    if (!worlds) return worlds;
+    const label = `63빌딩 던전 ${currentGroupLabel()}`;
+    /* 같은 raidDungeon 맵을 모든 구간이 함께 쓰므로, 최초 1–10층 이름을
+       그대로 두면 11층 이상에서도 왼쪽 위 장소명이 1–10층으로 남는다. */
+    if (worlds[MAP_KEY]) {
+      worlds[MAP_KEY].label = label;
+      return worlds;
+    }
     worlds[MAP_KEY] = {
       key:MAP_KEY,
-      label:'63빌딩 던전 1–10층',
+      label,
       width:1280,
       height:720,
       playerSpawn:{ x:200, y:520 },
@@ -3462,6 +3469,7 @@
       // 글은 '무엇을 할까?' 자리에 그대로 들어간다(별도 로그 상자 없음).
       panelMode = 'playing';
       panelMessage = event.text || '';
+      global.YuksamCombatDetailLog?.record?.(event, active?.snapshot?.());
       applyEventToView(event);
       playEventSound(event);
       updateBattleView();       // 창을 새로 열지 않고 값만 고친다 → 체력바가 스르륵 줄어든다

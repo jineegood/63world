@@ -2616,6 +2616,20 @@ body.defeated #app { filter: grayscale(1) brightness(.62); transition: filter .3
 .cheat-panel-title{font-weight:900;font-size:12px;color:#ffd76a;margin-bottom:9px;text-align:center;letter-spacing:.02em;}
 .cheat-panel-grid{display:grid;gap:6px;}
 .cheat-panel-grid button{width:100%;justify-content:center;}
+.combat-detail-overlay{position:fixed;right:14px;top:76px;z-index:460;width:min(540px,calc(100vw - 28px));
+  max-height:calc(100vh - 96px);display:flex;flex-direction:column;border-radius:15px;overflow:hidden;
+  color:#e5edf8;background:rgba(5,12,23,.96);border:1px solid rgba(56,189,248,.55);
+  box-shadow:0 18px 46px rgba(0,0,0,.58);backdrop-filter:blur(9px)}
+.combat-detail-overlay.hidden{display:none}.combat-detail-overlay.collapsed .combat-detail-body{display:none}
+.combat-detail-head{display:flex;align-items:center;gap:6px;padding:9px 10px;background:rgba(12,32,53,.98);
+  border-bottom:1px solid rgba(125,211,252,.25)}
+.combat-detail-head b{margin-right:auto;color:#a5e9ff;font-size:13px}.combat-detail-head button{padding:4px 8px;font-size:11px}
+.combat-detail-body{overflow:auto;padding:9px;display:flex;flex-direction:column;gap:8px}
+.combat-detail-empty{padding:18px 8px;text-align:center;color:#94a3b8;font-size:12px}
+.combat-detail-entry{padding:8px 9px;border-radius:10px;background:rgba(15,23,42,.9);border:1px solid rgba(148,163,184,.2)}
+.combat-detail-entry>strong{display:block;color:#f8fafc;font-size:12px;line-height:1.45}
+.combat-detail-formula{margin-top:5px;color:#fde68a;font:700 11px/1.5 "Noto Sans KR",system-ui;white-space:normal;word-break:keep-all}
+.combat-detail-meta{margin-top:3px;color:#a5b4c7;font-size:10px;line-height:1.45}
 
 /* ---- 미사용 스킬포인트 말풍선 ---- */
 .skillpoint-hint-v41{position:fixed;z-index:120;transform:translate(-50%,-100%);background:linear-gradient(135deg,#facc15,#f59e0b);color:#3a2a00;font-weight:900;font-size:12.5px;padding:8px 12px;border-radius:12px;box-shadow:0 8px 22px rgba(0,0,0,.4);white-space:nowrap;pointer-events:none;animation:skillHintBlink 1.1s ease-in-out infinite;}

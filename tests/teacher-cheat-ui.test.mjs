@@ -8,6 +8,8 @@ const game = fs.readFileSync(path.join(root, 'game.js'), 'utf8');
 const dashboard = fs.readFileSync(path.join(root, 'src/admin-dashboard.js'), 'utf8');
 const panel = fs.readFileSync(path.join(root, 'src/cheat-panel.js'), 'utf8');
 const data = fs.readFileSync(path.join(root, 'src/admin-data-v2.js'), 'utf8');
+const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+const style = fs.readFileSync(path.join(root, 'style.css'), 'utf8');
 
 test('resource cheat buttons delegate to the teacher-only server action', () => {
   assert.match(game, /adminApplyCurrentStudentCheatV3\?\.\(['"]exp20['"]\)/);
@@ -20,9 +22,20 @@ test('resource cheat buttons delegate to the teacher-only server action', () => 
 });
 
 test('dungeon progress cheat is visible as one ten-floor advance button', () => {
-  const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   assert.match(index, /id="testRaidProgressBtn"[^>]*>🏢 던전 \+10층<\/button>/);
   assert.match(dashboard, /raidAdvance:`던전 \$\{Math\.min\(63,/);
+});
+
+test('teacher combat detail log is toggleable, collapsible, and shows calculation factors', () => {
+  assert.match(index, /id="combatDetailLogBtn"[^>]*>🔎 전투 세분화 로그 OFF<\/button>/);
+  assert.match(panel, /function detailFormula\(calc\)/);
+  assert.match(panel, /기본 공격 굴림/);
+  assert.match(panel, /자리.*slotMultiplier|slotLabel/);
+  assert.match(panel, /data-detail-collapse/);
+  assert.match(panel, /data-detail-clear/);
+  assert.match(panel, /YuksamCombatDetailLog = Object\.freeze/);
+  assert.match(style, /\.combat-detail-overlay/);
+  assert.match(dashboard, /YuksamCombatDetailLog\?\.setEnabled\?\.\(false\)/);
 });
 
 test('cheat menu starts hidden and requires a restored teacher session', () => {

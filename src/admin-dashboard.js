@@ -40,6 +40,7 @@ function setTeacherCheatUiV3(enabled) {
   if (!enabled) {
     const panel = document.getElementById('cheatPanel');
     if (panel) panel.classList.add('hidden');
+    window.YuksamCombatDetailLog?.setEnabled?.(false);
   }
 }
 

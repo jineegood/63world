@@ -177,7 +177,8 @@
       minimumBonus = stat * 0.05;
       maximumBonus = stat * 0.15;
     }
-    let power = stat / 2 + minimumBonus + roll(rng) * (maximumBonus - minimumBonus);
+    const powerRoll = roll(rng);
+    let power = stat / 2 + minimumBonus + powerRoll * (maximumBonus - minimumBonus);
     let maximumPower = stat / 2 + maximumBonus;
     if (member.klass === 'mage' && member.buffs?.intBuffTurns > 0) {
       const multiplier = 1 + number(member.buffs.intBuffPct, 0.30);
@@ -187,6 +188,10 @@
     return {
       power:Math.max(1, Math.round(power)),
       maximumPower:Math.max(1, Math.round(maximumPower)),
+      stat,
+      roll:powerRoll,
+      minimumBonus,
+      maximumBonus,
     };
   }
 
@@ -464,17 +469,31 @@
       ? members.filter((member) => member.hp > 0)
       : [attacker].filter((member) => member && member.hp > 0);
     victims.forEach((member) => {
+      const living = members.filter((entry) => entry.hp > 0);
+      const effectiveSlot = effectiveSlotFor(member, living, raidRules);
+      const raidMultiplier = number(raidRules?.MONSTER_DAMAGE_MULTIPLIER, 1);
+      const slotMultiplier = damageMultiplierForSlot(effectiveSlot, raidRules);
+      const classMultiplier = incomingMultiplier(member);
       let incoming = Math.max(1, Math.round(
         Math.max(0, number(monsterAttack))
-        * number(raidRules?.MONSTER_DAMAGE_MULTIPLIER, 1)
-        * damageMultiplierForSlot(member.slot, raidRules)
-        * incomingMultiplier(member)
+        * raidMultiplier
+        * slotMultiplier
+        * classMultiplier
         * ratio,
       ));
       const applied = applyDamageToMember(member, incoming);
       events.push({
         kind:'monster-counter', memberId:member.id, memberName:member.name,
-        slot:member.slot, missed:false, critical:false, ...applied, audioId:'enemyAttack',
+        slot:effectiveSlot, missed:false, critical:false, ...applied, audioId:'enemyAttack',
+        debugCalc:{
+          kind:'monster-counter', baseAttack:number(monsterAttack), raidMultiplier,
+          slot:effectiveSlot, slotLabel:raidRules?.slotLabel?.(effectiveSlot) || effectiveSlot,
+          slotMultiplier, attackType:'반격', focusMultiplier:ratio,
+          empowerMultiplier:1, chargeMultiplier:1, classMultiplier, armorMultiplier:1,
+          chillMultiplier:1, criticalMultiplier:1, requestedDamage:incoming,
+          shieldDamage:applied.shieldDamage, hpDamage:applied.hpDamage,
+          reason:'몬스터 반격 자세가 발동했습니다.',
+        },
         text:`${monster.name}의 반격! ${member.name}이(가) ${applied.totalDamage}의 피해를 받았습니다.`,
       });
       if (member.hp <= 0) {
@@ -509,12 +528,21 @@
         }));
         continue;
       }
-      const raw = Math.max(1, Math.ceil(getAttackPower(member, rng) * multiplier));
+      const attackRoll = rollAttackPower(member, rng);
+      const raw = Math.max(1, Math.ceil(attackRoll.power * multiplier));
       const damage = Math.max(1, Math.floor(raw * 0.5));
       const applied = applyDamageToMonster(monster, damage, active.ignoreShield === true);
       events.push(eventBase(member, action, {
         kind:'party-hit', correct:false, hitIndex, missed:false, critical:false,
         ...applied,
+        debugCalc:{
+          kind:'party-damage', statName:member.klass === 'mage' ? '지능' : member.klass === 'priest' ? '정신' : '힘',
+          stat:attackRoll.stat, powerRoll:attackRoll.roll, rolledPower:attackRoll.power,
+          actionMultiplier:multiplier, answerMultiplier:0.5, criticalMultiplier:1,
+          chargeMultiplier:1, chillMultiplier:1, requestedDamage:damage,
+          shieldDamage:applied.shieldDamage, hpDamage:applied.hpDamage,
+          reason:'오답이므로 최종 피해가 50%로 감소합니다.',
+        },
         audioId:hitIndex === 0 ? audioIdForAction(action.id, member.klass) : null,
         text:`${member.name}의 오답 공격! ${applied.totalDamage}의 피해를 주었습니다.`,
       }));
@@ -651,19 +679,30 @@
       if (monster.hp <= 0) break;
       let raw = number(hit.raw);
       let maximumRaw = 0;
+      let attackRoll = null;
       if (number(hit.attackMultiplier) > 0) {
-        const attackRoll = rollAttackPower(member, rng);
+        attackRoll = rollAttackPower(member, rng);
         raw = attackRoll.power * number(hit.attackMultiplier);
         maximumRaw = attackRoll.maximumPower * number(hit.attackMultiplier);
       }
       /* 던전 몬스터의 실명 패턴이 걸려 있으면 굴림 없이 그냥 빗나간다. */
       const blinded = consumeBlind(member, rng);
-      const missed = blinded || roll(rng) < BASE_MISS_CHANCE;
+      const missRoll = blinded ? null : roll(rng);
+      const missed = blinded || missRoll < BASE_MISS_CHANCE;
       if (missed) {
         events.push(eventBase(member, action, {
           kind:'party-hit', correct:true, hitIndex:hit.hitIndex, label:hit.label,
           missed:true, blinded, critical:false, damage:0, hpDamage:0, shieldDamage:0,
           audioId:'miss',
+          debugCalc:{
+            kind:'party-damage', statName:member.klass === 'mage' ? '지능' : member.klass === 'priest' ? '정신' : '힘',
+            stat:attackRoll?.stat ?? member.attack, powerRoll:attackRoll?.roll ?? null,
+            rolledPower:attackRoll?.power ?? raw, actionMultiplier:number(hit.attackMultiplier) || 1,
+            answerMultiplier:1, criticalMultiplier:1, chargeMultiplier:chargePending ? chargeMultiplier : 1,
+            chillMultiplier:chillPending ? 0.5 : 1, requestedDamage:0, shieldDamage:0, hpDamage:0,
+            missRoll, missChance:BASE_MISS_CHANCE,
+            reason:blinded ? '실명 상태로 인해 빗나갔습니다.' : '기본 빗나감 판정입니다.',
+          },
           text:blinded
             ? `앞이 보이지 않습니다! ${member.name}의 ${hit.label}이(가) 빗나갔습니다!`
             : `${member.name}의 ${hit.label}이(가) 빗나갔습니다!`,
@@ -671,10 +710,13 @@
         continue;
       }
       landedAction = true;
-      const critical = hit.canCrit && roll(rng) < playerCritChance(member, defs);
+      const criticalChance = playerCritChance(member, defs);
+      const criticalRoll = hit.canCrit ? roll(rng) : null;
+      const critical = hit.canCrit && criticalRoll < criticalChance;
+      const criticalMultiplier = critical ? playerCritMultiplier(member, isSkill, defs) : 1;
       let amount = raw > 0 ? Math.max(1, Math.ceil(raw)) : 0;
       if (critical) {
-        amount = Math.max(1, Math.ceil(amount * playerCritMultiplier(member, isSkill, defs)));
+        amount = Math.max(1, Math.ceil(amount * criticalMultiplier));
         /* 사냥터 v50 규칙: 낮은 공격력 난수에서 나온 치명타도 같은 행동의
            최대 일반 피해보다 작아지지 않는다. */
         if (maximumRaw > raw) amount = Math.max(amount, Math.ceil(maximumRaw));
@@ -691,6 +733,16 @@
       events.push(eventBase(member, action, {
         kind:'party-hit', correct:true, hitIndex:hit.hitIndex, label:hit.label,
         missed:false, critical, chargeReleased:chargePending, ...applied, audioId:hitAudioId,
+        debugCalc:{
+          kind:'party-damage', statName:member.klass === 'mage' ? '지능' : member.klass === 'priest' ? '정신' : '힘',
+          stat:attackRoll?.stat ?? member.attack, powerRoll:attackRoll?.roll ?? null,
+          rolledPower:attackRoll?.power ?? raw, actionMultiplier:number(hit.attackMultiplier) || 1,
+          answerMultiplier:1, criticalMultiplier, chargeMultiplier:chargePending ? chargeMultiplier : 1,
+          chillMultiplier:chillPending ? 0.5 : 1, requestedDamage:amount,
+          shieldDamage:applied.shieldDamage, hpDamage:applied.hpDamage,
+          missRoll, missChance:BASE_MISS_CHANCE, criticalRoll, criticalChance,
+          reason:hit.bonus ? `${hit.label} 특성의 추가 피해입니다.` : '',
+        },
         text:`${critical ? '치명타! ' : ''}${member.name}의 ${hit.label}! ${applied.totalDamage}의 피해를 주었습니다.`,
       }));
     }
@@ -972,31 +1024,48 @@
       const focus = plan.kind === 'all'
         ? Math.max(0, number(effect.ALL_ATTACK_MULTIPLIER, 0.5))
         : number(raidRules?.SINGLE_TARGET_BONUS, 1);
+      const effectiveSlot = effectiveSlots.get(String(member.id)) || member.slot;
+      const raidMultiplier = number(raidRules?.MONSTER_DAMAGE_MULTIPLIER, 1);
+      const slotMultiplier = damageMultiplierForSlot(effectiveSlot, raidRules);
+      const classMultiplier = incomingMultiplier(member);
       let incoming = Math.max(1, Math.round(
         Math.max(0, number(monsterAttack))
-        * number(raidRules?.MONSTER_DAMAGE_MULTIPLIER, 1)
-        * damageMultiplierForSlot(effectiveSlots.get(String(member.id)) || member.slot, raidRules)
+        * raidMultiplier
+        * slotMultiplier
         * focus
         * empowerMultiplier
         * chargeMultiplier
-        * incomingMultiplier(member),
+        * classMultiplier,
       ));
       const thickArmorRank = skillRank(member, 'warrior_thick_armor');
       const thickArmorReduction = [0, 0.05, 0.10][thickArmorRank] || 0;
+      const armorMultiplier = 1 - thickArmorReduction;
       if (thickArmorReduction > 0) incoming = Math.max(1, Math.ceil(incoming * (1 - thickArmorReduction)));
+      const chillMultiplier = monster.chillTurns > 0 ? 0.5 : 1;
       if (monster.chillTurns > 0) {
         incoming = Math.max(1, Math.ceil(incoming * 0.5));
         chillConsumed = true;
       }
       const faithRank = skillRank(member, 'priest_basic_life');
       const faithBonus = number(defs.priest_basic_life?.monsterMissChance?.[faithRank]);
-      const missed = roll(rng) < monsterMissChanceFor(member, defs);
+      const missChance = monsterMissChanceFor(member, defs);
+      const missRoll = roll(rng);
+      const missed = missRoll < missChance;
       if (missed) {
         events.push({
           kind:'monster-hit', memberId:member.id, memberName:member.name,
           hitIndex, hitCount,
           missed:true, critical:false, damage:0, hpDamage:0, shieldDamage:0,
           missReason:faithBonus > 0 ? 'priest_basic_life' : null,
+          debugCalc:{
+            kind:'monster-damage', baseAttack:number(monsterAttack), raidMultiplier,
+            slot:effectiveSlot, slotLabel:raidRules?.slotLabel?.(effectiveSlot) || effectiveSlot,
+            slotMultiplier, attackType:plan.kind === 'all' ? '전체 공격' : '단일 공격', focusMultiplier:focus,
+            empowerMultiplier, chargeMultiplier, classMultiplier, armorMultiplier, chillMultiplier,
+            criticalMultiplier:1, requestedDamage:0, shieldDamage:0, hpDamage:0,
+            missRoll, missChance,
+            reason:faithBonus > 0 ? `신앙의 광채 추가 회피 ${Math.round(faithBonus * 100)}%가 적용되었습니다.` : '기본 빗나감 판정입니다.',
+          },
           audioId:'miss', text:faithBonus > 0
             ? `${member.name}의 신앙의 광채로 인해 ${monster.name}의 공격이 빗나갔습니다!`
             : `${monster.name}의 공격이 ${member.name}에게 빗나갔습니다!`,
@@ -1004,13 +1073,25 @@
         continue;   // 빗나가도 남은 타수는 이어서 굴린다
       }
       const criticalChance = member.klass === 'warrior' && member.spec === '방어' ? 0.10 : BASE_CRIT_CHANCE;
-      const critical = roll(rng) < criticalChance;
-      if (critical) incoming = Math.max(1, Math.ceil(incoming * 1.8));
+      const criticalRoll = roll(rng);
+      const critical = criticalRoll < criticalChance;
+      const criticalMultiplier = critical ? 1.8 : 1;
+      if (critical) incoming = Math.max(1, Math.ceil(incoming * criticalMultiplier));
       const applied = applyDamageToMember(member, incoming);
       const hitEvent = {
         kind:'monster-hit', memberId:member.id, memberName:member.name,
         hitIndex, hitCount,
         slot:effectiveSlots.get(String(member.id)) || member.slot, missed:false, critical, ...applied,
+        debugCalc:{
+          kind:'monster-damage', baseAttack:number(monsterAttack), raidMultiplier,
+          slot:effectiveSlot, slotLabel:raidRules?.slotLabel?.(effectiveSlot) || effectiveSlot,
+          slotMultiplier, attackType:plan.kind === 'all' ? '전체 공격' : '단일 공격', focusMultiplier:focus,
+          empowerMultiplier, chargeMultiplier, classMultiplier, armorMultiplier, chillMultiplier,
+          criticalMultiplier, requestedDamage:incoming,
+          shieldDamage:applied.shieldDamage, hpDamage:applied.hpDamage,
+          missRoll, missChance, criticalRoll, criticalChance,
+          reason:faithBonus > 0 ? `신앙의 광채 추가 회피 ${Math.round(faithBonus * 100)}%가 포함되었습니다.` : '',
+        },
         audioId:critical ? 'critical' : 'enemyAttack',
         text:`${critical ? '치명타! ' : ''}${member.name}이(가) ${applied.totalDamage}의 피해를 받았습니다.`,
       };

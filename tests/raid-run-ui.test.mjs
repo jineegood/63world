@@ -545,6 +545,12 @@ test('기절한 몬스터는 다음 턴 예고 대신 쉰다고 알려 준다', 
   assert.match(uiSource, /const nextHint = nextPlanHint\(truth, nextPlan\)/);
 });
 
+test('던전 왼쪽 위 장소명은 선택한 구간에 맞춰 매번 갱신된다', () => {
+  assert.match(uiSource, /const label = `63빌딩 던전 \$\{currentGroupLabel\(\)\}`/);
+  assert.match(uiSource, /worlds\[MAP_KEY\]\.label = label/);
+  assert.doesNotMatch(uiSource, /label:'63빌딩 던전 1–10층'/);
+});
+
 test('다음 기술 예고와 실제 판정은 서버 라운드와 방 id를 기준으로 한다', () => {
   assert.match(uiSource, /function networkPatternRound\(snapshot/);
   assert.match(uiSource, /Math\.trunc\(Number\(room\.round\) \|\| 0\) - 1/);
@@ -819,6 +825,10 @@ test('새로 그린 몬스터는 사냥터 스프라이트를 빌려 쓰거나 �
   assert.match(stomp, /금속띠/);
   assert.match(stomp, /#2f6c39/, '스톰프의 잎은 유지해야 한다');
   assert.doesNotMatch(stomp, /borrowSprite\('drawStompSprite'|#a56636|#5b321e/, '나무 몸통이나 작은 갑옷으로 돌아가면 안 된다');
+});
+
+test('전투 재생 로그는 교사용 세분화 창에도 같은 순서로 전달된다', () => {
+  assert.match(uiSource, /YuksamCombatDetailLog\?\.record\?\.\(event, active\?\.snapshot\?\.\(\)\)/);
 });
 
 test('오염된 슬라임은 몸과 오염 방울이 보라색 계열이다', () => {

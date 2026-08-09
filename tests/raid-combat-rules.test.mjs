@@ -312,6 +312,29 @@ test('Faith Radiance increases dungeon monster miss chance by its learned rank',
   assert.equal(radiantPriest.hp, 100, '빗나간 던전 공격은 체력을 깎지 않아야 한다');
 });
 
+test('damage events expose the exact factors used by the teacher detail log', () => {
+  const fighter = member('detail-warrior', { slot:'middle', attack:40 });
+  const target = monster({ attack:12, shield:5 });
+  const result = resolve({
+    members:[fighter], target,
+    submissions:{ 'detail-warrior':{ correct:true, actionId:'basic' } },
+    rng:sequence([0.5, 0.5, 0.5, 0.5, 0.5]),
+  });
+  const outgoing = result.events.find((event) => event.kind === 'party-hit' && !event.missed);
+  assert.equal(outgoing?.debugCalc?.kind, 'party-damage');
+  assert.equal(outgoing?.debugCalc?.statName, '힘');
+  assert.equal(outgoing?.debugCalc?.stat, 40);
+  assert.equal(outgoing?.debugCalc?.powerRoll, 0.5);
+  assert.equal(outgoing?.debugCalc?.shieldDamage, 5);
+  const incoming = result.events.find((event) => event.kind === 'monster-hit' && !event.missed);
+  assert.equal(incoming?.debugCalc?.kind, 'monster-damage');
+  assert.equal(incoming?.debugCalc?.baseAttack, 12);
+  assert.equal(incoming?.debugCalc?.slot, 'front', '한 명만 생존하면 앞자리로 당겨져야 한다');
+  assert.equal(incoming?.debugCalc?.slotMultiplier, 1.5);
+  assert.equal(incoming?.debugCalc?.missRoll, 0.5);
+  assert.equal(incoming?.debugCalc?.criticalRoll, 0.5);
+});
+
 test('Frost Focus stun explains which passive caused it', () => {
   const mage = member('frost-mage', {
     klass:'mage', spec:'냉기',
