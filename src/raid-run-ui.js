@@ -1541,10 +1541,13 @@
           correct:entry.correct === true,
           actionId:String(entry.actionId || 'basic'),
         }]));
-        const result = active.resolveRound(submissions);
+        const teacherKill = Math.max(0, Number(
+          session.room?.teacherKillRound ?? session.room?.teacher_kill_round,
+        ) || 0) === round;
+        const result = active.resolveRound(submissions, { forceMonsterDefeat:teacherKill });
         if (!result.ok) throw new Error(result.reason || '전투 판정을 완료하지 못했습니다.');
         const snapshot = active.snapshot();
-        const answerEvents = inputs.map((entry) => {
+        const answerEvents = teacherKill ? [] : inputs.map((entry) => {
           const skipped = downAtRoundStart.has(String(entry.userId));
           const storedAnswers = session.answerKeys?.[round];
           const correctAnswer = String(

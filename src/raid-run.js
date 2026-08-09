@@ -241,12 +241,43 @@
 
     /* 한 라운드를 처리한다.
        answers: { 멤버id: true/false } — 셋이 같은 문제를 푼 결과 */
-    function resolveRound(answers = {}) {
+    function resolveRound(answers = {}, options = {}) {
       if (state.phase !== 'battle' || !state.monster) {
         return { ok:false, reason:'지금은 전투 중이 아닙니다.' };
       }
 
       const events = [];
+
+      if (options.forceMonsterDefeat === true) {
+        const hpDamage = Math.max(0, Number(state.monster.hp) || 0);
+        const shieldDamage = Math.max(0, Number(state.monster.shield) || 0);
+        const monsterName = state.monster.name;
+        state.monster.hp = 0;
+        state.monster.shield = 0;
+        events.push({
+          kind:'party-hit',
+          memberId:'teacher-cheat',
+          memberName:'교사 치트',
+          correct:true,
+          critical:true,
+          damage:hpDamage,
+          hpDamage,
+          shieldDamage,
+          remainingShield:0,
+          monsterHp:0,
+          audioId:'critical',
+          text:`교사 치트: ${monsterName}을(를) 즉시 처치했습니다!`,
+        });
+        events.push({ kind:'monster-down', text:`${monsterName}을(를) 쓰러뜨렸습니다!` });
+        state.log.push(...events);
+        state.encounterIndex += 1;
+        const more = state.encounterIndex < encounters.length;
+        state.monster.dying = true;
+        state.phase = more ? 'travel' : 'cleared';
+        if (more) reviveForNextEncounter();
+        if (!more) state.finishedAt = Date.now();
+        return { ok:true, events, monsterDown:true, cleared:!more, teacherKill:true };
+      }
 
       /* 예전 혼자 연습 모드는 { id:true/false }를 보냈다. 실제 3인 방은
          { id:{ correct, actionId } }를 보내며, 이때부터 각 학생의 스킬과

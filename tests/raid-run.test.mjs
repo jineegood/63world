@@ -59,6 +59,23 @@ test('처음에는 대형을 정하는 장면에서 시작한다', () => {
   assert.equal(run.snapshot().encounterTotal, 4);
 });
 
+test('교사 던전 치트는 현재 몬스터를 서버 결과 한 번으로 즉시 처치한다', () => {
+  const run = makeRun();
+  run.confirmFormation({ me:'front', ally1:'middle', ally2:'back' });
+  run.arriveAtEncounter();
+  const before = run.snapshot();
+  const result = run.resolveRound({}, { forceMonsterDefeat:true });
+  const after = run.snapshot();
+  assert.equal(result.ok, true);
+  assert.equal(result.teacherKill, true);
+  assert.equal(result.monsterDown, true);
+  assert.equal(after.monster.hp, 0);
+  assert.equal(after.encounterIndex, before.encounterIndex + 1);
+  assert.equal(after.phase, 'travel');
+  assert.equal(result.events[0].monsterHp, 0);
+  assert.equal(result.events.at(-1).kind, 'monster-down');
+});
+
 test('대형이 잘못되면 출발하지 못한다', () => {
   const run = makeRun();
   const bad = run.confirmFormation({ me:'front', ally1:'front', ally2:'back' });

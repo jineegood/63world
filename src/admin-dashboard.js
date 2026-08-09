@@ -205,6 +205,27 @@ window.adminRetrySecurityAlertsV1 = function adminRetrySecurityAlertsV1(){
   openAdminPanel('security');
 };
 
+window.adminKillCurrentRaidMonsterV1 = async function adminKillCurrentRaidMonsterV1() {
+  if (secureAdminCheatPendingV3) return false;
+  const identity = window.getPvpIdentityV1?.();
+  if (!identity?.userId) {
+    toast('먼저 학생 캐릭터로 로그인해 주세요.');
+    return false;
+  }
+  if (!requireTeacherAuth() || !secureAdminDataV2?.killRaidMonster) return false;
+  secureAdminCheatPendingV3 = true;
+  try {
+    const result = await secureAdminDataV2.killRaidMonster(identity.userId);
+    toast(`치트: ${result.monsterName || '던전 몬스터'} 즉시 처치!`);
+    return true;
+  } catch (error) {
+    toast(error?.message || '던전 몬스터를 즉시 처치하지 못했어요.');
+    return false;
+  } finally {
+    secureAdminCheatPendingV3 = false;
+  }
+};
+
 window.adminResolveSecurityAlertV1 = async function adminResolveSecurityAlertV1(alertId){
   if (!requireTeacherAuth() || !secureAdminDataV2) return;
   try {

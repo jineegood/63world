@@ -35,6 +35,12 @@
 
   async function killCurrentMonster() {
     if (!(await hasTeacherAccess())) return;
+    if (window.YuksamRaidRunUi?.isRunning?.()) {
+      const killRaid = call('adminKillCurrentRaidMonsterV1');
+      if (!killRaid) { toastMsg('던전 처치 기능을 찾지 못했습니다.'); return; }
+      await killRaid();
+      return;
+    }
     const gm = g();
     const ccm = call('currentCombatMonster');
     const monster = ccm ? ccm() : (gm && gm.currentCombatMonster ? gm.currentCombatMonster() : null);

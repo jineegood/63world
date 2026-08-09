@@ -148,6 +148,39 @@ test('applyStudentCheat accepts only fixed actions and delegates to the teacher 
   });
 });
 
+test('killRaidMonster delegates one server-authoritative raid kill for the current student', async () => {
+  const invokeResult = { data:{
+    ok:true,
+    displayName:'테스터',
+    monsterName:'버섯돌이킹',
+    roomId:'33333333-3333-4333-8333-333333333333',
+    round:4,
+  }, error:null };
+  const { calls, service } = setup({ invokeResult });
+  const result = await service.killRaidMonster(studentId);
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), {
+    displayName:'테스터',
+    monsterName:'버섯돌이킹',
+    roomId:'33333333-3333-4333-8333-333333333333',
+    round:4,
+  });
+  const invoke = calls.find(([name, fn]) => name === 'invoke' && fn === 'teacher-apply-cheat');
+  assert.deepEqual(JSON.parse(JSON.stringify(invoke[2])), {
+    body:{ userId:studentId, action:'raidKill' },
+  });
+});
+
+test('killRaidMonster shows safe raid-state errors returned by the server', async () => {
+  const { service } = setup({
+    invokeResult:{ data:{ ok:false, code:'RAID_NOT_IN_BATTLE' }, error:null },
+  });
+  await assert.rejects(service.killRaidMonster(studentId), (error) => {
+    assert.equal(error.code, 'RAID_NOT_IN_BATTLE');
+    assert.match(error.message, /던전 전투/);
+    return true;
+  });
+});
+
 test('backend failures map to safe errors without leaking raw details', async () => {
   const { service:grantService } = setup({ insertError:{ status:429, message:'secret database password' } });
   await assert.rejects(grantService.grantReward(studentId, { gold:1, building:0, exp:0 }), (error) => {

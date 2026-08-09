@@ -27,3 +27,10 @@ test('server cheat snapshot is applied to the active player', () => {
   assert.match(game, /window\.applyAuthoritySnapshotFromServerV3/);
   assert.match(dashboard, /applyAuthoritySnapshotFromServerV3\?\.\(result\.snapshot\)/);
 });
+
+test('the existing monster kill button routes dungeon combat through the teacher server', () => {
+  assert.match(panel, /YuksamRaidRunUi\?\.isRunning\?\.\(\)/);
+  assert.match(panel, /adminKillCurrentRaidMonsterV1/);
+  assert.match(dashboard, /secureAdminDataV2\.killRaidMonster\(identity\.userId\)/);
+  assert.match(data, /action:['"]raidKill['"]/);
+});

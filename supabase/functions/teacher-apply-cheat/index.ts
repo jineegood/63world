@@ -1,7 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.110.8';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const ACTIONS = new Set(['exp20', 'exp100', 'gold3000', 'building200', 'heal']);
+const ACTIONS = new Set(['exp20', 'exp100', 'gold3000', 'building200', 'heal', 'raidKill']);
 const XP_REQUIREMENTS: Record<number, number> = {
   1:10, 2:40, 3:80, 4:130, 5:200, 6:280, 7:370, 8:470, 9:580, 10:700,
 };
@@ -75,6 +75,31 @@ Deno.serve(async (req) => {
     .maybeSingle();
   if (profileError) return json(500, { ok:false, code:'CHEAT_FAILED' });
   if (!profile) return json(404, { ok:false, code:'STUDENT_NOT_FOUND' });
+
+  if (action === 'raidKill') {
+    const { data:raidResult, error:raidError } = await serviceClient.rpc(
+      'private_teacher_kill_raid_monster_v1',
+      { p_target_user_id:userId, p_killed_at:new Date().toISOString() },
+    );
+    if (raidError) {
+      const message = String(raidError.message || '');
+      if (message.includes('RAID_NOT_IN_BATTLE')) {
+        return json(200, { ok:false, code:'RAID_NOT_IN_BATTLE' });
+      }
+      if (message.includes('RAID_PARTY_INCOMPLETE')) {
+        return json(200, { ok:false, code:'RAID_PARTY_INCOMPLETE' });
+      }
+      return json(500, { ok:false, code:'CHEAT_FAILED' });
+    }
+    return json(200, {
+      ok:true,
+      displayName:profile.display_name,
+      action,
+      roomId:raidResult?.roomId,
+      round:raidResult?.round,
+      monsterName:raidResult?.monsterName,
+    });
+  }
 
   const current = profile.data && typeof profile.data === 'object' && !Array.isArray(profile.data)
     ? { ...profile.data }

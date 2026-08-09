@@ -19,6 +19,8 @@
     GRANT_FAILED:'학생 보상을 저장하지 못했어요.',
     DELETE_FAILED:'학생 계정을 삭제하지 못했어요.',
     CHEAT_FAILED:'교사 전용 치트를 적용하지 못했어요.',
+    RAID_NOT_IN_BATTLE:'던전 전투 중에만 사용할 수 있어요.',
+    RAID_PARTY_INCOMPLETE:'세 명이 모두 던전에 접속한 뒤 사용할 수 있어요.',
     AUDIT_FAILED:'보안 알림을 불러오지 못했어요.',
   });
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -205,6 +207,26 @@
       });
     }
 
+    async function killRaidMonster(userId) {
+      const targetUserId = validateUserId(userId);
+      await requireTeacher();
+      const { data, error:cheatError } = await client.functions.invoke('teacher-apply-cheat', {
+        body:{ userId:targetUserId, action:'raidKill' },
+      });
+      if (cheatError) throw mapError(cheatError, 'CHEAT_FAILED');
+      if (data?.code === 'RAID_NOT_IN_BATTLE') throw error('RAID_NOT_IN_BATTLE');
+      if (data?.code === 'RAID_PARTY_INCOMPLETE') throw error('RAID_PARTY_INCOMPLETE');
+      if (!data?.ok || typeof data.roomId !== 'string' || !Number.isInteger(Number(data.round))) {
+        throw error('CHEAT_FAILED');
+      }
+      return Object.freeze({
+        displayName:safeText(data.displayName, 20),
+        monsterName:safeText(data.monsterName, 60),
+        roomId:safeText(data.roomId, 36),
+        round:Number(data.round),
+      });
+    }
+
     async function listSecurityAlerts() {
       await requireTeacher();
       const { data, error:listError } = await client
@@ -230,7 +252,7 @@
     }
 
     return Object.freeze({
-      listStudents, grantReward, deleteStudent, applyStudentCheat,
+      listStudents, grantReward, deleteStudent, applyStudentCheat, killRaidMonster,
       listSecurityAlerts, resolveSecurityAlert,
     });
   }

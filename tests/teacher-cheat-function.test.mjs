@@ -9,6 +9,10 @@ const source = fs.readFileSync(
   'utf8',
 );
 const config = fs.readFileSync(path.join(root, 'supabase/config.toml'), 'utf8');
+const raidKillMigration = fs.readFileSync(
+  path.join(root, 'supabase/migrations/202608090005_teacher_raid_kill_v1.sql'),
+  'utf8',
+);
 
 test('teacher cheat function verifies the caller and trusts app_metadata only', () => {
   assert.match(source, /Authorization/);
@@ -24,7 +28,18 @@ test('teacher cheat function accepts a narrow action list and one UUID target', 
   assert.match(source, /gold3000/);
   assert.match(source, /building200/);
   assert.match(source, /heal/);
+  assert.match(source, /raidKill/);
   assert.match(source, /\.eq\(['"]user_id['"], userId\)/);
+});
+
+test('dungeon instant kill is teacher-only and becomes one authoritative server round', () => {
+  assert.match(source, /private_teacher_kill_raid_monster_v1/);
+  assert.match(raidKillMigration, /teacher_kill_round/);
+  assert.match(raidKillMigration, /phase\s*=\s*'resolving'/);
+  assert.match(raidKillMigration, /raid_round_inputs_v1/);
+  assert.match(raidKillMigration, /is_correct/);
+  assert.match(raidKillMigration, /revoke all[\s\S]*?from public, anon, authenticated/i);
+  assert.match(raidKillMigration, /grant execute[\s\S]*?to service_role/i);
 });
 
 test('teacher cheat function keeps service credentials server-side', () => {
