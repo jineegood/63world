@@ -199,7 +199,10 @@ test('보호막·회복 기술은 몬스터를 더 단단하게 만든다', () =
     plan:{ name:'방벽', kind:'none', shieldPct:0.5 }, submissions:idle,
   });
   assert.equal(boss.shield, 500);
-  assert.ok(shielded.events.some((event) => event.kind === 'monster-shield'));
+  const shield = shielded.events.find((event) => event.kind === 'monster-shield');
+  assert.ok(shield);
+  assert.equal(shield.audioId, 'defensiveStance',
+    '던전 몬스터 방패는 일반 사냥과 같은 방어 태세 효과음을 한 번 재생해야 한다');
 
   const hpBeforeHeal = boss.hp;
   const healed = turn({

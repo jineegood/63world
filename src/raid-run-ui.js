@@ -51,6 +51,7 @@
   let networkLobbyCountdownValue = 0;
   let networkLobbyStartPending = false;
   let raidQuestionTimerInterval = null;
+  let raidQuestionReadyRetryTimer = null;
 
   function raidIdentity() {
     return global.getPvpIdentityV1?.() || global.secureStudentAccessV2?.getIdentity?.() || null;
@@ -338,6 +339,10 @@
     return Math.max(0, Math.trunc(Number(row?.playbackRound ?? row?.playback_round) || 0));
   }
 
+  function memberQuestionReadyRound(row) {
+    return Math.max(0, Math.trunc(Number(row?.questionReadyRound ?? row?.question_ready_round) || 0));
+  }
+
   /* heartbeat와 realtime 조회가 겹치면 오래된 응답이 나중에 도착할 수 있다.
      같은 방 버전에서는 전투 상태가 같으므로, 재생 완료 번호만 절대로
      뒤로 가지 않게 합친다. */
@@ -349,7 +354,14 @@
       const id = String(row?.userId || row?.user_id || '');
       const previous = currentById.get(id);
       const playbackRound = Math.max(memberPlaybackRound(previous), memberPlaybackRound(row));
-      return { ...row, playbackRound, playback_round:playbackRound };
+      const questionReadyRound = Math.max(memberQuestionReadyRound(previous), memberQuestionReadyRound(row));
+      return {
+        ...row,
+        playbackRound,
+        playback_round:playbackRound,
+        questionReadyRound,
+        question_ready_round:questionReadyRound,
+      };
     });
   }
 
@@ -518,11 +530,6 @@
     if (networkSession.room?.question) {
       networkSession.lastQuestion = publicRaidQuestion(networkSession.room.question);
       question = networkSession.lastQuestion;
-      if (active?.phase === 'battle' && !busy && panelMode === 'playing') {
-        panelMode = 'menu';
-        panelMessage = '무엇을 할까?';
-        renderBattle();
-      }
     }
     const events = Array.isArray(data.events) ? data.events : [];
     if (initial) {
@@ -535,6 +542,10 @@
     }
     if (!staleSnapshot) {
       networkSession.submissions = Array.isArray(data.submissions) ? data.submissions : [];
+      if (data.submitted === true && networkSession.room?.round) {
+        networkSession.submittedRounds = networkSession.submittedRounds || new Set();
+        networkSession.submittedRounds.add(Math.max(1, Number(networkSession.room.round) || 1));
+      }
       /* 결과 전송 응답을 잃어도 다음 sync에서 서버 반영을 확인하면
          보관해 둔 재시도 자료를 정리한다. */
       if (networkSession.room?.phase !== 'resolving' && networkSession.pendingRoundPublishes) {
@@ -584,6 +595,9 @@
       encounterStartedAt = 0;
       walkProgress = 1;
       openBattleScreen({ resumed:true });
+    }
+    if (active?.phase === 'battle' && ['question', 'waiting'].includes(phase)) {
+      reconcileNetworkQuestionRound();
     }
     if (phase === 'cancelled') {
       stopNetworkTransport();
@@ -650,6 +664,10 @@
     if (networkHeartbeatTimer) {
       global.clearInterval(networkHeartbeatTimer);
       networkHeartbeatTimer = null;
+    }
+    if (raidQuestionReadyRetryTimer) {
+      global.clearTimeout(raidQuestionReadyRetryTimer);
+      raidQuestionReadyRetryTimer = null;
     }
   }
 
@@ -725,6 +743,126 @@
     }
   }
 
+  function scheduleQuestionReadyRefresh(session, round) {
+    if (!session || networkSession !== session || raidQuestionReadyRetryTimer) return;
+    raidQuestionReadyRetryTimer = global.setTimeout(() => {
+      raidQuestionReadyRetryTimer = null;
+      if (networkSession !== session) return;
+      const sameRound = Math.max(0, Number(session.room?.round) || 0) === round;
+      const waiting = ['question', 'waiting'].includes(session.room?.phase)
+        && raidQuestionDeadlineMs() <= 0;
+      if (sameRound && waiting) refreshNetworkRoom();
+    }, 350);
+  }
+
+  /* 문제를 받았다는 것과 문제를 풀 수 있다는 것은 다르다. 세 브라우저가
+     전투 화면을 실제로 만든 뒤 준비 확인을 보내고, 서버가 세 확인을 모두
+     받은 시점부터만 공통 30초를 시작한다. */
+  function acknowledgeNetworkQuestionReady(round) {
+    const session = networkSession;
+    const safeRound = Math.max(0, Math.trunc(Number(round) || 0));
+    if (!session || safeRound < 1 || raidQuestionDeadlineMs() > 0
+      || typeof session.client?.ackQuestionReady !== 'function') return;
+    if (G()?.modalState?.type !== 'raidBattle' || session.playbackActive || session.playbackQueue?.length) return;
+
+    const me = String(raidIdentity()?.userId || '');
+    const mine = (session.members || []).find((row) => String(row?.userId || row?.user_id || '') === me);
+    if (memberQuestionReadyRound(mine) >= safeRound) {
+      scheduleQuestionReadyRefresh(session, safeRound);
+      return;
+    }
+
+    session.ackingQuestionReadyRounds = session.ackingQuestionReadyRounds || new Set();
+    if (session.ackingQuestionReadyRounds.has(safeRound)) return;
+    session.ackingQuestionReadyRounds.add(safeRound);
+    Promise.resolve(session.client.ackQuestionReady(session.room.id, safeRound, session.lastSequence || 0))
+      .then((data) => {
+        if (networkSession === session) setNetworkData(data);
+      })
+      .catch(() => {
+        if (networkSession === session) scheduleQuestionReadyRefresh(session, safeRound);
+      })
+      .finally(() => {
+        if (networkSession !== session) return;
+        session.ackingQuestionReadyRounds.delete(safeRound);
+        if (raidQuestionDeadlineMs() <= 0) scheduleQuestionReadyRefresh(session, safeRound);
+      });
+  }
+
+  function networkQuestionGateDecision({ phase, round, hasQuestion, deadline, submitted, down } = {}) {
+    if (!['question', 'waiting'].includes(phase) || !(Number(round) > 0) || !hasQuestion) return 'none';
+    if (!(Number(deadline) > 0)) return 'server-wait';
+    if (submitted) return 'submitted';
+    if (down) return 'down';
+    return 'open';
+  }
+
+  /* wait/effects 화면에서 곧바로 question 스냅샷으로 건너뛰어도 입력 잠금이
+     남지 않게 하는 단일 복구 지점이다. 이미 답을 보낸 라운드는 반대로 절대
+     입력창을 다시 열지 않는다. */
+  function reconcileNetworkQuestionRound() {
+    const session = networkSession;
+    const phase = session?.room?.phase;
+    const round = Math.max(0, Math.trunc(Number(session?.room?.round) || 0));
+    const publicQuestion = publicRaidQuestion(session?.room?.question || session?.lastQuestion);
+    if (!session || !active || active.phase !== 'battle'
+      || session.playbackActive || session.playbackQueue?.length) return false;
+
+    question = publicQuestion;
+    const submitted = session.submittedRounds?.has(round) === true
+      || session.deadSubmittedRounds?.has(round) === true;
+    const localMember = myActiveRaidMember();
+    const down = !!localMember && localMember.hp <= 0;
+    const gate = networkQuestionGateDecision({
+      phase,
+      round,
+      hasQuestion:!!publicQuestion?.q,
+      deadline:raidQuestionDeadlineMs(),
+      submitted,
+      down,
+    });
+    if (gate === 'none') return false;
+
+    if (gate === 'server-wait') {
+      busy = true;
+      chosenAction = null;
+      panelMode = 'playing';
+      panelMessage = '서버 대기중…';
+      if (G()?.modalState?.type === 'raidBattle') {
+        renderBattle();
+        acknowledgeNetworkQuestionReady(round);
+      }
+      return true;
+    }
+
+    if (raidQuestionReadyRetryTimer) {
+      global.clearTimeout(raidQuestionReadyRetryTimer);
+      raidQuestionReadyRetryTimer = null;
+    }
+    if (gate === 'submitted') {
+      busy = true;
+      panelMode = 'playing';
+      panelMessage = '서버 대기중…';
+      if (G()?.modalState?.type === 'raidBattle') renderBattle();
+      return true;
+    }
+    if (gate === 'down') {
+      maybeAutoSubmitDeadNetworkTurn();
+      return true;
+    }
+
+    session.questionUnlockedRounds = session.questionUnlockedRounds || new Set();
+    if (!session.questionUnlockedRounds.has(round)) {
+      session.questionUnlockedRounds.add(round);
+      busy = false;
+      chosenAction = null;
+      panelMode = 'menu';
+      panelMessage = '무엇을 할까?';
+      if (G()?.modalState?.type === 'raidBattle') renderBattle();
+    }
+    return true;
+  }
+
   async function leaveNetworkRoom({ returnToTown = false } = {}) {
     const session = networkSession;
     resetNetworkSession();
@@ -767,6 +905,9 @@
         handledRounds:new Set(),
         resolvingRounds:new Set(),
         deadSubmittedRounds:new Set(),
+        submittedRounds:new Set(),
+        questionUnlockedRounds:new Set(),
+        ackingQuestionReadyRounds:new Set(),
         pendingRoundPublishes:new Map(),
         ackingPlaybackRounds:new Set(),
         travelPlaybackKeys:new Set(),
@@ -1148,12 +1289,12 @@
     const member = myActiveRaidMember();
     if (!session || !active || active.phase !== 'battle'
       || !['question', 'waiting'].includes(phase) || round < 1
-      || !member || member.hp > 0) return false;
+      || raidQuestionDeadlineMs() <= 0 || !member || member.hp > 0) return false;
 
     busy = true;
     chosenAction = null;
     panelMode = 'playing';
-    panelMessage = '쓰러져 있어 이번 전투에서는 행동하지 않습니다. 친구들을 기다리는 중…';
+    panelMessage = '쓰러져 있어 이번 전투에서는 행동하지 않습니다. 서버 대기중…';
     if (G()?.modalState?.type === 'raidBattle') renderBattle();
 
     session.deadSubmittedRounds = session.deadSubmittedRounds || new Set();
@@ -1290,14 +1431,14 @@
   function showPlaybackBarrierWait() {
     busy = true;
     panelMode = 'playing';
-    panelMessage = '친구들의 전투 연출이 끝나기를 기다리는 중…';
+    panelMessage = '서버 대기중…';
     if (G()?.modalState?.type === 'raidBattle') {
       updateBattleView();
       return;
     }
     call('openModal', `
-      <h2>던전 동기화 중</h2>
-      <div class="panel-card"><p class="raid-room-status">친구들의 전투 연출이 끝나기를 기다리는 중…</p></div>
+      <h2>서버 대기중</h2>
+      <div class="panel-card"><p class="raid-room-status">서버 대기중…</p></div>
     `, { type:'raidSyncWait', pause:true });
   }
 
@@ -1341,6 +1482,10 @@
     importNetworkTruth();
     syncViewToTruth();
     syncMyRaidCooldowns();
+    if (['question', 'waiting'].includes(session.room?.phase) && session.room?.question) {
+      reconcileNetworkQuestionRound();
+      return true;
+    }
     question = null;
     chosenAction = null;
 
@@ -1360,13 +1505,12 @@
 
     const localMember = myActiveRaidMember();
     const down = !!localMember && localMember.hp <= 0;
-    busy = down;
-    panelMode = down ? 'playing' : 'menu';
+    const preparing = ['travel', 'effects'].includes(session.room?.phase);
+    busy = down || preparing;
+    panelMode = busy ? 'playing' : 'menu';
     panelMessage = down
-      ? '쓰러져 있어 이번 전투에서는 행동하지 않습니다. 친구들을 기다리는 중…'
-      : isNetworkHost() && ['travel', 'effects'].includes(session.room?.phase)
-        ? '다음 문제를 준비하는 중…'
-        : '무엇을 할까?';
+      ? '쓰러져 있어 이번 전투에서는 행동하지 않습니다. 서버 대기중…'
+      : preparing ? '서버 대기중…' : '무엇을 할까?';
     renderBattle();
     /* 방장 캐릭터가 쓰러져도 남은 두 사람의 라운드는 방장이 열어야 한다. */
     if (isNetworkHost()) beginNetworkRound();
@@ -1608,7 +1752,7 @@
         if (session.playbackQueue?.length) {
           busy = true;
           panelMode = 'playing';
-          panelMessage = '친구들의 전투를 따라가는 중…';
+          panelMessage = '서버 대기중…';
           updateBattleView();
           playNextNetworkRound();
           return;
@@ -1639,22 +1783,30 @@
     const session = networkSession;
     if (!session || busy || !active || active.phase !== 'battle') return;
     const phase = session.room?.phase;
+    const round = Math.max(0, Math.trunc(Number(session.room?.round) || 0));
     if (!['question', 'waiting'].includes(phase)) {
       panelMode = 'playing';
-      panelMessage = '친구들과 같은 문제를 불러오는 중…';
+      panelMessage = '서버 대기중…';
       renderBattle();
+      return;
+    }
+    if (raidQuestionDeadlineMs() <= 0) {
+      reconcileNetworkQuestionRound();
       return;
     }
     busy = true;
     const actionId = chosenAction === 'attack'
       ? 'basic'
       : String(chosenAction || '').replace(/^active:/, '') || 'basic';
-    showPlaybackPanel('답을 제출했습니다. 다른 친구들의 답을 기다리는 중…');
+    session.submittedRounds = session.submittedRounds || new Set();
+    session.submittedRounds.add(round);
+    showPlaybackPanel('답을 제출했습니다. 서버 대기중…');
     try {
-      await session.client.submit(session.room.id, Number(session.room.round), actionId, String(given ?? ''));
+      await session.client.submit(session.room.id, round, actionId, String(given ?? ''));
       const data = await session.client.sync(session.room.id, session.lastSequence || 0);
       if (networkSession === session) setNetworkData(data);
     } catch (error) {
+      session.submittedRounds.delete(round);
       busy = false;
       panelMode = 'menu';
       panelMessage = error?.message || '답을 전송하지 못했습니다. 다시 시도해 주세요.';
@@ -2194,15 +2346,14 @@
       question = publicRaidQuestion(networkSession.room?.question || networkSession.lastQuestion);
       const resolving = roomPhase === 'resolving';
       const preparing = roomPhase === 'effects' || !question?.q;
-      busy = resolving || preparing;
+      const waitingForServer = ['question', 'waiting'].includes(roomPhase)
+        && !!question?.q && raidQuestionDeadlineMs() <= 0;
+      busy = resolving || preparing || waitingForServer;
       panelMode = busy ? 'playing' : 'menu';
-      panelMessage = resolving
-        ? '친구들의 답을 판정하는 중…'
-        : preparing
-          ? '다음 문제를 준비하는 중…'
-          : '무엇을 할까?';
+      panelMessage = busy ? '서버 대기중…' : '무엇을 할까?';
       renderBattle();
-      maybeAutoSubmitDeadNetworkTurn();
+      if (['question', 'waiting'].includes(roomPhase)) reconcileNetworkQuestionRound();
+      else maybeAutoSubmitDeadNetworkTurn();
       if (isNetworkHost()) {
         if (resolving) global.setTimeout(() => maybeResolveNetworkRound(), 0);
         else if (preparing) global.setTimeout(() => beginNetworkRound(), 0);
@@ -2220,13 +2371,14 @@
     // 등장 문구를 한 박자 보여 준 뒤 행동 메뉴로 넘어간다.
     global.setTimeout(() => {
       if (!active || active.phase !== 'battle') return;
-      busy = false;
-      panelMode = 'menu';
-      panelMessage = networkSession && !networkSession.room?.question
-        ? '친구들과 풀 문제를 준비하는 중…'
-        : '무엇을 할까?';
+      const waitingForServer = !!networkSession
+        && (!networkSession.room?.question || raidQuestionDeadlineMs() <= 0);
+      busy = waitingForServer;
+      panelMode = waitingForServer ? 'playing' : 'menu';
+      panelMessage = waitingForServer ? '서버 대기중…' : '무엇을 할까?';
       renderBattle();
       if (networkSession && isNetworkHost()) beginNetworkRound();
+      if (networkSession?.room?.question) reconcileNetworkQuestionRound();
     }, eventDelayMs);
   }
 
@@ -2492,9 +2644,11 @@
     chosenAction = action;
     if (networkSession) {
       question = publicRaidQuestion(networkSession.room?.question || networkSession.lastQuestion);
-      if (!question?.q) {
+      const round = Math.max(0, Math.trunc(Number(networkSession.room?.round) || 0));
+      if (!question?.q || raidQuestionDeadlineMs() <= 0
+        || networkSession.submittedRounds?.has(round)) {
         panelMode = 'playing';
-        panelMessage = '친구들과 풀 문제를 불러오는 중…';
+        panelMessage = '서버 대기중…';
         renderBattle();
         if (isNetworkHost()) beginNetworkRound();
         return;
@@ -3409,24 +3563,38 @@
 
     /* ── Lv.6 ───────────────────────────────────────── */
 
-    /* 빌딩 스톰프 — 사냥터 스톰프의 나무 몸·얼굴·잎을 그대로 쓴다.
-       화면에 맞는 크기로만 줄이고, 아래쪽 창문과 보강띠로 빌딩형임을 구분한다. */
+    /* 빌딩 스톰프 — 사냥터 스톰프와 같은 둥근 몸·얼굴·잎 실루엣을 쓰되,
+       몸통 전체가 철로 된 모습이다. 작은 갑옷을 덧씌운 것처럼 보이지 않게
+       금속 몸통 자체에 창문과 이음새를 새긴다. */
     buildingStomp(ctx, cx, cy, t) {
       const stomp = Math.abs(Math.sin(t * 1.8)) * 6;
       ctx.save();
       ctx.translate(0, stomp);
-      if (!borrowSprite('drawStompSprite', ctx, cx, cy, 0.75)) {
-        const trunk = ctx.createLinearGradient(cx, cy - 50, cx, cy + 58);
-        trunk.addColorStop(0, '#a56636');
-        trunk.addColorStop(1, '#5b321e');
-        box(ctx, cx - 38, cy - 48, 76, 110, trunk, 20);
-        blob(ctx, cx - 18, cy - 64, 26, 23, '#2f6c39');
-        blob(ctx, cx + 14, cy - 68, 30, 25, '#2f6c39');
-        blob(ctx, cx + 39, cy - 48, 23, 21, '#2f6c39');
-        eyes(ctx, cx, cy - 3, 13, 4, '#2f1f16');
-      }
+      const steelBody = ctx.createLinearGradient(cx - 38, cy - 48, cx + 38, cy + 62);
+      steelBody.addColorStop(0, '#e2e8f0');
+      steelBody.addColorStop(0.42, '#94a3b8');
+      steelBody.addColorStop(1, '#475569');
+      box(ctx, cx - 38, cy - 48, 76, 110, steelBody, 20);
 
-      // 얼굴과 나무결은 가리지 않고 몸통 아래에만 빌딩 창문을 단다.
+      // 스톰프의 몸통 세로결을 금속 판 이음새와 반사광으로 바꾼다.
+      box(ctx, cx - 5, cy - 42, 10, 98, '#64748b', 5);
+      ctx.strokeStyle = 'rgba(248,250,252,.62)';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(cx - 27, cy - 30); ctx.lineTo(cx - 20, cy + 42);
+      ctx.moveTo(cx + 26, cy - 30); ctx.lineTo(cx + 20, cy + 42);
+      ctx.stroke();
+
+      // 얼굴과 잎은 원래 스톰프와 같은 인상을 유지한다.
+      eyes(ctx, cx, cy - 7, 13, 4, '#1e293b');
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(cx, cy + 7, 9, 0, Math.PI); ctx.stroke();
+      blob(ctx, cx - 18, cy - 64, 26, 23, '#2f6c39');
+      blob(ctx, cx + 14, cy - 68, 30, 25, '#2f6c39');
+      blob(ctx, cx + 39, cy - 48, 23, 21, '#2f6c39');
+
+      // 몸통 아래쪽의 창문도 철 몸체에 바로 박혀 있다.
       const windowGlow = 0.72 + Math.sin(t * 2.8) * 0.16;
       ctx.fillStyle = `rgba(125,211,252,${windowGlow.toFixed(3)})`;
       [[-27, 25], [11, 25], [-27, 42], [11, 42]].forEach(([dx, dy]) => {
@@ -3439,7 +3607,7 @@
       ctx.strokeRect(cx - 28, cy + 41, 18, 12);
       ctx.strokeRect(cx + 10, cy + 41, 18, 12);
 
-      // 아래 보강띠와 작은 리벳만 더해 원래 스톰프와 자연스럽게 구분한다.
+      // 아래 금속띠와 리벳으로 빌딩의 묵직한 바닥을 표현한다.
       box(ctx, cx - 36, cy + 55, 72, 8, '#64748b', 3);
       ctx.fillStyle = '#cbd5e1';
       [-27, -9, 9, 27].forEach((dx) => {
@@ -4180,5 +4348,6 @@
     currentQuestion:() => question,
     submitAnswerForTest:(value) => submitAnswer(value),
     playbackReadyForTest:(round, session) => allMembersFinishedPlayback(round, session),
+    questionGateDecisionForTest:(state) => networkQuestionGateDecision(state),
   });
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -1063,6 +1063,9 @@
       monster.shield = Math.max(0, integer(monster.shield)) + amount;
       events.push({
         kind:'monster-shield', planName:plan.name, amount, shield:monster.shield,
+        /* Keep dungeon monster shields in sync with the hunting shield cue.
+           An explicit audio id also prevents the UI fallback from playing twice. */
+        audioId:'defensiveStance',
         text:`${monster.name}의 ${plan.name}! 보호막 ${amount}을(를) 만들었습니다.`,
       });
     }

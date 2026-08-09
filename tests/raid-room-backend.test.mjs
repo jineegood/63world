@@ -25,6 +25,10 @@ const firstClearRewardMigration = fs.readFileSync(
   path.join(root, 'supabase/migrations/202608090003_raid_first_clear_rewards_v1.sql'),
   'utf8',
 );
+const questionReadyBarrierMigration = fs.readFileSync(
+  path.join(root, 'supabase/migrations/202608090004_raid_question_ready_barrier_v1.sql'),
+  'utf8',
+);
 const serviceUrl = pathToFileURL(path.join(root, 'supabase/functions/_shared/raid-room-service.mjs'));
 const errorUrl = pathToFileURL(path.join(root, 'supabase/functions/_shared/raid-room-error.mjs'));
 const storeUrl = pathToFileURL(path.join(root, 'supabase/functions/_shared/raid-room-store.mjs'));
@@ -91,6 +95,22 @@ test('세 화면의 전투 연출이 모두 끝나야 서버가 다음 문제를
   assert.match(playbackBarrierMigration, /member\.playback_round < old\.round_no/i);
   assert.match(playbackBarrierMigration, /raise exception[\s\S]*PLAYBACK_PENDING/i);
   assert.match(playbackBarrierMigration, /create trigger raid_playback_barrier_v1/i);
+});
+
+test('세 화면이 새 문제를 받은 뒤에만 공통 30초 제한시간을 시작한다', () => {
+  assert.match(questionReadyBarrierMigration,
+    /add column if not exists question_ready_round integer not null default 0/i);
+  assert.match(questionReadyBarrierMigration,
+    /private_begin_raid_round_v1[\s\S]*question_deadline\s*=\s*null/i);
+  assert.match(questionReadyBarrierMigration,
+    /private_ack_raid_question_ready_v1[\s\S]*greatest\(question_ready_round, p_round_no\)/i);
+  assert.match(questionReadyBarrierMigration,
+    /v_ready_count = v_member_count[\s\S]*p_ready_at \+ interval '30 seconds'/i);
+  assert.match(questionReadyBarrierMigration,
+    /question_deadline is null[\s\S]*QUESTION_PENDING/i,
+    '세 명 준비 전에는 우회 제출도 서버가 거절해야 한다');
+  assert.match(questionReadyBarrierMigration,
+    /grant execute on function public\.private_ack_raid_question_ready_v1[\s\S]*service_role/i);
 });
 
 test('던전 클리어 해금은 서버가 저장하고 과거 완료 방도 자동 복구한다', () => {
@@ -198,6 +218,26 @@ test('전투 연출 완료 번호는 인증된 자기 자리만 서버에 기록
   });
   await service.handle('b', { op:'ackPlayback', roomId:'room-1', round:3, afterSequence:8 });
   assert.deepEqual(acknowledgements, [{ roomId:'room-1', userId:'b', round:3, seenAt:12345 }]);
+});
+
+test('문제 준비 완료 번호도 인증된 자기 자리만 서버에 기록한다', async () => {
+  const { createRaidRoomService } = await import(serviceUrl.href);
+  const acknowledgements = [];
+  const stableRoom = {
+    id:'room-1', hostId:'a', phase:'question', round:4, version:5, nextSequence:9,
+  };
+  const service = createRaidRoomService({
+    now:() => 23456,
+    store:{
+      ackQuestionReady:async (value) => acknowledgements.push(value),
+      getRoomForUser:async () => structuredClone(stableRoom),
+      listMembers:async () => [{ userId:'b', questionReadyRound:4 }],
+      listEventsAfter:async () => [],
+      listRoundJudgements:async () => [],
+    },
+  });
+  await service.handle('b', { op:'ackQuestionReady', roomId:'room-1', round:4, afterSequence:8 });
+  assert.deepEqual(acknowledgements, [{ roomId:'room-1', userId:'b', round:4, readyAt:23456 }]);
 });
 
 test('service ignores caller combat stats and loads the authenticated profile from storage', async () => {

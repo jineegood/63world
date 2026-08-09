@@ -16,6 +16,7 @@ const PUBLIC_CODES = new Set([
   'ROUND_CHANGED',
   'ROUND_CLOSED',
   'PLAYBACK_PENDING',
+  'QUESTION_PENDING',
   'JOIN_RATE_LIMIT',
   'TEMPORARY_UNAVAILABLE',
   /* 문제 발급이 막힌 이유를 구분해 준다.

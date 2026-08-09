@@ -281,6 +281,36 @@ test('block training creates at least one shield even at very low HP', () => {
   assert.equal(shield.audioId, 'blockShield');
 });
 
+test('Faith Radiance increases dungeon monster miss chance by its learned rank', () => {
+  const plainPriest = member('plain-priest', {
+    klass:'priest', skills:{}, maxHp:100, hp:100, attack:1,
+  });
+  const radiantPriest = member('radiant-priest', {
+    klass:'priest', skills:{ priest_basic_life:3 }, maxHp:100, hp:100, attack:1,
+  });
+
+  /* A wrong basic attack consumes the first roll for its half-damage power.
+     The next 0.20 is outside the normal 10% miss rate, but inside rank 3's
+     25% total (10% base + 15% Faith Radiance). */
+  const plain = resolve({
+    members:[plainPriest],
+    submissions:{ 'plain-priest':{ correct:false, actionId:'basic' } },
+    rng:sequence([0.5, 0.20, 0.99]),
+  });
+  const radiant = resolve({
+    members:[radiantPriest],
+    submissions:{ 'radiant-priest':{ correct:false, actionId:'basic' } },
+    rng:sequence([0.5, 0.20, 0.99]),
+  });
+
+  const plainHit = plain.events.find((event) => event.kind === 'monster-hit');
+  const radiantHit = radiant.events.find((event) => event.kind === 'monster-hit');
+  assert.equal(plainHit?.missed, false, '기본 10%만 있으면 0.20 공격은 명중해야 한다');
+  assert.equal(radiantHit?.missed, true, '신앙의 광채 3단계면 같은 0.20 공격이 빗나가야 한다');
+  assert.equal(radiantHit?.audioId, 'miss');
+  assert.equal(radiantPriest.hp, 100, '빗나간 던전 공격은 체력을 깎지 않아야 한다');
+});
+
 test('frost status halves the next monster attack and is consumed by one turn', () => {
   const mage = member('mage', {
     klass:'mage', spec:'냉기', skills:{ mage_frost_lance_v24:1 },

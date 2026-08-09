@@ -44,6 +44,7 @@ function memberRow(row) {
     profile:row.profile_snapshot || {},
     state:row.combat_state || {},
     playbackRound:Math.max(0, Number(row.playback_round) || 0),
+    questionReadyRound:Math.max(0, Number(row.question_ready_round) || 0),
     lastSeenAt:row.last_seen_at ? new Date(row.last_seen_at).getTime() : 0,
     active:row.active === true,
   };
@@ -292,6 +293,13 @@ export function createSupabaseRaidRoomStore(client) {
       p_room_id:value.roomId,
       p_round_no:value.round,
       p_seen_at:new Date(value.seenAt).toISOString(),
+    }),
+
+    ackQuestionReady:value => rpc('private_ack_raid_question_ready_v1', {
+      p_user_id:value.userId,
+      p_room_id:value.roomId,
+      p_round_no:value.round,
+      p_ready_at:new Date(value.readyAt).toISOString(),
     }),
 
     heartbeat:value => rpc('private_heartbeat_raid_room_v1', {

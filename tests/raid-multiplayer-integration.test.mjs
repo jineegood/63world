@@ -149,6 +149,7 @@ class FakeRaidRoomStore {
       round_no:room.round,
       monster_state:clone(room.monsterState),
       question_public:clone(room.question),
+      question_deadline:room.questionDeadline ? new Date(room.questionDeadline).toISOString() : null,
       version:room.version,
     };
   }
@@ -163,6 +164,7 @@ class FakeRaidRoomStore {
       profile_snapshot:clone(member.profile),
       combat_state:clone(member.state),
       playback_round:member.playbackRound,
+      question_ready_round:member.questionReadyRound,
       active:member.active,
     };
   }
@@ -212,6 +214,7 @@ class FakeRaidRoomStore {
       profile:clone(profile),
       state:{ hp:maxHp, maxHp, shield:0, cooldowns:{}, statuses:{} },
       playbackRound:0,
+      questionReadyRound:0,
       lastSeenAt:now,
       active:true,
     };
@@ -302,10 +305,10 @@ class FakeRaidRoomStore {
     if (room.round > 0 && this.roomMembers(roomId).some((member) => member.playbackRound < room.round)) {
       fail('PLAYBACK_PENDING');
     }
-    room.phase = 'answering';
+    room.phase = 'question';
     room.round += 1;
     room.question = clone(questionPublic);
-    room.questionDeadline = begunAt + 30_000;
+    room.questionDeadline = 0;
     this.answerKeys.set(`${roomId}:${room.round}`, JSON.parse(answerKey));
     this.submissions.set(`${roomId}:${room.round}`, new Map());
     this.touchRoom(room);
@@ -315,7 +318,8 @@ class FakeRaidRoomStore {
     const room = this.requireRoom(roomId);
     this.requireMember(roomId, userId);
     if (room.round !== round) fail('ROUND_CHANGED');
-    if (room.phase !== 'answering') fail('ROUND_CLOSED');
+    if (room.phase !== 'question' && room.phase !== 'waiting') fail('ROUND_CLOSED');
+    if (!room.questionDeadline) fail('QUESTION_PENDING');
     const key = `${roomId}:${round}`;
     const submissions = this.submissions.get(key);
     submissions.set(userId, {
@@ -328,6 +332,9 @@ class FakeRaidRoomStore {
     const received = submissions.size;
     if (received === 3) {
       room.phase = 'resolving';
+      this.touchRoom(room);
+    } else {
+      room.phase = 'waiting';
       this.touchRoom(room);
     }
     return { waiting:received < 3, received, required:3 };
@@ -375,6 +382,22 @@ class FakeRaidRoomStore {
     member.playbackRound = Math.max(member.playbackRound, round);
     member.lastSeenAt = seenAt;
     this.hub.broadcast('raid_room_members_v1', 'UPDATE', this.memberDatabaseRow(member));
+  }
+
+  async ackQuestionReady({ roomId, userId, round, readyAt }) {
+    const room = this.requireRoom(roomId);
+    if (round !== room.round) fail('ROUND_CHANGED');
+    if (room.phase !== 'question' && room.phase !== 'waiting') fail('ROUND_CLOSED');
+    const member = this.requireMember(roomId, userId);
+    member.questionReadyRound = Math.max(member.questionReadyRound, round);
+    member.lastSeenAt = readyAt;
+    this.hub.broadcast('raid_room_members_v1', 'UPDATE', this.memberDatabaseRow(member));
+    const members = this.roomMembers(roomId);
+    if (!room.questionDeadline && members.length === 3
+      && members.every((candidate) => candidate.questionReadyRound >= round)) {
+      room.questionDeadline = readyAt + 30_000;
+      this.touchRoom(room);
+    }
   }
 
   async leaveRoom({ roomId, userId }) {
@@ -475,8 +498,9 @@ test('three authenticated browser sessions create, join, form, start and resolve
   };
   const answers = { alice:'42', bob:'64', cara:'81' };
   const begun = await alice.beginRound(roomId, { byUser:questions }, JSON.stringify(answers));
-  assert.equal(begun.room.phase, 'answering');
+  assert.equal(begun.room.phase, 'question');
   assert.equal(begun.room.round, 1);
+  assert.equal(begun.room.questionDeadline, 0, '세 화면 준비 전에는 제한시간이 시작되면 안 된다');
   assert.deepEqual(begun.room.question, questions.alice);
   assert.equal(JSON.stringify(begun).includes('answerKey'), false, '정답 키는 어떤 응답에도 노출되면 안 된다');
 
@@ -486,6 +510,22 @@ test('three authenticated browser sessions create, join, form, start and resolve
   assert.deepEqual(aliceView.room.question, questions.alice);
   assert.deepEqual(bobView.room.question, questions.bob);
   assert.deepEqual(caraView.room.question, questions.cara);
+
+  await assert.rejects(
+    alice.submit(roomId, 1, 'warrior_weapon_breaker', '42'),
+    (error) => error?.code === 'QUESTION_PENDING',
+    '문제를 받은 화면이 하나뿐일 때는 제출로 준비 장벽을 우회할 수 없어야 한다',
+  );
+  const aliceReady = await alice.ackQuestionReady(roomId, 1);
+  const bobReady = await bob.ackQuestionReady(roomId, 1);
+  assert.equal(aliceReady.room.questionDeadline, 0);
+  assert.equal(bobReady.room.questionDeadline, 0, '두 화면만 준비해도 제한시간은 흐르지 않는다');
+  const caraReady = await cara.ackQuestionReady(roomId, 1);
+  assert.ok(caraReady.room.questionDeadline > clock, '세 번째 화면 준비 시 공통 제한시간이 시작된다');
+  const readyViews = await Promise.all([alice.sync(roomId), bob.sync(roomId), cara.sync(roomId)]);
+  assert.equal(new Set(readyViews.map((view) => view.room.questionDeadline)).size, 1,
+    '세 독립 클라이언트가 같은 절대 제한시각을 받아야 한다');
+  assert.ok(readyViews.every((view) => view.submitted === false));
 
   const first = await alice.submit(roomId, 1, 'warrior_weapon_breaker', '42');
   const second = await bob.submit(roomId, 1, 'mage_basic_double', '64');
@@ -557,11 +597,19 @@ test('three authenticated browser sessions create, join, form, start and resolve
   await cara.ackPlayback(roomId, 1);
   const nextRound = await alice.beginRound(roomId, { byUser:questions }, JSON.stringify(answers));
   assert.equal(nextRound.room.round, 2);
-  assert.equal(nextRound.room.phase, 'answering');
+  assert.equal(nextRound.room.phase, 'question');
+  assert.equal(nextRound.room.questionDeadline, 0);
+
+  await alice.ackQuestionReady(roomId, 2);
+  await bob.ackQuestionReady(roomId, 2);
+  await cara.ackQuestionReady(roomId, 2);
 
   /* 최종 보상창에서는 세 명이 연출을 다 본 뒤 한 명부터 확인을 누른다.
      서버는 그 사람만 active 목록에서 빼고 완료된 방은 그대로 둔다. */
   await alice.submit(roomId, 2, 'basic', '42');
+  assert.equal((await alice.sync(roomId)).submitted, true,
+    '제출한 클라이언트는 동기화 후 입력 화면을 다시 열지 않도록 표시된다');
+  assert.equal((await bob.sync(roomId)).submitted, false);
   await bob.submit(roomId, 2, 'basic', '64');
   await cara.submit(roomId, 2, 'basic', '81');
   const finalResolving = await alice.sync(roomId);

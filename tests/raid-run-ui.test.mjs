@@ -321,8 +321,32 @@ test('세 명이 전투 로그를 모두 본 뒤에만 다음 문제나 복도�
   assert.match(uiSource, /session\.client\.ackPlayback\(session\.room\.id, safeRound/);
   assert.match(uiSource, /function allMembersFinishedPlayback\(round, session = networkSession\)/);
   assert.match(uiSource, /terminal \? members\.length > 0 : members\.length === 3/);
-  assert.match(uiSource, /친구들의 전투 연출이 끝나기를 기다리는 중/);
+  assert.match(uiSource, /panelMessage = '서버 대기중…'/);
+  assert.doesNotMatch(uiSource, /친구들의 전투 연출이 끝나기를 기다리는 중/);
   assert.match(uiSource, /if \(!allMembersFinishedPlayback\(round, session\)\) \{/);
+});
+
+test('대기 화면에서 새 question으로 바로 건너뛰어도 세 클라이언트 모두 입력이 열린다', () => {
+  const clients = ['alice', 'bob', 'carol'].map((identityUserId) => networkUiHarness({ identityUserId }));
+  for (const client of clients) {
+    const decide = client.context.YuksamRaidRunUi.questionGateDecisionForTest;
+    assert.equal(decide({
+      phase:'question', round:5, hasQuestion:true, deadline:0,
+      submitted:false, down:false,
+    }), 'server-wait', '세 화면 준비 전에는 서버 대기 상태여야 한다');
+    assert.equal(decide({
+      phase:'question', round:5, hasQuestion:true, deadline:123456,
+      submitted:false, down:false,
+    }), 'open', '서버가 공통 제한시각을 열면 기존 busy 상태와 무관하게 입력이 열려야 한다');
+  }
+  const decide = clients[0].context.YuksamRaidRunUi.questionGateDecisionForTest;
+  assert.equal(decide({
+    phase:'waiting', round:5, hasQuestion:true, deadline:123456,
+    submitted:true, down:false,
+  }), 'submitted', '이미 제출한 화면은 같은 question을 다시 입력하게 하면 안 된다');
+  assert.match(uiSource, /reconcileNetworkQuestionRound\(\)/);
+  assert.match(uiSource, /session\.questionUnlockedRounds\.has\(round\)/);
+  assert.match(uiSource, /session\.submittedRounds\?\.has\(round\)/);
 });
 
 test('최종 보상창에서 한 명이 먼저 나가도 남은 화면은 연출 대기에 갇히지 않는다', () => {
@@ -363,7 +387,7 @@ test('서버 라운드는 세 명에게 서로 다른 문제를 주고 세 답�
   assert.match(uiSource, /pickDistinctQuestions\(members\.length\)/);
   assert.match(uiSource, /\{ byUser:questionByUser \}/);
   assert.match(uiSource, /JSON\.stringify\(answerByUser\)/);
-  assert.match(uiSource, /session\.client\.submit\(session\.room\.id, Number\(session\.room\.round\), actionId/);
+  assert.match(uiSource, /session\.client\.submit\(session\.room\.id, round, actionId/);
   assert.match(uiSource, /session\.room\?\.phase !== 'resolving'/);
   assert.match(uiSource, /inputs\.length !== 3/);
   assert.match(uiSource, /session\.resolvingRounds\.add\(round\)/);
@@ -444,7 +468,7 @@ test('답 제출 직후 입력 UI를 없애고 세 명의 결과를 기다린다
   assert.match(uiSource, /function showPlaybackPanel\(message = '전투 중…'\)/);
   assert.match(uiSource, /querySelector\('\.raid-combat > \.panel-card'\)/);
   assert.match(uiSource, /panel\.innerHTML = `<h3>/);
-  assert.match(uiSource, /showPlaybackPanel\('답을 제출했습니다\. 다른 친구들의 답을 기다리는 중…'\)/);
+  assert.match(uiSource, /showPlaybackPanel\('답을 제출했습니다\. 서버 대기중…'\)/);
   assert.match(uiSource, /id="combatAnswer"/);
   assert.match(uiSource, /data-answer-key=/);
 });
@@ -665,15 +689,19 @@ test('새로 그린 몬스터는 사냥터 스프라이트를 빌려 쓰거나 �
   assert.match(uiSource, /function borrowSprite\(name, ctx, cx, cy, scale\)/);
   assert.match(uiSource, /borrowSprite\('drawMushroomSprite'/);
   assert.match(gameSource, /function drawMushroomSprite\(/);
-  /* 빌딩 스톰프도 나무 몸통·얼굴·잎은 원본을 쓰되, 예전 1.6배처럼
-     잘리지 않도록 0.75배 외부 배율을 쓴다. 창문·보강띠만 덧붙인다. */
+  /* 빌딩 스톰프는 원본의 둥근 몸·얼굴·잎 실루엣을 유지하되
+     작은 갑옷이 아니라 몸통 전체가 철색이어야 한다. */
   const stomp = uiSource.match(/buildingStomp\(ctx, cx, cy, t\)[\s\S]*?\n    \},/)?.[0] || '';
   assert.notEqual(stomp, '');
   assert.match(gameSource, /function drawStompSprite\(/);
-  assert.match(stomp, /borrowSprite\('drawStompSprite', ctx, cx, cy, 0\.75\)/);
+  assert.match(stomp, /const steelBody/);
+  assert.match(stomp, /#e2e8f0/);
+  assert.match(stomp, /#94a3b8/);
+  assert.match(stomp, /#475569/);
   assert.match(stomp, /windowGlow/);
-  assert.match(stomp, /보강띠/);
-  assert.doesNotMatch(stomp, /const steel|붉은 시야창/, '원본과 다른 철제 로봇 몸통을 다시 만들면 안 된다');
+  assert.match(stomp, /금속띠/);
+  assert.match(stomp, /#2f6c39/, '스톰프의 잎은 유지해야 한다');
+  assert.doesNotMatch(stomp, /borrowSprite\('drawStompSprite'|#a56636|#5b321e/, '나무 몸통이나 작은 갑옷으로 돌아가면 안 된다');
 });
 
 test('오염된 슬라임은 몸과 오염 방울이 보라색 계열이다', () => {

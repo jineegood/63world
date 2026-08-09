@@ -16,6 +16,7 @@
     "test:raid-rules": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 raid-rules",
     "test:raid-run": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 raid-run",
     "test:raid-run-ui": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 raid-run-ui",
+    "test:raid-visual-lab": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 raid-visual-lab",
     "test:raid-combat-rules": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 raid-combat-rules",
     "test:raid-entry-ui": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 raid-entry-ui",
     "test:raid-party-client": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 raid-party-client",

@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>63월드 던전 1인 검사실</title>
+  <link rel="stylesheet" href="../style.css">
+  <style>
+    :root{color-scheme:dark}
+    html,body{min-height:100%;margin:0;background:#050b16;color:#e8f3ff}
+    body{padding-top:116px}
+    .lab-toolbar{position:fixed;z-index:1000;inset:0 0 auto 0;min-height:92px;padding:10px 16px;
+      display:grid;grid-template-columns:minmax(270px,1fr) auto;gap:10px 18px;align-items:center;
+      background:linear-gradient(180deg,rgba(4,12,25,.99),rgba(8,21,39,.97));
+      border-bottom:2px solid rgba(56,189,248,.48);box-shadow:0 12px 32px rgba(0,0,0,.5)}
+    .lab-title{display:flex;align-items:center;gap:10px;min-width:0}
+    .lab-title h1{font-size:21px;margin:0;color:#f8fafc;white-space:nowrap}
+    .lab-safe{padding:4px 9px;border-radius:999px;font-size:12px;font-weight:900;
+      color:#86efac;border:1px solid rgba(74,222,128,.5);background:rgba(22,101,52,.28)}
+    .lab-status{grid-column:1/-1;display:flex;gap:10px;align-items:center;min-height:22px;font-size:13px;color:#bfdbfe}
+    .lab-status strong{color:#fde68a}.lab-status .done{color:#86efac}
+    .lab-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}
+    .lab-actions select,.lab-actions button{height:38px;margin:0;padding:7px 11px;border-radius:10px;font-size:13px}
+    .lab-actions select{min-width:170px;background:#10233d;color:#eff6ff;border:1px solid rgba(125,211,252,.42)}
+    .lab-actions button{font-weight:900}
+    #labAutoBtn.on{background:#166534;border-color:#4ade80;color:#f0fdf4}
+    #labFinishBtn{border-color:#f59e0b;color:#fde68a}
+    #labStopBtn{border-color:#fb7185;color:#fecdd3}
+    .lab-backdrop{position:fixed;inset:116px 0 0;display:grid;place-items:center;text-align:center;
+      background:radial-gradient(circle at 50% 35%,rgba(30,64,175,.19),transparent 38%),
+        linear-gradient(180deg,#071224,#050a13)}
+    .lab-backdrop-card{max-width:720px;padding:28px;border:1px solid rgba(125,211,252,.2);border-radius:24px;
+      background:rgba(10,24,44,.84);box-shadow:0 20px 60px rgba(0,0,0,.42)}
+    .lab-backdrop-card h2{margin:0 0 12px;color:#7dd3fc}
+    .lab-backdrop-card p{line-height:1.65;margin:7px 0;color:#cbd5e1}
+    .lab-patterns{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+    .lab-pattern{padding:3px 8px;border-radius:999px;border:1px solid rgba(148,163,184,.4);color:#cbd5e1}
+    .lab-pattern.seen{border-color:#4ade80;color:#bbf7d0;background:rgba(22,101,52,.26)}
+    .lab-local-block{display:none;position:fixed;inset:0;z-index:99999;place-items:center;padding:30px;text-align:center;background:#050b16}
+    .lab-local-block.on{display:grid}
+    /* 검사 도구는 모달 위에 있어야 언제든 자동 진행을 멈출 수 있다. */
+    #modal{top:116px}
+    #modal .modal-box{max-height:calc(100vh - 148px)}
+    #modalClose{display:none!important}
+    #returnTownBtn{display:none!important}
+    @media(max-width:900px){
+      body{padding-top:168px}.lab-toolbar{grid-template-columns:1fr;min-height:144px}
+      .lab-actions{justify-content:flex-start}.lab-status{grid-column:1}.lab-patterns{width:100%;margin-left:0}
+      .lab-backdrop{inset:168px 0 0}#modal{top:168px}#modal .modal-box{max-height:calc(100vh - 192px)}
+    }
+  </style>
+</head>
+<body>
+  <div id="labLocalBlock" class="lab-local-block">
+    <div class="lab-backdrop-card">
+      <h2>로컬 컴퓨터에서만 열 수 있습니다</h2>
+      <p>이 검사실은 실제 학생 기록과 서버 보상을 건드리지 않도록 로컬 주소에서만 작동합니다.</p>
+    </div>
+  </div>
+
+  <header class="lab-toolbar" aria-label="던전 검사 도구">
+    <div class="lab-title">
+      <h1>🏢 던전 1인 검사실</h1>
+      <span class="lab-safe">서버·저장 미사용</span>
+    </div>
+    <div class="lab-actions">
+      <select id="labFloorSelect" aria-label="검사할 구간"></select>
+      <button class="primary" id="labStartBtn">검사 시작</button>
+      <button class="primary" id="labOneTurnBtn" disabled>다음 패턴 1회</button>
+      <button class="ghost" id="labAutoBtn" disabled>이 몬스터 자동 검사</button>
+      <button class="ghost" id="labFinishBtn" disabled>다음 몬스터로</button>
+      <button class="ghost" id="labStopBtn" disabled>검사 종료</button>
+    </div>
+    <div class="lab-status">
+      <span id="labStatusText">구간을 고른 뒤 <strong>검사 시작</strong>을 누르세요.</span>
+      <div id="labPatternList" class="lab-patterns" aria-label="현재 몬스터 패턴 확인 현황"></div>
+    </div>
+  </header>
+
+  <main class="lab-backdrop" id="labBackdrop">
+    <div class="lab-backdrop-card">
+      <h2>크롬 창 하나로 던전 전투를 확인합니다</h2>
+      <p>가짜 파티원 둘이 자동으로 정답을 제출합니다. 선생님은 버튼 한 번으로 몬스터의 공격·상태이상·보호막·회복·효과음을 차례로 볼 수 있습니다.</p>
+      <p><strong>실제 계정, Supabase 방, 클리어 보상, 캐릭터 저장값은 사용하지 않습니다.</strong></p>
+    </div>
+  </main>
+
+  <button id="returnTownBtn" class="return-town hidden" type="button">검사 종료</button>
+  <div id="toast" class="toast hidden"></div>
+  <div id="modal" class="modal hidden">
+    <div class="modal-box">
+      <button id="modalClose" class="modal-close" type="button">×</button>
+      <div id="modalContent"></div>
+    </div>
+  </div>
+
+  <script src="../src/audio-defaults.js"></script>
+  <script src="../src/core-utils.js"></script>
+  <script src="../src/combat-rules.js"></script>
+  <script src="../src/combat-fx.js"></script>
+  <script src="../src/audio-manifest.js"></script>
+  <script src="raid-visual-lab.js"></script>
+  <script src="../src/raid-progress.js"></script>
+  <script src="../src/raid-combat-rules.js"></script>
+  <script src="../src/raid-rules.js"></script>
+  <script src="../src/raid-run.js"></script>
+  <script src="../src/raid-run-ui.js"></script>
+</body>
+</html>

@@ -189,6 +189,12 @@ export function createRaidRoomService({ store, now = Date.now } = {}) {
     }
     const privateQuestion = object(room.question?.byUser)?.[String(userId)] || room.question;
     const result = { room:{ ...room, question:privateQuestion || null }, members, events };
+    let roundJudgements = null;
+    if (['question', 'waiting', 'resolving'].includes(room.phase)
+      && typeof store.listRoundJudgements === 'function') {
+      roundJudgements = await store.listRoundJudgements(id, room.round);
+      result.submitted = roundJudgements.some((entry) => String(entry.userId) === String(userId));
+    }
     /* A cleared room and its first-clear reward receipt are committed together.
        Return only this authenticated member's canonical resource totals so every
        client can SET its UI state instead of adding an untrusted local reward. */
@@ -196,7 +202,7 @@ export function createRaidRoomService({ store, now = Date.now } = {}) {
       result.completion = await store.getRaidCompletion(id, userId, room.floorGroup);
     }
     if (room.hostId === userId && room.phase === 'resolving') {
-      const submitted = await store.listRoundJudgements(id, room.round);
+      const submitted = roundJudgements || await store.listRoundJudgements(id, room.round);
       const byUser = new Map(submitted.map((entry) => [String(entry.userId), entry]));
       result.submissions = members.map((member) => byUser.get(String(member.userId)) || ({
         userId:member.userId,
@@ -360,6 +366,18 @@ export function createRaidRoomService({ store, now = Date.now } = {}) {
           userId,
           round,
           seenAt:now(),
+        });
+        return sync(userId, id, body.afterSequence);
+      }
+      case 'ackQuestionReady': {
+        const id = roomId(body.roomId);
+        const round = Math.trunc(Number(body.round) || 0);
+        if (round < 1) failRaidRoom('INVALID_REQUEST');
+        await store.ackQuestionReady({
+          roomId:id,
+          userId,
+          round,
+          readyAt:now(),
         });
         return sync(userId, id, body.afterSequence);
       }
