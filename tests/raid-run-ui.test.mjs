@@ -545,6 +545,46 @@ test('기절한 몬스터는 다음 턴 예고 대신 쉰다고 알려 준다', 
   assert.match(uiSource, /const nextHint = nextPlanHint\(truth, nextPlan\)/);
 });
 
+test('다음 기술 예고와 실제 판정은 서버 라운드와 방 id를 기준으로 한다', () => {
+  assert.match(uiSource, /function networkPatternRound\(snapshot/);
+  assert.match(uiSource, /Math\.trunc\(Number\(room\.round\) \|\| 0\) - 1/);
+  assert.match(uiSource, /function networkPatternSeed\(snapshot/);
+  assert.match(uiSource, /networkSession\?\.room\?\.id/);
+  assert.match(uiSource, /rules\(\)\.attackPlanForRound\(\s*truth,\s*networkPatternRound\(snap\),\s*networkPatternSeed\(snap\)/);
+  assert.match(uiSource, /active\.importSnapshot\(\{\s*round:networkPatternRound/,
+    '방장이 실제 판정하기 직전에도 서버 라운드를 강제해야 한다');
+});
+
+test('환기와 특성 원인은 던전 체력창 툴팁에 표시된다', () => {
+  const { context } = networkUiHarness();
+  const ui = context.YuksamRaidRunUi;
+  const buff = ui.memberStatusBadgesHtmlForTest({
+    id:'mage', statuses:{}, buffs:{ intBuffTurns:3 },
+  });
+  assert.match(buff, /환기 3/);
+  assert.match(buff, /지능이 30% 증가/);
+  const stun = ui.monsterStatusBadgesHtmlForTest({
+    stunTurns:1, stunSourceName:'냉기 집중',
+  });
+  assert.match(stun, /냉기 집중 특성으로 기절/);
+  assert.match(combatSource, /신앙의 광채로 인해/);
+});
+
+test('쓰러진 파티원이 생기면 화면에서도 생존자 자리를 앞으로 당긴다', () => {
+  const { context } = networkUiHarness();
+  const ui = context.YuksamRaidRunUi;
+  const shifted = ui.displayPartyMembersForTest([
+    { id:'a', slot:'front', hp:0 },
+    { id:'b', slot:'middle', hp:10 },
+    { id:'c', slot:'back', hp:10 },
+  ]);
+  assert.deepEqual(Array.from(shifted, (member) => [member.id, member.slot]), [
+    ['a', 'front'], ['b', 'front'], ['c', 'middle'],
+  ]);
+  assert.match(uiSource, /function applyDynamicFormationToBattle\(snapshot\)/);
+  assert.match(uiSource, /label\.textContent = member\.hp > 0 \? rules\(\)\.slotLabel\(member\.slot\) : '쓰러짐'/);
+});
+
 test('모든 다음 전투 예고는 같은 노란색 공통 서식을 쓴다', () => {
   const { context } = networkUiHarness();
   const ui = context.YuksamRaidRunUi;

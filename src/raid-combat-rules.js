@@ -121,6 +121,7 @@
     monster.empowerTurns = 0;
     monster.counterMode = null;
     monster.chargedPlanName = null;
+    monster.stunSourceName = null;
     monster.shadowBySource = {};
     return monster;
   }
@@ -302,11 +303,14 @@
     }
     const key = status === 'stun' ? 'stunTurns' : 'chillTurns';
     monster[key] = Math.max(integer(monster[key]), turns);
+    const reasonName = String(extra.reasonName || '');
+    if (status === 'stun' && reasonName) monster.stunSourceName = reasonName;
     events.push(eventBase(member, action, {
       kind:'monster-status', status, turns:monster[key],
+      sourceName:reasonName || null,
       audioId:status === 'stun' ? 'stunned' : null,
       text:status === 'stun'
-        ? `${monster.name}이(가) ${monster[key]}턴간 기절했습니다!`
+        ? `${reasonName ? `${member.name}의 ${reasonName} 특성! ` : ''}${monster.name}이(가) ${monster[key]}턴간 기절했습니다!`
         : `${monster.name}이(가) 냉기 상태가 되었습니다!`,
     }));
   }
@@ -728,7 +732,7 @@
         const frostRank = skillRank(member, 'mage_frost_focus_v24');
         const chance = number(defs.mage_frost_focus_v24?.activeStunChance?.[frostRank]);
         if (frostRank > 0 && roll(rng) < chance) {
-          addMonsterStatus(monster, member, action, 'stun', 1, events);
+          addMonsterStatus(monster, member, action, 'stun', 1, events, { reasonName:'냉기 집중' });
         }
       }
     }
@@ -812,6 +816,12 @@
 
   function damageMultiplierForSlot(slot, raidRules) {
     return typeof raidRules?.damageMultiplier === 'function' ? raidRules.damageMultiplier(slot) : 1;
+  }
+
+  function effectiveSlotFor(member, living, raidRules) {
+    return typeof raidRules?.effectiveSlot === 'function'
+      ? raidRules.effectiveSlot(living, member)
+      : member?.slot;
   }
 
   function pickTarget(members, raidRules) {
@@ -900,6 +910,7 @@
         audioId:'stunned', text:`${monster.name}이(가) 기절해 공격하지 못했습니다!`,
       });
       monster.stunTurns = Math.max(0, monster.stunTurns - 1);
+      if (monster.stunTurns <= 0) monster.stunSourceName = null;
       resolveShadowTicks(monster, members, rng, defs, events);
       return;
     }
@@ -924,11 +935,21 @@
     const empowerMultiplier = empowered ? Math.max(1, number(effect.EMPOWER_MULTIPLIER, 1.5)) : 1;
     let chillConsumed = false;
     let drained = 0;
+    /* 이번 몬스터 행동이 시작될 때의 생존 대형을 고정한다. 한 공격 도중
+       쓰러졌다고 같은 폭발 안에서 즉시 자리를 또 바꾸지는 않고, 다음 행동부터 당긴다. */
+    const turnLiving = living();
+    const effectiveSlots = new Map(turnLiving.map((member) => [
+      String(member.id), effectiveSlotFor(member, turnLiving, raidRules),
+    ]));
 
     if (plan.kind !== 'none') {
       const targets = plan.kind === 'all'
-        ? living()
-        : [pickPlanTarget(living(), plan, raidRules, rng)].filter(Boolean);
+        ? turnLiving
+        : [pickPlanTarget(turnLiving.map((member) => ({
+          ...member, slot:effectiveSlots.get(String(member.id)) || member.slot,
+        })), plan, raidRules, rng)].map((picked) => (
+          picked ? turnLiving.find((member) => String(member.id) === String(picked.id)) : null
+        )).filter(Boolean);
       if (!targets.length) return;
       const hitCount = plan.hits;
       events.push({
@@ -942,7 +963,7 @@
     /* 연속 공격은 한 사람을 연달아 때린 뒤 다음 사람으로 넘어간다.
        앞·앞·가운데·가운데·뒤·뒤 순서로 로그가 나와야 누가 몇 대 맞았는지 읽힌다.
        (예전에는 앞·가운데·뒤를 한 바퀴씩 돌아 순서가 섞여 보였다.) */
-    const waveTargets = plan.kind === 'all' ? living() : targets;
+    const waveTargets = plan.kind === 'all' ? turnLiving : targets;
     waveTargets.forEach((member) => {
     for (let hitIndex = 0; hitIndex < hitCount; hitIndex += 1) {
       if (member.hp <= 0) break;
@@ -954,7 +975,7 @@
       let incoming = Math.max(1, Math.round(
         Math.max(0, number(monsterAttack))
         * number(raidRules?.MONSTER_DAMAGE_MULTIPLIER, 1)
-        * damageMultiplierForSlot(member.slot, raidRules)
+        * damageMultiplierForSlot(effectiveSlots.get(String(member.id)) || member.slot, raidRules)
         * focus
         * empowerMultiplier
         * chargeMultiplier
@@ -967,13 +988,18 @@
         incoming = Math.max(1, Math.ceil(incoming * 0.5));
         chillConsumed = true;
       }
+      const faithRank = skillRank(member, 'priest_basic_life');
+      const faithBonus = number(defs.priest_basic_life?.monsterMissChance?.[faithRank]);
       const missed = roll(rng) < monsterMissChanceFor(member, defs);
       if (missed) {
         events.push({
           kind:'monster-hit', memberId:member.id, memberName:member.name,
           hitIndex, hitCount,
           missed:true, critical:false, damage:0, hpDamage:0, shieldDamage:0,
-          audioId:'miss', text:`${monster.name}의 공격이 ${member.name}에게 빗나갔습니다!`,
+          missReason:faithBonus > 0 ? 'priest_basic_life' : null,
+          audioId:'miss', text:faithBonus > 0
+            ? `${member.name}의 신앙의 광채로 인해 ${monster.name}의 공격이 빗나갔습니다!`
+            : `${monster.name}의 공격이 ${member.name}에게 빗나갔습니다!`,
         });
         continue;   // 빗나가도 남은 타수는 이어서 굴린다
       }
@@ -984,7 +1010,7 @@
       const hitEvent = {
         kind:'monster-hit', memberId:member.id, memberName:member.name,
         hitIndex, hitCount,
-        slot:member.slot, missed:false, critical, ...applied,
+        slot:effectiveSlots.get(String(member.id)) || member.slot, missed:false, critical, ...applied,
         audioId:critical ? 'critical' : 'enemyAttack',
         text:`${critical ? '치명타! ' : ''}${member.name}이(가) ${applied.totalDamage}의 피해를 받았습니다.`,
       };

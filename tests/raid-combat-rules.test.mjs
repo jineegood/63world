@@ -307,7 +307,24 @@ test('Faith Radiance increases dungeon monster miss chance by its learned rank',
   assert.equal(plainHit?.missed, false, '기본 10%만 있으면 0.20 공격은 명중해야 한다');
   assert.equal(radiantHit?.missed, true, '신앙의 광채 3단계면 같은 0.20 공격이 빗나가야 한다');
   assert.equal(radiantHit?.audioId, 'miss');
+  assert.equal(radiantHit?.missReason, 'priest_basic_life');
+  assert.match(radiantHit?.text || '', /신앙의 광채로 인해/);
   assert.equal(radiantPriest.hp, 100, '빗나간 던전 공격은 체력을 깎지 않아야 한다');
+});
+
+test('Frost Focus stun explains which passive caused it', () => {
+  const mage = member('frost-mage', {
+    klass:'mage', spec:'냉기',
+    skills:{ mage_frost_focus_v24:3, mage_frost_lance_v24:1 },
+  });
+  const result = resolve({
+    members:[mage],
+    submissions:{ 'frost-mage':{ correct:true, actionId:'mage_frost_lance_v24' } },
+    rng:sequence([0.5, 0.5, 0.5, 0.01]),
+  });
+  const stun = result.events.find((event) => event.kind === 'monster-status' && event.status === 'stun');
+  assert.equal(stun?.sourceName, '냉기 집중');
+  assert.match(stun?.text || '', /냉기 집중 특성/);
 });
 
 test('frost status halves the next monster attack and is consumed by one turn', () => {

@@ -71,6 +71,18 @@ test('단일 공격은 앞 한 명만 맞고 별도 집중 배율은 붙지 않�
   assert.equal(rules.SINGLE_TARGET_BONUS, 1);
 });
 
+test('앞사람이 쓰러지면 생존자는 한 자리씩 앞으로 당겨져 더 위험해진다', () => {
+  const shifted = party({ a:{ hp:0 } });
+  assert.equal(rules.effectiveSlot(shifted, shifted[1]), 'front');
+  assert.equal(rules.effectiveSlot(shifted, shifted[2]), 'middle');
+  const result = rules.resolveMonsterAttack({ members:shifted, attack:10, kind:'all', rng:PLAIN });
+  const byId = Object.fromEntries(result.hits.map((hit) => [hit.memberId, hit]));
+  assert.equal(byId.b.slot, 'front');
+  assert.equal(byId.b.damage, 8, '가운데 생존자는 앞자리 1.5배를 받아야 한다');
+  assert.equal(byId.c.slot, 'middle');
+  assert.equal(byId.c.damage, 5, '뒷자리 생존자는 가운데 1배를 받아야 한다');
+});
+
 test('한 명만 노리는 공격이 전체 공격보다 한 방이 더 아프다', () => {
   const single = rules.resolveMonsterAttack({ members:party(), attack:10, kind:'single', rng:PLAIN });
   const all = rules.resolveMonsterAttack({ members:party(), attack:10, kind:'all', rng:PLAIN });

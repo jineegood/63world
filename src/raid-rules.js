@@ -40,6 +40,17 @@
     return typeof value === 'number' ? value : 1;
   }
 
+  /* 누군가 쓰러지면 남은 사람들은 빈자리를 그대로 두지 않고 앞으로 당겨 선다.
+     원래 대형 순서는 유지하되, 생존자만 앞→가운데→뒤를 다시 채운다. */
+  function effectiveSlot(members, target) {
+    if (!target || Number(target.hp) <= 0) return target?.slot || 'middle';
+    const alive = (Array.isArray(members) ? members : [])
+      .filter((member) => member && Number(member.hp) > 0)
+      .sort((a, b) => (ATTACK_ORDER[a?.slot] ?? 1) - (ATTACK_ORDER[b?.slot] ?? 1));
+    const index = alive.findIndex((member) => String(member.id) === String(target.id));
+    return SLOTS[Math.max(0, Math.min(SLOTS.length - 1, index))] || target.slot || 'middle';
+  }
+
   /* 세 명이 앞·가운데·뒤에 하나씩 서 있어야 올바른 대형이다. */
   function validateFormation(members) {
     if (!Array.isArray(members) || members.length !== PARTY_SIZE) {
@@ -87,16 +98,17 @@
        스킬을 쓰는 3인 전투 계산기와 같은 값을 써야 결과가 갈리지 않는다. */
     const focus = kind === 'all' ? PATTERN_EFFECT.ALL_ATTACK_MULTIPLIER : SINGLE_TARGET_BONUS;
     const hits = targets.map((member) => {
-      const multiplier = damageMultiplier(member.slot);
+      const slot = effectiveSlot(alive, member);
+      const multiplier = damageMultiplier(slot);
       if (roll() < MISS_CHANCE) {
-        return { memberId:member.id, slot:member.slot, multiplier, damage:0, missed:true, critical:false, lethal:false };
+        return { memberId:member.id, slot, multiplier, damage:0, missed:true, critical:false, lethal:false };
       }
       const critical = roll() < CRIT_CHANCE;
       // 배율을 곱해도 최소 1은 들어간다. 뒤에 섰다고 0이 되면 안 된다.
       const raw = Math.max(1, Math.round(base * multiplier * focus * (critical ? CRIT_MULTIPLIER : 1)));
       return {
         memberId: member.id,
-        slot: member.slot,
+        slot,
         multiplier,
         critical,
         missed: false,
@@ -681,6 +693,7 @@
     NEXT_ENCOUNTER_REVIVE_HP,
     slotLabel,
     damageMultiplier,
+    effectiveSlot,
     validateFormation,
     pickTarget,
     resolveMonsterAttack,

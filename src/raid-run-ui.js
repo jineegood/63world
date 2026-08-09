@@ -1201,6 +1201,24 @@
       && String(networkSession.room?.hostId || '') === String(raidIdentity()?.userId || '');
   }
 
+  /* 던전 기술 순서는 각 탭의 로컬 round가 아니라 서버 방의 round가 기준이다.
+     서버 round 1은 진행 엔진의 첫 공격(인덱스 0)에 해당한다. */
+  function networkPatternRound(snapshot = active?.snapshot?.()) {
+    const room = networkSession?.room;
+    if (!room) return Math.max(0, Number(snapshot?.round) || 0);
+    if (['question', 'waiting', 'resolving'].includes(room.phase)) {
+      return Math.max(0, Math.trunc(Number(room.round) || 0) - 1);
+    }
+    const saved = Number(room.monsterState?.raidRound);
+    return Number.isFinite(saved) && saved >= 0
+      ? Math.trunc(saved)
+      : Math.max(0, Number(snapshot?.round) || 0);
+  }
+
+  function networkPatternSeed(snapshot = active?.snapshot?.()) {
+    return String(networkSession?.room?.id || snapshot?.patternSeed || '');
+  }
+
   function beginNetworkRun() {
     if (!networkSession || active || networkStarting) return;
     const members = roomMembers();
@@ -1551,6 +1569,11 @@
         /* resolveRound은 로컬 상태를 실제로 변경한다. 결과 전송이 끊겼다고
            다시 호출하면 방장 화면만 같은 공격을 두 번 계산한다. 최초 계산
            결과를 보관하고 이후에는 같은 자료와 같은 요청 번호만 재전송한다. */
+        /* 로컬 round가 한 칸 밀렸더라도 방장이 서버 round의 기술을 계산한다. */
+        active.importSnapshot({
+          round:networkPatternRound(active.snapshot()),
+          patternSeed:networkPatternSeed(active.snapshot()),
+        });
         const downAtRoundStart = new Set(active.snapshot().members
           .filter((member) => member.hp <= 0)
           .map((member) => String(member.id)));
@@ -1724,6 +1747,8 @@
       memberShields:{ ...(view.memberShields || {}) },
       memberStatuses:Object.fromEntries(Object.entries(view.memberStatuses || {})
         .map(([id, statuses]) => [id, { ...(statuses || {}) }])),
+      memberBuffs:Object.fromEntries(Object.entries(view.memberBuffs || {})
+        .map(([id, buffs]) => [id, { ...(buffs || {}) }])),
       monsterStatuses:{ ...(view.monsterStatuses || {}) },
     };
   }
@@ -2406,7 +2431,11 @@
   function partySpriteHtml(members) {
     const order = { front:0, middle:1, back:2 };
     return [...members]
-      .sort((a, b) => (order[a.slot] ?? 1) - (order[b.slot] ?? 1))
+      .sort((a, b) => {
+        const aOrder = a.hp > 0 ? (order[a.slot] ?? 1) : 3 + (order[a.originalSlot || a.slot] ?? 1);
+        const bOrder = b.hp > 0 ? (order[b.slot] ?? 1) : 3 + (order[b.originalSlot || b.slot] ?? 1);
+        return aOrder - bOrder;
+      })
       /* combat-idle / combat-idle-player 는 사냥터 전투가 쓰는 클래스다.
          이걸 붙여야 캐릭터가 가만히 있을 때도 살짝살짝 움직인다.
          체력바는 각자의 머리 위에 함께 붙인다. */
@@ -2442,6 +2471,7 @@
     if (status.poisonTurns > 0) badges.push({ key:'poison', label:`중독 ${status.poisonTurns}`, tooltip:`턴마다 독 피해를 받습니다. 남은 ${status.poisonTurns}턴` });
     if (status.stunTurns > 0) badges.push({ key:'stun', label:`기절 ${status.stunTurns}`, tooltip:`행동할 수 없습니다. 남은 ${status.stunTurns}턴` });
     if (status.chillTurns > 0) badges.push({ key:'chill', label:`냉기 ${status.chillTurns}`, tooltip:'다음 공격 데미지가 50% 감소합니다.' });
+    if (Number(status.intBuffTurns) > 0) badges.push({ key:'intBuff', label:`환기 ${status.intBuffTurns}`, tooltip:`지능이 30% 증가합니다. 남은 ${status.intBuffTurns}턴` });
     return badges;
   }
 
@@ -2449,7 +2479,7 @@
     const source = String(value == null ? '' : value);
     const snap = active?.snapshot?.();
     const entities = [];
-    (snap?.members || []).forEach((member) => {
+    displayPartyMembers(snap?.members || [], view?.members || {}).forEach((member) => {
       const name = String(member?.name || '');
       if (name) entities.push({ name, cls:`raid-log-name ${raidSlotClass(member.slot)}` });
     });
@@ -2509,7 +2539,11 @@
   }
 
   function memberStatusBadgesHtml(member) {
-    const badges = commonStatusBadges(member?.statuses || {});
+    const buffs = member?.buffs || {};
+    const badges = commonStatusBadges({
+      ...(member?.statuses || {}),
+      intBuffTurns:Math.max(0, Number(buffs.intBuffTurns) || 0),
+    });
     /* 던전 몬스터의 실명 패턴 — 남은 횟수만큼 공격이 그냥 빗나간다. */
     const blind = Math.max(0, Number(member?.statuses?.blindHits) || 0);
     if (blind > 0) badges.push({ key:'blind', label:`실명 ${blind}`, tooltip:`다음 공격 ${blind}회가 50% 확률로 빗나갑니다.` });
@@ -2529,6 +2563,10 @@
       chillTurns:Number(monster?.chillTurns || monster?.statuses?.chillTurns) || 0,
       poisonTurns:Number(monster?.poisonTurns || monster?.statuses?.poisonTurns) || 0,
     });
+    const stunBadge = badges.find((badge) => badge.key === 'stun');
+    if (stunBadge && monster?.stunSourceName) {
+      stunBadge.tooltip = `${monster.stunSourceName} 특성으로 기절했습니다. 남은 ${Math.max(0, Number(monster.stunTurns) || 0)}턴`;
+    }
     const shadow = Object.values(monster?.shadowBySource || {}).reduce((sum, value) => sum + Math.max(0, Number(value) || 0), 0);
     if (shadow > 0) badges.push({ key:'shadow', label:`암흑 ${shadow}`, tooltip:'누적되는 지속 데미지로 턴이 끝날 때 피해를 줍니다.' });
     /* 시트 패턴이 남긴 몬스터 쪽 상태도 보여 준다. */
@@ -2716,6 +2754,7 @@
       members: Object.fromEntries(snap.members.map((m) => [m.id, m.hp])),
       memberShields:Object.fromEntries(snap.members.map((m) => [m.id, Math.max(0, Number(m.shield) || 0)])),
       memberStatuses:Object.fromEntries(snap.members.map((m) => [m.id, { ...(m.statuses || {}) }])),
+      memberBuffs:Object.fromEntries(snap.members.map((m) => [m.id, { ...(m.buffs || {}) }])),
       /* 몬스터 상태는 체력처럼 '표시용'을 따로 둔다.
          기절은 걸린 그 라운드 안에서 몬스터 턴에 바로 소모되기 때문에,
          최종 상태만 보면 배지가 한 번도 보이지 않는다. 사냥터에서는
@@ -2723,6 +2762,7 @@
       monsterStatuses:{
         stunTurns:Math.max(0, Number(snap.monster.stunTurns) || 0),
         chillTurns:Math.max(0, Number(snap.monster.chillTurns) || 0),
+        stunSourceName:String(snap.monster.stunSourceName || ''),
       },
     };
   }
@@ -2730,6 +2770,26 @@
   /* 다음 턴에 무엇이 오는지 한 줄로 알려 준다.
      패턴이 정해져 있으니 학생이 미리 자리를 바꾸거나 보호막을 준비할 수 있다. */
   const SLOT_WORD = { front:'앞', middle:'가운데', back:'뒤' };
+
+  function displayPartyMembers(members, hpById = null) {
+    const source = (Array.isArray(members) ? members : []).map((member) => ({
+      ...member,
+      originalSlot:member.originalSlot || member.slot,
+      hp:Math.max(0, hpById?.[member.id] ?? member.hp),
+    }));
+    const R = rules();
+    const order = { front:0, middle:1, back:2 };
+    const slots = ['front', 'middle', 'back'];
+    const alive = source.filter((member) => member.hp > 0)
+      .sort((a, b) => (order[a.slot] ?? 1) - (order[b.slot] ?? 1));
+    return source.map((member) => ({
+      ...member,
+      slot:member.hp > 0 && typeof R.effectiveSlot === 'function'
+        ? R.effectiveSlot(source, member)
+        : member.hp > 0 ? (slots[alive.findIndex((entry) => String(entry.id) === String(member.id))] || member.slot)
+        : member.slot,
+    }));
+  }
 
   /* 예고 문구의 기술 이름은 패턴 종류와 관계없이 반드시 이 공통 경로를 거친다.
      예전에는 전체 공격/상태이상만 warn 클래스가 붙어 노란색이고,
@@ -2808,14 +2868,19 @@
       hp:Math.max(0, view?.monsterHp ?? truth.hp),
       shield:Math.max(0, view?.monsterShield ?? truth.shield ?? 0),
     };
-    const members = snap.members.map((m) => ({
+    const members = displayPartyMembers(snap.members.map((m) => ({
       ...m,
       hp: Math.max(0, view?.members?.[m.id] ?? m.hp),
       shield:Math.max(0, view?.memberShields?.[m.id] ?? m.shield ?? 0),
       statuses:{ ...(view?.memberStatuses?.[m.id] || m.statuses || {}) },
-    }));
+      buffs:{ ...(view?.memberBuffs?.[m.id] || m.buffs || {}) },
+    })));
     const percent = Math.max(0, Math.round((monster.hp / monster.maxHp) * 100));
-    const nextPlan = rules().attackPlanForRound(truth, snap.round, snap.patternSeed);
+    const nextPlan = rules().attackPlanForRound(
+      truth,
+      networkPatternRound(snap),
+      networkPatternSeed(snap),
+    );
     const nextKind = nextPlan.kind;
     const nextHint = nextPlanHint(truth, nextPlan);
 
@@ -3246,10 +3311,19 @@
       const before = view.members[id] ?? 0;
       const exactHp = exactEventNumber(event, 'memberHp');
       view.members[id] = exactHp === null ? before + (event.amount || 0) : Math.max(0, exactHp);
-    } else if (event.kind === 'party-buff' && event.heal > 0) {
-      const before = view.members[event.memberId] ?? 0;
-      const exactHp = exactEventNumber(event, 'memberHp');
-      view.members[event.memberId] = exactHp === null ? before + Number(event.heal || 0) : Math.max(0, exactHp);
+    } else if (event.kind === 'party-buff') {
+      if (event.heal > 0) {
+        const before = view.members[event.memberId] ?? 0;
+        const exactHp = exactEventNumber(event, 'memberHp');
+        view.members[event.memberId] = exactHp === null ? before + Number(event.heal || 0) : Math.max(0, exactHp);
+      }
+      if (event.status === 'intBuff') {
+        view.memberBuffs = view.memberBuffs || {};
+        view.memberBuffs[event.memberId] = {
+          ...(view.memberBuffs[event.memberId] || {}),
+          intBuffTurns:Math.max(1, Number(event.turns) || 1),
+        };
+      }
     } else if (event.kind === 'party-shield') {
       const id = event.targetMemberId || event.memberId;
       const exactShield = exactEventNumber(event, 'shield');
@@ -3268,10 +3342,37 @@
     if (event.kind === 'monster-status') {
       const turns = Math.max(1, Number(event.turns) || 1);
       if (event.status === 'stun') statuses.stunTurns = Math.max(statuses.stunTurns || 0, turns);
+      if (event.status === 'stun' && event.sourceName) statuses.stunSourceName = String(event.sourceName);
       if (event.status === 'chill') statuses.chillTurns = Math.max(statuses.chillTurns || 0, turns);
     } else if (event.kind === 'monster-skip' && event.status === 'stun') {
       statuses.stunTurns = Math.max(0, (statuses.stunTurns || 0) - 1);
+      if (statuses.stunTurns <= 0) statuses.stunSourceName = '';
     }
+  }
+
+  function applyDynamicFormationToBattle(snapshot) {
+    const doc = global.document;
+    const order = { front:0, middle:1, back:2 };
+    const members = displayPartyMembers(snapshot?.members || [], view?.members || {});
+    const sorted = [...members].sort((a, b) => {
+      const aOrder = a.hp > 0 ? (order[a.slot] ?? 1) : 3 + (order[a.originalSlot || a.slot] ?? 1);
+      const bOrder = b.hp > 0 ? (order[b.slot] ?? 1) : 3 + (order[b.originalSlot || b.slot] ?? 1);
+      return aOrder - bOrder;
+    });
+    sorted.forEach((member, index) => {
+      const box = doc.querySelector(`.raid-ally-hp[data-member="${member.id}"]`);
+      const sprite = box?.closest?.('.raid-ally-sprite');
+      if (sprite) {
+        sprite.classList.remove('raid-ally-0', 'raid-ally-1', 'raid-ally-2');
+        sprite.classList.add(`raid-ally-${Math.min(2, index)}`);
+      }
+      if (box) {
+        box.classList.remove('slot-front', 'slot-middle', 'slot-back');
+        box.classList.add(raidSlotClass(member.slot));
+        const label = box.querySelector('.raid-ally-slot');
+        if (label) label.textContent = member.hp > 0 ? rules().slotLabel(member.slot) : '쓰러짐';
+      }
+    });
   }
 
   /* 재생 중에는 창을 다시 열지 않고 바뀐 곳만 고친다.
@@ -3317,6 +3418,7 @@
           status.innerHTML = memberStatusBadgesHtml({
             ...member,
             statuses:{ ...(view.memberStatuses?.[member.id] || member.statuses || {}) },
+            buffs:{ ...(view.memberBuffs?.[member.id] || member.buffs || {}) },
           });
         }
         box.classList.toggle('down', hp <= 0);
@@ -3324,6 +3426,7 @@
       const sprite = memberSpriteNode(member.id);
       if (sprite) sprite.classList.toggle('down', hp <= 0);
     });
+    applyDynamicFormationToBattle(snap);
 
     /* 다음 턴 예고는 여기서 고치지 않는다.
        한 턴(우리 공격 + 몬스터 반격)이 다 끝나고 다음 문제가 나올 때
@@ -4399,5 +4502,8 @@
     questionWaitMessageForTest:(state) => networkQuestionWaitMessage(state),
     nextPlanHintForTest:(monster, plan) => nextPlanHint(monster, plan),
     nextPlanHintHtmlForTest:(hint) => nextPlanHintHtml(hint),
+    memberStatusBadgesHtmlForTest:(member) => memberStatusBadgesHtml(member),
+    monsterStatusBadgesHtmlForTest:(monster) => monsterStatusBadgesHtml(monster),
+    displayPartyMembersForTest:(members, hpById) => displayPartyMembers(members, hpById),
   });
 })(typeof window !== 'undefined' ? window : globalThis);
