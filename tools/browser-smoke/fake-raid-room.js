@@ -180,5 +180,5 @@ module.exports = function createFakeRaidRoom({
     close() { listeners.clear(); },
   };
 
-  return { client, room, members, get eventCount() { return events.length; } };
+  return { client, room, members, notify, get eventCount() { return events.length; } };
 };

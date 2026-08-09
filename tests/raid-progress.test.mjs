@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
 const source = readFileSync(join(root, 'src', 'raid-progress.js'), 'utf8').replace(/\r\n/g, '\n');
+const gameSource = readFileSync(join(root, 'game.js'), 'utf8').replace(/\r\n/g, '\n');
 
 const context = createContext({ window:{} });
 new Script(source, { filename:'src/raid-progress.js' }).runInContext(context);
@@ -90,6 +91,16 @@ test('구간을 깨면 진행도가 오르고, 이미 앞서 있으면 그대로
   assert.equal(P.recordClear(player, 99), false);
   assert.equal(player.raidTopGroup, 3);
   assert.equal(P.recordClear(null, 1), false);
+});
+
+test('로그인 정리 과정에서도 저장된 던전 해금값을 보존한다', () => {
+  const normalizer = gameSource.match(/function normalizePlayer\(p\)[\s\S]*?\n}/)?.[0] || '';
+  assert.notEqual(normalizer, '');
+  assert.match(normalizer, /raidTopGroup:\s*Math\.max\(0, Math\.min\(7,/);
+  assert.match(normalizer, /p\.raidTopGroup \?\? p\.raid_top_group/);
+
+  const creator = gameSource.match(/function createNewPlayer\(name\)[\s\S]*?\n}/)?.[0] || '';
+  assert.match(creator, /raidTopGroup:\s*0/);
 });
 
 test('화면·저장·서버를 건드리지 않는 순수 규칙이다', () => {

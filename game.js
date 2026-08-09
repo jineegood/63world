@@ -560,6 +560,9 @@ function normalizePlayer(p) {
     skillCooldowns: p.skillCooldowns || {},
     combatStatuses,
     skillPoints: Number.isFinite(Number(p.skillPoints)) ? Number(p.skillPoints) : Math.max(0, (Number(p.level) || 1) - 1),
+    /* 63빌딩 던전에서 완료한 가장 높은 구간. 로그인 정리 과정에서도
+       반드시 보존해야 다음 구간 해금이 서버 저장에서 사라지지 않는다. */
+    raidTopGroup: Math.max(0, Math.min(7, Math.trunc(Number(p.raidTopGroup ?? p.raid_top_group) || 0))),
     updatedAt: p.updatedAt || Date.now(),
     records: (function(){
       const r = p.records || {};
@@ -624,6 +627,7 @@ function createNewPlayer(name) {
     skills: {},
     skillCooldowns: {},
     skillPoints: 0,
+    raidTopGroup: 0,
     updatedAt: Date.now(),
   });
 }

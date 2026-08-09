@@ -94,6 +94,13 @@ run(process.argv[2], async ({ window, $, click, sleep, asyncErrors }) => {
   while (G.modalState?.type !== 'raidBattle' && waitBattle < 300) { await sleep(50); waitBattle += 1; }
   check('복도 끝에서 전투가 시작된다', G.modalState?.type === 'raidBattle', `type=${G.modalState?.type}`);
 
+  /* 실제 사고 재현: 등장 문구를 보여 주는 동안 heartbeat가 아직 travel인
+     서버 상태를 보내도 로컬 전투가 복도로 되감기면 안 된다. */
+  fake.notify();
+  await sleep(80);
+  check('등장 중 늦은 이동 신호가 와도 전투가 멈추지 않는다',
+    ui.peek()?.phase === 'battle', `phase=${ui.peek()?.phase}`);
+
   // ===== 전투 화면 =====
   check('일반 전투와 같은 무대를 쓴다', !!document.querySelector('.combat-stage'));
   check('왼쪽에 캐릭터 셋이 선다', document.querySelectorAll('.raid-ally-sprite').length === 3);

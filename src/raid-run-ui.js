@@ -360,6 +360,16 @@
     return progressApi()?.labelFor(currentFloorGroup()) || '1–10층';
   }
 
+  /* 복도 끝에 도착한 화면은 서버가 문제를 발급하기 전까지 잠깐 서버보다
+     한 장면 앞선다. 이 정상적인 틈에 heartbeat의 travel 스냅샷을 그대로
+     넣으면 battle이 travel로 되감겨 "몬스터가 나타났다!"에서 멈춘다. */
+  function localEncounterAwaitingQuestion(session = networkSession) {
+    if (!session || !active || session.room?.phase !== 'travel' || active.phase !== 'battle') return false;
+    const localIndex = Math.max(0, Math.trunc(Number(active.snapshot()?.encounterIndex) || 0));
+    const serverIndex = Math.max(0, Math.trunc(Number(session.room?.encounterIndex) || 0));
+    return localIndex === serverIndex;
+  }
+
   /* 파티 셋이 모두 이 구간을 열었는지. 한 명이라도 못 열었으면 이름을 돌려준다. */
   function partyUnlockState() {
     const P = progressApi();
@@ -529,6 +539,7 @@
       && !allMembersFinishedPlayback(Number(networkSession.room?.round) || 0, networkSession);
     if (active && !networkSession.playbackActive && !networkSession.playbackQueue?.length
       && !waitingForPlaybackBarrier
+      && !localEncounterAwaitingQuestion(networkSession)
       && ['question', 'waiting', 'travel', 'effects'].includes(phase)) {
       importNetworkTruth();
       syncViewToTruth();
@@ -551,6 +562,7 @@
     if (active?.phase === 'battle' && ['question', 'waiting', 'resolving'].includes(phase)
       && !networkSession.playbackActive && !networkSession.playbackQueue?.length
       && G()?.currentMap === MAP_KEY && G()?.modalState?.type !== 'raidBattle') {
+      cancelTravelWatchdog();
       travelAnimationToken += 1;
       encounterMonster = null;
       encounterStartedAt = 0;
@@ -576,6 +588,7 @@
     }
     if (!active && !networkStarting) beginNetworkRun();
     if (active && !networkSession.playbackActive && !networkSession.playbackQueue?.length
+      && !localEncounterAwaitingQuestion(networkSession)
       && ['effects', 'travel', 'cleared', 'wiped'].includes(phase)) {
       continueAfterNetworkPlayback();
     }
@@ -1426,7 +1439,9 @@
     if (!networkSession || !active || typeof active.importSnapshot !== 'function') return;
     const room = networkSession.room || {};
     const current = active.snapshot();
-    const phase = ['question', 'waiting', 'resolving', 'effects'].includes(room.phase)
+    const preserveLocalArrival = localEncounterAwaitingQuestion(networkSession);
+    const phase = preserveLocalArrival ? current.phase
+      : ['question', 'waiting', 'resolving', 'effects'].includes(room.phase)
       ? 'battle'
       : ['travel', 'cleared', 'wiped'].includes(room.phase) ? room.phase : current.phase;
 
@@ -1444,7 +1459,8 @@
     if (def) {
       /* 상태가 그 몬스터의 것일 때만 얹는다. 아니면 새 몬스터를 온전한
          체력으로 세운다 — 다음 조우가 시작된 것이기 때문이다. */
-      monster = stateMatchesEncounter
+      monster = preserveLocalArrival ? current.monster
+        : stateMatchesEncounter
         ? { ...def, ...state }
         : { ...def, hp:def.hp, maxHp:def.hp };
     } else {
@@ -1455,7 +1471,8 @@
       phase,
       encounterIndex:serverIndex,
       /* 죽은 이전 몬스터의 raidRound를 다음 몬스터에 넘기지 않는다. */
-      round:stateMatchesEncounter ? (Number(state?.raidRound) || 0) : 0,
+      round:preserveLocalArrival ? current.round
+        : stateMatchesEncounter ? (Number(state?.raidRound) || 0) : 0,
       monster,
       members:roomMembers(),
     });
@@ -1627,6 +1644,12 @@
   let walkStartedAt = 0;   // 이동 연출 시작 시각
   let walkProgress = 1;    // 0=출발 지점, 1=몬스터 앞
   let travelAnimationToken = 0;
+  let travelWatchdogTimer = null;
+
+  function cancelTravelWatchdog() {
+    if (travelWatchdogTimer != null) global.clearTimeout(travelWatchdogTimer);
+    travelWatchdogTimer = null;
+  }
   let returnMap = 'town';
   let returnPos = null;
 
@@ -2046,12 +2069,22 @@
     walkProgress = 0;
     encounterMonster = null;
     encounterStartedAt = 0;
+    cancelTravelWatchdog();
     const travelToken = ++travelAnimationToken;
 
     // 다음에 만날 몬스터를 미리 알아 둔다(등장 연출에 필요).
     const R = rules();
     const snap = active.snapshot();
     const upcoming = R.floorEncounters(snap.floor)[snap.encounterIndex] || null;
+
+    /* 백그라운드 탭에서는 requestAnimationFrame이 멎을 수 있다. 그 탭이
+       방장이면 서버 문제도 영원히 시작되지 않으므로 실제 경과시간 기준의
+       안전 타이머로 반드시 다음 장면까지 보낸다. */
+    travelWatchdogTimer = global.setTimeout(() => {
+      if (!active || travelToken !== travelAnimationToken) return;
+      walkProgress = 1;
+      finishTravel(travelToken);
+    }, WALK_MS + ENCOUNTER_MS + 600);
 
     const tick = () => {
       if (!active || travelToken !== travelAnimationToken) return;
@@ -2078,6 +2111,8 @@
 
   function finishTravel(travelToken = travelAnimationToken) {
     if (!active || travelToken !== travelAnimationToken) return;
+    cancelTravelWatchdog();
+    travelAnimationToken += 1;
     encounterMonster = null;
     encounterStartedAt = 0;
     const arrival = active.arriveAtEncounter();

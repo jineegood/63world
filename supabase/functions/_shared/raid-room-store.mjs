@@ -81,14 +81,25 @@ export function createSupabaseRaidRoomStore(client) {
 
   return Object.freeze({
     async getAuthoritativeProfile(userId) {
-      const row = check(await client.from('player_profiles_v2')
-        .select('display_name,data').eq('user_id', userId).maybeSingle());
+      const [profileResult, progressResult] = await Promise.all([
+        client.from('player_profiles_v2')
+          .select('display_name,data').eq('user_id', userId).maybeSingle(),
+        client.from('raid_progress_v1')
+          .select('top_group').eq('user_id', userId).maybeSingle(),
+      ]);
+      const row = check(profileResult);
+      const progress = check(progressResult);
       if (!row) return null;
-      return buildAuthoritativePvpProfile({
+      const profile = buildAuthoritativePvpProfile({
         userId,
         displayName:row.display_name,
         data:row.data,
       });
+      if (!profile) return null;
+      return {
+        ...profile,
+        raidTopGroup:Math.max(0, Math.min(7, Math.trunc(Number(progress?.top_group) || 0))),
+      };
     },
 
     async createRoom(value) {

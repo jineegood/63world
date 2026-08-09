@@ -17,6 +17,10 @@ const playbackBarrierMigration = fs.readFileSync(
   path.join(root, 'supabase/migrations/202608090001_raid_playback_barrier_v1.sql'),
   'utf8',
 );
+const progressAuthorityMigration = fs.readFileSync(
+  path.join(root, 'supabase/migrations/202608090002_raid_progress_authority_v1.sql'),
+  'utf8',
+);
 const serviceUrl = pathToFileURL(path.join(root, 'supabase/functions/_shared/raid-room-service.mjs'));
 const errorUrl = pathToFileURL(path.join(root, 'supabase/functions/_shared/raid-room-error.mjs'));
 const storeUrl = pathToFileURL(path.join(root, 'supabase/functions/_shared/raid-room-store.mjs'));
@@ -83,6 +87,15 @@ test('세 화면의 전투 연출이 모두 끝나야 서버가 다음 문제를
   assert.match(playbackBarrierMigration, /member\.playback_round < old\.round_no/i);
   assert.match(playbackBarrierMigration, /raise exception[\s\S]*PLAYBACK_PENDING/i);
   assert.match(playbackBarrierMigration, /create trigger raid_playback_barrier_v1/i);
+});
+
+test('던전 클리어 해금은 서버가 저장하고 과거 완료 방도 자동 복구한다', () => {
+  assert.match(progressAuthorityMigration, /create table if not exists public\.raid_progress_v1/i);
+  assert.match(progressAuthorityMigration, /room\.phase = 'cleared'[\s\S]*group by member\.user_id/i);
+  assert.match(progressAuthorityMigration, /private_record_raid_clear_v1[\s\S]*new\.phase = 'cleared'/i);
+  assert.match(progressAuthorityMigration, /top_group = greatest\(public\.raid_progress_v1\.top_group, excluded\.top_group\)/i);
+  assert.match(progressAuthorityMigration, /private_guard_raid_progress_profile_v1/i);
+  assert.match(progressAuthorityMigration, /revoke all on table public\.raid_progress_v1 from public, anon, authenticated/i);
 });
 
 test('서버 sync는 방 version이 바뀌면 파티원과 이벤트를 다시 읽는다', async () => {
@@ -340,6 +353,36 @@ test('Supabase store finds only a non-terminal active room for resume', async ()
   assert.equal(room.phase, 'travel');
   assert.equal(queried.some((entry) => entry[0] === 'raid_room_members_v1'
     && entry[1] === 'eq' && entry[2] === 'active' && entry[3] === true), true);
+});
+
+test('Supabase store uses server-owned raid progress instead of editable player JSON', async () => {
+  const { createSupabaseRaidRoomStore } = await import(storeUrl.href);
+  const rows = {
+    player_profiles_v2:{
+      display_name:'앨리스',
+      data:{
+        name:'앨리스', class:'warrior', exp:0,
+        inventory:['training_greatsword'],
+        equipment:{ weapon:'training_greatsword' },
+        raidTopGroup:7,
+      },
+    },
+    raid_progress_v1:{ top_group:1 },
+  };
+  const client = {
+    from(table) {
+      const query = {
+        select() { return query; },
+        eq() { return query; },
+        async maybeSingle() { return { data:rows[table] || null, error:null }; },
+      };
+      return query;
+    },
+    rpc:async () => ({ data:null, error:null }),
+  };
+  const store = createSupabaseRaidRoomStore(client);
+  const profile = await store.getAuthoritativeProfile('student-a');
+  assert.equal(profile.raidTopGroup, 1);
 });
 
 test('only the host receives private correctness judgements after all submissions', async () => {
