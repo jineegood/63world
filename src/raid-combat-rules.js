@@ -229,9 +229,48 @@
   }
 
   function healMember(member, requested) {
+    /* 던전에서 쓰러진 파티원은 다음 조우의 HP 1 부활 또는 수호자의 맹세처럼
+       명시적인 부활 효과로만 일어날 수 있다. 일반 회복·흡혈이 HP 0을 넘겨
+       전투 도중 몰래 부활시키지 못하게 공통 회복 경계에서 막는다. */
+    if (!member || member.hp <= 0) return 0;
     const amount = Math.min(Math.max(0, member.maxHp - member.hp), Math.max(0, integer(requested)));
     member.hp += amount;
     return amount;
+  }
+
+  function healingDebug(member, options = {}, defsOverride) {
+    const defs = skillDefs(defsOverride);
+    const boosted = options.boosted === true;
+    const rank = boosted ? skillRank(member, 'priest_holy_grace_v24') : 0;
+    const bonus = boosted ? number(defs.priest_holy_grace_v24?.healBoost?.[rank]) : 0;
+    return {
+      kind:'healing',
+      baseName:String(options.baseName || '기준값'),
+      baseValue:Math.max(0, number(options.baseValue)),
+      rate:Math.max(0, number(options.rate, 1)),
+      rawRequested:Math.max(0, integer(options.rawRequested)),
+      healBoostMultiplier:1 + bonus,
+      requestedHeal:Math.max(0, integer(options.requestedHeal)),
+      actualHeal:Math.max(0, integer(options.actualHeal)),
+      beforeHp:Math.max(0, integer(options.beforeHp)),
+      afterHp:Math.max(0, integer(options.afterHp)),
+      maxHp:Math.max(1, integer(options.maxHp, 1)),
+      reason:String(options.reason || ''),
+    };
+  }
+
+  function shieldDebug(options = {}) {
+    return {
+      kind:'shield',
+      baseName:String(options.baseName || '기준값'),
+      baseValue:Math.max(0, number(options.baseValue)),
+      rate:Math.max(0, number(options.rate, 1)),
+      requestedShield:Math.max(0, integer(options.requestedShield)),
+      actualShield:Math.max(0, integer(options.actualShield)),
+      beforeShield:Math.max(0, integer(options.beforeShield)),
+      afterShield:Math.max(0, integer(options.afterShield)),
+      reason:String(options.reason || ''),
+    };
   }
 
   function addShield(member, requested) {
@@ -557,9 +596,17 @@
     if (isSkill) member.cooldowns[action.id] = Math.max(0, integer(active.cooldown));
 
     if (active.type === 'shield') {
-      const amount = addShield(member, Math.ceil(member.maxHp * number(active.shieldPct, 0.4)));
+      const rate = number(active.shieldPct, 0.4);
+      const requested = Math.ceil(member.maxHp * rate);
+      const before = member.shield;
+      const amount = addShield(member, requested);
       events.push(eventBase(member, action, {
         kind:'party-shield', amount, shield:member.shield, audioId:actionAudioId,
+        debugCalc:shieldDebug({
+          baseName:'최대 HP', baseValue:member.maxHp, rate,
+          requestedShield:requested, actualShield:amount,
+          beforeShield:before, afterShield:member.shield,
+        }),
         text:`${member.name}이(가) ${active.name}로 보호막 ${amount}을 얻었습니다.`,
       }));
       return;
@@ -568,11 +615,19 @@
     if (active.type === 'buff') {
       member.buffs.intBuffTurns = Math.max(member.buffs.intBuffTurns, Math.max(1, integer(active.buffTurns, 3)));
       member.buffs.intBuffPct = Math.max(member.buffs.intBuffPct, number(active.buffPct, 0.3));
-      const requested = healBoost(member, Math.max(1, Math.ceil(member.maxHp * number(active.healMaxPct))), defs);
+      const rate = number(active.healMaxPct);
+      const rawRequested = Math.max(1, Math.ceil(member.maxHp * rate));
+      const requested = healBoost(member, rawRequested, defs);
+      const before = member.hp;
       const amount = healMember(member, requested);
       events.push(eventBase(member, action, {
         kind:'party-buff', status:'intBuff', turns:member.buffs.intBuffTurns,
         heal:amount, memberHp:member.hp, audioId:actionAudioId,
+        debugCalc:healingDebug(member, {
+          baseName:'최대 HP', baseValue:member.maxHp, rate, rawRequested,
+          requestedHeal:requested, actualHeal:amount, beforeHp:before,
+          afterHp:member.hp, maxHp:member.maxHp, boosted:true,
+        }, defs),
         text:`${member.name}이(가) ${active.name}을(를) 사용했습니다. 지능 상승 ${member.buffs.intBuffTurns}턴${amount > 0 ? `, HP ${amount} 회복` : ''}.`,
       }));
       return;
@@ -589,13 +644,21 @@
 
     if (active.type === 'healBuff') {
       const lost = Math.max(0, member.maxHp - member.hp);
-      const requested = healBoost(member, Math.max(1, Math.ceil(lost * number(active.healLostPct, 0.2))), defs);
+      const rate = number(active.healLostPct, 0.2);
+      const rawRequested = Math.max(1, Math.ceil(lost * rate));
+      const requested = healBoost(member, rawRequested, defs);
+      const before = member.hp;
       const amount = healMember(member, requested);
       member.buffs.battleRoarTurns = Math.max(member.buffs.battleRoarTurns, 2);
       events.push(eventBase(member, action, {
         kind:'party-heal', healerId:member.id, actorMemberId:member.id,
         targetMemberId:member.id, amount, memberHp:member.hp,
         status:'battleRoar', turns:member.buffs.battleRoarTurns, audioId:actionAudioId,
+        debugCalc:healingDebug(member, {
+          baseName:'잃은 HP', baseValue:lost, rate, rawRequested,
+          requestedHeal:requested, actualHeal:amount, beforeHp:before,
+          afterHp:member.hp, maxHp:member.maxHp, boosted:true,
+        }, defs),
         text:`${member.name}이(가) ${active.name}으로 HP ${amount}을 회복했습니다.`,
       }));
       return;
@@ -605,7 +668,9 @@
       const living = members.filter((target) => target.hp > 0);
       let healSoundPlayed = false;
       living.forEach((target) => {
-        const requested = Math.max(1, Math.ceil(target.maxHp * number(active.healMaxPct, 0.5)));
+        const rate = number(active.healMaxPct, 0.5);
+        const requested = Math.max(1, Math.ceil(target.maxHp * rate));
+        const before = target.hp;
         const amount = healMember(target, requested);
         if (amount <= 0) return;
         events.push(eventBase(member, action, {
@@ -613,6 +678,11 @@
           healerId:member.id, actorMemberId:member.id,
           targetMemberId:target.id, amount, memberHp:target.hp,
           audioId:healSoundPlayed ? null : actionAudioId,
+          debugCalc:healingDebug(member, {
+            baseName:'대상 최대 HP', baseValue:target.maxHp, rate,
+            rawRequested:requested, requestedHeal:requested, actualHeal:amount,
+            beforeHp:before, afterHp:target.hp, maxHp:target.maxHp,
+          }, defs),
           text:`${member.name}의 ${active.name}! ${target.name}의 HP가 ${amount} 회복되었습니다.`,
         }));
         healSoundPlayed = true;
@@ -622,10 +692,18 @@
 
     let beforeShield = null;
     if (active.type === 'shieldBash') {
-      const amount = addShield(member, Math.ceil(member.maxHp * number(active.shieldPct, 0.6)));
+      const rate = number(active.shieldPct, 0.6);
+      const requested = Math.ceil(member.maxHp * rate);
+      const previousShield = member.shield;
+      const amount = addShield(member, requested);
       beforeShield = { amount, shield:member.shield };
       events.push(eventBase(member, action, {
         kind:'party-shield', amount, shield:member.shield, audioId:actionAudioId,
+        debugCalc:shieldDebug({
+          baseName:'최대 HP', baseValue:member.maxHp, rate,
+          requestedShield:requested, actualShield:amount,
+          beforeShield:previousShield, afterShield:member.shield,
+        }),
         text:`${member.name}이(가) ${active.name}으로 보호막 ${amount}을 생성했습니다!`,
       }));
     }
@@ -800,22 +878,43 @@
 
     if (isSkill && totalDamage > 0) {
       let requestedHeal = 0;
-      if (active.type === 'damageHeal') requestedHeal += Math.max(1, Math.ceil(totalDamage * number(active.healRate, 0.5)));
-      if (number(active.healMaxPct) > 0) requestedHeal += Math.max(1, Math.ceil(member.maxHp * number(active.healMaxPct)));
+      const damageRate = active.type === 'damageHeal' ? number(active.healRate, 0.5) : 0;
+      const maxHpRate = number(active.healMaxPct);
+      if (damageRate > 0) requestedHeal += Math.max(1, Math.ceil(totalDamage * damageRate));
+      if (maxHpRate > 0) requestedHeal += Math.max(1, Math.ceil(member.maxHp * maxHpRate));
       if (requestedHeal > 0) {
-        const amount = healMember(member, healBoost(member, requestedHeal, defs));
+        const boostedRequest = healBoost(member, requestedHeal, defs);
+        const before = member.hp;
+        const amount = healMember(member, boostedRequest);
         events.push(eventBase(member, action, {
           kind:'party-heal', healerId:member.id, actorMemberId:member.id,
           targetMemberId:member.id, amount, memberHp:member.hp,
+          debugCalc:healingDebug(member, {
+            baseName:damageRate > 0 && maxHpRate > 0 ? '준 피해 + 최대 HP' : damageRate > 0 ? '준 피해' : '최대 HP',
+            baseValue:damageRate > 0 ? totalDamage : member.maxHp,
+            rate:damageRate > 0 ? damageRate : maxHpRate,
+            rawRequested:requestedHeal, requestedHeal:boostedRequest,
+            actualHeal:amount, beforeHp:before, afterHp:member.hp,
+            maxHp:member.maxHp, boosted:true,
+            reason:damageRate > 0 && maxHpRate > 0 ? `최대 HP 비례분 ${Math.max(1, Math.ceil(member.maxHp * maxHpRate))}이 합산되었습니다.` : '',
+          }, defs),
           text:`${member.name}의 HP가 ${amount} 회복되었습니다.`,
         }));
       }
     }
 
     if (number(active.bonusShieldPct) > 0) {
-      const amount = addShield(member, Math.ceil(member.maxHp * number(active.bonusShieldPct)));
+      const rate = number(active.bonusShieldPct);
+      const requested = Math.ceil(member.maxHp * rate);
+      const before = member.shield;
+      const amount = addShield(member, requested);
       events.push(eventBase(member, action, {
         kind:'party-shield', amount, shield:member.shield,
+        debugCalc:shieldDebug({
+          baseName:'최대 HP', baseValue:member.maxHp, rate,
+          requestedShield:requested, actualShield:amount,
+          beforeShield:before, afterShield:member.shield,
+        }),
         text:`${member.name}이(가) 보호막 ${amount}을 얻었습니다.`,
       }));
     }
@@ -851,11 +950,19 @@
     const rank = skillRank(member, 'warrior_basic_guard');
     const rate = number(defs.warrior_basic_guard?.guardShieldPct?.[rank]);
     if (!(rank > 0) || !(rate > 0)) return;
-    const amount = addShield(member, Math.max(1, Math.floor(member.hp * rate)));
+    const requested = Math.max(1, Math.floor(member.hp * rate));
+    const before = member.shield;
+    const amount = addShield(member, requested);
     events.push({
       kind:'party-shield', memberId:member.id, targetMemberId:member.id,
       memberName:member.name, actionId:'warrior_basic_guard', skillId:'warrior_basic_guard',
       passive:true, amount, shield:member.shield, audioId:'blockShield',
+      debugCalc:shieldDebug({
+        baseName:'현재 HP', baseValue:member.hp, rate,
+        requestedShield:requested, actualShield:amount,
+        beforeShield:before, afterShield:member.shield,
+        reason:'막기 훈련은 현재 HP를 기준으로 계산하며 최소 1의 보호막을 만듭니다.',
+      }),
       text:`${member.name}의 막기 훈련! 보호막 ${amount} 생성!`,
     });
   }
@@ -920,14 +1027,29 @@
       let heal = 0;
       const lifeRank = skillRank(source, 'priest_shadow_focus_v24');
       const lifeChance = number(defs.priest_shadow_focus_v24?.shadowLifestealChance?.[lifeRank]);
-      if (lifeRank > 0 && roll(rng) < lifeChance) {
-        heal = healMember(source, healBoost(source, applied.hpDamage, defs));
+      const lifeRoll = lifeRank > 0 && source.hp > 0 ? roll(rng) : null;
+      let requestedHeal = 0;
+      const beforeHp = source.hp;
+      if (lifeRank > 0 && source.hp > 0 && lifeRoll < lifeChance) {
+        requestedHeal = healBoost(source, applied.hpDamage, defs);
+        heal = healMember(source, requestedHeal);
       }
       events.push({
         kind:'monster-dot', memberId:source.id, memberName:source.name,
         actionId:'shadow-dot', skillId:null, status:'shadow', stacks,
         critical, heal, targetMemberId:heal > 0 ? source.id : null,
         ...applied, audioId:'shadowStackHit',
+        debugCalc:{
+          kind:'shadow-dot', stacks, criticalMultiplier:critical ? 2 : 1,
+          requestedDamage:amount, shieldDamage:applied.shieldDamage, hpDamage:applied.hpDamage,
+          healRoll:lifeRoll, healChance:lifeChance,
+          healing:healingDebug(source, {
+            baseName:'암흑 중첩 HP 피해', baseValue:applied.hpDamage, rate:1,
+            rawRequested:applied.hpDamage, requestedHeal, actualHeal:heal,
+            beforeHp, afterHp:source.hp, maxHp:source.maxHp, boosted:true,
+            reason:source.hp <= 0 ? '쓰러진 캐릭터는 암흑 흡혈로 부활할 수 없습니다.' : '',
+          }, defs),
+        },
         text:`${critical ? '암흑 치명타! ' : ''}${source.name}의 암흑 중첩(${stacks})이 ${applied.totalDamage}의 피해를 주었습니다.${heal > 0 ? ` HP ${heal} 회복!` : ''}`,
       });
     });
@@ -941,11 +1063,19 @@
       const regenRank = skillRank(member, 'warrior_regeneration');
       const regenRate = [0, 0.015, 0.03][regenRank] || 0;
       if (!(regenRate > 0)) return;
-      const amount = healMember(member, Math.max(1, Math.floor(member.maxHp * regenRate)));
+      const requested = Math.max(1, Math.floor(member.maxHp * regenRate));
+      const before = member.hp;
+      const amount = healMember(member, requested);
       if (amount > 0) events.push({
         kind:'party-heal', memberId:member.id, memberName:member.name,
         healerId:member.id, actorMemberId:member.id, targetMemberId:member.id,
         actionId:'warrior_regeneration', skillId:'warrior_regeneration', passive:true,
+        debugCalc:healingDebug(member, {
+          baseName:'최대 HP', baseValue:member.maxHp, rate:regenRate,
+          rawRequested:requested, requestedHeal:requested, actualHeal:amount,
+          beforeHp:before, afterHp:member.hp, maxHp:member.maxHp,
+          reason:'재생력 강화의 턴 시작 회복입니다.',
+        }, defs),
         amount, memberHp:member.hp, text:`${member.name}의 재생력 강화! HP ${amount} 회복!`,
       });
     });
@@ -1111,12 +1241,25 @@
         const prayerDamage = prayerRank > 0 ? Math.floor(incoming * prayerRate) : 0;
         if (prayerDamage > 0 && monster.hp > 0) {
           const reflected = applyDamageToMonster(monster, prayerDamage, false);
-          const heal = healMember(member, healBoost(member, prayerDamage, defs));
+          const requestedHeal = healBoost(member, prayerDamage, defs);
+          const beforeHp = member.hp;
+          const heal = healMember(member, requestedHeal);
           events.push({
             kind:'party-retaliation', memberId:member.id, memberName:member.name,
             actionId:'priest_basic_prayer', skillId:'priest_basic_prayer',
             amount:reflected.totalDamage, heal, targetMemberId:member.id,
             ...reflected, memberHp:member.hp, audioId:'prayerBarrier',
+            debugCalc:{
+              kind:'retaliation-heal', baseAttack:incoming, reflectRate:prayerRate,
+              requestedDamage:prayerDamage, shieldDamage:reflected.shieldDamage,
+              hpDamage:reflected.hpDamage,
+              healing:healingDebug(member, {
+                baseName:'반사 피해', baseValue:prayerDamage, rate:1,
+                rawRequested:prayerDamage, requestedHeal, actualHeal:heal,
+                beforeHp, afterHp:member.hp, maxHp:member.maxHp, boosted:true,
+                reason:'기도의 방벽 반사 피해를 기준으로 회복합니다.',
+              }, defs),
+            },
             text:`${member.name}의 기도의 방벽! 반사 피해 ${reflected.totalDamage}, HP ${heal} 회복!`,
           });
         }
@@ -1156,6 +1299,13 @@
       if (healed > 0) {
         events.push({
           kind:'monster-heal', status:'drain', amount:healed, monsterHp:monster.hp,
+          debugCalc:{
+            kind:'healing', baseName:'이번 턴에 빼앗은 피해', baseValue:drained,
+            rate:1, rawRequested:drained, healBoostMultiplier:1,
+            requestedHeal:drained, actualHeal:healed,
+            beforeHp:before, afterHp:monster.hp, maxHp:monster.maxHp,
+            reason:healed < drained ? '최대 HP를 넘는 회복량은 적용되지 않습니다.' : '',
+          },
           text:`${monster.name}이(가) 빼앗은 생명력으로 ${healed} 회복했습니다!`,
         });
       }
@@ -1166,6 +1316,7 @@
 
     /* 공격이 아닌 부분(보호막·회복·강화·실명·반격 자세·예고)을 처리한다. */
     if (plan.shieldPct > 0) {
+      const before = Math.max(0, integer(monster.shield));
       const amount = Math.max(1, Math.ceil(monster.maxHp * plan.shieldPct));
       monster.shield = Math.max(0, integer(monster.shield)) + amount;
       events.push({
@@ -1173,15 +1324,28 @@
         /* Keep dungeon monster shields in sync with the hunting shield cue.
            An explicit audio id also prevents the UI fallback from playing twice. */
         audioId:'defensiveStance',
+        debugCalc:shieldDebug({
+          baseName:'몬스터 최대 HP', baseValue:monster.maxHp, rate:plan.shieldPct,
+          requestedShield:amount, actualShield:amount,
+          beforeShield:before, afterShield:monster.shield,
+        }),
         text:`${monster.name}의 ${plan.name}! 보호막 ${amount}을(를) 만들었습니다.`,
       });
     }
     if (plan.healPct > 0) {
       const before = monster.hp;
-      monster.hp = Math.min(monster.maxHp, monster.hp + Math.max(1, Math.ceil(monster.maxHp * plan.healPct)));
+      const requested = Math.max(1, Math.ceil(monster.maxHp * plan.healPct));
+      monster.hp = Math.min(monster.maxHp, monster.hp + requested);
       const healed = monster.hp - before;
       events.push({
         kind:'monster-heal', planName:plan.name, amount:healed, monsterHp:monster.hp,
+        debugCalc:{
+          kind:'healing', baseName:'몬스터 최대 HP', baseValue:monster.maxHp,
+          rate:plan.healPct, rawRequested:requested, healBoostMultiplier:1,
+          requestedHeal:requested, actualHeal:healed,
+          beforeHp:before, afterHp:monster.hp, maxHp:monster.maxHp,
+          reason:healed < requested ? '최대 HP를 넘는 회복량은 적용되지 않습니다.' : '',
+        },
         text:healed > 0
           ? `${monster.name}의 ${plan.name}! HP ${healed}을(를) 회복했습니다.`
           : `${monster.name}이(가) ${plan.name}을(를) 썼지만 이미 온전합니다.`,

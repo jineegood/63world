@@ -260,7 +260,7 @@ function teacherStudentsHtml(){
           <td><input type="checkbox" aria-label="${escapeHtml(student.displayName)} 계정 선택"
             ${checkedAdminStudentsV2.has(student.userId) ? 'checked' : ''}
             onchange="adminToggleStudentSelectionV2('${student.userId}',this.checked)"></td>
-          <td><b>${escapeHtml(student.displayName)}</b></td>
+          <td><button class="ghost tiny" onclick="adminOpenStudentDetailV2('${student.userId}')"><b>${escapeHtml(student.displayName)}</b></button></td>
           <td>${escapeHtml(classMeta.name || '')}${spec}</td>
           <td>Lv.${student.level}</td>
           <td>${fmtAcc(student.records)}</td>
@@ -766,6 +766,87 @@ window.adminResetStudentPassword = async function adminResetStudentPassword(){
 function secureAdminStudentByIdV2(userId){
   return secureAdminStudentsV2.find((student) => student.userId === userId) || null;
 }
+
+function adminStudentTotalStatsV2(student) {
+  const data = window.YuksamData || {};
+  const base = typeof data.resolvePlayerBaseStats === 'function'
+    ? data.resolvePlayerBaseStats(student.className, student.baseStatsVersion)
+    : { ...(CLASS_META[student.className]?.baseStats || {}) };
+  const total = { 힘:0, 지능:0, 정신:0, 체력:0, 방어:0, ...base };
+  const add = (stats, rank = 1) => Object.entries(stats || {}).forEach(([key, value]) => {
+    total[key] = (Number(total[key]) || 0) + (Number(value) || 0) * rank;
+  });
+  const equipped = new Set(Object.values(student.equipment || {}).filter(Boolean));
+  equipped.forEach((itemId) => add(data.ITEM_DEFS?.[itemId]?.stats));
+  (student.inventory || []).forEach((itemId) => {
+    const item = data.ITEM_DEFS?.[itemId];
+    if (item?.slot === 'accessory' && !equipped.has(itemId)) add(item.possessStats);
+  });
+  Object.entries(student.skills || {}).forEach(([skillId, rank]) => {
+    const skill = data.SKILL_DEFS?.[skillId];
+    add(skill?.bonuses, Number(rank) || 0);
+    if (Number(rank) > 0) add(skill?.flatBonuses);
+  });
+  const specBonus = {
+    'warrior:방어':{ 체력:9 }, 'warrior:무기':{ 힘:5, 체력:3 },
+    'mage:냉기':{ 지능:3, 체력:3 }, 'mage:화염':{ 지능:6 },
+    'priest:신성':{ 정신:5, 체력:3 }, 'priest:암흑':{ 정신:6 },
+  }[`${student.className}:${student.spec}`];
+  add(specBonus);
+  add(window.PET_DEFS_V27?.[student.activePet]?.stats);
+  const weaponId = student.equipment?.weapon;
+  const weapon = data.ITEM_DEFS?.[weaponId];
+  const tier = Math.max(0, Math.min(4, Number(student.weaponUpgrades?.[weaponId]) || 0));
+  if (weapon?.stats && tier > 0) Object.entries(weapon.stats).forEach(([key, value]) => {
+    total[key] = (Number(total[key]) || 0) + Math.max(1, Math.ceil((Number(value) || 0) * tier * 0.45));
+  });
+  return total;
+}
+
+window.adminOpenStudentDetailV2 = function adminOpenStudentDetailV2(userId) {
+  if (!SECURE_ADMIN_MODE_V2 || !requireTeacherAuth()) return;
+  const student = secureAdminStudentByIdV2(userId);
+  if (!student) { toast('학생 계정을 찾지 못했어요.'); return; }
+  const data = window.YuksamData || {};
+  const classMeta = CLASS_META[student.className] || { name:student.className || '미정' };
+  const stats = adminStudentTotalStatsV2(student);
+  const calculatedMaxHp = Math.max(1, 8 + (Number(stats.체력) || 1) * 3 + student.level * 2);
+  const maxHp = student.maxHp > 0 ? student.maxHp : calculatedMaxHp;
+  const hp = Math.min(maxHp, Math.max(0, student.hp));
+  const slotNames = { weapon:'무기', armor:'방어구', head:'머리', accessory:'장신구' };
+  const equipmentHtml = Object.entries(slotNames).map(([slot, label]) => {
+    const itemId = student.equipment?.[slot];
+    const item = itemId ? data.ITEM_DEFS?.[itemId] : null;
+    const tier = slot === 'weapon' ? Math.max(0, Math.min(4, Number(student.weaponUpgrades?.[itemId]) || 0)) : 0;
+    const tierName = tier > 0 ? `${window.TIER_INFO_V27?.[tier]?.name || `${tier}강`} · ` : '';
+    return `<div class="panel-card" style="padding:10px"><small class="muted">${label}</small><br><b>${escapeHtml(item ? `${tierName}${item.name}` : '없음')}</b></div>`;
+  }).join('');
+  const learned = Object.entries(student.skills || {})
+    .filter(([, rank]) => Number(rank) > 0)
+    .map(([skillId, rank]) => ({ skill:data.SKILL_DEFS?.[skillId], skillId, rank:Number(rank) || 0 }))
+    .sort((a, b) => (Number(a.skill?.level) || 0) - (Number(b.skill?.level) || 0));
+  const skillsHtml = learned.length
+    ? learned.map(({ skill, skillId, rank }) => `<span class="badge">${escapeHtml(skill?.name || skillId)} ${rank > 1 ? `Lv.${rank}` : ''}</span>`).join(' ')
+    : '<span class="muted">아직 배운 스킬이 없습니다.</span>';
+  const petName = student.activePet ? (window.PET_DEFS_V27?.[student.activePet]?.name || student.activePet) : '없음';
+  openModal(`
+    <h2>👨‍🎓 ${escapeHtml(student.displayName)} 캐릭터 정보</h2>
+    <div class="panel-card">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <span class="badge">Lv.${student.level}</span><span class="badge">${escapeHtml(classMeta.name || '')}</span>
+        <span class="badge">${escapeHtml(student.spec || '전문화 전')}</span><span class="badge">남은 스킬 포인트 ${student.skillPoints}</span>
+      </div>
+      <p><b>HP ${hp}/${maxHp}</b> · EXP ${student.exp} · 골드 ${student.gold} · 빌딩 ${student.building}</p>
+      <div style="display:grid;grid-template-columns:repeat(5,minmax(70px,1fr));gap:8px;text-align:center">
+        ${['힘','지능','정신','체력','방어'].map((key) => `<div class="panel-card" style="padding:9px"><small class="muted">${key}</small><br><b>${Math.max(0, Number(stats[key]) || 0)}</b></div>`).join('')}
+      </div>
+    </div>
+    <h3>장착 장비</h3><div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">${equipmentHtml}</div>
+    <h3>배운 스킬</h3><div class="panel-card" style="line-height:2.1">${skillsHtml}</div>
+    <p class="muted">장착 펫: ${escapeHtml(petName)}</p>
+    <button class="ghost wide" onclick="openAdminPanel('students')">학생 목록으로 돌아가기</button>
+  `, { type:'admin', pause:false });
+};
 
 async function loadSecureAdminStudentsV2(){
   if (!SECURE_ADMIN_MODE_V2 || !secureAdminDataV2 || secureAdminStudentsStatusV2 === 'loading') return;

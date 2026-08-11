@@ -31,6 +31,10 @@ test('teacher combat detail log is toggleable, collapsible, and shows calculatio
   assert.match(panel, /function detailFormula\(calc\)/);
   assert.match(panel, /기본 공격 굴림/);
   assert.match(panel, /자리.*slotMultiplier|slotLabel/);
+  assert.match(panel, /function healingFormula\(calc\)/);
+  assert.match(panel, /보호막 비율/);
+  assert.match(panel, /실제 회복/);
+  assert.match(panel, /흡혈 난수/);
   assert.match(panel, /data-detail-collapse/);
   assert.match(panel, /data-detail-clear/);
   assert.match(panel, /YuksamCombatDetailLog = Object\.freeze/);

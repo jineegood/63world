@@ -27,8 +27,43 @@
     return Number.isInteger(number) ? String(number) : number.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
   }
 
+  function healingFormula(calc) {
+    if (!calc || typeof calc !== 'object') return '';
+    const factors = [
+      `${calc.baseName || '기준값'} ${shortNumber(calc.baseValue)}`,
+      `회복 비율 ×${shortNumber(calc.rate)}`,
+      `기본 회복 ${shortNumber(calc.rawRequested)}`,
+    ];
+    if (Number(calc.healBoostMultiplier) !== 1) {
+      factors.push(`치유 숙련 ×${shortNumber(calc.healBoostMultiplier)}`);
+    }
+    factors.push(`요청 회복 ${shortNumber(calc.requestedHeal)}`);
+    return `${factors.join(' → ')} / HP ${shortNumber(calc.beforeHp)}→${shortNumber(calc.afterHp)}`
+      + `/${shortNumber(calc.maxHp)}, 실제 회복 ${shortNumber(calc.actualHeal)}`;
+  }
+
   function detailFormula(calc) {
     if (!calc || typeof calc !== 'object') return '';
+    if (calc.kind === 'shield') {
+      return `${calc.baseName || '기준값'} ${shortNumber(calc.baseValue)}`
+        + ` × 보호막 비율 ${shortNumber(calc.rate)} = ${shortNumber(calc.requestedShield)}`
+        + ` / 보호막 ${shortNumber(calc.beforeShield)}→${shortNumber(calc.afterShield)}`
+        + `, 실제 생성 ${shortNumber(calc.actualShield)}`;
+    }
+    if (calc.kind === 'healing') return healingFormula(calc);
+    if (calc.kind === 'shadow-dot') {
+      const damage = `중첩 ${shortNumber(calc.stacks)} × 치명타 ${shortNumber(calc.criticalMultiplier)}`
+        + ` = 계산 피해 ${shortNumber(calc.requestedDamage)}`
+        + ` / 보호막 ${shortNumber(calc.shieldDamage)}, HP ${shortNumber(calc.hpDamage)}`;
+      const healing = calc.healing ? healingFormula(calc.healing) : '';
+      return healing ? `${damage} / 흡혈: ${healing}` : damage;
+    }
+    if (calc.kind === 'retaliation-heal') {
+      const damage = `받을 피해 ${shortNumber(calc.baseAttack)} × 반사율 ${shortNumber(calc.reflectRate)}`
+        + ` = 반사 피해 ${shortNumber(calc.requestedDamage)}`
+        + ` / 보호막 ${shortNumber(calc.shieldDamage)}, HP ${shortNumber(calc.hpDamage)}`;
+      return calc.healing ? `${damage} / 회복: ${healingFormula(calc.healing)}` : damage;
+    }
     if (calc.kind === 'party-damage') {
       const factors = [
         `${calc.statName || '능력치'} ${shortNumber(calc.stat)}`,
@@ -66,7 +101,9 @@
     const bits = [];
     if (calc.missRoll != null) bits.push(`빗나감 난수 ${shortNumber(calc.missRoll)} / 확률 ${shortNumber(Number(calc.missChance) * 100)}%`);
     if (calc.criticalRoll != null) bits.push(`치명타 난수 ${shortNumber(calc.criticalRoll)} / 확률 ${shortNumber(Number(calc.criticalChance) * 100)}%`);
+    if (calc.healRoll != null) bits.push(`흡혈 난수 ${shortNumber(calc.healRoll)} / 확률 ${shortNumber(Number(calc.healChance) * 100)}%`);
     if (calc.reason) bits.push(String(calc.reason));
+    if (calc.healing?.reason) bits.push(String(calc.healing.reason));
     return bits.join(' · ');
   }
 

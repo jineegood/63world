@@ -9,6 +9,10 @@ window.__teacherSignedIn = false;
 window.__profileRows = [{
   user_id:'${studentId}', display_name:'별빛', updated_at:'2026-07-23T01:02:03.000Z',
   data:{ class:'mage', spec:'화염', level:7, exp:1234, gold:44, building:8,
+    hp:48, maxHp:70, skillPoints:2, baseStatsVersion:2,
+    equipment:{ weapon:'ironwoodStaff', armor:'navyRobe', head:'navyWizardHat', accessory:null },
+    inventory:['ironwoodStaff','navyRobe','navyWizardHat'],
+    skills:{ mage_basic_element:2, mage_fire_meteor_v24:1 }, weaponUpgrades:{ ironwoodStaff:2 },
     password:'must-not-render', records:{ answered:12, correct:9, wrongLog:[{ q:'<img src=x>', a:'정답', mine:'<script>bad</script>', at:1, access_token:'hidden' }] } }
 }];
 window.YuksamSupabaseClient = {
@@ -89,6 +93,12 @@ run(root, async ({ window, $, sleep, asyncErrors }) => {
   check('cloud student row is shown', window.document.querySelector('#secureAdminStudentRows')?.textContent.includes('별빛'));
   const dashboardHtml = window.document.querySelector('#modal').innerHTML;
   check('dashboard contains no credentials', !/must-not-render|access_token|teacher-secret|6363/.test(dashboardHtml));
+
+  window.adminOpenStudentDetailV2(studentId);
+  const detailText = window.document.querySelector('#modal').textContent;
+  check('student detail shows stats and equipment', /HP 48\/70/.test(detailText) && detailText.includes('수정 지팡이'));
+  check('student detail shows learned skills', detailText.includes('원소') && detailText.includes('메테오'));
+  check('student detail contains no credentials', !/must-not-render|access_token|teacher-secret/.test(window.document.querySelector('#modal').innerHTML));
 
   window.adminOpenWrongLogV2(studentId);
   check('wrong log is displayed as text', window.document.querySelector('#modal').textContent.includes('<img src=x>'));

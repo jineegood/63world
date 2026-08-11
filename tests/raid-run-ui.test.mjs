@@ -842,6 +842,12 @@ test('전투 재생 로그는 교사용 세분화 창에도 같은 순서로 전
   assert.match(uiSource, /YuksamCombatDetailLog\?\.record\?\.\(event, active\?\.snapshot\?\.\(\)\)/);
 });
 
+test('암흑 중첩 배지는 최종 서버 상태가 아니라 해당 상태 로그 시점에 나타난다', () => {
+  assert.match(uiSource, /shadowBySource:\{ \.\.\.\(snap\.monster\.shadowBySource \|\| \{\}\) \}/);
+  assert.match(uiSource, /event\.status === 'shadow'[\s\S]*?event\.memberStacks/);
+  assert.match(uiSource, /shadowBySource:\{ \.\.\.\(view\.monsterStatuses\?\.shadowBySource \|\| \{\}\) \}/);
+});
+
 test('오염된 슬라임은 몸과 오염 방울이 보라색 계열이다', () => {
   const slime = uiSource.match(/pollutedSlime\(ctx, cx, cy, t\)[\s\S]*?\n    \},/)?.[0] || '';
   assert.notEqual(slime, '');

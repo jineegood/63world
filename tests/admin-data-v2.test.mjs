@@ -24,6 +24,11 @@ function setup(overrides = {}) {
     updated_at:'2026-07-23T01:02:03.000Z',
     data:{
       class:'mage', spec:'화염', level:7, exp:1234, gold:44, building:8,
+      hp:51, maxHp:70, skillPoints:3, baseStatsVersion:2,
+      equipment:{ weapon:'ironwoodStaff', armor:'navyRobe', head:null, accessory:'moonRing', password:'nested-secret' },
+      inventory:['ironwoodStaff', 'navyRobe', 'moonRing'],
+      skills:{ mage_basic_element:2, mage_fire_meteor_v24:1, invalid:-3 },
+      weaponUpgrades:{ ironwoodStaff:3, impossible:99 }, activePet:'pet_slime',
       password:'must-not-leak', email:'student@example.com', access_token:'token-value',
       records:{ answered:12, correct:9, password:'nested-secret', wrongLog:Array.from({ length:35 }, (_, i) => ({
         q:`문제${i}`, a:`정답${i}`, mine:`오답${i}`, at:i, refresh_token:'hidden',
@@ -79,6 +84,11 @@ test('listStudents returns only frozen sanitized summaries ordered by the backen
     displayName:'별빛',
     updatedAt:'2026-07-23T01:02:03.000Z',
     className:'mage', spec:'화염', level:7, exp:1234, gold:44, building:8,
+    hp:51, maxHp:70, skillPoints:3, baseStatsVersion:2,
+    equipment:{ weapon:'ironwoodStaff', armor:'navyRobe', head:null, accessory:'moonRing' },
+    inventory:['ironwoodStaff', 'navyRobe', 'moonRing'],
+    skills:{ mage_basic_element:2, mage_fire_meteor_v24:1 },
+    weaponUpgrades:{ ironwoodStaff:3, impossible:4 }, activePet:'pet_slime',
     records:{ answered:12, correct:9, wrongLog:Array.from({ length:30 }, (_, i) => ({
       q:`문제${i + 5}`, a:`정답${i + 5}`, mine:`오답${i + 5}`, at:i + 5,
     })) },

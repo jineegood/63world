@@ -1754,7 +1754,10 @@
         .map(([id, statuses]) => [id, { ...(statuses || {}) }])),
       memberBuffs:Object.fromEntries(Object.entries(view.memberBuffs || {})
         .map(([id, buffs]) => [id, { ...(buffs || {}) }])),
-      monsterStatuses:{ ...(view.monsterStatuses || {}) },
+      monsterStatuses:{
+        ...(view.monsterStatuses || {}),
+        shadowBySource:{ ...(view.monsterStatuses?.shadowBySource || {}) },
+      },
     };
   }
 
@@ -2775,6 +2778,7 @@
         stunTurns:Math.max(0, Number(snap.monster.stunTurns) || 0),
         chillTurns:Math.max(0, Number(snap.monster.chillTurns) || 0),
         stunSourceName:String(snap.monster.stunSourceName || ''),
+        shadowBySource:{ ...(snap.monster.shadowBySource || {}) },
       },
     };
   }
@@ -2879,6 +2883,8 @@
       ...truth,
       hp:Math.max(0, view?.monsterHp ?? truth.hp),
       shield:Math.max(0, view?.monsterShield ?? truth.shield ?? 0),
+      ...(view?.monsterStatuses || {}),
+      shadowBySource:{ ...(view?.monsterStatuses?.shadowBySource || {}) },
     };
     const members = displayPartyMembers(snap.members.map((m) => ({
       ...m,
@@ -3356,6 +3362,11 @@
       if (event.status === 'stun') statuses.stunTurns = Math.max(statuses.stunTurns || 0, turns);
       if (event.status === 'stun' && event.sourceName) statuses.stunSourceName = String(event.sourceName);
       if (event.status === 'chill') statuses.chillTurns = Math.max(statuses.chillTurns || 0, turns);
+      if (event.status === 'shadow' && event.memberId) {
+        statuses.shadowBySource = { ...(statuses.shadowBySource || {}) };
+        statuses.shadowBySource[event.memberId] = Math.max(0,
+          Number(event.memberStacks ?? statuses.shadowBySource[event.memberId]) || 0);
+      }
     } else if (event.kind === 'monster-skip' && event.status === 'stun') {
       statuses.stunTurns = Math.max(0, (statuses.stunTurns || 0) - 1);
       if (statuses.stunTurns <= 0) statuses.stunSourceName = '';
@@ -3452,6 +3463,8 @@
       statusNode.innerHTML = monsterStatusBadgesHtml({
         ...snap.monster,
         ...(view.monsterStatuses || {}),
+        /* 서버의 최종 중첩보다 로그와 함께 움직이는 표시용 중첩을 우선한다. */
+        shadowBySource:{ ...(view.monsterStatuses?.shadowBySource || {}) },
       });
     }
 

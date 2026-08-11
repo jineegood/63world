@@ -17,6 +17,8 @@ test('admin data module loads before the dashboard and secure branches delegate 
   assert.match(source, /secureAdminDataV2\.grantReward\(userId/);
   assert.match(source, /secureAdminDataV2\.deleteStudent\(userId\)/);
   assert.match(source, /adminOpenWrongLogV2\(['"]?\$\{[^}]*userId/);
+  assert.match(source, /adminOpenStudentDetailV2\(['"]?\$\{[^}]*userId/);
+  assert.match(source, /function adminStudentTotalStatsV2\(student\)/);
 });
 
 test('secure cloud dashboard renders safe data and completes reward and deletion flows', () => {

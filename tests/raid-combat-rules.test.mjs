@@ -458,6 +458,69 @@ test('shadow stacks tick after the monster turn and stay attributed to their cas
   assert.equal(dot.audioId, 'shadowStackHit');
 });
 
+test('shadow lifesteal never revives a defeated shadow priest', () => {
+  const priest = member('priest', {
+    klass:'priest', spec:'암흑', maxHp:100, hp:0,
+    skills:{ priest_shadow_focus_v24:5 },
+  });
+  const target = monster({ attack:1, shadowBySource:{ priest:6 } });
+  const result = resolve({
+    members:[priest], target,
+    submissions:{ priest:{ correct:true, actionId:'basic' } },
+    plan:{ kind:'none', name:'숨 고르기' },
+    rng:constant(0),
+  });
+  const dot = result.events.find((event) => event.kind === 'monster-dot');
+  assert.ok(dot);
+  assert.equal(dot.heal, 0);
+  assert.equal(dot.targetMemberId, null);
+  assert.equal(priest.hp, 0);
+  assert.match(dot.debugCalc.healing.reason, /부활할 수 없습니다/);
+});
+
+test('shield and healing events explain their exact bases, rates, caps, and applied values', () => {
+  const tank = member('tank', {
+    spec:'방어', maxHp:100, hp:100, skills:{ warrior_def_stance:1 },
+  });
+  const shieldResult = resolve({
+    members:[tank], target:monster({ attack:1 }),
+    submissions:{ tank:{ correct:true, actionId:'warrior_def_stance' } },
+    plan:{ kind:'none', name:'숨 고르기' },
+  });
+  const shield = shieldResult.events.find((event) => event.kind === 'party-shield' && event.skillId === 'warrior_def_stance');
+  assert.deepEqual({
+    kind:shield.debugCalc.kind,
+    base:shield.debugCalc.baseValue,
+    rate:shield.debugCalc.rate,
+    requested:shield.debugCalc.requestedShield,
+    before:shield.debugCalc.beforeShield,
+    after:shield.debugCalc.afterShield,
+  }, { kind:'shield', base:100, rate:0.1, requested:10, before:0, after:10 });
+
+  const priest = member('healer', {
+    klass:'priest', spec:'신성', slot:'front', maxHp:100, hp:100,
+    skills:{ priest_holy_absorb_v24:1 },
+  });
+  const ally = member('ally', { slot:'middle', maxHp:100, hp:80 });
+  const healResult = resolve({
+    members:[priest, ally], target:monster({ attack:1 }),
+    submissions:{
+      healer:{ correct:true, actionId:'priest_holy_absorb_v24' },
+      ally:{ correct:false, actionId:'basic' },
+    },
+    plan:{ kind:'none', name:'숨 고르기' },
+  });
+  const heal = healResult.events.find((event) => event.kind === 'party-heal' && event.targetMemberId === 'ally');
+  assert.equal(heal.amount, 20);
+  assert.equal(heal.debugCalc.kind, 'healing');
+  assert.equal(heal.debugCalc.baseValue, 100);
+  assert.equal(heal.debugCalc.rate, 0.5);
+  assert.equal(heal.debugCalc.requestedHeal, 50);
+  assert.equal(heal.debugCalc.beforeHp, 80);
+  assert.equal(heal.debugCalc.afterHp, 100);
+  assert.equal(heal.debugCalc.actualHeal, 20);
+});
+
 test('guardian oath revives a defeated warrior once per encounter', () => {
   const tank = member('tank', {
     maxHp:20, hp:1, attack:1, spec:'방어',

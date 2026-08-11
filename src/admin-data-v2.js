@@ -66,6 +66,33 @@
     })));
   }
 
+  function sanitizeIdList(value, maximum = 200) {
+    if (!Array.isArray(value)) return Object.freeze([]);
+    return Object.freeze(value.slice(0, maximum)
+      .map((item) => safeText(item, 80))
+      .filter(Boolean));
+  }
+
+  function sanitizeEquipment(value) {
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    const result = {};
+    ['weapon', 'armor', 'head', 'accessory'].forEach((slot) => {
+      result[slot] = safeText(source[slot], 80) || null;
+    });
+    return Object.freeze(result);
+  }
+
+  function sanitizeRankMap(value, maximumValue = 99) {
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    const result = {};
+    Object.entries(source).slice(0, 200).forEach(([rawId, rawRank]) => {
+      const id = safeText(rawId, 80);
+      const rank = Math.min(maximumValue, nonNegativeInteger(rawRank));
+      if (id && rank > 0) result[id] = rank;
+    });
+    return Object.freeze(result);
+  }
+
   function summarize(row) {
     const data = row?.data && typeof row.data === 'object' && !Array.isArray(row.data) ? row.data : {};
     const records = data.records && typeof data.records === 'object' && !Array.isArray(data.records) ? data.records : {};
@@ -79,6 +106,15 @@
       exp:nonNegativeInteger(data.exp),
       gold:nonNegativeInteger(data.gold),
       building:nonNegativeInteger(data.building),
+      hp:nonNegativeInteger(data.hp),
+      maxHp:nonNegativeInteger(data.maxHp),
+      skillPoints:nonNegativeInteger(data.skillPoints),
+      baseStatsVersion:nonNegativeInteger(data.baseStatsVersion),
+      equipment:sanitizeEquipment(data.equipment),
+      inventory:sanitizeIdList(data.inventory),
+      skills:sanitizeRankMap(data.skills, 5),
+      weaponUpgrades:sanitizeRankMap(data.weaponUpgrades, 4),
+      activePet:safeText(data.activePet, 80) || null,
       records:Object.freeze({
         answered:nonNegativeInteger(records.answered),
         correct:nonNegativeInteger(records.correct),
