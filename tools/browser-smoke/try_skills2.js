@@ -180,7 +180,7 @@ run(root, async ({ window, $, sleep, click, asyncErrors }) => {
     };
   };
   const normalShieldCharge = await shieldChargeDamage(40, [0.5, 0.5], 0);
-  ok(normalShieldCharge.shield === 140 && normalShieldCharge.damage === 100, 'Shield Charge adds its shield before deriving capped normal damage', 'shield=' + normalShieldCharge.shield + ', damage=' + normalShieldCharge.damage);
+  ok(normalShieldCharge.shield === 240 && normalShieldCharge.damage === 100, 'Shield Charge adds its shield before deriving capped normal damage', 'shield=' + normalShieldCharge.shield + ', damage=' + normalShieldCharge.damage);
   const cappedShieldCharge = await shieldChargeDamage(500, [0.5, 0.5], 0);
   ok(cappedShieldCharge.damage === 100, 'Shield Charge caps a large shield at 100 normal damage', 'damage=' + cappedShieldCharge.damage);
   const criticalShieldCharge = await shieldChargeDamage(500, [0.5, 0], 0);
@@ -192,7 +192,7 @@ run(root, async ({ window, $, sleep, click, asyncErrors }) => {
   ok(
     missedShieldCharge.damage === 0
       && missedShieldCharge.monsterHp === 100000
-      && missedShieldCharge.shield === 140
+      && missedShieldCharge.shield === 240
       && missedShieldChargeEvent?.audioId === 'miss'
       && !missedShieldChargeEvent.effect
       && /빗나갔다/.test(missedShieldChargeEvent.text),

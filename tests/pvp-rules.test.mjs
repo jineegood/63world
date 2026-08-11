@@ -144,7 +144,7 @@ test('server PvP profile ignores request-like combat numbers and rejects impossi
   assert.equal(profile.level, 3);
   assert.equal(profile.equipment.weapon, 'training_greatsword');
   assert.equal(profile.equipment.head, null);
-  assert.deepEqual(profile.skills, { warrior_basic_guard:3 });
+  assert.deepEqual(profile.skills, { warrior_basic_guard:4 });
   assert.equal(profile.maxHp, 26);
   assert.equal(profile.attack, 5);
   assert.equal(profile.defense, 0);
@@ -254,8 +254,8 @@ test('shield absorbs damage before HP and effects are assigned stable event ids'
 test('active shields use maximum HP even when the caster has only 1 HP left', async () => {
   const rules = await import(rulesUrl.href);
   const cases = [
-    { id:'warrior_def_stance', className:'warrior', spec:'방어', expected:5 },
-    { id:'warrior_def_wall', className:'warrior', spec:'방어', expected:5 },
+    { id:'warrior_def_stance', className:'warrior', spec:'방어', expected:10 },
+    { id:'warrior_def_wall', className:'warrior', spec:'방어', expected:10 },
     { id:'mage_frost_armor_v24', className:'mage', spec:'냉기', expected:35 },
   ];
   for (const entry of cases) {

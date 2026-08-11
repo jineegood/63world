@@ -368,15 +368,15 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
       && nearFullPrayerRetaliation?.effectAmount === 1
       && nearFullPrayerRetaliation?.effectHeal === 1
       && injuredPrayerRetaliation?.effectAmount === 1
-      && injuredPrayerRetaliation?.effectHeal === 3
+      && injuredPrayerRetaliation?.effectHeal === 2
       && nearFullPrayerRetaliation?.floatingNumbers.some((number) => number.text === '-1' && /monster damage/.test(number.className))
       && nearFullPrayerRetaliation?.floatingNumbers.some((number) => number.text === '+1' && /player heal/.test(number.className))
       && injuredPrayerRetaliation?.floatingNumbers.some((number) => number.text === '-1' && /monster damage/.test(number.className))
-      && injuredPrayerRetaliation?.floatingNumbers.some((number) => number.text === '+3' && /player heal/.test(number.className))
+      && injuredPrayerRetaliation?.floatingNumbers.some((number) => number.text === '+2' && /player heal/.test(number.className))
       && /반사 피해 1/.test(nearFullPrayerRetaliation?.text || '')
       && /실제 회복 1/.test(nearFullPrayerRetaliation?.text || '')
       && /반사 피해 1/.test(injuredPrayerRetaliation?.text || '')
-      && /실제 회복 3/.test(injuredPrayerRetaliation?.text || ''),
+      && /실제 회복 2/.test(injuredPrayerRetaliation?.text || ''),
     `nearFull=${JSON.stringify(nearFullPrayerTrace)}, injured=${JSON.stringify(injuredPrayerTrace)}, audio=${JSON.stringify(playedPrayerBarrierAudio)}`);
 
   resetCombatState('slime', 4);

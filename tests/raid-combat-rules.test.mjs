@@ -530,7 +530,7 @@ test('shield and healing events explain their exact bases, rates, caps, and appl
     requested:shield.debugCalc.requestedShield,
     before:shield.debugCalc.beforeShield,
     after:shield.debugCalc.afterShield,
-  }, { kind:'shield', base:100, rate:0.1, requested:10, before:0, after:10 });
+  }, { kind:'shield', base:100, rate:0.2, requested:20, before:0, after:20 });
 
   const charger = member('charger', {
     spec:'방어', maxHp:100, hp:1, skills:{ warrior_def_wall:1 },
@@ -543,7 +543,7 @@ test('shield and healing events explain their exact bases, rates, caps, and appl
   const chargeShield = chargeResult.events.find(
     (event) => event.kind === 'party-shield' && event.skillId === 'warrior_def_wall',
   );
-  assert.equal(chargeShield.amount, 10, 'HP가 1이어도 방패 돌진 보호막은 최대 HP 100을 기준으로 한다');
+  assert.equal(chargeShield.amount, 20, 'HP가 1이어도 방패 돌진 보호막은 최대 HP 100을 기준으로 한다');
 
   const priest = member('healer', {
     klass:'priest', spec:'신성', slot:'front', maxHp:100, hp:100,

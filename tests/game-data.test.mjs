@@ -122,13 +122,19 @@ test('balance skill data exposes the approved v43 static values and matching cop
   runBrowserModule('src/game-data.js', context);
   const skills = context.window.YuksamData.V24_SKILLS;
 
-  assert.equal(skills.mage_frost_focus_v24.maxPoints, 3);
+  assert.equal(skills.mage_frost_focus_v24.maxPoints, 5);
   assert.equal(skills.mage_frost_focus_v24.bonuses.지능, 1);
-  assert.deepEqual(Array.from(skills.mage_frost_focus_v24.activeStunChance), [0, 0.07, 0.21, 0.35]);
+  assert.deepEqual(Array.from(skills.mage_frost_focus_v24.activeStunChance), [0, 0.07, 0.14, 0.21, 0.28, 0.35]);
   assert.match(skills.mage_frost_focus_v24.desc, /지능 \+1/);
-  assert.match(skills.mage_frost_focus_v24.desc, /7,21,35%/);
+  assert.match(skills.mage_frost_focus_v24.desc, /7,14,21,28,35%/);
+  assert.match(skills.mage_frost_focus_v24.desc, /기본 20% 확률로 냉기 2중첩/);
   assert.match(skills.mage_frost_focus_v24.passiveText, /지능 \+1/);
-  assert.match(skills.mage_frost_focus_v24.passiveText, /7\/21\/35%/);
+  assert.match(skills.mage_frost_focus_v24.passiveText, /7\/14\/21\/28\/35%/);
+
+  assert.equal(skills.mage_fire_focus_v24.maxPoints, 5);
+  assert.equal(skills.mage_fire_focus_v24.bonuses.지능, 1);
+  assert.deepEqual(Array.from(skills.mage_fire_focus_v24.critChanceBonus), [0, 0.06, 0.12, 0.18, 0.24, 0.30]);
+  assert.match(skills.mage_fire_focus_v24.desc, /6,12,18,24,30%/);
 
   assert.equal(skills.mage_frost_lance_v24.active.multiplier, 2.1);
   assert.match(skills.mage_frost_lance_v24.desc, /210%/);
@@ -138,12 +144,21 @@ test('balance skill data exposes the approved v43 static values and matching cop
   assert.match(skills.mage_frost_mind_v24.passiveText, /지능 \+4/);
 
   assert.equal(skills.mage_fire_ember_v24.maxPoints, 5);
-  assert.equal(skills.mage_fire_ember_v24.bonuses.지능, 1);
+  assert.equal(skills.mage_fire_ember_v24.bonuses.지능, 2);
   assert.deepEqual(Array.from(skills.mage_fire_ember_v24.critDmgBonus), [0, 0.2, 0.4, 0.6, 0.8, 1]);
-  assert.match(skills.mage_fire_ember_v24.desc, /지능 \+1/);
+  assert.match(skills.mage_fire_ember_v24.desc, /지능 \+2/);
   assert.match(skills.mage_fire_ember_v24.desc, /20,40,60,80,100%/);
-  assert.match(skills.mage_fire_ember_v24.passiveText, /지능 \+1/);
+  assert.match(skills.mage_fire_ember_v24.passiveText, /지능 \+2/);
   assert.match(skills.mage_fire_ember_v24.passiveText, /20\/40\/60\/80\/100%/);
+
+  assert.equal(skills.priest_holy_grace_v24.maxPoints, 5);
+  assert.equal(skills.priest_holy_grace_v24.bonuses.정신, 1);
+  assert.deepEqual(Array.from(skills.priest_holy_grace_v24.healBoost), [0, 0.3, 0.6, 0.9, 1.2, 1.5]);
+  assert.match(skills.priest_holy_grace_v24.desc, /30,60,90,120,150%/);
+
+  assert.equal(skills.warrior_basic_guard.maxPoints, 5);
+  assert.deepEqual(Array.from(skills.warrior_basic_guard.guardShieldPct), [0, 0.02, 0.04, 0.06, 0.08, 0.10]);
+  assert.match(skills.warrior_basic_guard.desc, /2,4,6,8,10%/);
 
   assert.equal(skills.priest_basic_smite.active.cooldown, 5);
   assert.equal(skills.priest_basic_smite.active.healMaxPct, 0.25);
@@ -182,12 +197,12 @@ test('current class skill data matches the approved v42 balance rules', () => {
   assert.equal(skills.priest_holy_absorb_v24.active.healMaxPct, 0.5);
   assert.equal(skills.priest_holy_absorb_v24.active.cooldown, 5);
 
-  assert.equal(skills.warrior_def_stance.active.shieldPct, 0.10);
+  assert.equal(skills.warrior_def_stance.active.shieldPct, 0.20);
   assert.equal(skills.warrior_def_stance.active.cooldown, 6);
   assert.match(skills.warrior_def_stance.desc, /현재 체력과 관계없이 최대 체력/);
   assert.match(skills.warrior_def_stance.desc, /쿨타임 6턴/);
   assert.equal(skills.warrior_def_wall.icon, '🛡️');
-  assert.equal(skills.warrior_def_wall.active.shieldPct, 0.10);
+  assert.equal(skills.warrior_def_wall.active.shieldPct, 0.20);
   assert.equal(skills.warrior_def_wall.active.cooldown, 7);
   assert.match(skills.warrior_def_wall.desc, /현재 체력과 관계없이 최대 체력/);
   assert.match(skills.warrior_def_wall.desc, /쿨타임 7턴/);

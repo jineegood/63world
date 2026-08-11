@@ -71,7 +71,7 @@ export const PVP_SKILLS = Object.freeze({
   },
   "mage_fire_ember_v24": {
     "bonuses": {
-      "지능": 1
+      "지능": 2
     },
     "classOnly": "mage",
     "critDmgBonus": [
@@ -95,13 +95,15 @@ export const PVP_SKILLS = Object.freeze({
     "classOnly": "mage",
     "critChanceBonus": [
       0,
-      0.1,
-      0.2,
+      0.06,
+      0.12,
+      0.18,
+      0.24,
       0.3
     ],
     "id": "mage_fire_focus_v24",
     "line": 5,
-    "maxPoints": 3,
+    "maxPoints": 5,
     "name": "화염 집중",
     "specOnly": "화염"
   },
@@ -153,7 +155,9 @@ export const PVP_SKILLS = Object.freeze({
     "activeStunChance": [
       0,
       0.07,
+      0.14,
       0.21,
+      0.28,
       0.35
     ],
     "bonuses": {
@@ -162,7 +166,7 @@ export const PVP_SKILLS = Object.freeze({
     "classOnly": "mage",
     "id": "mage_frost_focus_v24",
     "line": 5,
-    "maxPoints": 3,
+    "maxPoints": 5,
     "name": "냉기 집중",
     "specOnly": "냉기"
   },
@@ -300,16 +304,21 @@ export const PVP_SKILLS = Object.freeze({
     "specOnly": "신성"
   },
   "priest_holy_grace_v24": {
+    "bonuses": {
+      "정신": 1
+    },
     "classOnly": "priest",
     "healBoost": [
       0,
-      0.5,
-      1,
+      0.3,
+      0.6,
+      0.9,
+      1.2,
       1.5
     ],
     "id": "priest_holy_grace_v24",
     "line": 8,
-    "maxPoints": 3,
+    "maxPoints": 5,
     "name": "치유 숙련",
     "specOnly": "신성"
   },
@@ -438,11 +447,13 @@ export const PVP_SKILLS = Object.freeze({
       0,
       0.02,
       0.04,
-      0.06
+      0.06,
+      0.08,
+      0.1
     ],
     "id": "warrior_basic_guard",
     "line": 3,
-    "maxPoints": 3,
+    "maxPoints": 5,
     "name": "막기 훈련"
   },
   "warrior_basic_strike": {
@@ -511,7 +522,7 @@ export const PVP_SKILLS = Object.freeze({
     "active": {
       "cooldown": 6,
       "name": "방어 태세",
-      "shieldPct": 0.1,
+      "shieldPct": 0.2,
       "type": "shield"
     },
     "classOnly": "warrior",
@@ -525,7 +536,7 @@ export const PVP_SKILLS = Object.freeze({
     "active": {
       "cooldown": 7,
       "name": "방패 돌진",
-      "shieldPct": 0.1,
+      "shieldPct": 0.2,
       "type": "shieldBash"
     },
     "classOnly": "warrior",

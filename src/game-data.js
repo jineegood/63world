@@ -115,13 +115,13 @@
     // === 전사 공용 ===
     warrior_basic_body: { id:'warrior_basic_body', v24:true, classOnly:'warrior', name:'기초 체력 단련', icon:'💪', line:1, desc:'전사의 기본기는 체력이다. 체력 +2.', cost:1, maxPoints:3, prereq:[], kind:'root', bonuses:{ 체력:2 }, passiveText:'체력 +2' },
     warrior_basic_blade: { id:'warrior_basic_blade', v24:true, classOnly:'warrior', name:'기초 검술', icon:'🗡️', line:2, desc:'검을 다루는 기본 자세이다. 힘 +1.', cost:1, maxPoints:3, prereq:['warrior_basic_body'], kind:'power', bonuses:{ 힘:1 }, passiveText:'힘 +1' },
-    warrior_basic_guard: { id:'warrior_basic_guard', v24:true, classOnly:'warrior', name:'막기 훈련', icon:'🛡️', line:3, desc:'매 턴 상대의 공격을 막는다. 매 턴 보호막 2,4,6% 생성', cost:1, maxPoints:3, prereq:['warrior_basic_blade'], kind:'guard', guardShieldPct:[0,.02,.04,.06], passiveText:'매 턴 현재 체력 2/4/6% 보호막' },
+    warrior_basic_guard: { id:'warrior_basic_guard', v24:true, classOnly:'warrior', name:'막기 훈련', icon:'🛡️', line:3, desc:'매 턴 상대의 공격을 막는다. 포인트별 현재 체력의 2,4,6,8,10% 보호막 생성', cost:1, maxPoints:5, prereq:['warrior_basic_blade'], kind:'guard', guardShieldPct:[0,.02,.04,.06,.08,.10], passiveText:'매 턴 현재 체력의 2/4/6/8/10% 보호막' },
     warrior_basic_strike: { id:'warrior_basic_strike', v24:true, classOnly:'warrior', name:'전사의 일격', icon:'⚔️', line:4, desc:'상대의 보호막을 무시하고 현재 공격력의 180% 피해를 준다. 쿨타임 4턴.', cost:1, maxPoints:1, prereq:['warrior_basic_guard'], kind:'power', active:{ name:'전사의 일격', cooldown:4, type:'damage', multiplier:1.8, ignoreShield:true } },
     // === 전사 방어 ===
-    warrior_def_stance: { id:'warrior_def_stance', v24:true, classOnly:'warrior', specOnly:'방어', name:'방어 태세', icon:'🛡️', line:5, desc:'현재 체력과 관계없이 최대 체력의 10% 보호막을 얻는다. 쿨타임 6턴.', cost:1, maxPoints:1, prereq:['warrior_basic_strike'], kind:'guard', active:{ name:'방어 태세', cooldown:6, type:'shield', shieldPct:.10 } },
+    warrior_def_stance: { id:'warrior_def_stance', v24:true, classOnly:'warrior', specOnly:'방어', name:'방어 태세', icon:'🛡️', line:5, desc:'현재 체력과 관계없이 최대 체력의 20% 보호막을 얻는다. 쿨타임 6턴.', cost:1, maxPoints:1, prereq:['warrior_basic_strike'], kind:'guard', active:{ name:'방어 태세', cooldown:6, type:'shield', shieldPct:.20 } },
     warrior_def_armor: { id:'warrior_def_armor', v24:true, classOnly:'warrior', specOnly:'방어', name:'공세 갑옷', icon:'🥋', line:6, desc:'체력+3, 최대 체력의 2,4,6,8,10%만큼 기본 공격에 추가 데미지', cost:1, maxPoints:5, prereq:['warrior_def_stance'], kind:'guard', flatBonuses:{ 체력:3 }, armorBonusPct:[0,.02,.04,.06,.08,.10], passiveText:'체력 +3 · 기본 공격 추가 피해 2~10%' },
     warrior_def_resist: { id:'warrior_def_resist', v24:true, classOnly:'warrior', specOnly:'방어', name:'불굴의 의지', icon:'🔰', line:7, desc:'상태 이상에 잘 걸리지 않는 전사의 의지. 체력 +1. 매 턴 20,40,60,80,100% 확률로 상태이상에서 깨어난다.', cost:1, maxPoints:5, prereq:['warrior_def_armor'], kind:'guard', bonuses:{ 체력:1 }, cleanseChance:[0,.20,.40,.60,.80,1], passiveText:'체력 +1 · 매 턴 20/40/60/80/100% 상태이상 해제' },
-    warrior_def_wall: { id:'warrior_def_wall', v24:true, classOnly:'warrior', specOnly:'방어', name:'방패 돌진', icon:'🛡️', line:8, desc:'현재 체력과 관계없이 최대 체력의 10% 보호막을 얻고, 내 현재 보호막만큼의 피해를 준다. 쿨타임 7턴', cost:1, maxPoints:1, prereq:['warrior_def_resist'], kind:'guard', active:{ name:'방패 돌진', cooldown:7, type:'shieldBash', shieldPct:.10 } },
+    warrior_def_wall: { id:'warrior_def_wall', v24:true, classOnly:'warrior', specOnly:'방어', name:'방패 돌진', icon:'🛡️', line:8, desc:'현재 체력과 관계없이 최대 체력의 20% 보호막을 얻고, 내 현재 보호막만큼의 피해를 준다. 쿨타임 7턴', cost:1, maxPoints:1, prereq:['warrior_def_resist'], kind:'guard', active:{ name:'방패 돌진', cooldown:7, type:'shieldBash', shieldPct:.20 } },
     warrior_def_bastion: { id:'warrior_def_bastion', v24:true, classOnly:'warrior', specOnly:'방어', name:'수호자의 맹세', icon:'🌟', line:9, desc:'쓰러질 때, 다시 한번 회복해 일어나 싸운다. 쿨타임 11턴, 한 전투에서 두번 사용 불가', cost:1, maxPoints:1, prereq:['warrior_def_wall'], kind:'ultimate', reviveHealPct:1.0, reviveCooldown:11, passiveText:'전투당 1회 부활(HP 전체 회복)' },
     // === 전사 무기 ===
     warrior_weapon_mastery: { id:'warrior_weapon_mastery', v24:true, classOnly:'warrior', specOnly:'무기', name:'무기 숙련', icon:'⚔️', line:5, desc:'무기의 달인이 된다. 힘 +1. 치명타 피격 시 원래 피해의 10,20,30,40,50%를 반사한다.', cost:1, maxPoints:5, prereq:['warrior_basic_strike'], kind:'power', bonuses:{ 힘:1 }, reflectPct:[0,.10,.20,.30,.40,.50], passiveText:'힘 +1 · 치명타 피격 시 10/20/30/40/50% 반사' },
@@ -135,15 +135,15 @@
     mage_basic_bolt: { id:'mage_basic_bolt', v24:true, classOnly:'mage', name:'마력탄', icon:'🌠', line:3, desc:'현재 공격력의 150% 피해. 쿨타임 2턴.', cost:1, maxPoints:1, prereq:['mage_basic_element'], kind:'power', active:{ name:'마력탄', cooldown:2, type:'damage', multiplier:1.5 } },
     mage_basic_barrier: { id:'mage_basic_barrier', v24:true, classOnly:'mage', name:'환기', icon:'🔮', line:4, desc:'4턴간 자신의 지능을 30% 늘리고, 최대 체력의 30%를 회복한다. 쿨타임 5턴.', cost:1, maxPoints:1, prereq:['mage_basic_bolt'], kind:'guard', active:{ name:'환기', cooldown:5, type:'buff', buffStat:'지능', buffPct:.30, buffTurns:4, healMaxPct:.30 } },
     // === 마법사 냉기 ===
-    mage_frost_focus_v24: { id:'mage_frost_focus_v24', v24:true, classOnly:'mage', specOnly:'냉기', name:'냉기 집중', icon:'❄️', line:5, desc:'냉기의 흐름에 집중한다. 지능 +2, 모든 공격 주문에 상대 기절 확률 7,21,35%', cost:1, maxPoints:3, prereq:['mage_basic_barrier'], kind:'frost', bonuses:{ 지능:2 }, activeStunChance:[0,.07,.21,.35], passiveText:'지능 +2 · 공격 주문 기절 7/21/35%' },
+    mage_frost_focus_v24: { id:'mage_frost_focus_v24', v24:true, classOnly:'mage', specOnly:'냉기', name:'냉기 집중', icon:'❄️', line:5, desc:'냉기의 흐름에 집중한다. 포인트당 지능 +1, 모든 공격 주문에 상대 기절 확률 7,14,21,28,35%. 냉기 전문화의 모든 공격은 적중 시 기본 20% 확률로 냉기 2중첩을 적용하며, 빙결 창은 확정 적용한다.', cost:1, maxPoints:5, prereq:['mage_basic_barrier'], kind:'frost', bonuses:{ 지능:1 }, activeStunChance:[0,.07,.14,.21,.28,.35], passiveText:'지능 +1/점 · 공격 주문 기절 7/14/21/28/35% · 공격 적중 시 냉기 2중첩' },
     mage_frost_lance_v24: { id:'mage_frost_lance_v24', v24:true, classOnly:'mage', specOnly:'냉기', name:'빙결 창', icon:'🧊', line:6, desc:'현재 공격력의 180% 피해. 상대를 1턴간 냉기 상태로 만든다. 쿨타임 4턴.', cost:1, maxPoints:1, prereq:['mage_frost_focus_v24'], kind:'frost', active:{ name:'빙결 창', cooldown:4, type:'damage', multiplier:1.8, forceChill:true, chillTurns:1 } },
     mage_frost_armor_v24: { id:'mage_frost_armor_v24', v24:true, classOnly:'mage', specOnly:'냉기', name:'서리 갑옷', icon:'🛡️', line:7, desc:'최대 체력의 70% 보호막. 쿨타임 6턴.', cost:1, maxPoints:1, prereq:['mage_frost_lance_v24'], kind:'guard', active:{ name:'서리 갑옷', cooldown:6, type:'shield', shieldPct:.70 } },
     mage_frost_mind_v24: { id:'mage_frost_mind_v24', v24:true, classOnly:'mage', specOnly:'냉기', name:'혹한의 정신', icon:'💎', line:8, desc:'차가운 지능을 얻는다. 지능 +3.', cost:1, maxPoints:3, prereq:['mage_frost_armor_v24'], kind:'frost', bonuses:{ 지능:3 }, passiveText:'지능 +3' },
     mage_frost_storm_v24: { id:'mage_frost_storm_v24', v24:true, classOnly:'mage', specOnly:'냉기', name:'빙하 폭풍', icon:'🌨️', line:9, desc:'현재 공격력의 270% 피해. 상대를 2턴간 얼려 공격 피해를 50% 감소시킨다. 쿨타임 6턴.', cost:1, maxPoints:1, prereq:['mage_frost_mind_v24'], kind:'ultimate', active:{ name:'빙하 폭풍', cooldown:6, type:'damage', multiplier:2.7, chillTurns:2 } },
     // === 마법사 화염 ===
-    mage_fire_focus_v24: { id:'mage_fire_focus_v24', v24:true, classOnly:'mage', specOnly:'화염', name:'화염 집중', icon:'🔥', line:5, desc:'화염의 흐름에 집중한다. 지능 +1. 치명타 확률 10,20,30% 증가', cost:1, maxPoints:3, prereq:['mage_basic_barrier'], kind:'fire', bonuses:{ 지능:1 }, critChanceBonus:[0,.10,.20,.30], passiveText:'지능 +1 · 치명타 확률 +10/20/30%p' },
+    mage_fire_focus_v24: { id:'mage_fire_focus_v24', v24:true, classOnly:'mage', specOnly:'화염', name:'화염 집중', icon:'🔥', line:5, desc:'화염의 흐름에 집중한다. 포인트당 지능 +1. 치명타 확률 6,12,18,24,30% 증가', cost:1, maxPoints:5, prereq:['mage_basic_barrier'], kind:'fire', bonuses:{ 지능:1 }, critChanceBonus:[0,.06,.12,.18,.24,.30], passiveText:'지능 +1/점 · 치명타 확률 +6/12/18/24/30%p' },
     mage_fireball_v24: { id:'mage_fireball_v24', v24:true, classOnly:'mage', specOnly:'화염', name:'대화염구', icon:'☄️', line:6, desc:'현재 공격력의 105% 피해로 2번 타격한다. 쿨타임 4턴.', cost:1, maxPoints:1, prereq:['mage_fire_focus_v24'], kind:'fire', active:{ name:'대화염구', cooldown:4, type:'damage', hits:2, hitMult:1.05 } },
-    mage_fire_ember_v24: { id:'mage_fire_ember_v24', v24:true, classOnly:'mage', specOnly:'화염', name:'불씨 증폭', icon:'💥', line:7, desc:'화염 치명타 감각을 높인다. 지능 +1, 스킬 치명타 데미지 20,40,60% 증가', cost:1, maxPoints:3, prereq:['mage_fireball_v24'], kind:'fire', bonuses:{ 지능:1 }, critDmgBonus:[0,.20,.40,.60], passiveText:'지능 +1 · 스킬 치명타 피해 +20/40/60%p' },
+    mage_fire_ember_v24: { id:'mage_fire_ember_v24', v24:true, classOnly:'mage', specOnly:'화염', name:'불씨 증폭', icon:'💥', line:7, desc:'화염 치명타 감각을 높인다. 포인트당 지능 +2, 스킬 치명타 데미지 20,40,60% 증가', cost:1, maxPoints:3, prereq:['mage_fireball_v24'], kind:'fire', bonuses:{ 지능:2 }, critDmgBonus:[0,.20,.40,.60], passiveText:'지능 +2/점 · 스킬 치명타 피해 +20/40/60%p' },
     mage_fire_burst_v24: { id:'mage_fire_burst_v24', v24:true, classOnly:'mage', specOnly:'화염', name:'폭열', icon:'🔥', line:8, desc:'현재 공격력의 90% 피해로 3번 타격한다. 쿨타임 5턴.', cost:1, maxPoints:1, prereq:['mage_fire_ember_v24'], kind:'fire', active:{ name:'폭열', cooldown:5, type:'damage', hits:3, hitMult:0.90 } },
     mage_fire_meteor_v24: { id:'mage_fire_meteor_v24', v24:true, classOnly:'mage', specOnly:'화염', name:'메테오', icon:'🌋', line:9, desc:'현재 공격력의 100% 피해로 4번 타격한다. 쿨타임 6턴.', cost:1, maxPoints:1, prereq:['mage_fire_burst_v24'], kind:'ultimate', active:{ name:'메테오', cooldown:6, type:'damage', hits:4, hitMult:1.00 } },
     // === 사제 공용 ===
@@ -155,7 +155,7 @@
     priest_holy_focus_v24: { id:'priest_holy_focus_v24', v24:true, classOnly:'priest', specOnly:'신성', name:'신성 집중', icon:'☀️', line:5, desc:'신성의 힘에 집중한다. 정신 +2.', cost:1, maxPoints:5, prereq:['priest_basic_prayer'], kind:'holy', bonuses:{ 정신:2 }, passiveText:'정신 +2' },
     priest_holy_absorb_v24: { id:'priest_holy_absorb_v24', v24:true, classOnly:'priest', specOnly:'신성', name:'빛의 섬광', icon:'✨', line:6, desc:'모든 생존 아군의 체력을 각 대상 최대 체력의 50%만큼 회복한다. 쿨타임 5턴.', cost:1, maxPoints:1, prereq:['priest_holy_focus_v24'], kind:'holy', active:{ name:'빛의 섬광', cooldown:5, type:'healAllies', healMaxPct:.50 } },
     priest_holy_barrier_v24: { id:'priest_holy_barrier_v24', v24:true, classOnly:'priest', specOnly:'신성', name:'신성 보호막', icon:'🛡️', line:7, desc:'최대 체력의 70% 보호막. 쿨타임 5턴.', cost:1, maxPoints:1, prereq:['priest_holy_absorb_v24'], kind:'guard', active:{ name:'신성 보호막', cooldown:5, type:'shield', shieldPct:.70 } },
-    priest_holy_grace_v24: { id:'priest_holy_grace_v24', v24:true, classOnly:'priest', specOnly:'신성', name:'치유 숙련', icon:'💫', line:8, desc:'체력을 회복하는 모든 기술들의 효율이 50, 100, 150% 증가한다.', cost:1, maxPoints:3, prereq:['priest_holy_barrier_v24'], kind:'holy', healBoost:[0,.50,1.0,1.5], passiveText:'모든 회복량 +50/100/150%' },
+    priest_holy_grace_v24: { id:'priest_holy_grace_v24', v24:true, classOnly:'priest', specOnly:'신성', name:'치유 숙련', icon:'💫', line:8, desc:'포인트당 정신 +1. 체력을 회복하는 모든 기술의 효율이 30,60,90,120,150% 증가한다.', cost:1, maxPoints:5, prereq:['priest_holy_barrier_v24'], kind:'holy', bonuses:{ 정신:1 }, healBoost:[0,.30,.60,.90,1.20,1.50], passiveText:'정신 +1/점 · 모든 회복량 +30/60/90/120/150%' },
     priest_holy_judgment_v24: { id:'priest_holy_judgment_v24', v24:true, classOnly:'priest', specOnly:'신성', name:'은총의 심판', icon:'✦', line:9, desc:'현재 공격력의 230% 피해를 주고 크게 회복한다. 쿨타임 6턴.', cost:1, maxPoints:1, prereq:['priest_holy_grace_v24'], kind:'ultimate', active:{ name:'은총의 심판', cooldown:6, type:'damageHeal', multiplier:2.3, healRate:.75 } },
     // === 사제 암흑 ===
     priest_shadow_focus_v24: { id:'priest_shadow_focus_v24', v24:true, classOnly:'priest', specOnly:'암흑', name:'암흑 집중', icon:'☾', line:5, desc:'암흑의 힘에 집중한다. 정신 +2. 포인트별 10/15/20/25/30% 확률로 암흑 중첩 데미지만큼 생명력을 회복한다.', cost:1, maxPoints:5, prereq:['priest_basic_prayer'], kind:'shadow', bonuses:{ 정신:2 }, shadowLifestealChance:[0,.10,.15,.20,.25,.30], passiveText:'정신 +2 · 포인트별 10/15/20/25/30% 확률로 암흑 중첩 데미지만큼 생명력 회복' },
@@ -165,9 +165,11 @@
     priest_shadow_judgment_v24: { id:'priest_shadow_judgment_v24', v24:true, classOnly:'priest', specOnly:'암흑', name:'암흑 심판', icon:'☄️', line:9, desc:'현재 공격력의 260% 피해와 암흑 6중첩, 자신 최대 체력의 30% 회복. 쿨타임 6턴.', cost:1, maxPoints:1, prereq:['priest_shadow_void_v24'], kind:'ultimate', active:{ name:'암흑 심판', cooldown:6, type:'shadowDot', multiplier:2.6, stacks:6, healMaxPct:.30 } },
   };
   Object.assign(V24_SKILLS.mage_frost_focus_v24, {
-    desc:'냉기의 흐름에 집중한다. 지능 +1, 모든 공격 주문에 상대를 기절 시킬 확률 7,21,35%',
+    desc:'냉기의 흐름에 집중한다. 포인트당 지능 +1, 모든 공격 주문에 상대를 기절시킬 확률 7,14,21,28,35%. 냉기 전문화의 모든 공격은 적중 시 기본 20% 확률로 냉기 2중첩을 적용하며, 빙결 창은 확정 적용한다.',
+    maxPoints:5,
     bonuses:{ 지능:1 },
-    passiveText:'지능 +1 · 공격 주문 기절 7/21/35%',
+    activeStunChance:[0,.07,.14,.21,.28,.35],
+    passiveText:'지능 +1/점 · 공격 주문 기절 7/14/21/28/35% · 공격 적중 시 냉기 2중첩',
   });
   Object.assign(V24_SKILLS.mage_frost_lance_v24.active, { multiplier:2.1 });
   V24_SKILLS.mage_frost_lance_v24.desc = '현재 공격력의 210% 피해. 상대를 1턴간 냉기 상태로 만든다. 쿨타임 4턴.';
@@ -175,8 +177,8 @@
     desc:'차가운 지능을 얻는다. 지능 +4.', maxPoints:5, bonuses:{ 지능:4 }, passiveText:'지능 +4',
   });
   Object.assign(V24_SKILLS.mage_fire_ember_v24, {
-    desc:'화염 치명타 감각을 높인다. 지능 +1, 스킬 치명타 데미지 20,40,60,80,100% 증가',
-    maxPoints:5, critDmgBonus:[0,.20,.40,.60,.80,1], passiveText:'지능 +1 · 스킬 치명타 피해 +20/40/60/80/100%p',
+    desc:'화염 치명타 감각을 높인다. 포인트당 지능 +2, 스킬 치명타 데미지 20,40,60,80,100% 증가',
+    maxPoints:5, bonuses:{ 지능:2 }, critDmgBonus:[0,.20,.40,.60,.80,1], passiveText:'지능 +2/점 · 스킬 치명타 피해 +20/40/60/80/100%p',
   });
   Object.assign(V24_SKILLS.priest_basic_smite.active, { cooldown:5, healMaxPct:.25 });
   V24_SKILLS.priest_basic_smite.desc = '현재 공격력의 130% 피해, 최대 체력의 25% 회복. 쿨타임 5턴.';
