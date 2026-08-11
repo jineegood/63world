@@ -127,7 +127,8 @@ test('balance skill data exposes the approved v43 static values and matching cop
   assert.deepEqual(Array.from(skills.mage_frost_focus_v24.activeStunChance), [0, 0.07, 0.14, 0.21, 0.28, 0.35]);
   assert.match(skills.mage_frost_focus_v24.desc, /지능 \+1/);
   assert.match(skills.mage_frost_focus_v24.desc, /7,14,21,28,35%/);
-  assert.match(skills.mage_frost_focus_v24.desc, /기본 20% 확률로 냉기 2중첩/);
+  assert.doesNotMatch(skills.mage_frost_focus_v24.desc, /냉기 2중첩/);
+  assert.doesNotMatch(skills.mage_frost_focus_v24.passiveText, /냉기 2중첩/);
   assert.match(skills.mage_frost_focus_v24.passiveText, /지능 \+1/);
   assert.match(skills.mage_frost_focus_v24.passiveText, /7\/14\/21\/28\/35%/);
 
@@ -186,6 +187,8 @@ test('current class skill data matches the approved v42 balance rules', () => {
 
   const skills = context.window.YuksamData.V24_SKILLS;
   assert.equal(skills.mage_basic_element.name, '원소 보호막');
+  assert.equal(skills.mage_basic_element.icon, '🛡️');
+  assert.notEqual(skills.mage_basic_element.icon, skills.mage_basic_barrier.icon);
   assert.equal(skills.mage_basic_element.triggerHpPct, 0.20);
   assert.deepEqual(Array.from(skills.mage_basic_element.emergencyShieldPct), [0, 0.10, 0.15, 0.20, 0.25, 0.30]);
   assert.equal('executeHp' in skills.mage_basic_element, false);

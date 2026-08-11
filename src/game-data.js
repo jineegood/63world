@@ -131,11 +131,11 @@
     warrior_weapon_judgment: { id:'warrior_weapon_judgment', v24:true, classOnly:'warrior', specOnly:'무기', name:'최후의 심판', icon:'✦', line:9, desc:'한 턴간 모은 후, 현재 공격력의 280% 피해. 쿨타임 6턴.', cost:1, maxPoints:1, prereq:['warrior_weapon_breaker'], kind:'ultimate', active:{ name:'최후의 심판', cooldown:6, type:'charge', charge:true, chargeMult:2.8 } },
     // === 마법사 공용 ===
     mage_basic_mana: { id:'mage_basic_mana', v24:true, classOnly:'mage', name:'기초 마력 수련', icon:'🔷', line:1, desc:'마법사의 기본 마력 수련. 지능+1.', cost:1, maxPoints:5, prereq:[], kind:'root', bonuses:{ 지능:1 }, passiveText:'지능 +1' },
-    mage_basic_element: { id:'mage_basic_element', v24:true, classOnly:'mage', name:'원소 보호막', icon:'🔮', line:2, desc:'적의 공격이 모두 끝난 뒤 살아 있고 체력이 20% 이하라면 전투당 한 번 최대 체력의 10,15,20,25,30% 보호막 생성', cost:1, maxPoints:5, prereq:['mage_basic_mana'], kind:'root', triggerHpPct:0.20, emergencyShieldPct:[0,.10,.15,.20,.25,.30], passiveText:'생존 후 HP 20% 이하: 전투당 1회 최대 HP의 10/15/20/25/30% 보호막' },
+    mage_basic_element: { id:'mage_basic_element', v24:true, classOnly:'mage', name:'원소 보호막', icon:'🛡️', line:2, desc:'적의 공격이 모두 끝난 뒤 살아 있고 체력이 20% 이하라면 전투당 한 번 최대 체력의 10,15,20,25,30% 보호막 생성', cost:1, maxPoints:5, prereq:['mage_basic_mana'], kind:'root', triggerHpPct:0.20, emergencyShieldPct:[0,.10,.15,.20,.25,.30], passiveText:'생존 후 HP 20% 이하: 전투당 1회 최대 HP의 10/15/20/25/30% 보호막' },
     mage_basic_bolt: { id:'mage_basic_bolt', v24:true, classOnly:'mage', name:'마력탄', icon:'🌠', line:3, desc:'현재 공격력의 150% 피해. 쿨타임 2턴.', cost:1, maxPoints:1, prereq:['mage_basic_element'], kind:'power', active:{ name:'마력탄', cooldown:2, type:'damage', multiplier:1.5 } },
     mage_basic_barrier: { id:'mage_basic_barrier', v24:true, classOnly:'mage', name:'환기', icon:'🔮', line:4, desc:'4턴간 자신의 지능을 30% 늘리고, 최대 체력의 30%를 회복한다. 쿨타임 5턴.', cost:1, maxPoints:1, prereq:['mage_basic_bolt'], kind:'guard', active:{ name:'환기', cooldown:5, type:'buff', buffStat:'지능', buffPct:.30, buffTurns:4, healMaxPct:.30 } },
     // === 마법사 냉기 ===
-    mage_frost_focus_v24: { id:'mage_frost_focus_v24', v24:true, classOnly:'mage', specOnly:'냉기', name:'냉기 집중', icon:'❄️', line:5, desc:'냉기의 흐름에 집중한다. 포인트당 지능 +1, 모든 공격 주문에 상대 기절 확률 7,14,21,28,35%. 냉기 전문화의 모든 공격은 적중 시 기본 20% 확률로 냉기 2중첩을 적용하며, 빙결 창은 확정 적용한다.', cost:1, maxPoints:5, prereq:['mage_basic_barrier'], kind:'frost', bonuses:{ 지능:1 }, activeStunChance:[0,.07,.14,.21,.28,.35], passiveText:'지능 +1/점 · 공격 주문 기절 7/14/21/28/35% · 공격 적중 시 냉기 2중첩' },
+    mage_frost_focus_v24: { id:'mage_frost_focus_v24', v24:true, classOnly:'mage', specOnly:'냉기', name:'냉기 집중', icon:'❄️', line:5, desc:'냉기의 흐름에 집중한다. 포인트당 지능 +1, 모든 공격 주문에 상대 기절 확률 7,14,21,28,35%.', cost:1, maxPoints:5, prereq:['mage_basic_barrier'], kind:'frost', bonuses:{ 지능:1 }, activeStunChance:[0,.07,.14,.21,.28,.35], passiveText:'지능 +1/점 · 공격 주문 기절 7/14/21/28/35%' },
     mage_frost_lance_v24: { id:'mage_frost_lance_v24', v24:true, classOnly:'mage', specOnly:'냉기', name:'빙결 창', icon:'🧊', line:6, desc:'현재 공격력의 180% 피해. 상대를 1턴간 냉기 상태로 만든다. 쿨타임 4턴.', cost:1, maxPoints:1, prereq:['mage_frost_focus_v24'], kind:'frost', active:{ name:'빙결 창', cooldown:4, type:'damage', multiplier:1.8, forceChill:true, chillTurns:1 } },
     mage_frost_armor_v24: { id:'mage_frost_armor_v24', v24:true, classOnly:'mage', specOnly:'냉기', name:'서리 갑옷', icon:'🛡️', line:7, desc:'최대 체력의 70% 보호막. 쿨타임 6턴.', cost:1, maxPoints:1, prereq:['mage_frost_lance_v24'], kind:'guard', active:{ name:'서리 갑옷', cooldown:6, type:'shield', shieldPct:.70 } },
     mage_frost_mind_v24: { id:'mage_frost_mind_v24', v24:true, classOnly:'mage', specOnly:'냉기', name:'혹한의 정신', icon:'💎', line:8, desc:'차가운 지능을 얻는다. 지능 +3.', cost:1, maxPoints:3, prereq:['mage_frost_armor_v24'], kind:'frost', bonuses:{ 지능:3 }, passiveText:'지능 +3' },
@@ -165,11 +165,11 @@
     priest_shadow_judgment_v24: { id:'priest_shadow_judgment_v24', v24:true, classOnly:'priest', specOnly:'암흑', name:'암흑 심판', icon:'☄️', line:9, desc:'현재 공격력의 260% 피해와 암흑 6중첩, 자신 최대 체력의 30% 회복. 쿨타임 6턴.', cost:1, maxPoints:1, prereq:['priest_shadow_void_v24'], kind:'ultimate', active:{ name:'암흑 심판', cooldown:6, type:'shadowDot', multiplier:2.6, stacks:6, healMaxPct:.30 } },
   };
   Object.assign(V24_SKILLS.mage_frost_focus_v24, {
-    desc:'냉기의 흐름에 집중한다. 포인트당 지능 +1, 모든 공격 주문에 상대를 기절시킬 확률 7,14,21,28,35%. 냉기 전문화의 모든 공격은 적중 시 기본 20% 확률로 냉기 2중첩을 적용하며, 빙결 창은 확정 적용한다.',
+    desc:'냉기의 흐름에 집중한다. 포인트당 지능 +1, 모든 공격 주문에 상대를 기절시킬 확률 7,14,21,28,35%.',
     maxPoints:5,
     bonuses:{ 지능:1 },
     activeStunChance:[0,.07,.14,.21,.28,.35],
-    passiveText:'지능 +1/점 · 공격 주문 기절 7/14/21/28/35% · 공격 적중 시 냉기 2중첩',
+    passiveText:'지능 +1/점 · 공격 주문 기절 7/14/21/28/35%',
   });
   Object.assign(V24_SKILLS.mage_frost_lance_v24.active, { multiplier:2.1 });
   V24_SKILLS.mage_frost_lance_v24.desc = '현재 공격력의 210% 피해. 상대를 1턴간 냉기 상태로 만든다. 쿨타임 4턴.';
