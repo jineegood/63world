@@ -274,6 +274,21 @@ test('준비 취소가 동기화되면 진행 중이던 자동 출발 카운트�
   assert.doesNotMatch(host.html(), /초 후 출발!/);
 });
 
+test('full lobby formation can swap two occupied seats without resetting the draft', () => {
+  assert.match(uiSource, /data-network-slot="\$\{slot\}">이 자리로<\/button>/);
+  assert.match(uiSource, /const occupant = inSlot\(targetSlot\)/);
+  assert.match(uiSource, /networkDraftPlacement\[occupant\.id\] = networkDraftPlacement\[selected\.id\] \|\| null/);
+  assert.match(uiSource, /networkDraftPlacement\[selected\.id\] = targetSlot/);
+  assert.doesNotMatch(uiSource, /if \(member\.slot\) networkDraftPlacement\[member\.id\] = member\.slot/);
+});
+
+test('shield charge uses close-range travel motion in dungeon and PVP', () => {
+  assert.match(uiSource, /const profile = partyAttackFxProfile\(event\)/);
+  assert.match(uiSource, /profile\?\.motionTravelPct/);
+  assert.match(styleSource, /\.combat-player\.combat-fx-motion-shield-charge/);
+  assert.match(styleSource, /\.pvp-combat-stage-v2 \.combat-monster\.combat-fx-motion-shield-charge/);
+});
+
 test('teacher pause freezes the whole dungeon UI and resumes from the server state', () => {
   assert.match(uiSource, /function teacherPaused\(session = networkSession\)/);
   assert.match(uiSource, /type:'raidTeacherPause'/);
@@ -282,6 +297,12 @@ test('teacher pause freezes the whole dungeon UI and resumes from the server sta
   assert.match(uiSource, /function updatePausedClock|const updatePausedClock/);
   assert.match(uiSource, /walkStartedAt \+= pausedFor/);
   assert.match(uiSource, /isTeacherPaused:\(\) => teacherPaused\(\)/);
+  assert.match(uiSource, /function setTeacherPauseAudio\(paused\)/);
+  assert.match(uiSource, /entry\?\.loop === true && typeof entry\.pause === 'function'/);
+  assert.match(uiSource, /audio\?\.ctx\?\.suspend\?\.\(\)/);
+  assert.match(uiSource, /audio\?\.ctx\?\.resume\?\.\(\)/);
+  assert.match(uiSource, /setTeacherPauseAudio\(true\)/);
+  assert.match(uiSource, /setTeacherPauseAudio\(false\)/);
 });
 
 test('같은 전문화 세 명은 준비할 수 없고 자동 출발도 시작되지 않는다', async () => {
@@ -352,6 +373,10 @@ test('대기 화면에서 새 question으로 바로 건너뛰어도 세 클라�
   }
   const decide = clients[0].context.YuksamRaidRunUi.questionGateDecisionForTest;
   assert.equal(decide({
+    phase:'question', round:5, hasQuestion:true, deadline:123456,
+    submitted:false, down:false, stunned:true,
+  }), 'down', 'a stunned student must rest instead of opening a question');
+  assert.equal(decide({
     phase:'waiting', round:5, hasQuestion:true, deadline:123456,
     submitted:true, down:false,
   }), 'submitted', '이미 제출한 화면은 같은 question을 다시 입력하게 하면 안 된다');
@@ -372,9 +397,14 @@ test('문제 답변 대기와 서버 동기화 대기를 서로 다른 문구로
     '쓰러져 있어 이번 전투에서는 행동하지 않습니다. 친구들의 문제 풀이를 기다리는 중…',
     '쓰러진 파티원의 자동 제출도 친구 답변 대기로 구분해야 한다',
   );
+  assert.equal(
+    message({ submitted:true, stunned:true }),
+    '기절해서 이번 턴은 쉬어갑니다. 친구들의 문제 풀이를 기다리는 중…',
+    'a stunned student gets an explicit rest-turn message',
+  );
   assert.match(uiSource, /phase === 'resolving'[\s\S]*?panelMessage = networkQuestionWaitMessage\(\)/,
     '세 답이 모두 모여 서버가 결과를 계산할 때는 서버 대기로 돌아가야 한다');
-  assert.match(uiSource, /panelMessage = networkQuestionWaitMessage\(\{ submitted:true, down \}\)/);
+  assert.match(uiSource, /panelMessage = networkQuestionWaitMessage\(\{ submitted:true, down, stunned \}\)/);
   assert.match(uiSource, /showPlaybackPanel\(`답을 제출했습니다\. \$\{networkQuestionWaitMessage\(\{ submitted:true \}\)\}`\)/);
 });
 
@@ -425,13 +455,15 @@ test('서버 라운드는 세 명에게 서로 다른 문제를 주고 세 답�
   assert.match(uiSource, /events:\[\.\.\.answerEvents, \.\.\.\(result\.events \|\| \[\]\)\]/);
 });
 
-test('쓰러진 학생은 문제를 받지 않고 서버 제출만 자동 처리한다', () => {
+test('쓰러지거나 기절한 학생은 문제를 받지 않고 서버 제출만 자동 처리한다', () => {
   const autoSkip = uiSource.match(/function maybeAutoSubmitDeadNetworkTurn\(\) \{[\s\S]*?\n  \}/)?.[0] || '';
   assert.notEqual(autoSkip, '');
-  assert.match(autoSkip, /member\.hp > 0/);
+  assert.match(autoSkip, /const down = !!member && member\.hp <= 0/);
+  assert.match(autoSkip, /Number\(member\.statuses\?\.stunTurns\) > 0/);
+  assert.match(autoSkip, /\(!down && !stunned\)/);
   assert.match(autoSkip, /session\.deadSubmittedRounds\.has\(round\)/);
   assert.match(autoSkip, /session\.client\.submit\(session\.room\.id, round, 'basic', ''\)/);
-  assert.match(autoSkip, /networkQuestionWaitMessage\(\{ submitted:true, down:true \}\)/);
+  assert.match(autoSkip, /networkQuestionWaitMessage\(\{ submitted:true, down, stunned \}\)/);
   assert.match(uiSource, /skipped:skipped \|\| entry\.correct === true|correct:skipped \|\| entry\.correct === true/);
   assert.match(uiSource, /answerEvent\?\.skipped !== true/);
 });
@@ -446,6 +478,8 @@ test('1–10층 복도는 1→3→5→8→10층 조우 진행을 표시한다', 
   assert.equal(floor({ encounterIndex:1, phase:'battle' }, 0), 5);
   assert.equal(floor({ encounterIndex:2, phase:'battle' }, 0), 8);
   assert.equal(floor({ encounterIndex:3, phase:'battle' }, 0), 10);
+  assert.match(uiSource, /walkProgress = active\.phase === 'travel' \? 0 : 1/,
+    'a new floor group must not render with stale completed travel progress');
   assert.match(uiSource, /const floorLabel = `\$\{floor\}층`/);
   assert.match(uiSource, /ctx\.fillStyle = '#fb7185';\s*ctx\.fillText\(floorLabel/);
   assert.doesNotMatch(uiSource, /다음 조우 \$\{Math\.min/);
@@ -527,6 +561,7 @@ test('던전 전투 규칙은 기절·더블 어택·힐·보호막·쿨타임�
   assert.match(combatSource, /doubleAttack:true/);
   assert.match(combatSource, /addMonsterStatus\(monster, member, action, 'stun'/);
   assert.match(combatSource, /monster\.stunTurns > 0/);
+  assert.match(uiSource, /event\.kind === 'monster-stun-break'[\s\S]*?statuses\.stunTurns = 0/);
   assert.match(combatSource, /kind:'party-heal'/);
   assert.match(combatSource, /kind:'party-shield'/);
   assert.match(combatSource, /member\.cooldowns\[action\.id\]/);

@@ -280,6 +280,41 @@ test('block training creates at least one shield even at very low HP', () => {
   assert.equal(shield.audioId, 'blockShield');
 });
 
+test('level 11 and higher dungeon monsters immediately break stun and still attack', () => {
+  const fighter = member('fighter', { skills:{ warrior_weapon_slash:1 } });
+  const target = monster({ level:11, attack:10 });
+  const result = resolve({
+    members:[fighter],
+    target,
+    submissions:{ fighter:{ correct:true, actionId:'warrior_weapon_slash' } },
+    rng:constant(0.5),
+  });
+  const applied = result.events.find((event) => event.kind === 'monster-status' && event.status === 'stun');
+  const broken = result.events.find((event) => event.kind === 'monster-stun-break');
+  assert.ok(applied, 'the stun still lands so its tooltip and cause can be shown');
+  assert.equal(broken?.audioId, 'stunned');
+  assert.match(broken?.text || '', /기절에서 바로 깨어났습니다/);
+  assert.ok(!result.events.some((event) => event.kind === 'monster-skip'));
+  assert.ok(result.events.some((event) => event.kind === 'monster-hit'));
+  assert.equal(target.stunTurns, 0);
+});
+
+test('offensive armor bonus hit carries its own sound and close-range motion', () => {
+  const fighter = member('fighter', {
+    maxHp:100,
+    skills:{ warrior_def_armor:1 },
+  });
+  const result = resolve({
+    members:[fighter],
+    submissions:{ fighter:{ correct:true, actionId:'basic' } },
+    rng:constant(0.5),
+  });
+  const armorHit = result.events.find((event) => event.kind === 'party-hit' && event.label === '공세 갑옷');
+  assert.ok(armorHit);
+  assert.equal(armorHit.audioId, 'offensiveArmor');
+  assert.equal(armorHit.motion, 'offensive-armor-bump');
+});
+
 test('Faith Radiance increases dungeon monster miss chance by its learned rank', () => {
   const plainPriest = member('plain-priest', {
     klass:'priest', skills:{}, maxHp:100, hp:100, attack:1,
@@ -589,6 +624,28 @@ test('structured whole-party damage events are always front, middle, back', () =
     (event) => event.memberId,
   );
   assert.deepEqual(targetOrder, ['front', 'middle', 'back']);
+});
+
+test('whole-party damage recalculates the current formation after an ally falls', () => {
+  const front = member('front', { slot:'front', maxHp:1, hp:1, attack:1 });
+  const middle = member('middle', { slot:'middle', maxHp:100, hp:100, attack:1 });
+  const back = member('back', { slot:'back', maxHp:100, hp:100, attack:1 });
+  const target = monster({ attack:10 });
+  const result = resolve({
+    members:[back, front, middle],
+    target,
+    attackKind:'all',
+    submissions:{
+      front:{ correct:true, actionId:'basic' },
+      middle:{ correct:true, actionId:'basic' },
+      back:{ correct:true, actionId:'basic' },
+    },
+    rng:constant(0.5),
+  });
+  const hits = result.events.filter((event) => event.kind === 'monster-hit' && !event.missed);
+  assert.deepEqual(Array.from(hits, (event) => event.memberId), ['front', 'middle', 'back']);
+  assert.deepEqual(Array.from(hits, (event) => event.slot), ['front', 'front', 'middle']);
+  assert.deepEqual(Array.from(hits, (event) => event.debugCalc?.slotMultiplier), [1.5, 1.5, 1]);
 });
 
 test('raid-run revives a genuinely downed structured-combat member at exactly 1 HP for the next monster', () => {

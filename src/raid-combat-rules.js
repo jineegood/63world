@@ -807,10 +807,13 @@
       totalDamage += applied.totalDamage;
       const hitAudioId = hit.doubleAttack
         ? audioIdForAction(BASIC_ACTION, member.klass)
-        : (hit.hitIndex === 0 ? actionAudioId : null);
+        : (hit.bonus && hit.label === '공세 갑옷'
+          ? 'offensiveArmor'
+          : (hit.hitIndex === 0 ? actionAudioId : null));
       events.push(eventBase(member, action, {
         kind:'party-hit', correct:true, hitIndex:hit.hitIndex, label:hit.label,
         missed:false, critical, chargeReleased:chargePending, ...applied, audioId:hitAudioId,
+        ...(hit.bonus && hit.label === '공세 갑옷' ? { motion:'offensive-armor-bump' } : {}),
         debugCalc:{
           kind:'party-damage', statName:member.klass === 'mage' ? '지능' : member.klass === 'priest' ? '정신' : '힘',
           stat:attackRoll?.stat ?? member.attack, powerRoll:attackRoll?.roll ?? null,
@@ -1086,7 +1089,14 @@
     /* 몬스터가 움직이기 전에 파티가 독 피해를 받는다. */
     tickMemberPoison(members, events);
 
-    if (monster.stunTurns > 0) {
+    if (monster.stunTurns > 0 && Math.max(1, integer(monster.level, 1)) >= 11) {
+      events.push({
+        kind:'monster-stun-break', status:'stun', turns:0,
+        audioId:'stunned', text:`${monster.name}이(가) 기절에서 바로 깨어났습니다!`,
+      });
+      monster.stunTurns = 0;
+      monster.stunSourceName = null;
+    } else if (monster.stunTurns > 0) {
       events.push({
         kind:'monster-skip', status:'stun', turns:monster.stunTurns,
         audioId:'stunned', text:`${monster.name}이(가) 기절해 공격하지 못했습니다!`,
@@ -1117,8 +1127,8 @@
     const empowerMultiplier = empowered ? Math.max(1, number(effect.EMPOWER_MULTIPLIER, 1.5)) : 1;
     let chillConsumed = false;
     let drained = 0;
-    /* 이번 몬스터 행동이 시작될 때의 생존 대형을 고정한다. 한 공격 도중
-       쓰러졌다고 같은 폭발 안에서 즉시 자리를 또 바꾸지는 않고, 다음 행동부터 당긴다. */
+    /* 기술 대상을 고를 때는 현재 생존 대형을 쓴다. 실제 피해를 넣을 때는
+       앞사람이 먼저 쓰러졌을 수도 있으므로 아래에서 다시 현재 자리를 계산한다. */
     const turnLiving = living();
     const effectiveSlots = new Map(turnLiving.map((member) => [
       String(member.id), effectiveSlotFor(member, turnLiving, raidRules),
@@ -1154,7 +1164,8 @@
       const focus = plan.kind === 'all'
         ? Math.max(0, number(effect.ALL_ATTACK_MULTIPLIER, 0.5))
         : number(raidRules?.SINGLE_TARGET_BONUS, 1);
-      const effectiveSlot = effectiveSlots.get(String(member.id)) || member.slot;
+      const currentLiving = living();
+      const effectiveSlot = effectiveSlotFor(member, currentLiving, raidRules);
       const raidMultiplier = number(raidRules?.MONSTER_DAMAGE_MULTIPLIER, 1);
       const slotMultiplier = damageMultiplierForSlot(effectiveSlot, raidRules);
       const classMultiplier = incomingMultiplier(member);
@@ -1211,7 +1222,7 @@
       const hitEvent = {
         kind:'monster-hit', memberId:member.id, memberName:member.name,
         hitIndex, hitCount,
-        slot:effectiveSlots.get(String(member.id)) || member.slot, missed:false, critical, ...applied,
+        slot:effectiveSlot, missed:false, critical, ...applied,
         debugCalc:{
           kind:'monster-damage', baseAttack:number(monsterAttack), raidMultiplier,
           slot:effectiveSlot, slotLabel:raidRules?.slotLabel?.(effectiveSlot) || effectiveSlot,

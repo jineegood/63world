@@ -46,9 +46,27 @@ test('manifest exposes stable event and skill mappings for every supplied combat
   assert.equal(manifest?.skillSounds.priest_holy_absorb_v24, 'holyShared');
   assert.equal(manifest?.skillSounds.priest_holy_barrier_v24, 'holyShared');
   assert.equal(manifest?.skillSounds.warrior_def_armor, 'offensiveArmor');
+  assert.equal(manifest?.skillSounds.warrior_charge, 'shieldCharge');
+  assert.equal(manifest?.skillSounds.warrior_defense_stance, 'defensiveStance');
   assert.equal(manifest?.skillSounds.warrior_weapon_judgment, 'finalJudgment');
   assert.equal(manifest?.skillSounds.mage_fire_meteor_v24, 'meteor');
   assert.equal(manifest?.skillSounds.priest_shadow_judgment_v24, 'shadowJudgment');
+});
+
+test('every learnable active skill has an assigned combat sound', () => {
+  const skillContext = createContext({
+    window:{ YuksamCore:{ uid:() => 'test-id' } },
+    console,
+  });
+  skillContext.globalThis = skillContext.window;
+  new Script(readFileSync(join(root, 'src', 'game-data.js'), 'utf8'), {
+    filename:'src/game-data.js',
+  }).runInContext(skillContext);
+  const data = skillContext.window.YuksamData;
+  Object.assign(data.SKILL_DEFS, data.V24_SKILLS || {});
+  const activeSkills = Object.values(data.SKILL_DEFS).filter((skill) => skill?.active);
+  const missing = activeSkills.filter((skill) => !manifest?.skillSounds?.[skill.id]);
+  assert.deepEqual(Array.from(missing, (skill) => skill.id), []);
 });
 
 test('mapped playback keeps configured file sound volumes within the SFX setting', () => {

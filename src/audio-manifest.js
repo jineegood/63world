@@ -62,6 +62,7 @@
   });
   const classBasicSounds = Object.freeze({ warrior:'warriorBasic', mage:'mageBasic', priest:'priestBasic' });
   const skillSounds = Object.freeze({
+    warrior_charge:'shieldCharge', warrior_defense_stance:'defensiveStance',
     warrior_basic_strike:'warriorBasicStrike', warrior_def_stance:'defensiveStance', warrior_def_armor:'offensiveArmor',
     warrior_def_wall:'shieldCharge', warrior_def_bastion:'guardianOath', warrior_weapon_slash:'shatteringStrike', warrior_weapon_judgment:'finalJudgment',
     mage_basic_bolt:'magicBolt', mage_basic_barrier:'ventilation', mage_frost_lance_v24:'frostLance', mage_frost_armor_v24:'frostArmor',

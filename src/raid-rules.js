@@ -666,8 +666,8 @@
     const result = engine.resolveRound({
       ...options,
       raidRules:{
-        damageMultiplier, pickTarget, SINGLE_TARGET_BONUS, MONSTER_DAMAGE_MULTIPLIER,
-        PATTERN_EFFECT, SLOTS,
+        damageMultiplier, effectiveSlot, slotLabel, pickTarget,
+        SINGLE_TARGET_BONUS, MONSTER_DAMAGE_MULTIPLIER, PATTERN_EFFECT, SLOTS,
       },
     });
     return { ok:true, ...result };

@@ -512,8 +512,26 @@
     return session?.room?.phase === 'paused' || session?.room?.teacherPaused === true;
   }
 
+  let teacherPauseAudioActive = false;
+  function setTeacherPauseAudio(paused) {
+    const shouldPause = paused === true;
+    if (teacherPauseAudioActive === shouldPause) return;
+    teacherPauseAudioActive = shouldPause;
+    const audio = G()?.audio;
+    if (shouldPause) {
+      Object.values(audio || {}).forEach((entry) => {
+        if (entry?.loop === true && typeof entry.pause === 'function') entry.pause();
+      });
+      audio?.ctx?.suspend?.().catch?.(() => {});
+      return;
+    }
+    audio?.ctx?.resume?.().catch?.(() => {});
+    call('syncAudioFileBgm');
+  }
+
   function showTeacherPauseScreen() {
     stopRaidQuestionTimer();
+    setTeacherPauseAudio(true);
     busy = true;
     panelMode = 'playing';
     panelMessage = '던전 일시정지';
@@ -558,6 +576,7 @@
       return;
     }
     if (wasTeacherPaused && G()?.modalState?.type === 'raidTeacherPause') {
+      setTeacherPauseAudio(false);
       call('closeModal');
     }
     /* 포기 확인창은 선생님/학생이 직접 예·아니오를 고를 때까지 유지한다.
@@ -729,6 +748,7 @@
   }
 
   function resetNetworkSession() {
+    setTeacherPauseAudio(false);
     stopNetworkTransport();
     cancelNetworkLobbyCountdown();
     stopRaidQuestionTimer();
@@ -832,18 +852,20 @@
       });
   }
 
-  function networkQuestionGateDecision({ phase, round, hasQuestion, deadline, submitted, down } = {}) {
+  function networkQuestionGateDecision({ phase, round, hasQuestion, deadline, submitted, down, stunned } = {}) {
     if (!['question', 'waiting'].includes(phase) || !(Number(round) > 0) || !hasQuestion) return 'none';
     if (!(Number(deadline) > 0)) return 'server-wait';
     if (submitted) return 'submitted';
-    if (down) return 'down';
+    if (down || stunned) return 'down';
     return 'open';
   }
 
-  function networkQuestionWaitMessage({ submitted = false, down = false } = {}) {
+  function networkQuestionWaitMessage({ submitted = false, down = false, stunned = false } = {}) {
     if (!submitted) return '서버 대기중…';
-    const downNotice = down ? '쓰러져 있어 이번 전투에서는 행동하지 않습니다. ' : '';
-    return `${downNotice}친구들의 문제 풀이를 기다리는 중…`;
+    const restNotice = down
+      ? '쓰러져 있어 이번 전투에서는 행동하지 않습니다. '
+      : stunned ? '기절해서 이번 턴은 쉬어갑니다. ' : '';
+    return `${restNotice}친구들의 문제 풀이를 기다리는 중…`;
   }
 
   /* wait/effects 화면에서 곧바로 question 스냅샷으로 건너뛰어도 입력 잠금이
@@ -862,6 +884,7 @@
       || session.deadSubmittedRounds?.has(round) === true;
     const localMember = myActiveRaidMember();
     const down = !!localMember && localMember.hp <= 0;
+    const stunned = !!localMember && localMember.hp > 0 && Number(localMember.statuses?.stunTurns) > 0;
     const gate = networkQuestionGateDecision({
       phase,
       round,
@@ -869,6 +892,7 @@
       deadline:raidQuestionDeadlineMs(),
       submitted,
       down,
+      stunned,
     });
     if (gate === 'none') return false;
 
@@ -891,7 +915,7 @@
     if (gate === 'submitted') {
       busy = true;
       panelMode = 'playing';
-      panelMessage = networkQuestionWaitMessage({ submitted:true, down });
+      panelMessage = networkQuestionWaitMessage({ submitted:true, down, stunned });
       if (G()?.modalState?.type === 'raidBattle') renderBattle();
       return true;
     }
@@ -993,7 +1017,6 @@
     Object.keys(networkDraftPlacement).forEach((id) => { if (!ids.has(id)) delete networkDraftPlacement[id]; });
     roster.forEach((member) => {
       if (!Object.hasOwn(networkDraftPlacement, member.id)) networkDraftPlacement[member.id] = member.slot || null;
-      if (member.slot) networkDraftPlacement[member.id] = member.slot;
     });
     return networkDraftPlacement;
   }
@@ -1127,6 +1150,7 @@
             <div class="raid-figure-name">${networkHostCrown(member)}${esc(member.name)}${isMine(member) ? ' (나)' : ''}</div>
             <div class="raid-figure-sub">Lv.${member.level} · ${esc(member.spec || '전문화 없음')} · HP ${member.maxHp}</div>
           </div>
+          ${host ? `<button class="ghost small" data-network-slot="${slot}">이 자리로</button>` : ''}
           ${ready ? '<div class="raid-ready-badge">Ready!</div>' : ''}
         </div>`;
     };
@@ -1303,7 +1327,9 @@
       importNetworkTruth();
       question = null;
       busy = false;
-      walkProgress = 1;
+      /* 맵이 먼저 한 프레임 그려질 때 이전 조우의 진행도 1이 남아 있으면
+         31→32층을 잠깐 보여 준 뒤 31층으로 되돌아오는 것처럼 보인다. */
+      walkProgress = active.phase === 'travel' ? 0 : 1;
       enterDungeonMap(() => {
         networkStarting = false;
         if (!active || networkSession?.room?.phase === 'cancelled') return;
@@ -1346,7 +1372,7 @@
     return active?.snapshot?.().members?.find((member) => String(member.id) === me) || null;
   }
 
-  /* 쓰러진 학생에게 문제를 풀게 하거나 30초 제한시간을 기다리게 하지 않는다.
+  /* 쓰러졌거나 기절한 학생에게 문제를 풀게 하거나 30초 제한시간을 기다리게 하지 않는다.
      서버의 라운드 완료 조건은 여전히 세 명 제출이므로 빈 답을 자동 제출하되,
      전투 판정과 화면에서는 오답이 아니라 '행동 불가'로 취급한다. */
   function maybeAutoSubmitDeadNetworkTurn() {
@@ -1354,14 +1380,16 @@
     const phase = session?.room?.phase;
     const round = Math.max(0, Number(session?.room?.round) || 0);
     const member = myActiveRaidMember();
+    const down = !!member && member.hp <= 0;
+    const stunned = !!member && member.hp > 0 && Number(member.statuses?.stunTurns) > 0;
     if (!session || !active || active.phase !== 'battle'
       || !['question', 'waiting'].includes(phase) || round < 1
-      || raidQuestionDeadlineMs() <= 0 || !member || member.hp > 0) return false;
+      || raidQuestionDeadlineMs() <= 0 || !member || (!down && !stunned)) return false;
 
     busy = true;
     chosenAction = null;
     panelMode = 'playing';
-    panelMessage = networkQuestionWaitMessage({ submitted:true, down:true });
+    panelMessage = networkQuestionWaitMessage({ submitted:true, down, stunned });
     if (G()?.modalState?.type === 'raidBattle') renderBattle();
 
     session.deadSubmittedRounds = session.deadSubmittedRounds || new Set();
@@ -1374,7 +1402,7 @@
       .catch((error) => {
         if (networkSession !== session) return;
         session.deadSubmittedRounds.delete(round);
-        panelMessage = error?.message || '쓰러진 턴을 넘기지 못했습니다. 다시 연결하는 중…';
+        panelMessage = error?.message || '행동할 수 없는 턴을 넘기지 못했습니다. 다시 연결하는 중…';
         if (G()?.modalState?.type === 'raidBattle') renderBattle();
       });
     return true;
@@ -1573,11 +1601,13 @@
 
     const localMember = myActiveRaidMember();
     const down = !!localMember && localMember.hp <= 0;
+    const stunned = !!localMember && localMember.hp > 0 && Number(localMember.statuses?.stunTurns) > 0;
     const preparing = ['travel', 'effects'].includes(session.room?.phase);
-    busy = down || preparing;
+    busy = down || stunned || preparing;
     panelMode = busy ? 'playing' : 'menu';
     panelMessage = down
       ? '쓰러져 있어 이번 전투에서는 행동하지 않습니다. 서버 대기중…'
+      : stunned ? '기절해서 이번 턴은 쉬어갑니다. 서버 대기중…'
       : preparing ? '서버 대기중…' : '무엇을 할까?';
     renderBattle();
     /* 방장 캐릭터가 쓰러져도 남은 두 사람의 라운드는 방장이 열어야 한다. */
@@ -1610,6 +1640,9 @@
         const downAtRoundStart = new Set(active.snapshot().members
           .filter((member) => member.hp <= 0)
           .map((member) => String(member.id)));
+        const stunnedAtRoundStart = new Set(active.snapshot().members
+          .filter((member) => member.hp > 0 && Number(member.statuses?.stunTurns) > 0)
+          .map((member) => String(member.id)));
         const submissions = Object.fromEntries(inputs.map((entry) => [String(entry.userId), {
           correct:entry.correct === true,
           actionId:String(entry.actionId || 'basic'),
@@ -1621,7 +1654,9 @@
         if (!result.ok) throw new Error(result.reason || '전투 판정을 완료하지 못했습니다.');
         const snapshot = active.snapshot();
         const answerEvents = teacherKill ? [] : inputs.map((entry) => {
-          const skipped = downAtRoundStart.has(String(entry.userId));
+          const down = downAtRoundStart.has(String(entry.userId));
+          const stunned = stunnedAtRoundStart.has(String(entry.userId));
+          const skipped = down || stunned;
           const storedAnswers = session.answerKeys?.[round];
           const correctAnswer = String(
             storedAnswers && typeof storedAnswers === 'object'
@@ -1636,7 +1671,9 @@
             timedOut:skipped ? false : entry.timedOut === true,
             correctAnswer:skipped ? '' : correctAnswer,
             text:skipped
-              ? '쓰러져 있어 이번 전투에서는 행동하지 않습니다.'
+              ? (down
+                ? '쓰러져 있어 이번 전투에서는 행동하지 않습니다.'
+                : '기절해서 이번 턴은 쉬어갑니다.')
               : entry.correct === true
                 ? '정답!'
                 : `오답입니다! 정답은 ${correctAnswer || '확인 중'} (피해가 절반만 들어갑니다)`,
@@ -3131,15 +3168,26 @@
     return global.YuksamData?.SKILL_DEFS?.[skillId] || null;
   }
 
-  /* 파티원 한 명이 때릴 때의 연출. 스킬이면 그 스킬 고유 연출, 아니면 직업 기본 공격. */
-  function playPartyAttackFx(event) {
+  function partyAttackFxProfile(event) {
     const fx = global.YuksamCombatFx;
-    if (!fx || event.missed) return;
+    if (!fx) return null;
     const member = active?.snapshot?.().members?.find((entry) => entry.id === event.memberId);
     const skillId = event.skillId;
     const profile = skillId
       ? { ...fx.getSkillFxProfile(skillId, skillDefFor(skillId)), source:'player', target:'monster' }
       : fx.getBasicAttackFxProfile(member?.klass || 'warrior');
+    if (event.motion === 'offensive-armor-bump') {
+      return { ...profile, motion:event.motion, motionTravelPct:.35, travelMs:230, actionMs:420 };
+    }
+    return profile;
+  }
+
+  /* 파티원 한 명이 때릴 때의 연출. 스킬이면 그 스킬 고유 연출, 아니면 직업 기본 공격. */
+  function playPartyAttackFx(event) {
+    const fx = global.YuksamCombatFx;
+    if (!fx) return;
+    const profile = partyAttackFxProfile(event);
+    if (event.missed && !(Number(profile?.motionTravelPct) > 0)) return;
     withFxAnchor(event.memberId, () => fx.playPlayerActionFx(profile));
   }
 
@@ -3204,7 +3252,9 @@
       }
       // 명중 여부와 관계없이 공격을 시도한 사람은 앞으로 나갔다 돌아온다.
       const attacker = memberSpriteNode(event.memberId);
-      lunge(attacker, 'party');
+      /* 방패 돌진·공세 갑옷은 사냥터 전용 이동 거리를 그대로 사용한다.
+         공통 살짝 전진을 동시에 붙이면 CSS 애니메이션이 서로 덮어쓴다. */
+      if (!(Number(partyAttackFxProfile(event)?.motionTravelPct) > 0)) lunge(attacker, 'party');
       return;
     }
 
@@ -3434,6 +3484,9 @@
     } else if (event.kind === 'monster-skip' && event.status === 'stun') {
       statuses.stunTurns = Math.max(0, (statuses.stunTurns || 0) - 1);
       if (statuses.stunTurns <= 0) statuses.stunSourceName = '';
+    } else if (event.kind === 'monster-stun-break') {
+      statuses.stunTurns = 0;
+      statuses.stunSourceName = '';
     }
   }
 
