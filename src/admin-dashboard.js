@@ -228,6 +228,33 @@ window.adminKillCurrentRaidMonsterV1 = async function adminKillCurrentRaidMonste
   }
 };
 
+window.adminToggleCurrentRaidPauseV1 = async function adminToggleCurrentRaidPauseV1() {
+  if (secureAdminCheatPendingV3) return false;
+  const identity = window.getPvpIdentityV1?.();
+  if (!identity?.userId) {
+    toast('먼저 학생 캐릭터로 로그인해 주세요.');
+    return false;
+  }
+  if (!requireTeacherAuth() || !secureAdminDataV2?.toggleRaidPause) return false;
+  secureAdminCheatPendingV3 = true;
+  const button = document.getElementById('testRaidPauseBtn');
+  try {
+    const result = await secureAdminDataV2.toggleRaidPause(identity.userId);
+    if (button) {
+      button.textContent = result.paused ? '▶ 던전 다시 시작' : '⏸ 던전 일시정지';
+      button.classList.toggle('active', result.paused);
+    }
+    window.YuksamRaidRunUi?.refresh?.();
+    toast(result.paused ? '던전 전체를 일시정지했어요.' : '던전을 다시 시작했어요.');
+    return true;
+  } catch (error) {
+    toast(error?.message || '던전 일시정지를 바꾸지 못했어요.');
+    return false;
+  } finally {
+    secureAdminCheatPendingV3 = false;
+  }
+};
+
 window.adminResolveSecurityAlertV1 = async function adminResolveSecurityAlertV1(alertId){
   if (!requireTeacherAuth() || !secureAdminDataV2) return;
   try {

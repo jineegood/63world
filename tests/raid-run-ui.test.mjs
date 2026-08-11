@@ -138,7 +138,7 @@ test('화면은 피해 판정을 재정의하지 않고 진행·전투 규칙에
   assert.match(uiSource, /teacherKillRound/);
   /* 던전은 셋이 함께 하는 기능뿐이라 답 제출도 반드시 방을 거친다.
      혼자 도는 경로(NPC 동료 둘)는 게임에서 쓰이지 않아 걷어냈다. */
-  assert.match(uiSource, /if \(busy \|\| !active \|\| active\.phase !== 'battle' \|\| !networkSession\) return;/);
+  assert.match(uiSource, /if \(busy \|\| !active \|\| active\.phase !== 'battle' \|\| !networkSession(?: \|\| teacherPaused\(\))?\) return;/);
   assert.doesNotMatch(uiSource, /rollAllyAnswers|buildParty|startRun|soloMode/);
   assert.match(runSource, /R\.resolvePartyCombatRound\(/);
   assert.match(rulesSource, /global\.YuksamRaidCombatRules/);
@@ -272,6 +272,16 @@ test('준비 취소가 동기화되면 진행 중이던 자동 출발 카운트�
   await new Promise((resolve) => setTimeout(resolve, 35));
   assert.equal(host.calls.filter(([kind]) => kind === 'start').length, 0);
   assert.doesNotMatch(host.html(), /초 후 출발!/);
+});
+
+test('teacher pause freezes the whole dungeon UI and resumes from the server state', () => {
+  assert.match(uiSource, /function teacherPaused\(session = networkSession\)/);
+  assert.match(uiSource, /type:'raidTeacherPause'/);
+  assert.match(uiSource, /if \(teacherPaused\(networkSession\)\) \{[\s\S]*?showTeacherPauseScreen\(\);[\s\S]*?return;/);
+  assert.match(uiSource, /if \(teacherPaused\(\)\) \{[\s\S]*?setTimeout\(step, 150\)/);
+  assert.match(uiSource, /function updatePausedClock|const updatePausedClock/);
+  assert.match(uiSource, /walkStartedAt \+= pausedFor/);
+  assert.match(uiSource, /isTeacherPaused:\(\) => teacherPaused\(\)/);
 });
 
 test('같은 전문화 세 명은 준비할 수 없고 자동 출발도 시작되지 않는다', async () => {

@@ -60,3 +60,12 @@ test('the existing monster kill button routes dungeon combat through the teacher
   assert.match(dashboard, /secureAdminDataV2\.killRaidMonster\(identity\.userId\)/);
   assert.match(data, /action:['"]raidKill['"]/);
 });
+
+test('teacher cheat panel can pause and resume the authoritative dungeon room', () => {
+  assert.match(index, /id="testRaidPauseBtn"[^>]*>⏸ 던전 일시정지<\/button>/);
+  assert.match(panel, /adminToggleCurrentRaidPauseV1/);
+  assert.match(dashboard, /secureAdminDataV2\.toggleRaidPause\(identity\.userId\)/);
+  assert.match(dashboard, /▶ 던전 다시 시작/);
+  assert.match(data, /action:'raidPause'/);
+  assert.match(data, /RAID_NOT_ACTIVE/);
+});

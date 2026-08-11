@@ -263,6 +263,30 @@
       });
     }
 
+    async function toggleRaidPause(userId) {
+      const targetUserId = validateUserId(userId);
+      await requireTeacher();
+      const { data, error:cheatError } = await client.functions.invoke('teacher-apply-cheat', {
+        body:{ userId:targetUserId, action:'raidPause' },
+      });
+      if (cheatError) throw mapError(cheatError, 'CHEAT_FAILED');
+      if (data?.code === 'RAID_NOT_ACTIVE') {
+        throw new AdminDataV2Error('RAID_NOT_ACTIVE', '현재 진행 중인 던전이 없어요.');
+      }
+      if (!data?.ok || typeof data.roomId !== 'string' || typeof data.paused !== 'boolean') {
+        throw error('CHEAT_FAILED');
+      }
+      return Object.freeze({
+        displayName:safeText(data.displayName, 20),
+        roomId:safeText(data.roomId, 36),
+        paused:data.paused,
+        resumedPhase:safeText(data.resumedPhase, 20),
+        remainingSeconds:Number.isFinite(Number(data.remainingSeconds))
+          ? Math.max(0, Math.ceil(Number(data.remainingSeconds)))
+          : null,
+      });
+    }
+
     async function listSecurityAlerts() {
       await requireTeacher();
       const { data, error:listError } = await client
@@ -288,7 +312,7 @@
     }
 
     return Object.freeze({
-      listStudents, grantReward, deleteStudent, applyStudentCheat, killRaidMonster,
+      listStudents, grantReward, deleteStudent, applyStudentCheat, killRaidMonster, toggleRaidPause,
       listSecurityAlerts, resolveSecurityAlert,
     });
   }

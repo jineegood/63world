@@ -252,6 +252,19 @@
       killBtn.dataset.boundV41 = '1';
       killBtn.addEventListener('click', () => { killCurrentMonster(); });
     }
+    const pauseBtn = document.getElementById('testRaidPauseBtn');
+    if (pauseBtn && !pauseBtn.dataset.boundRaidPauseV1) {
+      pauseBtn.dataset.boundRaidPauseV1 = '1';
+      pauseBtn.addEventListener('click', async () => {
+        if (!(await hasTeacherAccess())) return;
+        const togglePause = call('adminToggleCurrentRaidPauseV1');
+        if (!togglePause) {
+          toastMsg('던전 일시정지 기능을 찾지 못했습니다.');
+          return;
+        }
+        await togglePause();
+      });
+    }
     const questBtn = document.getElementById('cheatCompleteQuestBtn');
     if (questBtn && !questBtn.dataset.boundV41) {
       questBtn.dataset.boundV41 = '1';

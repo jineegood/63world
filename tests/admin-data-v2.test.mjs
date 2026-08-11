@@ -198,6 +198,30 @@ test('killRaidMonster shows safe raid-state errors returned by the server', asyn
   });
 });
 
+test('toggleRaidPause delegates one server-authoritative pause or resume', async () => {
+  const invokeResult = { data:{
+    ok:true,
+    displayName:'테스트',
+    roomId:'33333333-3333-4333-8333-333333333333',
+    paused:true,
+    resumedPhase:'question',
+    remainingSeconds:17,
+  }, error:null };
+  const { calls, service } = setup({ invokeResult });
+  const result = await service.toggleRaidPause(studentId);
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), {
+    displayName:'테스트',
+    roomId:'33333333-3333-4333-8333-333333333333',
+    paused:true,
+    resumedPhase:'question',
+    remainingSeconds:17,
+  });
+  const invoke = calls.find(([name, fn]) => name === 'invoke' && fn === 'teacher-apply-cheat');
+  assert.deepEqual(JSON.parse(JSON.stringify(invoke[2])), {
+    body:{ userId:studentId, action:'raidPause' },
+  });
+});
+
 test('backend failures map to safe errors without leaking raw details', async () => {
   const { service:grantService } = setup({ insertError:{ status:429, message:'secret database password' } });
   await assert.rejects(grantService.grantReward(studentId, { gold:1, building:0, exp:0 }), (error) => {

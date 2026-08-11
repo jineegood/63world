@@ -17,6 +17,10 @@ const raidBalanceMigration = fs.readFileSync(
   path.join(root, 'supabase/migrations/202608090006_raid_balance_and_teacher_progress_v1.sql'),
   'utf8',
 );
+const raidPauseMigration = fs.readFileSync(
+  path.join(root, 'supabase/migrations/202608110001_teacher_raid_pause_v1.sql'),
+  'utf8',
+);
 
 test('teacher cheat function verifies the caller and trusts app_metadata only', () => {
   assert.match(source, /Authorization/);
@@ -34,7 +38,18 @@ test('teacher cheat function accepts a narrow action list and one UUID target', 
   assert.match(source, /heal/);
   assert.match(source, /raidKill/);
   assert.match(source, /raidAdvance/);
+  assert.match(source, /raidPause/);
   assert.match(source, /\.eq\(['"]user_id['"], userId\)/);
+});
+
+test('dungeon pause is server-only and preserves the remaining question time', () => {
+  assert.match(source, /private_teacher_toggle_raid_pause_v1/);
+  assert.match(raidPauseMigration, /phase = 'paused'/);
+  assert.match(raidPauseMigration, /teacher_paused_remaining_ms/);
+  assert.match(raidPauseMigration, /question_deadline = case[\s\S]*?milliseconds/i);
+  assert.match(raidPauseMigration, /version = version \+ 1/g);
+  assert.match(raidPauseMigration, /revoke all[\s\S]*?from public, anon, authenticated/i);
+  assert.match(raidPauseMigration, /grant execute[\s\S]*?to service_role/i);
 });
 
 test('dungeon progress cheat advances only server-owned progress without granting rewards', () => {

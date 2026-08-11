@@ -508,8 +508,28 @@
 
   /* ---------- 실제 3인 파티 방 ---------- */
 
+  function teacherPaused(session = networkSession) {
+    return session?.room?.phase === 'paused' || session?.room?.teacherPaused === true;
+  }
+
+  function showTeacherPauseScreen() {
+    stopRaidQuestionTimer();
+    busy = true;
+    panelMode = 'playing';
+    panelMessage = '던전 일시정지';
+    if (G()?.modalState?.type === 'raidTeacherPause') return;
+    call('openModal', `
+      <h2>⏸ 던전 일시정지</h2>
+      <div class="panel-card raid-center">
+        <p><strong>선생님이 던전을 잠시 멈췄습니다.</strong></p>
+        <p class="raid-hint">다시 시작할 때까지 문제 제한시간과 전투 진행도 함께 멈춥니다.</p>
+      </div>
+    `, { type:'raidTeacherPause', pause:true });
+  }
+
   function setNetworkData(data, { initial = false } = {}) {
     if (!networkSession || !data) return;
+    const wasTeacherPaused = teacherPaused(networkSession);
     const incomingRoom = data.room || null;
     const currentVersion = Math.max(0, Number(networkSession.room?.version) || 0);
     const incomingVersion = Math.max(0, Number(incomingRoom?.version) || 0);
@@ -532,6 +552,13 @@
     if (networkSession.room?.question) {
       networkSession.lastQuestion = publicRaidQuestion(networkSession.room.question);
       question = networkSession.lastQuestion;
+    }
+    if (teacherPaused(networkSession)) {
+      showTeacherPauseScreen();
+      return;
+    }
+    if (wasTeacherPaused && G()?.modalState?.type === 'raidTeacherPause') {
+      call('closeModal');
     }
     /* 포기 확인창은 선생님/학생이 직접 예·아니오를 고를 때까지 유지한다.
        heartbeat나 Realtime 응답이 전투창을 다시 그리면 버튼을 누를 수 없었다.
@@ -1509,7 +1536,8 @@
      크롬의 백그라운드 탭이 느려도 먼저 끝난 탭이 혼자 진행하지 않는다. */
   function continueAfterNetworkPlayback() {
     const session = networkSession;
-    if (!session || !active || session.playbackActive || session.playbackQueue?.length) return false;
+    if (!session || !active || teacherPaused(session)
+      || session.playbackActive || session.playbackQueue?.length) return false;
     const round = Math.max(0, Number(session.room?.round) || 0);
     if (playbackBarrierNeeded(session)) {
       acknowledgeNetworkPlayback(round);
@@ -2316,6 +2344,21 @@
     encounterStartedAt = 0;
     cancelTravelWatchdog();
     const travelToken = ++travelAnimationToken;
+    let travelPausedAt = 0;
+
+    const updatePausedClock = (now) => {
+      if (teacherPaused()) {
+        if (!travelPausedAt) travelPausedAt = now;
+        return true;
+      }
+      if (travelPausedAt) {
+        const pausedFor = Math.max(0, now - travelPausedAt);
+        walkStartedAt += pausedFor;
+        if (encounterStartedAt) encounterStartedAt += pausedFor;
+        travelPausedAt = 0;
+      }
+      return false;
+    };
 
     // 다음에 만날 몬스터를 미리 알아 둔다(등장 연출에 필요).
     const R = rules();
@@ -2325,15 +2368,31 @@
     /* 백그라운드 탭에서는 requestAnimationFrame이 멎을 수 있다. 그 탭이
        방장이면 서버 문제도 영원히 시작되지 않으므로 실제 경과시간 기준의
        안전 타이머로 반드시 다음 장면까지 보낸다. */
-    travelWatchdogTimer = global.setTimeout(() => {
+    const runTravelWatchdog = () => {
       if (!active || travelToken !== travelAnimationToken) return;
+      const now = (global.performance ? performance.now() : Date.now());
+      if (updatePausedClock(now)) {
+        travelWatchdogTimer = global.setTimeout(runTravelWatchdog, 250);
+        return;
+      }
+      const remaining = WALK_MS + ENCOUNTER_MS + 600 - (now - walkStartedAt);
+      if (remaining > 0) {
+        travelWatchdogTimer = global.setTimeout(runTravelWatchdog, remaining);
+        return;
+      }
       walkProgress = 1;
       finishTravel(travelToken);
-    }, WALK_MS + ENCOUNTER_MS + 600);
+    };
+    travelWatchdogTimer = global.setTimeout(runTravelWatchdog, WALK_MS + ENCOUNTER_MS + 600);
 
     const tick = () => {
       if (!active || travelToken !== travelAnimationToken) return;
       const now = (global.performance ? performance.now() : Date.now());
+      if (updatePausedClock(now)) {
+        if (global.requestAnimationFrame) global.requestAnimationFrame(tick);
+        else global.setTimeout(tick, 32);
+        return;
+      }
       walkProgress = Math.min(1, (now - walkStartedAt) / WALK_MS);
 
       // 걷기가 끝나면 몬스터가 복도 끝에서 나타난다.
@@ -2429,7 +2488,11 @@
     renderBattle();
 
     // 등장 문구를 한 박자 보여 준 뒤 행동 메뉴로 넘어간다.
-    global.setTimeout(() => {
+    const finishEncounterIntro = () => {
+      if (teacherPaused()) {
+        global.setTimeout(finishEncounterIntro, 150);
+        return;
+      }
       if (!active || active.phase !== 'battle') return;
       const waitingForServer = !!networkSession
         && (!networkSession.room?.question || raidQuestionDeadlineMs() <= 0);
@@ -2439,7 +2502,8 @@
       renderBattle();
       if (networkSession && isNetworkHost()) beginNetworkRound();
       if (networkSession?.room?.question) reconcileNetworkQuestionRound();
-    }, eventDelayMs);
+    };
+    global.setTimeout(finishEncounterIntro, eventDelayMs);
   }
 
   /* 왼쪽에 세 명이 대형 순서대로 선다(앞줄이 가장 앞). */
@@ -3477,6 +3541,10 @@
     let index = 0;
     const step = () => {
       if (!active) return;
+      if (teacherPaused()) {
+        global.setTimeout(step, 150);
+        return;
+      }
       if (index >= events.length) {
         if (syncAtEnd) syncViewToTruth();
         onDone?.();
@@ -3512,7 +3580,7 @@
 
   /* 던전은 셋이 함께 하는 기능뿐이라 답 제출도 방을 거친다. */
   function submitAnswer(given) {
-    if (busy || !active || active.phase !== 'battle' || !networkSession) return;
+    if (busy || !active || active.phase !== 'battle' || !networkSession || teacherPaused()) return;
     submitNetworkAnswer(given);
   }
 
@@ -4501,6 +4569,8 @@
   global.YuksamRaidRunUi = Object.freeze({
     openNetworkLobby,
     isRunning:() => !!active,
+    isTeacherPaused:() => teacherPaused(),
+    refresh:() => refreshNetworkRoom(),
     /* 전투 로그를 재생하는 중인지. 재생 중에는 다음 답을 받지 않는다. */
     isBusy:() => busy,
     /* 던전에서 나가기(진행 포기). 갇힘 방지용 탈출구. */

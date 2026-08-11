@@ -19,6 +19,12 @@ function roomRow(row) {
     hostId:row.host_id,
     floorGroup:Number(row.floor_group) || 1,
     phase:row.phase,
+    teacherPaused:row.phase === 'paused',
+    teacherPausedPhase:row.teacher_paused_phase || null,
+    teacherPausedRemainingMs:row.teacher_paused_remaining_ms == null
+      ? null
+      : Math.max(0, Number(row.teacher_paused_remaining_ms) || 0),
+    teacherPausedAt:row.teacher_paused_at ? new Date(row.teacher_paused_at).getTime() : 0,
     encounterIndex:Number(row.encounter_index) || 0,
     currentFloor:Number(row.current_floor) || 1,
     round:Number(row.round_no) || 0,
