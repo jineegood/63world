@@ -515,7 +515,7 @@ test('shadow lifesteal never revives a defeated shadow priest', () => {
 
 test('shield and healing events explain their exact bases, rates, caps, and applied values', () => {
   const tank = member('tank', {
-    spec:'방어', maxHp:100, hp:100, skills:{ warrior_def_stance:1 },
+    spec:'방어', maxHp:100, hp:1, skills:{ warrior_def_stance:1 },
   });
   const shieldResult = resolve({
     members:[tank], target:monster({ attack:1 }),
@@ -531,6 +531,19 @@ test('shield and healing events explain their exact bases, rates, caps, and appl
     before:shield.debugCalc.beforeShield,
     after:shield.debugCalc.afterShield,
   }, { kind:'shield', base:100, rate:0.1, requested:10, before:0, after:10 });
+
+  const charger = member('charger', {
+    spec:'방어', maxHp:100, hp:1, skills:{ warrior_def_wall:1 },
+  });
+  const chargeResult = resolve({
+    members:[charger], target:monster({ attack:1 }),
+    submissions:{ charger:{ correct:true, actionId:'warrior_def_wall' } },
+    plan:{ kind:'none', name:'가만히 있기' },
+  });
+  const chargeShield = chargeResult.events.find(
+    (event) => event.kind === 'party-shield' && event.skillId === 'warrior_def_wall',
+  );
+  assert.equal(chargeShield.amount, 10, 'HP가 1이어도 방패 돌진 보호막은 최대 HP 100을 기준으로 한다');
 
   const priest = member('healer', {
     klass:'priest', spec:'신성', slot:'front', maxHp:100, hp:100,

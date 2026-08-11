@@ -251,6 +251,36 @@ test('shield absorbs damage before HP and effects are assigned stable event ids'
   assert.equal(resolved.events[1].absorbed, 20);
 });
 
+test('active shields use maximum HP even when the caster has only 1 HP left', async () => {
+  const rules = await import(rulesUrl.href);
+  const cases = [
+    { id:'warrior_def_stance', className:'warrior', spec:'방어', expected:5 },
+    { id:'warrior_def_wall', className:'warrior', spec:'방어', expected:5 },
+    { id:'mage_frost_armor_v24', className:'mage', spec:'냉기', expected:35 },
+  ];
+  for (const entry of cases) {
+    const resolved = rules.resolveRound({
+      match:{ id:`max-hp-${entry.id}`, round:1 },
+      a:{
+        player:fighter('a', {
+          className:entry.className,
+          spec:entry.spec,
+          maxHp:100,
+          hp:1,
+          attack:1,
+          skills:{ [entry.id]:1 },
+        }),
+        actionId:entry.id,
+        correct:true,
+      },
+      b:{ player:fighter('b', { attack:1 }), actionId:'basic', correct:true },
+      randomInt:(_min, max) => max,
+    });
+    const shield = resolved.events.find((event) => event.kind === 'shield' && event.source === 'a');
+    assert.equal(shield?.amount, entry.expected, entry.id);
+  }
+});
+
 test('Block Training follows the hunting order: own action, shield, enemy counterattack', async () => {
   const rules = await import(rulesUrl.href);
   const resolved = rules.resolveRound({

@@ -185,7 +185,18 @@
     function reviveForNextEncounter() {
       /* 보호막은 한 몬스터와의 전투에서만 유효하다. 처치 직후 서버에
          travel 상태를 올리기 전에 지워야 다음 조우에서 옛 보호막이 복원되지 않는다. */
-      state.members.forEach((member) => { member.shield = 0; });
+      const engine = combatRules();
+      state.members.forEach((member) => {
+        if (engine?.resetMemberForEncounter) {
+          engine.resetMemberForEncounter(member);
+          return;
+        }
+        member.shield = 0;
+        member.statuses = {};
+        member.buffs = {};
+        member.chargeActive = false;
+        member.bastionUsed = false;
+      });
       const recovered = [];
       R.travelRecovery(state.members).forEach((entry) => {
         const member = state.members.find((m) => m.id === entry.memberId);

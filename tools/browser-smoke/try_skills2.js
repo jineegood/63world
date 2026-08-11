@@ -162,7 +162,7 @@ run(root, async ({ window, $, sleep, click, asyncErrors }) => {
   // (h) 방패 돌진: 새 보호막을 먼저 더한 뒤 100으로 제한하고, 치명타/냉기는 그 다음에 적용한다.
   const shieldChargeDamage = async (startingShield, randomValues, chillTurns) => {
     m = setup('warrior', '방어', { warrior_def_wall: 1 }, { maxHp: 100000 });
-    g.player.maxHp = 1000; g.player.hp = 1000;
+    g.player.maxHp = 1000; g.player.hp = 1;
     g.combatShield = startingShield;
     g.playerChillTurns = chillTurns;
     const randomQueue = randomValues.slice();

@@ -184,10 +184,12 @@ test('current class skill data matches the approved v42 balance rules', () => {
 
   assert.equal(skills.warrior_def_stance.active.shieldPct, 0.10);
   assert.equal(skills.warrior_def_stance.active.cooldown, 6);
+  assert.match(skills.warrior_def_stance.desc, /현재 체력과 관계없이 최대 체력/);
   assert.match(skills.warrior_def_stance.desc, /쿨타임 6턴/);
   assert.equal(skills.warrior_def_wall.icon, '🛡️');
   assert.equal(skills.warrior_def_wall.active.shieldPct, 0.10);
   assert.equal(skills.warrior_def_wall.active.cooldown, 7);
+  assert.match(skills.warrior_def_wall.desc, /현재 체력과 관계없이 최대 체력/);
   assert.match(skills.warrior_def_wall.desc, /쿨타임 7턴/);
   assert.equal(skills.warrior_basic_strike.active.multiplier, 1.8);
   assert.equal(skills.warrior_basic_strike.active.ignoreShield, true);
@@ -224,6 +226,8 @@ test('current class skill data matches the approved v42 balance rules', () => {
   assert.match(skills.warrior_def_resist.passiveText, /체력 \+1/);
   assert.match(skills.warrior_def_resist.passiveText, /20\/40\/60\/80\/100% 상태이상 해제/);
   assert.equal(skills.mage_frost_armor_v24.active.cooldown, 6);
+  assert.equal(skills.mage_frost_armor_v24.active.shieldPct, 0.70);
+  assert.match(skills.mage_frost_armor_v24.desc, /최대 체력의 70%/);
   assert.match(skills.mage_frost_armor_v24.desc, /쿨타임 6턴/);
   assert.match(skills.mage_fire_ember_v24.desc, /스킬 치명타 데미지/);
   assert.match(skills.mage_fire_ember_v24.passiveText, /스킬 치명타 피해/);

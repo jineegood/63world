@@ -90,6 +90,19 @@ test('한 몬스터 전투에서 얻은 보호막은 다음 몬스터 전에 모
   assert.deepEqual(Array.from(run.snapshot().members, (entry) => entry.shield), [0, 0, 0]);
 });
 
+test('전투에서 받은 기절과 다른 일시 상태는 이동 단계부터 다음 몬스터로 넘어가지 않는다', () => {
+  const run = makeRun();
+  run.confirmFormation({ me:'front', ally1:'middle', ally2:'back' });
+  run.arriveAtEncounter();
+  run.members[0].statuses = { stunTurns:2, chillTurns:1, poisonTurns:3 };
+  run.members[0].buffs = { intBuffTurns:2 };
+  const result = run.resolveRound({}, { forceMonsterDefeat:true });
+  assert.equal(result.monsterDown, true);
+  assert.equal(run.phase, 'travel');
+  assert.deepEqual({ ...run.snapshot().members[0].statuses }, {});
+  assert.deepEqual({ ...run.snapshot().members[0].buffs }, {});
+});
+
 test('대형이 잘못되면 출발하지 못한다', () => {
   const run = makeRun();
   const bad = run.confirmFormation({ me:'front', ally1:'front', ally2:'back' });

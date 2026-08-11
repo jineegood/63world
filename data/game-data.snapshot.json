@@ -2,7 +2,7 @@
   "meta": {
     "sourceFile": "game.js",
     "detectedVersion": "v35",
-    "generatedAt": "2026-07-12T10:16:31.428Z"
+    "generatedAt": "2026-08-11T09:29:54.074Z"
   },
   "classes": {
     "warrior": {
@@ -16,7 +16,7 @@
         "힘": 8,
         "지능": 2,
         "정신": 3,
-        "체력": 8
+        "체력": 4
       },
       "color": "#ef4444"
     },
@@ -31,7 +31,7 @@
         "힘": 2,
         "지능": 9,
         "정신": 5,
-        "체력": 5
+        "체력": 2
       },
       "color": "#60a5fa"
     },
@@ -46,7 +46,7 @@
         "힘": 3,
         "지능": 5,
         "정신": 9,
-        "체력": 5
+        "체력": 2
       },
       "color": "#f8fafc"
     }
@@ -693,6 +693,150 @@
         "type": "badge",
         "color": "#4ade80"
       }
+    },
+    "cs_questSproutRibbon": {
+      "id": "cs_questSproutRibbon",
+      "name": "새싹 리본",
+      "slot": "accessory",
+      "classOnly": null,
+      "price": 0,
+      "costume": true,
+      "questOnly": true,
+      "desc": "명진쌤의 부탁을 받은 상남이 처음 모험을 축하하며 선물한 초록 리본.",
+      "look": {
+        "type": "butterflyRibbon",
+        "color": "#4ade80"
+      }
+    },
+    "cs_bunnyBand": {
+      "id": "cs_bunnyBand",
+      "name": "토끼 머리띠",
+      "slot": "head",
+      "classOnly": null,
+      "price": 120,
+      "costume": true,
+      "desc": "폭신폭신한 토끼 귀 머리띠. 능력치는 없지만 아주 귀엽습니다.",
+      "look": {
+        "type": "bunnyEars",
+        "color": "#fbcfe8"
+      }
+    },
+    "cs_flowerCrown": {
+      "id": "cs_flowerCrown",
+      "name": "꽃 화관",
+      "slot": "head",
+      "classOnly": null,
+      "price": 260,
+      "costume": true,
+      "desc": "봄날의 들꽃을 엮어 만든 화관. 머리 위에 작은 정원이 피어납니다.",
+      "look": {
+        "type": "flowerCrown",
+        "color": "#fda4af"
+      }
+    },
+    "cs_starCrown": {
+      "id": "cs_starCrown",
+      "name": "별빛 왕관",
+      "slot": "head",
+      "classOnly": null,
+      "price": 480,
+      "costume": true,
+      "desc": "밤하늘의 별을 담은 왕관. 은은한 별빛이 반짝입니다.",
+      "look": {
+        "type": "starCrown",
+        "color": "#fde68a"
+      }
+    },
+    "cs_sailorCape": {
+      "id": "cs_sailorCape",
+      "name": "세일러 교복",
+      "slot": "armor",
+      "classOnly": null,
+      "price": 150,
+      "costume": true,
+      "desc": "남색 카라와 붉은 스카프, 주름 치마가 한 벌인 세일러 교복.",
+      "look": {
+        "type": "sailorSuit",
+        "color": "#1d4ed8"
+      }
+    },
+    "cs_starryRobe": {
+      "id": "cs_starryRobe",
+      "name": "별무리 로브",
+      "slot": "armor",
+      "classOnly": null,
+      "price": 320,
+      "costume": true,
+      "desc": "밤하늘을 그대로 두른 로브. 별이 반짝이고 은하수가 흐릅니다.",
+      "look": {
+        "type": "starryRobe",
+        "color": "#312e81"
+      }
+    },
+    "cs_peachDress": {
+      "id": "cs_peachDress",
+      "name": "복숭아 드레스",
+      "slot": "armor",
+      "classOnly": null,
+      "price": 420,
+      "costume": true,
+      "desc": "3단 프릴과 허리 리본이 살랑이는 드레스. 상남의 대표작입니다.",
+      "look": {
+        "type": "peachDress",
+        "color": "#fda4af"
+      }
+    },
+    "cs_ribbon": {
+      "id": "cs_ribbon",
+      "name": "나비 리본",
+      "slot": "accessory",
+      "classOnly": null,
+      "price": 100,
+      "costume": true,
+      "desc": "목에 매는 커다란 나비 모양 리본. 살랑살랑 흔들립니다.",
+      "look": {
+        "type": "butterflyRibbon",
+        "color": "#f9a8d4"
+      }
+    },
+    "cs_angelWing": {
+      "id": "cs_angelWing",
+      "name": "하얀 줄끈",
+      "slot": "accessory",
+      "classOnly": null,
+      "price": 380,
+      "costume": true,
+      "desc": "어깨에서 등 뒤로 흘러내리는 하얀 리본 끈. 걸을 때마다 살랑입니다.",
+      "look": {
+        "type": "ribbonStreamer",
+        "color": "rgba(255,255,255,.96)"
+      }
+    },
+    "cs_strangeWing": {
+      "id": "cs_strangeWing",
+      "name": "기묘한 날개",
+      "slot": "accessory",
+      "classOnly": null,
+      "price": 440,
+      "costume": true,
+      "desc": "어디서 온 것인지 알 수 없는 기묘한 날개. 깃털이 층층이 겹쳐 묘한 분위기를 냅니다.",
+      "look": {
+        "type": "angelWing",
+        "color": "rgba(255,255,255,.96)"
+      }
+    },
+    "cs_rainbowAura": {
+      "id": "cs_rainbowAura",
+      "name": "무지개 오라",
+      "slot": "accessory",
+      "classOnly": null,
+      "price": 500,
+      "costume": true,
+      "desc": "발밑에서 일곱 빛깔이 맴도는 화려한 오라.",
+      "look": {
+        "type": "rainbowAura",
+        "color": "rgba(167,243,208,.55)"
+      }
     }
   },
   "skills": {
@@ -1220,8 +1364,9 @@
       "bonuses": {
         "체력": 2
       },
-      "passiveText": "체력 +2 (랭크당)",
-      "unlockLevel": 1
+      "passiveText": "체력 +2",
+      "unlockLevel": 1,
+      "prereqAny": []
     },
     "warrior_basic_blade": {
       "id": "warrior_basic_blade",
@@ -1233,15 +1378,14 @@
       "desc": "검을 다루는 기본 자세이다. 힘 +1.",
       "cost": 1,
       "maxPoints": 3,
-      "prereq": [
-        "warrior_basic_body"
-      ],
+      "prereq": [],
       "kind": "power",
       "bonuses": {
         "힘": 1
       },
-      "passiveText": "힘 +1 (랭크당)",
-      "unlockLevel": 1
+      "passiveText": "힘 +1",
+      "unlockLevel": 1,
+      "prereqAny": []
     },
     "warrior_basic_guard": {
       "id": "warrior_basic_guard",
@@ -1250,21 +1394,20 @@
       "name": "막기 훈련",
       "icon": "🛡️",
       "line": 3,
-      "desc": "매 턴 상대의 공격을 막는다. 매 턴 보호막 3,6,9% 생성",
+      "desc": "매 턴 상대의 공격을 막는다. 매 턴 보호막 2,4,6% 생성",
       "cost": 1,
       "maxPoints": 3,
-      "prereq": [
-        "warrior_basic_blade"
-      ],
+      "prereq": [],
       "kind": "guard",
       "guardShieldPct": [
         0,
-        0.03,
-        0.06,
-        0.09
+        0.02,
+        0.04,
+        0.06
       ],
-      "passiveText": "매 턴 현재 체력 3/6/9% 보호막",
-      "unlockLevel": 1
+      "passiveText": "매 턴 현재 체력 2/4/6% 보호막",
+      "unlockLevel": 1,
+      "prereqAny": []
     },
     "warrior_basic_strike": {
       "id": "warrior_basic_strike",
@@ -1273,20 +1416,20 @@
       "name": "전사의 일격",
       "icon": "⚔️",
       "line": 4,
-      "desc": "현재 공격력의 150% 피해를 준다. 쿨타임 3턴.",
+      "desc": "상대의 보호막을 무시하고 현재 공격력의 180% 피해를 준다. 쿨타임 4턴.",
       "cost": 1,
       "maxPoints": 1,
-      "prereq": [
-        "warrior_basic_guard"
-      ],
+      "prereq": [],
       "kind": "power",
       "active": {
         "name": "전사의 일격",
-        "cooldown": 3,
+        "cooldown": 4,
         "type": "damage",
-        "multiplier": 1.5
+        "multiplier": 1.8,
+        "ignoreShield": true
       },
-      "unlockLevel": 1
+      "unlockLevel": 1,
+      "prereqAny": []
     },
     "warrior_def_stance": {
       "id": "warrior_def_stance",
@@ -1296,20 +1439,19 @@
       "name": "방어 태세",
       "icon": "🛡️",
       "line": 5,
-      "desc": "방어의 태세, 최대 체력의 25% 보호막을 얻는다.",
+      "desc": "현재 체력과 관계없이 최대 체력의 10% 보호막을 얻는다. 쿨타임 6턴.",
       "cost": 1,
       "maxPoints": 1,
-      "prereq": [
-        "warrior_basic_strike"
-      ],
+      "prereq": [],
       "kind": "guard",
       "active": {
         "name": "방어 태세",
-        "cooldown": 3,
+        "cooldown": 6,
         "type": "shield",
-        "shieldPct": 0.25
+        "shieldPct": 0.1
       },
-      "unlockLevel": 5
+      "unlockLevel": 5,
+      "prereqAny": []
     },
     "warrior_def_armor": {
       "id": "warrior_def_armor",
@@ -1322,9 +1464,7 @@
       "desc": "체력+3, 최대 체력의 2,4,6,8,10%만큼 기본 공격에 추가 데미지",
       "cost": 1,
       "maxPoints": 5,
-      "prereq": [
-        "warrior_def_stance"
-      ],
+      "prereq": [],
       "kind": "guard",
       "flatBonuses": {
         "체력": 3
@@ -1338,7 +1478,8 @@
         0.1
       ],
       "passiveText": "체력 +3 · 기본 공격 추가 피해 2~10%",
-      "unlockLevel": 5
+      "unlockLevel": 5,
+      "prereqAny": []
     },
     "warrior_def_resist": {
       "id": "warrior_def_resist",
@@ -1348,21 +1489,28 @@
       "name": "불굴의 의지",
       "icon": "🔰",
       "line": 7,
-      "desc": "상태 이상에 잘 걸리지 않는 전사의 의지. 20,40,60% 확률로 상태이상에서 깨어난다.",
+      "desc": "상태 이상에 잘 걸리지 않는 전사의 의지. 체력 +1. 매 턴 20,40,60,80,100% 확률로 상태이상에서 깨어난다.",
       "cost": 1,
-      "maxPoints": 3,
-      "prereq": [
-        "warrior_def_armor"
-      ],
+      "maxPoints": 5,
+      "prereq": [],
       "kind": "guard",
+      "bonuses": {
+        "체력": 1
+      },
       "cleanseChance": [
         0,
         0.2,
         0.4,
-        0.6
+        0.6,
+        0.8,
+        1
       ],
-      "passiveText": "매 턴 20/40/60% 상태이상 해제",
-      "unlockLevel": 7
+      "passiveText": "체력 +1 · 매 턴 20/40/60/80/100% 상태이상 해제",
+      "unlockLevel": 7,
+      "prereqAny": [
+        "warrior_def_stance",
+        "warrior_def_armor"
+      ]
     },
     "warrior_def_wall": {
       "id": "warrior_def_wall",
@@ -1370,22 +1518,24 @@
       "classOnly": "warrior",
       "specOnly": "방어",
       "name": "방패 돌진",
-      "icon": "🏰",
+      "icon": "🛡️",
       "line": 8,
-      "desc": "최대 체력의 25% 보호막을 얻고 내 현재 보호막만큼의 피해를 준다. 쿨타임 4턴",
+      "desc": "현재 체력과 관계없이 최대 체력의 10% 보호막을 얻고, 내 현재 보호막만큼의 피해를 준다. 쿨타임 7턴",
       "cost": 1,
       "maxPoints": 1,
-      "prereq": [
-        "warrior_def_resist"
-      ],
+      "prereq": [],
       "kind": "guard",
       "active": {
         "name": "방패 돌진",
-        "cooldown": 4,
+        "cooldown": 7,
         "type": "shieldBash",
-        "shieldPct": 0.25
+        "shieldPct": 0.1
       },
-      "unlockLevel": 7
+      "unlockLevel": 7,
+      "prereqAny": [
+        "warrior_def_stance",
+        "warrior_def_armor"
+      ]
     },
     "warrior_def_bastion": {
       "id": "warrior_def_bastion",
@@ -1395,17 +1545,19 @@
       "name": "수호자의 맹세",
       "icon": "🌟",
       "line": 9,
-      "desc": "쓰러질 때, 다시 한번 회복해 일어나 싸운다. 쿨타임 10턴, 한 전투에서 두번 사용 불가",
+      "desc": "쓰러질 때, 다시 한번 회복해 일어나 싸운다. 쿨타임 11턴, 한 전투에서 두번 사용 불가",
       "cost": 1,
       "maxPoints": 1,
-      "prereq": [
-        "warrior_def_wall"
-      ],
+      "prereq": [],
       "kind": "ultimate",
       "reviveHealPct": 1,
-      "reviveCooldown": 10,
+      "reviveCooldown": 11,
       "passiveText": "전투당 1회 부활(HP 전체 회복)",
-      "unlockLevel": 10
+      "unlockLevel": 10,
+      "prereqAny": [
+        "warrior_def_resist",
+        "warrior_def_wall"
+      ]
     },
     "warrior_weapon_mastery": {
       "id": "warrior_weapon_mastery",
@@ -1415,18 +1567,25 @@
       "name": "무기 숙련",
       "icon": "⚔️",
       "line": 5,
-      "desc": "무기의 달인이 된다. 힘 +2.",
+      "desc": "무기의 달인이 된다. 힘 +1. 치명타 피격 시 원래 피해의 10,20,30,40,50%를 반사한다.",
       "cost": 1,
-      "maxPoints": 3,
-      "prereq": [
-        "warrior_basic_strike"
-      ],
+      "maxPoints": 5,
+      "prereq": [],
       "kind": "power",
       "bonuses": {
-        "힘": 2
+        "힘": 1
       },
-      "passiveText": "힘 +2 (랭크당)",
-      "unlockLevel": 5
+      "reflectPct": [
+        0,
+        0.1,
+        0.2,
+        0.3,
+        0.4,
+        0.5
+      ],
+      "passiveText": "힘 +1 · 치명타 피격 시 10/20/30/40/50% 반사",
+      "unlockLevel": 5,
+      "prereqAny": []
     },
     "warrior_weapon_slash": {
       "id": "warrior_weapon_slash",
@@ -1436,21 +1595,20 @@
       "name": "파쇄 일격",
       "icon": "🗡️",
       "line": 6,
-      "desc": "현재 공격력의 175% 피해. 상대를 1턴간 기절시킨다. 쿨타임 4턴.",
+      "desc": "현재 공격력의 180% 피해. 상대를 1턴간 기절시킨다. 쿨타임 5턴.",
       "cost": 1,
       "maxPoints": 1,
-      "prereq": [
-        "warrior_weapon_mastery"
-      ],
+      "prereq": [],
       "kind": "power",
       "active": {
         "name": "파쇄 일격",
-        "cooldown": 4,
+        "cooldown": 5,
         "type": "damage",
-        "multiplier": 1.75,
+        "multiplier": 1.8,
         "stun": 1
       },
-      "unlockLevel": 5
+      "unlockLevel": 5,
+      "prereqAny": []
     },
     "warrior_weapon_rage": {
       "id": "warrior_weapon_rage",
@@ -1460,19 +1618,20 @@
       "name": "전투의 대가",
       "icon": "🔥",
       "line": 7,
-      "desc": "전투의 대가로 성장한다. 힘 +2, 체력 +1.",
+      "desc": "전투의 대가로 성장한다. 힘 +3.",
       "cost": 1,
       "maxPoints": 3,
-      "prereq": [
-        "warrior_weapon_slash"
-      ],
+      "prereq": [],
       "kind": "power",
       "bonuses": {
-        "힘": 2,
-        "체력": 1
+        "힘": 3
       },
-      "passiveText": "힘 +2 · 체력 +1 (랭크당)",
-      "unlockLevel": 7
+      "passiveText": "힘 +3",
+      "unlockLevel": 7,
+      "prereqAny": [
+        "warrior_weapon_mastery",
+        "warrior_weapon_slash"
+      ]
     },
     "warrior_weapon_breaker": {
       "id": "warrior_weapon_breaker",
@@ -1482,21 +1641,23 @@
       "name": "더블 어택",
       "icon": "💥",
       "line": 8,
-      "desc": "모든 일반 공격을 빠르게 두번씩 한다. 두번째는 감소된 데미지 (30/60/90%)",
+      "desc": "모든 일반 공격을 빠르게 두번씩 한다. 두번째는 감소된 데미지 (25/50/75%)",
       "cost": 1,
       "maxPoints": 3,
-      "prereq": [
-        "warrior_weapon_rage"
-      ],
+      "prereq": [],
       "kind": "power",
       "doubleAttackPct": [
         0,
-        0.3,
-        0.6,
-        0.9
+        0.25,
+        0.5,
+        0.75
       ],
-      "passiveText": "일반 공격 2회 타격(2타 30/60/90%)",
-      "unlockLevel": 7
+      "passiveText": "일반 공격 2회 타격(2타 25/50/75%)",
+      "unlockLevel": 7,
+      "prereqAny": [
+        "warrior_weapon_mastery",
+        "warrior_weapon_slash"
+      ]
     },
     "warrior_weapon_judgment": {
       "id": "warrior_weapon_judgment",
@@ -1506,21 +1667,23 @@
       "name": "최후의 심판",
       "icon": "✦",
       "line": 9,
-      "desc": "한 턴간 모은 후, 현재 공격력의 450% 피해. 쿨타임 5턴.",
+      "desc": "한 턴간 모은 후, 현재 공격력의 280% 피해. 쿨타임 6턴.",
       "cost": 1,
       "maxPoints": 1,
-      "prereq": [
-        "warrior_weapon_breaker"
-      ],
+      "prereq": [],
       "kind": "ultimate",
       "active": {
         "name": "최후의 심판",
-        "cooldown": 5,
+        "cooldown": 6,
         "type": "charge",
         "charge": true,
-        "chargeMult": 4.5
+        "chargeMult": 2.8
       },
-      "unlockLevel": 10
+      "unlockLevel": 10,
+      "prereqAny": [
+        "warrior_weapon_rage",
+        "warrior_weapon_breaker"
+      ]
     },
     "mage_basic_mana": {
       "id": "mage_basic_mana",
@@ -1537,8 +1700,9 @@
       "bonuses": {
         "지능": 1
       },
-      "passiveText": "지능 +1 (랭크당)",
-      "unlockLevel": 1
+      "passiveText": "지능 +1",
+      "unlockLevel": 1,
+      "prereqAny": []
     },
     "mage_basic_element": {
       "id": "mage_basic_element",
@@ -1550,9 +1714,7 @@
       "desc": "상대의 원소를 폭발시킨다. 상대의 남은 체력 3,6,9,12,15 이하 즉시 처형",
       "cost": 1,
       "maxPoints": 5,
-      "prereq": [
-        "mage_basic_mana"
-      ],
+      "prereq": [],
       "kind": "root",
       "executeHp": [
         0,
@@ -1563,7 +1725,8 @@
         15
       ],
       "passiveText": "적의 남은 체력 3/6/9/12/15 이하 즉시 처치",
-      "unlockLevel": 1
+      "unlockLevel": 1,
+      "prereqAny": []
     },
     "mage_basic_bolt": {
       "id": "mage_basic_bolt",
@@ -1575,9 +1738,7 @@
       "desc": "현재 공격력의 150% 피해. 쿨타임 2턴.",
       "cost": 1,
       "maxPoints": 1,
-      "prereq": [
-        "mage_basic_element"
-      ],
+      "prereq": [],
       "kind": "power",
       "active": {
         "name": "마력탄",
@@ -1585,7 +1746,8 @@
         "type": "damage",
         "multiplier": 1.5
       },
-      "unlockLevel": 1
+      "unlockLevel": 1,
+      "prereqAny": []
     },
     "mage_basic_barrier": {
       "id": "mage_basic_barrier",
@@ -1594,22 +1756,22 @@
       "name": "환기",
       "icon": "🔮",
       "line": 4,
-      "desc": "3턴간 자신의 지능을 30% 늘린다. 쿨타임 4턴.",
+      "desc": "4턴간 자신의 지능을 30% 늘리고, 최대 체력의 30%를 회복한다. 쿨타임 5턴.",
       "cost": 1,
       "maxPoints": 1,
-      "prereq": [
-        "mage_basic_bolt"
-      ],
+      "prereq": [],
       "kind": "guard",
       "active": {
         "name": "환기",
-        "cooldown": 4,
+        "cooldown": 5,
         "type": "buff",
         "buffStat": "지능",
         "buffPct": 0.3,
-        "buffTurns": 3
+        "buffTurns": 4,
+        "healMaxPct": 0.3
       },
-      "unlockLevel": 1
+      "unlockLevel": 1,
+      "prereqAny": []
     },
     "mage_frost_focus_v24": {
       "id": "mage_frost_focus_v24",
@@ -1619,15 +1781,13 @@
       "name": "냉기 집중",
       "icon": "❄️",
       "line": 5,
-      "desc": "냉기의 흐름에 집중한다. 지능 +2, 모든 공격 주문에 상대 기절 확률 7,21,35%",
+      "desc": "냉기의 흐름에 집중한다. 지능 +1, 모든 공격 주문에 상대를 기절 시킬 확률 7,21,35%",
       "cost": 1,
       "maxPoints": 3,
-      "prereq": [
-        "mage_basic_barrier"
-      ],
+      "prereq": [],
       "kind": "frost",
       "bonuses": {
-        "지능": 2
+        "지능": 1
       },
       "activeStunChance": [
         0,
@@ -1635,8 +1795,9 @@
         0.21,
         0.35
       ],
-      "passiveText": "지능 +2 · 공격 주문 기절 7/21/35%",
-      "unlockLevel": 5
+      "passiveText": "지능 +1 · 공격 주문 기절 7/21/35%",
+      "unlockLevel": 5,
+      "prereqAny": []
     },
     "mage_frost_lance_v24": {
       "id": "mage_frost_lance_v24",
@@ -1646,22 +1807,21 @@
       "name": "빙결 창",
       "icon": "🧊",
       "line": 6,
-      "desc": "현재 공격력의 180% 피해. 상대를 1턴간 약화시킨다. 쿨타임 3턴.",
+      "desc": "현재 공격력의 210% 피해. 상대를 1턴간 냉기 상태로 만든다. 쿨타임 4턴.",
       "cost": 1,
       "maxPoints": 1,
-      "prereq": [
-        "mage_frost_focus_v24"
-      ],
+      "prereq": [],
       "kind": "frost",
       "active": {
         "name": "빙결 창",
-        "cooldown": 3,
+        "cooldown": 4,
         "type": "damage",
-        "multiplier": 1.8,
+        "multiplier": 2.1,
         "forceChill": true,
-        "weakenTurns": 1
+        "chillTurns": 1
       },
-      "unlockLevel": 5
+      "unlockLevel": 5,
+      "prereqAny": []
     },
     "mage_frost_armor_v24": {
       "id": "mage_frost_armor_v24",
@@ -1671,20 +1831,22 @@
       "name": "서리 갑옷",
       "icon": "🛡️",
       "line": 7,
-      "desc": "최대 체력의 130% 보호막. 쿨타임 4턴.",
+      "desc": "최대 체력의 70% 보호막. 쿨타임 6턴.",
       "cost": 1,
       "maxPoints": 1,
-      "prereq": [
-        "mage_frost_lance_v24"
-      ],
+      "prereq": [],
       "kind": "guard",
       "active": {
         "name": "서리 갑옷",
-        "cooldown": 4,
+        "cooldown": 6,
         "type": "shield",
-        "shieldPct": 1.3
+        "shieldPct": 0.7
       },
-      "unlockLevel": 7
+      "unlockLevel": 7,
+      "prereqAny": [
+        "mage_frost_focus_v24",
+        "mage_frost_lance_v24"
+      ]
     },
     "mage_frost_mind_v24": {
       "id": "mage_frost_mind_v24",
@@ -1694,24 +1856,20 @@
       "name": "혹한의 정신",
       "icon": "💎",
       "line": 8,
-      "desc": "차가운 지능을 얻는다. 지능 +3. 약화 % 강화 30,40,50%",
+      "desc": "차가운 지능을 얻는다. 지능 +4.",
       "cost": 1,
-      "maxPoints": 3,
-      "prereq": [
-        "mage_frost_armor_v24"
-      ],
+      "maxPoints": 5,
+      "prereq": [],
       "kind": "frost",
       "bonuses": {
-        "지능": 3
+        "지능": 4
       },
-      "weakenBoost": [
-        0,
-        0.3,
-        0.4,
-        0.5
-      ],
-      "passiveText": "지능 +3 · 약화 계수 30/40/50%",
-      "unlockLevel": 7
+      "passiveText": "지능 +4",
+      "unlockLevel": 7,
+      "prereqAny": [
+        "mage_frost_focus_v24",
+        "mage_frost_lance_v24"
+      ]
     },
     "mage_frost_storm_v24": {
       "id": "mage_frost_storm_v24",
@@ -1721,21 +1879,23 @@
       "name": "빙하 폭풍",
       "icon": "🌨️",
       "line": 9,
-      "desc": "현재 공격력의 270% 피해. 상대를 2턴간 얼려 공격 피해를 50% 감소시킨다. 쿨타임 5턴.",
+      "desc": "현재 공격력의 270% 피해. 상대를 2턴간 얼려 공격 피해를 50% 감소시킨다. 쿨타임 6턴.",
       "cost": 1,
       "maxPoints": 1,
-      "prereq": [
-        "mage_frost_mind_v24"
-      ],
+      "prereq": [],
       "kind": "ultimate",
       "active": {
         "name": "빙하 폭풍",
-        "cooldown": 5,
+        "cooldown": 6,
         "type": "damage",
         "multiplier": 2.7,
         "chillTurns": 2
       },
-      "unlockLevel": 10
+      "unlockLevel": 10,
+      "prereqAny": [
+        "mage_frost_armor_v24",
+        "mage_frost_mind_v24"
+      ]
     },
     "mage_fire_focus_v24": {
       "id": "mage_fire_focus_v24",
@@ -1748,9 +1908,7 @@
       "desc": "화염의 흐름에 집중한다. 지능 +1. 치명타 확률 10,20,30% 증가",
       "cost": 1,
       "maxPoints": 3,
-      "prereq": [
-        "mage_basic_barrier"
-      ],
+      "prereq": [],
       "kind": "fire",
       "bonuses": {
         "지능": 1
@@ -1762,7 +1920,8 @@
         0.3
       ],
       "passiveText": "지능 +1 · 치명타 확률 +10/20/30%p",
-      "unlockLevel": 5
+      "unlockLevel": 5,
+      "prereqAny": []
     },
     "mage_fireball_v24": {
       "id": "mage_fireball_v24",
@@ -1772,21 +1931,20 @@
       "name": "대화염구",
       "icon": "☄️",
       "line": 6,
-      "desc": "현재 공격력의 85% 피해로 2번 타격한다. 쿨타임 3턴.",
+      "desc": "현재 공격력의 105% 피해로 2번 타격한다. 쿨타임 4턴.",
       "cost": 1,
       "maxPoints": 1,
-      "prereq": [
-        "mage_fire_focus_v24"
-      ],
+      "prereq": [],
       "kind": "fire",
       "active": {
         "name": "대화염구",
-        "cooldown": 3,
+        "cooldown": 4,
         "type": "damage",
         "hits": 2,
-        "hitMult": 0.85
+        "hitMult": 1.05
       },
-      "unlockLevel": 5
+      "unlockLevel": 5,
+      "prereqAny": []
     },
     "mage_fire_ember_v24": {
       "id": "mage_fire_ember_v24",
@@ -1796,12 +1954,10 @@
       "name": "불씨 증폭",
       "icon": "💥",
       "line": 7,
-      "desc": "화염 치명타 감각을 높인다. 지능 +1, 스킬 치명타 데미지 20,40,60% 증가",
+      "desc": "화염 치명타 감각을 높인다. 지능 +1, 스킬 치명타 데미지 20,40,60,80,100% 증가",
       "cost": 1,
-      "maxPoints": 3,
-      "prereq": [
-        "mage_fireball_v24"
-      ],
+      "maxPoints": 5,
+      "prereq": [],
       "kind": "fire",
       "bonuses": {
         "지능": 1
@@ -1810,10 +1966,16 @@
         0,
         0.2,
         0.4,
-        0.6
+        0.6,
+        0.8,
+        1
       ],
-      "passiveText": "지능 +1 · 스킬 치명타 피해 +20/40/60%p",
-      "unlockLevel": 7
+      "passiveText": "지능 +1 · 스킬 치명타 피해 +20/40/60/80/100%p",
+      "unlockLevel": 7,
+      "prereqAny": [
+        "mage_fire_focus_v24",
+        "mage_fireball_v24"
+      ]
     },
     "mage_fire_burst_v24": {
       "id": "mage_fire_burst_v24",
@@ -1823,21 +1985,23 @@
       "name": "폭열",
       "icon": "🔥",
       "line": 8,
-      "desc": "현재 공격력의 70% 피해로 3번 타격한다. 쿨타임 4턴.",
+      "desc": "현재 공격력의 90% 피해로 3번 타격한다. 쿨타임 5턴.",
       "cost": 1,
       "maxPoints": 1,
-      "prereq": [
-        "mage_fire_ember_v24"
-      ],
+      "prereq": [],
       "kind": "fire",
       "active": {
         "name": "폭열",
-        "cooldown": 4,
+        "cooldown": 5,
         "type": "damage",
         "hits": 3,
-        "hitMult": 0.7
+        "hitMult": 0.9
       },
-      "unlockLevel": 7
+      "unlockLevel": 7,
+      "prereqAny": [
+        "mage_fire_focus_v24",
+        "mage_fireball_v24"
+      ]
     },
     "mage_fire_meteor_v24": {
       "id": "mage_fire_meteor_v24",
@@ -1847,21 +2011,23 @@
       "name": "메테오",
       "icon": "🌋",
       "line": 9,
-      "desc": "현재 공격력의 80% 피해로 4번 타격한다. 쿨타임 5턴.",
+      "desc": "현재 공격력의 100% 피해로 4번 타격한다. 쿨타임 6턴.",
       "cost": 1,
       "maxPoints": 1,
-      "prereq": [
-        "mage_fire_burst_v24"
-      ],
+      "prereq": [],
       "kind": "ultimate",
       "active": {
         "name": "메테오",
-        "cooldown": 5,
+        "cooldown": 6,
         "type": "damage",
         "hits": 4,
-        "hitMult": 0.8
+        "hitMult": 1
       },
-      "unlockLevel": 10
+      "unlockLevel": 10,
+      "prereqAny": [
+        "mage_fire_ember_v24",
+        "mage_fire_burst_v24"
+      ]
     },
     "priest_basic_faith": {
       "id": "priest_basic_faith",
@@ -1878,8 +2044,9 @@
       "bonuses": {
         "정신": 1
       },
-      "passiveText": "정신 +1 (랭크당)",
-      "unlockLevel": 1
+      "passiveText": "정신 +1",
+      "unlockLevel": 1,
+      "prereqAny": []
     },
     "priest_basic_life": {
       "id": "priest_basic_life",
@@ -1891,9 +2058,7 @@
       "desc": "상대의 공격이 빗나갈 확률이 증가한다. 5,10,15,20,25% 빗나감",
       "cost": 1,
       "maxPoints": 5,
-      "prereq": [
-        "priest_basic_faith"
-      ],
+      "prereq": [],
       "kind": "holy",
       "monsterMissChance": [
         0,
@@ -1904,7 +2069,8 @@
         0.25
       ],
       "passiveText": "상대 공격 5~25% 빗나감",
-      "unlockLevel": 1
+      "unlockLevel": 1,
+      "prereqAny": []
     },
     "priest_basic_smite": {
       "id": "priest_basic_smite",
@@ -1913,21 +2079,20 @@
       "name": "신앙의 일격",
       "icon": "🌟",
       "line": 3,
-      "desc": "현재 공격력의 130% 피해, 최대 체력의 15% 회복. 쿨타임 3턴.",
+      "desc": "현재 공격력의 130% 피해, 최대 체력의 25% 회복. 쿨타임 5턴.",
       "cost": 1,
       "maxPoints": 1,
-      "prereq": [
-        "priest_basic_life"
-      ],
+      "prereq": [],
       "kind": "holy",
       "active": {
         "name": "신앙의 일격",
-        "cooldown": 3,
+        "cooldown": 5,
         "type": "damage",
         "multiplier": 1.3,
-        "healMaxPct": 0.15
+        "healMaxPct": 0.25
       },
-      "unlockLevel": 1
+      "unlockLevel": 1,
+      "prereqAny": []
     },
     "priest_basic_prayer": {
       "id": "priest_basic_prayer",
@@ -1939,9 +2104,7 @@
       "desc": "상대에게 공격받으면 5,10,15%만큼 피해를 돌려주고 그만큼 회복한다.",
       "cost": 1,
       "maxPoints": 3,
-      "prereq": [
-        "priest_basic_smite"
-      ],
+      "prereq": [],
       "kind": "guard",
       "reflectPct": [
         0,
@@ -1950,7 +2113,8 @@
         0.15
       ],
       "passiveText": "피격 시 5/10/15% 반사 및 회복",
-      "unlockLevel": 1
+      "unlockLevel": 1,
+      "prereqAny": []
     },
     "priest_holy_focus_v24": {
       "id": "priest_holy_focus_v24",
@@ -1963,15 +2127,14 @@
       "desc": "신성의 힘에 집중한다. 정신 +2.",
       "cost": 1,
       "maxPoints": 5,
-      "prereq": [
-        "priest_basic_prayer"
-      ],
+      "prereq": [],
       "kind": "holy",
       "bonuses": {
         "정신": 2
       },
-      "passiveText": "정신 +2 (랭크당)",
-      "unlockLevel": 5
+      "passiveText": "정신 +2",
+      "unlockLevel": 5,
+      "prereqAny": []
     },
     "priest_holy_absorb_v24": {
       "id": "priest_holy_absorb_v24",
@@ -1981,20 +2144,19 @@
       "name": "빛의 섬광",
       "icon": "✨",
       "line": 6,
-      "desc": "모든 생존 아군의 체력을 각 대상 최대 체력의 50%만큼 회복한다. 쿨타임 4턴.",
+      "desc": "모든 생존 아군의 체력을 각 대상 최대 체력의 50%만큼 회복한다. 쿨타임 5턴.",
       "cost": 1,
       "maxPoints": 1,
-      "prereq": [
-        "priest_holy_focus_v24"
-      ],
+      "prereq": [],
       "kind": "holy",
       "active": {
         "name": "빛의 섬광",
-        "cooldown": 4,
+        "cooldown": 5,
         "type": "healAllies",
         "healMaxPct": 0.5
       },
-      "unlockLevel": 5
+      "unlockLevel": 5,
+      "prereqAny": []
     },
     "priest_holy_barrier_v24": {
       "id": "priest_holy_barrier_v24",
@@ -2004,20 +2166,22 @@
       "name": "신성 보호막",
       "icon": "🛡️",
       "line": 7,
-      "desc": "최대 체력의 70% 보호막. 쿨타임 4턴.",
+      "desc": "최대 체력의 70% 보호막. 쿨타임 6턴.",
       "cost": 1,
       "maxPoints": 1,
-      "prereq": [
-        "priest_holy_absorb_v24"
-      ],
+      "prereq": [],
       "kind": "guard",
       "active": {
         "name": "신성 보호막",
-        "cooldown": 4,
+        "cooldown": 6,
         "type": "shield",
         "shieldPct": 0.7
       },
-      "unlockLevel": 7
+      "unlockLevel": 7,
+      "prereqAny": [
+        "priest_holy_focus_v24",
+        "priest_holy_absorb_v24"
+      ]
     },
     "priest_holy_grace_v24": {
       "id": "priest_holy_grace_v24",
@@ -2030,9 +2194,7 @@
       "desc": "체력을 회복하는 모든 기술들의 효율이 50, 100, 150% 증가한다.",
       "cost": 1,
       "maxPoints": 3,
-      "prereq": [
-        "priest_holy_barrier_v24"
-      ],
+      "prereq": [],
       "kind": "holy",
       "healBoost": [
         0,
@@ -2041,7 +2203,11 @@
         1.5
       ],
       "passiveText": "모든 회복량 +50/100/150%",
-      "unlockLevel": 7
+      "unlockLevel": 7,
+      "prereqAny": [
+        "priest_holy_focus_v24",
+        "priest_holy_absorb_v24"
+      ]
     },
     "priest_holy_judgment_v24": {
       "id": "priest_holy_judgment_v24",
@@ -2051,21 +2217,23 @@
       "name": "은총의 심판",
       "icon": "✦",
       "line": 9,
-      "desc": "현재 공격력의 230% 피해를 주고 크게 회복한다. 쿨타임 5턴.",
+      "desc": "현재 공격력의 230% 피해를 주고 크게 회복한다. 쿨타임 8턴.",
       "cost": 1,
       "maxPoints": 1,
-      "prereq": [
-        "priest_holy_grace_v24"
-      ],
+      "prereq": [],
       "kind": "ultimate",
       "active": {
         "name": "은총의 심판",
-        "cooldown": 5,
+        "cooldown": 8,
         "type": "damageHeal",
         "multiplier": 2.3,
         "healRate": 0.75
       },
-      "unlockLevel": 10
+      "unlockLevel": 10,
+      "prereqAny": [
+        "priest_holy_barrier_v24",
+        "priest_holy_grace_v24"
+      ]
     },
     "priest_shadow_focus_v24": {
       "id": "priest_shadow_focus_v24",
@@ -2075,18 +2243,25 @@
       "name": "암흑 집중",
       "icon": "☾",
       "line": 5,
-      "desc": "암흑의 힘에 집중한다. 정신 +2.",
+      "desc": "암흑의 힘에 집중한다. 정신 +2. 포인트별 10/15/20/25/30% 확률로 암흑 중첩 데미지만큼 생명력을 회복한다.",
       "cost": 1,
       "maxPoints": 5,
-      "prereq": [
-        "priest_basic_prayer"
-      ],
+      "prereq": [],
       "kind": "shadow",
       "bonuses": {
         "정신": 2
       },
-      "passiveText": "정신 +2 (랭크당)",
-      "unlockLevel": 5
+      "shadowLifestealChance": [
+        0,
+        0.1,
+        0.15,
+        0.2,
+        0.25,
+        0.3
+      ],
+      "passiveText": "정신 +2 · 포인트별 10/15/20/25/30% 확률로 암흑 중첩 데미지만큼 생명력 회복",
+      "unlockLevel": 5,
+      "prereqAny": []
     },
     "priest_shadow_seed_v24": {
       "id": "priest_shadow_seed_v24",
@@ -2096,21 +2271,20 @@
       "name": "암흑의 씨앗",
       "icon": "🟣",
       "line": 6,
-      "desc": "120%의 피해와 암흑 2중첩을 쌓는다. 쿨타임 3턴.",
+      "desc": "120%의 피해와 암흑 4중첩을 쌓는다. 쿨타임 4턴.",
       "cost": 1,
       "maxPoints": 1,
-      "prereq": [
-        "priest_shadow_focus_v24"
-      ],
+      "prereq": [],
       "kind": "shadow",
       "active": {
         "name": "암흑의 씨앗",
-        "cooldown": 3,
+        "cooldown": 4,
         "type": "shadowDot",
         "multiplier": 1.2,
-        "stacks": 2
+        "stacks": 4
       },
-      "unlockLevel": 5
+      "unlockLevel": 5,
+      "prereqAny": []
     },
     "priest_shadow_mark_v24": {
       "id": "priest_shadow_mark_v24",
@@ -2120,21 +2294,23 @@
       "name": "암흑 낙인",
       "icon": "🌑",
       "line": 7,
-      "desc": "암흑 5중첩을 적에게 추가한다. 쿨타임 4턴.",
+      "desc": "암흑 7중첩을 적에게 추가한다. 쿨타임 5턴.",
       "cost": 1,
       "maxPoints": 1,
-      "prereq": [
-        "priest_shadow_seed_v24"
-      ],
+      "prereq": [],
       "kind": "shadow",
       "active": {
         "name": "암흑 낙인",
-        "cooldown": 4,
+        "cooldown": 5,
         "type": "shadowDot",
         "multiplier": 0,
-        "stacks": 5
+        "stacks": 7
       },
-      "unlockLevel": 7
+      "unlockLevel": 7,
+      "prereqAny": [
+        "priest_shadow_focus_v24",
+        "priest_shadow_seed_v24"
+      ]
     },
     "priest_shadow_void_v24": {
       "id": "priest_shadow_void_v24",
@@ -2144,21 +2320,28 @@
       "name": "공허 숙련",
       "icon": "🌌",
       "line": 8,
-      "desc": "암흑 중첩 피해도 10,20,30% 확률로 치명타로 작용할 수 있게 된다.",
+      "desc": "암흑 중첩 피해도 20,40,60,80,100% 확률로 치명타로 작용할 수 있게 된다. 정신 +2.",
       "cost": 1,
-      "maxPoints": 3,
-      "prereq": [
-        "priest_shadow_mark_v24"
-      ],
+      "maxPoints": 5,
+      "prereq": [],
       "kind": "shadow",
       "shadowCritChance": [
         0,
-        0.1,
         0.2,
-        0.3
+        0.4,
+        0.6,
+        0.8,
+        1
       ],
-      "passiveText": "암흑 틱 10/20/30% 치명타",
-      "unlockLevel": 7
+      "passiveText": "정신 +2 · 암흑 틱 20/40/60/80/100% 치명타",
+      "bonuses": {
+        "정신": 2
+      },
+      "unlockLevel": 7,
+      "prereqAny": [
+        "priest_shadow_focus_v24",
+        "priest_shadow_seed_v24"
+      ]
     },
     "priest_shadow_judgment_v24": {
       "id": "priest_shadow_judgment_v24",
@@ -2168,21 +2351,24 @@
       "name": "암흑 심판",
       "icon": "☄️",
       "line": 9,
-      "desc": "현재 공격력의 260% 피해와 암흑 4중첩. 쿨타임 5턴.",
+      "desc": "현재 공격력의 260% 피해와 암흑 6중첩, 자신 최대 체력의 30% 회복. 쿨타임 6턴.",
       "cost": 1,
       "maxPoints": 1,
-      "prereq": [
-        "priest_shadow_void_v24"
-      ],
+      "prereq": [],
       "kind": "ultimate",
       "active": {
         "name": "암흑 심판",
-        "cooldown": 5,
+        "cooldown": 6,
         "type": "shadowDot",
         "multiplier": 2.6,
-        "stacks": 4
+        "stacks": 6,
+        "healMaxPct": 0.3
       },
-      "unlockLevel": 10
+      "unlockLevel": 10,
+      "prereqAny": [
+        "priest_shadow_mark_v24",
+        "priest_shadow_void_v24"
+      ]
     }
   },
   "quests": {
@@ -2207,6 +2393,24 @@
       ],
       "done": "잘했어! 장비가 몸에 착 감기지? 이제 너도 어엿한 63마을의 모험가란다."
     },
+    "tut_healing_well": {
+      "id": "tut_healing_well",
+      "title": "다치면 쉬어가기",
+      "target": 1,
+      "actionType": "healWell",
+      "desc": "치유의 우물에서 문제를 맞혀 HP를 1회 회복하고 명진쌤에게 보고하기",
+      "reward": {
+        "exp": 3,
+        "gold": 20,
+        "building": 0
+      },
+      "pages": [
+        "모험에서는 공격하는 법만큼 다쳤을 때 쉬는 법도 중요하단다.",
+        "놀라지 마렴. 회복 훈련을 위해 선생님이 안전한 공격을 한 번 보여줄게.",
+        "체력이 떨어지면 마을의 치유의 우물에서 문제를 풀어 회복할 수 있어. 우물빛으로 몸을 회복하고 돌아오렴."
+      ],
+      "done": "잘했어! 앞으로 싸우다 힘들면 무리하지 말고 치유의 우물로 돌아오렴."
+    },
     "mushroom_hunt": {
       "id": "mushroom_hunt",
       "title": "작물밭을 뒤덮은 버섯돌이",
@@ -2223,7 +2427,7 @@
       "pages": [
         "요즘 63마을 뒤편 작물밭에 이상한 포자가 날아들고 있단다. 여느 해와는 다른, 어딘가 뒤엉킨 기운이 섞여 있어.",
         "버섯돌이들이 숲 입구까지 내려와 작물을 갉아먹기 시작했어. 선생님은 이게 그냥 벌레 소동이 아닌 것 같아 조금 걱정이 된단다.",
-        "고요한 숲으로 가서 버섯돌이 4마리를 막아주겠니? 마을 친구들이 네 도움을 기다리고 있어. 무리하지 말고 차근차근 하렴."
+        "고요한 숲으로 가서 버섯돌이 4마리를 막아주겠니? 사냥터에 가려면 마을 가운데에 있는 포탈로 가렴. 마을 친구들이 네 도움을 기다리고 있어. 무리하지 말고 차근차근 하렴."
       ],
       "done": "고맙다! 작물밭이 한숨 돌렸어. 그런데… 포자에 섞여 있던 그 낯선 기운이 자꾸 마음에 걸리는구나."
     },
@@ -2240,15 +2444,33 @@
       },
       "pages": [
         "버섯돌이를 막아준 값으로 골드가 조금 모였겠구나. 모험가라면 번 것을 잘 쓰는 법도 배워야 한단다.",
-        "마을 상점에 가면 골드로 더 좋은 장비를 살 수 있어. 좋은 장비는 곧 더 단단한 지식, 더 든든한 준비란다.",
+        "상점은 마을 서쪽 장비 상점에 있단다. 그곳에 가면 골드로 더 좋은 장비를 살 수 있어. 좋은 장비는 곧 더 단단한 지식, 더 든든한 준비란다.",
         "상점에 들러 마음에 드는 물건을 하나 사 보렴. 앞으로의 모험이 한결 수월해질 거야."
       ],
       "done": "오, 벌써 장을 봐 왔구나! 필요한 걸 스스로 갖추는 모습이 아주 대견하다."
     },
+    "tut_skill": {
+      "id": "tut_skill",
+      "title": "나만의 첫 스킬",
+      "target": 1,
+      "actionType": "learnSkill",
+      "desc": "스킬창(N)을 열어 스킬 포인트로 스킬을 1회 배우고 명진쌤에게 보고하기",
+      "reward": {
+        "exp": 8,
+        "gold": 45,
+        "building": 3
+      },
+      "pages": [
+        "장비를 준비했으니 이제 네 안의 힘을 깨울 차례구나. N키를 누르면 스킬창을 열 수 있단다.",
+        "스킬 포인트가 남아 있으면 화면에 알림이 떠. 그 알림을 놓치지 말고 원하는 스킬에 포인트를 사용해 보렴.",
+        "액티브 스킬은 전투 중 직접 골라 사용하는 특별한 기술이야. 먼저 배울 수 있는 스킬 하나를 익혀 보렴."
+      ],
+      "done": "잘했어! 이제 스킬 포인트 알림과 액티브 스킬을 잊지 않겠구나. 전투에서 직접 사용해 보렴."
+    },
     "slime_hunt": {
       "id": "slime_hunt",
       "title": "깊은 숲의 끈적한 흔적",
-      "target": 4,
+      "target": 3,
       "targetTypes": [
         "slime"
       ],
@@ -2263,7 +2485,25 @@
         "슬라임들이 물길을 막으면 63마을의 우물물도 탁해질 수 있어. 마을 사람들의 마실 물이 걸린 일이란다.",
         "숲 깊은 곳으로 조금 더 들어가 슬라임 3마리를 처치하고 물길을 지켜줘. 너의 용기를 믿으마!"
       ],
-      "done": "물길이 다시 맑게 흐르는구나! 슬라임 보스를 잡다니 정말 몰라보게 성장했는걸?"
+      "done": "물길이 다시 맑게 흐르는구나! 슬라임들을 차분히 정리하다니 정말 몰라보게 성장했는걸?"
+    },
+    "tut_costume": {
+      "id": "tut_costume",
+      "title": "나만의 모습",
+      "target": 1,
+      "actionType": "receiveCostume",
+      "desc": "옷 상인 상남에게서 특별한 코스튬 선물을 받고 명진쌤에게 보고하기",
+      "reward": {
+        "exp": 10,
+        "gold": 35,
+        "building": 3
+      },
+      "pages": [
+        "슬라임을 상대하느라 고생했구나. 이번에는 힘이 아니라 너만의 멋을 꾸미는 법을 배워 보자.",
+        "옷 상인 상남에게 선생님의 부탁을 전해 주겠니? 너를 위해 특별한 선물을 준비해 두었단다.",
+        "코스튬은 능력치를 바꾸지 않고 겉모습만 바꿔 줘. 선물을 받은 뒤 상태창의 코스튬 칸에서 자유롭게 입을 수 있단다."
+      ],
+      "done": "아주 잘 어울리는구나! 상태창의 코스튬 칸에서 언제든 자유롭게 갈아입으렴."
     },
     "tut_accessory": {
       "id": "tut_accessory",
@@ -2465,7 +2705,7 @@
         "도망칠 수 없는 싸움이야. 치유의 우물에서 몸을 가다듬고 가렴. 그리고 나서 최종 흑막이 누구인지 알아내렴.",
         "기억하렴. 네가 배운 모든 것 — 장비를 두르는 법, 힘을 벼리는 법, 동료와 함께하는 법 — 그 전부가 너의 무기란다."
       ],
-      "done": "하하하! 고생했다! 너는 이미 어엿한 영웅이야! 선생님을 뛰어넘는 날이 곧 올거니 명진쌤 보스에게 졌다고 실망하지 말거라~ 언제든 도전은 환영이야 후후후~~"
+      "done": "늪의 지배자가 쓰러졌구나! 네가 모두를 지켜냈어. 엘리트 좀비가 사라진 자리에서 정체를 알 수 없는 새로운 문을 들어가 보았니..?"
     }
   },
   "worlds": {
@@ -2503,7 +2743,7 @@
         "y": 980,
         "w": 270,
         "h": 210,
-        "name": "빌딩 화폐 상점",
+        "name": "특별 상점",
         "doorX": 1660,
         "doorY": 1100
       },
@@ -2590,7 +2830,7 @@
     },
     "buildingShopInterior": {
       "key": "buildingShopInterior",
-      "label": "빌딩 화폐 상점 내부",
+      "label": "특별 상점 내부",
       "width": 1600,
       "height": 1000,
       "playerSpawn": {
@@ -2603,10 +2843,16 @@
         "r": 70
       },
       "saenari": {
-        "x": 800,
+        "x": 680,
         "y": 430,
         "r": 42,
         "name": "특별 상인 새나리"
+      },
+      "sangnam": {
+        "x": 920,
+        "y": 430,
+        "r": 42,
+        "name": "옷 상인 상남"
       }
     },
     "bossRoom": {
@@ -2725,7 +2971,7 @@
     {
       "id": "snapshot-id-0004",
       "zone": "silent_forest",
-      "q": "육삼빌딩의 세계 시작 마을 이름은?",
+      "q": "63월드의 시작 마을 이름은?",
       "answer": "63마을",
       "source": "기본"
     },
@@ -2764,7 +3010,7 @@
       "name": "문제집1 - 고요한 숲 기본 수학 세트",
       "zone": "silent_forest",
       "subject": "수학",
-      "prompt": "기본 데모 문제",
+      "prompt": "기본 문제",
       "createdAt": 1783036800000,
       "questions": [
         {
@@ -2794,7 +3040,7 @@
         {
           "id": "snapshot-id-0004",
           "zone": "silent_forest",
-          "q": "육삼빌딩의 세계 시작 마을 이름은?",
+          "q": "63월드의 시작 마을 이름은?",
           "answer": "63마을",
           "source": "기본",
           "workbookId": "wb_basic_math"
@@ -2814,7 +3060,7 @@
       "name": "문제집2 - 황량한 사막 기본 문제 세트",
       "zone": "desert_wasteland",
       "subject": "수학",
-      "prompt": "사막 데모 문제",
+      "prompt": "사막 문제",
       "createdAt": 1783036800000,
       "questions": [
         {
@@ -2849,9 +3095,9 @@
       "id": "chick",
       "name": "삐약이",
       "icon": "🐤",
-      "desc": "노란 병아리 펫. 작은 응원으로 체력을 올려줍니다.",
+      "desc": "노란 병아리 펫. 총명한 응원으로 지능을 올려줍니다.",
       "stats": {
-        "체력": 1
+        "지능": 5
       },
       "color": "#fde68a",
       "bob": 0
@@ -2860,10 +3106,10 @@
       "id": "miniMushroom",
       "name": "미니버섯돌이",
       "icon": "🍄",
-      "desc": "작은 버섯돌이 펫. 힘과 체력을 조금 올려줍니다.",
+      "desc": "작은 버섯돌이 펫. 정신과 체력을 올려줍니다.",
       "stats": {
-        "힘": 1,
-        "체력": 1
+        "정신": 3,
+        "체력": 3
       },
       "color": "#fca5a5",
       "bob": 1
@@ -2874,7 +3120,7 @@
       "icon": "🐉",
       "desc": "작은 용 펫. 용감한 기운으로 힘을 올려줍니다.",
       "stats": {
-        "힘": 2
+        "힘": 5
       },
       "color": "#fdba74",
       "bob": 2
@@ -2885,7 +3131,7 @@
       "icon": "🐱",
       "desc": "고양이 펫. 차분한 집중력으로 정신을 올려줍니다.",
       "stats": {
-        "정신": 2
+        "정신": 5
       },
       "color": "#f9a8d4",
       "bob": 3
@@ -2894,9 +3140,10 @@
       "id": "dog",
       "name": "멍멍이",
       "icon": "🐶",
-      "desc": "강아지 펫. 씩씩한 기운으로 체력을 올려줍니다.",
+      "desc": "강아지 펫. 씩씩한 기운으로 힘과 체력을 올려줍니다.",
       "stats": {
-        "체력": 2
+        "힘": 3,
+        "체력": 3
       },
       "color": "#bfdbfe",
       "bob": 4
@@ -2907,10 +3154,10 @@
       "icon": "🏢",
       "desc": "전설 펫. 눈과 미소를 가진 작은 육삼빌딩이 당신의 곁을 지켜줍니다.",
       "stats": {
-        "힘": 5,
-        "지능": 5,
-        "정신": 5,
-        "체력": 5
+        "힘": 8,
+        "지능": 8,
+        "정신": 8,
+        "체력": 8
       },
       "color": "#fbbf24",
       "bob": 6,
@@ -2959,7 +3206,7 @@
         "hp": 12,
         "exp": 1,
         "gold": 2,
-        "attack": 6,
+        "attack": 5,
         "speed": 0.92,
         "aggro": 220,
         "x": 760,
@@ -2973,7 +3220,7 @@
         "hp": 12,
         "exp": 1,
         "gold": 2,
-        "attack": 6,
+        "attack": 5,
         "speed": 0.92,
         "aggro": 220,
         "x": 1040,
@@ -2987,7 +3234,7 @@
         "hp": 12,
         "exp": 1,
         "gold": 2,
-        "attack": 6,
+        "attack": 5,
         "speed": 0.92,
         "aggro": 220,
         "x": 1320,
@@ -3001,7 +3248,7 @@
         "hp": 12,
         "exp": 1,
         "gold": 2,
-        "attack": 6,
+        "attack": 5,
         "speed": 0.92,
         "aggro": 220,
         "x": 1560,
@@ -3015,7 +3262,7 @@
         "hp": 12,
         "exp": 1,
         "gold": 2,
-        "attack": 6,
+        "attack": 5,
         "speed": 0.92,
         "aggro": 220,
         "x": 1780,
@@ -3029,7 +3276,7 @@
         "hp": 12,
         "exp": 1,
         "gold": 2,
-        "attack": 6,
+        "attack": 5,
         "speed": 0.92,
         "aggro": 220,
         "x": 1980,
@@ -3040,7 +3287,7 @@
         "type": "slime",
         "name": "슬라임",
         "level": 3,
-        "hp": 23,
+        "hp": 25,
         "exp": 3,
         "gold": 4,
         "attack": 6,
@@ -3054,7 +3301,7 @@
         "type": "slime",
         "name": "슬라임",
         "level": 3,
-        "hp": 23,
+        "hp": 25,
         "exp": 3,
         "gold": 4,
         "attack": 6,
@@ -3068,7 +3315,7 @@
         "type": "slime",
         "name": "슬라임",
         "level": 3,
-        "hp": 23,
+        "hp": 25,
         "exp": 3,
         "gold": 4,
         "attack": 6,
@@ -3082,7 +3329,7 @@
         "type": "slime",
         "name": "슬라임",
         "level": 3,
-        "hp": 23,
+        "hp": 25,
         "exp": 3,
         "gold": 4,
         "attack": 6,
@@ -3096,7 +3343,7 @@
         "type": "slime",
         "name": "슬라임",
         "level": 3,
-        "hp": 23,
+        "hp": 25,
         "exp": 3,
         "gold": 4,
         "attack": 6,
@@ -3110,7 +3357,7 @@
         "type": "slime",
         "name": "슬라임",
         "level": 3,
-        "hp": 23,
+        "hp": 25,
         "exp": 3,
         "gold": 4,
         "attack": 6,
@@ -3126,10 +3373,10 @@
         "type": "stomp",
         "name": "스톰프",
         "level": 5,
-        "hp": 42,
+        "hp": 50,
         "exp": 6,
         "gold": 9,
-        "attack": 9,
+        "attack": 11,
         "speed": 0.66,
         "aggro": 260,
         "x": 820,
@@ -3140,10 +3387,10 @@
         "type": "stomp",
         "name": "스톰프",
         "level": 5,
-        "hp": 42,
+        "hp": 50,
         "exp": 6,
         "gold": 9,
-        "attack": 9,
+        "attack": 11,
         "speed": 0.66,
         "aggro": 260,
         "x": 1120,
@@ -3154,10 +3401,10 @@
         "type": "stomp",
         "name": "스톰프",
         "level": 5,
-        "hp": 42,
+        "hp": 50,
         "exp": 6,
         "gold": 9,
-        "attack": 9,
+        "attack": 11,
         "speed": 0.66,
         "aggro": 260,
         "x": 1440,
@@ -3168,10 +3415,10 @@
         "type": "stomp",
         "name": "스톰프",
         "level": 5,
-        "hp": 42,
+        "hp": 50,
         "exp": 6,
         "gold": 9,
-        "attack": 9,
+        "attack": 11,
         "speed": 0.66,
         "aggro": 260,
         "x": 1760,
@@ -3182,10 +3429,10 @@
         "type": "stomp",
         "name": "스톰프",
         "level": 5,
-        "hp": 42,
+        "hp": 50,
         "exp": 6,
         "gold": 9,
-        "attack": 9,
+        "attack": 11,
         "speed": 0.66,
         "aggro": 260,
         "x": 1940,
@@ -3196,10 +3443,10 @@
         "type": "snake",
         "name": "스네이크",
         "level": 7,
-        "hp": 56,
+        "hp": 73,
         "exp": 9,
         "gold": 12,
-        "attack": 12,
+        "attack": 15,
         "speed": 0.95,
         "aggro": 280,
         "x": 2320,
@@ -3210,10 +3457,10 @@
         "type": "snake",
         "name": "스네이크",
         "level": 7,
-        "hp": 56,
+        "hp": 73,
         "exp": 9,
         "gold": 12,
-        "attack": 12,
+        "attack": 15,
         "speed": 0.95,
         "aggro": 280,
         "x": 2520,
@@ -3224,10 +3471,10 @@
         "type": "snake",
         "name": "스네이크",
         "level": 7,
-        "hp": 56,
+        "hp": 73,
         "exp": 9,
         "gold": 12,
-        "attack": 12,
+        "attack": 15,
         "speed": 0.95,
         "aggro": 280,
         "x": 2740,
@@ -3238,10 +3485,10 @@
         "type": "snake",
         "name": "스네이크",
         "level": 7,
-        "hp": 56,
+        "hp": 73,
         "exp": 9,
         "gold": 12,
-        "attack": 12,
+        "attack": 15,
         "speed": 0.95,
         "aggro": 280,
         "x": 3040,
@@ -3252,10 +3499,10 @@
         "type": "snake",
         "name": "스네이크",
         "level": 7,
-        "hp": 56,
+        "hp": 73,
         "exp": 9,
         "gold": 12,
-        "attack": 12,
+        "attack": 15,
         "speed": 0.95,
         "aggro": 280,
         "x": 3180,
@@ -3352,10 +3599,10 @@
         "type": "zombie",
         "name": "좀비",
         "level": 11,
-        "hp": 92,
+        "hp": 112,
         "exp": 16,
         "gold": 20,
-        "attack": 19,
+        "attack": 34,
         "speed": 0.7,
         "aggro": 310,
         "x": 2580,
@@ -3366,10 +3613,10 @@
         "type": "zombie",
         "name": "좀비",
         "level": 11,
-        "hp": 92,
+        "hp": 112,
         "exp": 16,
         "gold": 20,
-        "attack": 19,
+        "attack": 34,
         "speed": 0.7,
         "aggro": 310,
         "x": 2820,
@@ -3380,10 +3627,10 @@
         "type": "zombie",
         "name": "좀비",
         "level": 11,
-        "hp": 92,
+        "hp": 112,
         "exp": 16,
         "gold": 20,
-        "attack": 19,
+        "attack": 34,
         "speed": 0.7,
         "aggro": 310,
         "x": 3050,
@@ -3394,10 +3641,10 @@
         "type": "zombie",
         "name": "좀비",
         "level": 11,
-        "hp": 92,
+        "hp": 112,
         "exp": 16,
         "gold": 20,
-        "attack": 19,
+        "attack": 34,
         "speed": 0.7,
         "aggro": 310,
         "x": 3220,
@@ -3408,10 +3655,10 @@
         "type": "zombie",
         "name": "좀비",
         "level": 11,
-        "hp": 92,
+        "hp": 112,
         "exp": 16,
         "gold": 20,
-        "attack": 19,
+        "attack": 34,
         "speed": 0.7,
         "aggro": 310,
         "x": 3380,
@@ -3422,10 +3669,10 @@
         "type": "zombie",
         "name": "좀비",
         "level": 11,
-        "hp": 92,
+        "hp": 112,
         "exp": 16,
         "gold": 20,
-        "attack": 19,
+        "attack": 34,
         "speed": 0.7,
         "aggro": 310,
         "x": 3420,

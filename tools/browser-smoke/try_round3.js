@@ -52,7 +52,7 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   window.startFinalTeacherBattleV34(); await sleep(400);
   const fb = G().finalTeacherBossV34;
   const bstats = fb ? fb.maxHp + '/' + fb.attack + '/' + fb.exp + '/' + fb.gold : null;
-  chk(fb && fb.maxHp === 999 && fb.attack >= 20 && fb.attack <= 25 && fb.exp === 363 && fb.gold === 363, '보스 밸런스 999HP/공20~25/보상363', bstats);
+  chk(fb && fb.maxHp === 999 && fb.attack >= 40 && fb.attack <= 50 && fb.exp === 363 && fb.gold === 363, '보스 밸런스 999HP/공40~50/보상363', bstats);
 
   await sleep(300);
   chk(asyncErrors.length === 0, '비동기 오류 없음', JSON.stringify(asyncErrors.slice(0, 2)));

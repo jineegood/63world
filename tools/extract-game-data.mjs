@@ -5,10 +5,33 @@ import vm from 'node:vm';
 
 const root = dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
 const coreSourcePath = join(root, 'src', 'core-utils.js');
+const preGameModulePaths = [
+  'audio-defaults.js',
+  'audio-manifest.js',
+  'audio-dispatcher.js',
+  'player-store.js',
+  'input-router.js',
+  'world-interaction-registry.js',
+  'world-navigation-registry.js',
+  'click-movement.js',
+  'world-render-pipeline.js',
+  'hud-update-pipeline.js',
+  'total-stats-pipeline.js',
+  'combat-entry-pipeline.js',
+  'combat-frame-pipeline.js',
+  'audio-volume-pipeline.js',
+  'student-access-v2.js',
+  'pvp-client.js',
+];
 const dataSourcePath = join(root, 'src', 'game-data.js');
 const questDataSourcePath = join(root, 'src', 'quest-data.js');
+const questTextSourcePath = join(root, 'src', 'quest-text.js');
 const patchDataSourcePath = join(root, 'src', 'patch-data.js');
+const gameplayPolishSourcePath = join(root, 'src', 'gameplay-polish-v2.js');
+const costumeDataSourcePath = join(root, 'src', 'costume-data.js');
 const combatRulesSourcePath = join(root, 'src', 'combat-rules.js');
+const combatSequenceSourcePath = join(root, 'src', 'combat-sequence-controller.js');
+const combatFxSourcePath = join(root, 'src', 'combat-fx.js');
 const sourcePath = join(root, 'game.js');
 const outputPath = join(root, 'data', 'game-data.snapshot.json');
 const fixedNow = Date.parse('2026-07-03T00:00:00.000Z');
@@ -215,10 +238,19 @@ function rowsFromMonsterFactory(factory) {
 }
 
 const coreSource = await readFile(coreSourcePath, 'utf8');
+const preGameModules = await Promise.all(preGameModulePaths.map(async (name) => ({
+  name,
+  source:await readFile(join(root, 'src', name), 'utf8'),
+})));
 const dataSource = await readFile(dataSourcePath, 'utf8');
 const questDataSource = await readFile(questDataSourcePath, 'utf8');
+const questTextSource = await readFile(questTextSourcePath, 'utf8');
 const patchDataSource = await readFile(patchDataSourcePath, 'utf8');
+const gameplayPolishSource = await readFile(gameplayPolishSourcePath, 'utf8');
+const costumeDataSource = await readFile(costumeDataSourcePath, 'utf8');
 const combatRulesSource = await readFile(combatRulesSourcePath, 'utf8');
+const combatSequenceSource = await readFile(combatSequenceSourcePath, 'utf8');
+const combatFxSource = await readFile(combatFxSourcePath, 'utf8');
 const source = await readFile(sourcePath, 'utf8');
 const exportScript = `
 ;globalThis.__YUKSAM_EXPORT__ = {
@@ -250,6 +282,12 @@ vm.runInContext(coreSource, sandbox, {
   filename: 'src/core-utils.js',
   timeout: 1000,
 });
+for (const module of preGameModules) {
+  vm.runInContext(module.source, sandbox, {
+    filename:`src/${module.name}`,
+    timeout:1000,
+  });
+}
 vm.runInContext(dataSource, sandbox, {
   filename: 'src/game-data.js',
   timeout: 1000,
@@ -258,12 +296,32 @@ vm.runInContext(questDataSource, sandbox, {
   filename: 'src/quest-data.js',
   timeout: 1000,
 });
+vm.runInContext(questTextSource, sandbox, {
+  filename: 'src/quest-text.js',
+  timeout: 1000,
+});
 vm.runInContext(patchDataSource, sandbox, {
   filename: 'src/patch-data.js',
   timeout: 1000,
 });
+vm.runInContext(gameplayPolishSource, sandbox, {
+  filename: 'src/gameplay-polish-v2.js',
+  timeout: 1000,
+});
+vm.runInContext(costumeDataSource, sandbox, {
+  filename: 'src/costume-data.js',
+  timeout: 1000,
+});
 vm.runInContext(combatRulesSource, sandbox, {
   filename: 'src/combat-rules.js',
+  timeout: 1000,
+});
+vm.runInContext(combatSequenceSource, sandbox, {
+  filename: 'src/combat-sequence-controller.js',
+  timeout: 1000,
+});
+vm.runInContext(combatFxSource, sandbox, {
+  filename: 'src/combat-fx.js',
   timeout: 1000,
 });
 vm.runInContext(`${source}\n${exportScript}`, sandbox, {

@@ -12330,7 +12330,7 @@ function updateQuestTracker() {
         name:'명진쌤',
         level:99,
         hp:999,   // [밸런스] 사실상 못 깨는 히든보스 컨셉 (사용자 지정)
-        attack:20 + Math.floor(Math.random() * 6), // 공격 20~25 난수
+        attack:40 + Math.floor(Math.random() * 11), // 공격 40~50: 기존 20~25에서 2배 강화
         x:def.x,
         y:def.y,
         r:def.r,
@@ -12346,7 +12346,7 @@ function updateQuestTracker() {
       level:99,
       maxHp:999,
       hp: Math.min(999, Math.max(1, game.finalTeacherBossV34.hp || 999)),
-      attack:20 + Math.floor(Math.random() * 6),
+      attack:40 + Math.floor(Math.random() * 11),
       elite:true,
       noEscape:true,
       chasing:false,

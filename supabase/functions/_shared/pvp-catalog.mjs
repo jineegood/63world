@@ -139,7 +139,7 @@ export const PVP_SKILLS = Object.freeze({
     "active": {
       "cooldown": 6,
       "name": "서리 갑옷",
-      "shieldPct": 1.3,
+      "shieldPct": 0.7,
       "type": "shield"
     },
     "classOnly": "mage",
