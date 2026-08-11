@@ -719,10 +719,13 @@
     if (event.kind === 'shield' && target) {
       const amount = Math.max(0, Number(event.amount) || 0);
       target.shield = Math.max(0, Number(target.shield) || 0) + amount;
-      const passive = event.skillId === 'warrior_basic_guard' || event.passive === true;
-      setCombatLog(passive
-        ? `${target.name || sideName(event.target)} 학생의 막기 훈련! 보호막 ${amount} 생성!`
-        : `${target.name || sideName(event.target)} 학생에게 보호막 ${amount} 생성!`,
+      const elementalBarrier = event.skillId === 'mage_basic_element';
+      const blockTraining = event.skillId === 'warrior_basic_guard';
+      setCombatLog(elementalBarrier
+        ? `${target.name || sideName(event.target)} 학생의 원소 보호막 발동! 보호막 ${amount} 생성!`
+        : blockTraining
+          ? `${target.name || sideName(event.target)} 학생의 막기 훈련! 보호막 ${amount} 생성!`
+          : `${target.name || sideName(event.target)} 학생에게 보호막 ${amount} 생성!`,
       'correct-answer');
       showImpact(event.target, amount, 'shield');
       const fallback = () => global.playSfx?.('reward');

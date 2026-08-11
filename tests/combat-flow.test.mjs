@@ -244,9 +244,9 @@ test('final combat integration uses approved balance helpers', () => {
   assert.match(gameSource, /YuksamCombatRules\.mageBasicCriticalDamage/);
   assert.match(gameSource, /active\.type === 'healAllies'/);
   assert.match(gameSource, /YuksamCombatRules\.planLivingAllyHeals/);
-  assert.match(gameSource, /executeHpThreshold\(getSkillRank\('mage_basic_element'\)\)/);
-  assert.match(gameSource, /monster\.hp <= effect\.executeHp/);
-  assert.doesNotMatch(gameSource, /mage_basic_element\?\.executeHpPct/);
+  assert.match(gameSource, /game\.player\.hp\s*\/\s*Math\.max\(1, game\.player\.maxHp\)\s*<=\s*triggerHpPct/);
+  assert.match(gameSource, /game\.elementalBarrierUsed\s*=\s*true/);
+  assert.doesNotMatch(gameSource, /executeHpThreshold\(getSkillRank\('mage_basic_element'\)\)/);
   assert.match(gameSource, /YuksamCombatRules\.scaleMonsterStats/);
   assert.match(gameSource, /YuksamCombatRules\.rollEnhancement\(next\.chance, Math\.random\(\)\)/);
 });

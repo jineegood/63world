@@ -31,6 +31,7 @@ function fighter(id, overrides = {}) {
     defense:10,
     skills:{ warrior_basic_strike:1 },
     cooldowns:{},
+    elementalBarrierUsed:false,
     statuses:{ stun:0, chill:0, shadow:0 },
     ...overrides,
   };
@@ -183,6 +184,7 @@ test('snapshot normalization drops unknown fields and clamps combat values', asy
     costume:{},
     skills:{ warrior_basic_strike:1 },
     cooldowns:{},
+    elementalBarrierUsed:false,
     statuses:{ stun:0, chill:0, shadow:0 },
   });
 });
@@ -373,4 +375,46 @@ test('Block Training cannot activate for a non-warrior snapshot', async () => {
     randomInt:sequence([30, 1]),
   });
   assert.equal(resolved.events.some((event) => event.skillId === 'warrior_basic_guard'), false);
+});
+
+test('Elemental Barrier triggers after the full incoming action when a mage survives at 20 percent HP or less', async () => {
+  const rules = await import(rulesUrl.href);
+  const resolved = rules.resolveRound({
+    match:{ id:'match-elemental-barrier', round:1 },
+    a:{ player:fighter('a', { attack:50 }), actionId:'basic', correct:true },
+    b:{
+      player:fighter('b', {
+        className:'mage', spec:'화염', maxHp:100, hp:40,
+        skills:{ mage_basic_element:1 },
+      }),
+      actionId:'basic', correct:true,
+    },
+    randomInt:sequence([30, 1]),
+  });
+  const damageIndex = resolved.events.findIndex((event) => event.kind === 'damage' && event.target === 'b');
+  const barrierIndex = resolved.events.findIndex((event) => event.skillId === 'mage_basic_element');
+  assert.equal(resolved.state.b.hp, 20);
+  assert.equal(resolved.state.b.shield, 10);
+  assert.equal(resolved.state.b.elementalBarrierUsed, true);
+  assert.ok(barrierIndex > damageIndex);
+  assert.equal(resolved.events[barrierIndex].amount, 10);
+});
+
+test('Elemental Barrier does not rescue a mage killed by the incoming action', async () => {
+  const rules = await import(rulesUrl.href);
+  const resolved = rules.resolveRound({
+    match:{ id:'match-elemental-fatal', round:1 },
+    a:{ player:fighter('a', { attack:50 }), actionId:'basic', correct:true },
+    b:{
+      player:fighter('b', {
+        className:'mage', spec:'화염', maxHp:100, hp:15,
+        skills:{ mage_basic_element:5 },
+      }),
+      actionId:'basic', correct:true,
+    },
+    randomInt:sequence([30, 1]),
+  });
+  assert.equal(resolved.state.b.hp, 0);
+  assert.equal(resolved.state.b.shield, 0);
+  assert.equal(resolved.events.some((event) => event.skillId === 'mage_basic_element'), false);
 });

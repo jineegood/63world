@@ -1,4 +1,4 @@
-// 시트개편 검증: 다중랭크 / 더블어택 / 기절 / 다단히트 / 부활 / 회복효율 / 원소폭발
+// 시트개편 검증: 다중랭크 / 더블어택 / 기절 / 다단히트 / 부활 / 회복효율 / 원소보호막
 const run = require(require('path').join(__dirname, 'harness.js'));
 const root = process.argv[2];
 run(root, async ({ window, $, sleep, click, asyncErrors }) => {
@@ -147,17 +147,26 @@ run(root, async ({ window, $, sleep, click, asyncErrors }) => {
   const heal0 = await measureHeal(0), heal1 = await measureHeal(1), heal2 = await measureHeal(2);
   ok(heal1 > heal0 && heal2 > heal1, '(f) 치유 숙련 랭크별 회복 증가', heal0 + '/' + heal1 + '/' + heal2);
 
-  // (g) 원소 폭발
-  m = setup('mage', '화염', {}, { maxHp: 100000, hp: 10 });
-  hp0 = m.hp; attack('attack');
-  await waitFor(() => eventCount('player-hit') >= 1);
-  const noExecHp = m.hp;
-  m = setup('mage', '화염', { mage_basic_element: 1 }, { maxHp: 100000, hp: 10 });
-  attack('attack');
-  await waitFor(() => m.hp === 0); // [v51] 처형 데미지는 별도 순간(resolution 이벤트)에 적용
-  const execHp = m.hp;
-  ok(noExecHp > 0, '(g) 원소폭발 미보유: 생존', 'hp=' + noExecHp);
-  ok(execHp === 0, '(g) 원소폭발 보유: 임계 즉시 처치', 'hp=' + execHp);
+  // (g) 원소 보호막: 적의 공격을 전부 맞은 뒤 살아서 HP 20% 이하일 때만 전투당 1회
+  m = setup('mage', '화염', { mage_basic_element: 1 }, { maxHp: 100000, attack: 10 });
+  g.player.maxHp = 100; g.player.hp = 25; g.combatShield = 0;
+  window.monsterCounterAttack('');
+  await waitFor(() => g.elementalBarrierUsed === true && !g.combatSequenceActive);
+  ok(g.player.hp > 0 && g.player.hp / g.player.maxHp <= 0.20,
+    '(g) 원소 보호막은 적 공격이 끝난 뒤 생존 HP 20% 이하에서 발동', 'hp=' + g.player.hp + '/' + g.player.maxHp);
+  ok(g.combatShield === Math.ceil(g.player.maxHp * 0.10),
+    '(g2) 1랭크는 최대 HP의 10% 보호막', 'shield=' + g.combatShield + ', maxHp=' + g.player.maxHp);
+  const supportCountAfterFirst = eventCount('player-support');
+  window.monsterCounterAttack('');
+  await waitFor(() => !g.combatSequenceActive);
+  ok(eventCount('player-support') === supportCountAfterFirst, '(g3) 전투당 1회 제한');
+
+  m = setup('mage', '화염', { mage_basic_element: 5 }, { maxHp: 100000, attack: 10 });
+  g.player.maxHp = 100; g.player.hp = 5; g.combatShield = 0;
+  window.monsterCounterAttack('');
+  await waitFor(() => g.player.hp <= 0);
+  ok(g.combatShield === 0 && g.elementalBarrierUsed === false,
+    '(g4) 죽는 피해에는 원소 보호막 미발동', 'shield=' + g.combatShield + ', used=' + g.elementalBarrierUsed);
 
   // (h) 방패 돌진: 새 보호막을 먼저 더한 뒤 100으로 제한하고, 치명타/냉기는 그 다음에 적용한다.
   const shieldChargeDamage = async (startingShield, randomValues, chillTurns) => {

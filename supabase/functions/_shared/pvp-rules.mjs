@@ -63,6 +63,7 @@ export function normalizeSnapshot(raw = {}) {
       : {},
     skills,
     cooldowns:cleanNumberMap(raw.cooldowns),
+    elementalBarrierUsed:raw.elementalBarrierUsed === true,
     statuses:raw.statuses && typeof raw.statuses === 'object' ? {
       stun:Math.max(0, Math.trunc(Number(raw.statuses.stun) || 0)),
       chill:Math.max(0, Math.trunc(Number(raw.statuses.chill) || 0)),
@@ -165,6 +166,30 @@ function applyBlockTraining(ownerKey, state, events) {
   });
 }
 
+function applyElementalBarrierAfterDamage(ownerKey, state, hpBefore, events) {
+  const owner = state[ownerKey];
+  const rank = Math.max(0, Math.trunc(Number(owner.skills.mage_basic_element) || 0));
+  const skill = PVP_SKILLS.mage_basic_element || {};
+  const triggerHpPct = Number(skill.triggerHpPct || 0);
+  const shieldPct = Number(skill.emergencyShieldPct?.[rank] || 0);
+  if (
+    owner.elementalBarrierUsed
+    || owner.className !== 'mage'
+    || !(rank > 0)
+    || !(shieldPct > 0)
+    || !(owner.hp > 0)
+    || !(owner.hp < hpBefore)
+    || !(owner.hp / Math.max(1, owner.maxHp) <= triggerHpPct)
+  ) return;
+  owner.elementalBarrierUsed = true;
+  const amount = Math.max(1, Math.ceil(owner.maxHp * shieldPct));
+  owner.shield += amount;
+  events.push({
+    kind:'shield', source:ownerKey, target:ownerKey,
+    skillId:'mage_basic_element', passive:true, amount,
+  });
+}
+
 function applyAction(sourceKey, targetKey, entry, state, events) {
   const source = state[sourceKey];
   const target = state[targetKey];
@@ -246,7 +271,9 @@ export function resolveRound({ match, a, b, randomInt }) {
       correct:entry.correct === true,
       prevented:state[sourceKey].statuses.stun > 0 ? 'stun' : null,
     });
+    const targetHpBefore = state[targetKey].hp;
     applyAction(sourceKey, targetKey, entry, state, events);
+    applyElementalBarrierAfterDamage(targetKey, state, targetHpBefore, events);
     /* 일반 사냥과 같은 순서: 막기 훈련은 상대에게 맞기 직전 갑자기
        생기는 방어 보너스가 아니라, 자신의 행동을 마친 뒤 다음 반격을
        대비해 만드는 보호막이다. 전투가 끝났다면 불필요하게 생성하지 않는다. */

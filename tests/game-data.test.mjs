@@ -185,9 +185,11 @@ test('current class skill data matches the approved v42 balance rules', () => {
   runBrowserModule('src/game-data.js', context);
 
   const skills = context.window.YuksamData.V24_SKILLS;
-  assert.deepEqual(Array.from(skills.mage_basic_element.executeHp), [0, 3, 6, 9, 12, 15]);
-  assert.equal('executeHpPct' in skills.mage_basic_element, false);
-  assert.match(skills.mage_basic_element.desc, /남은 체력 3,6,9,12,15 이하/);
+  assert.equal(skills.mage_basic_element.name, '원소 보호막');
+  assert.equal(skills.mage_basic_element.triggerHpPct, 0.20);
+  assert.deepEqual(Array.from(skills.mage_basic_element.emergencyShieldPct), [0, 0.10, 0.15, 0.20, 0.25, 0.30]);
+  assert.equal('executeHp' in skills.mage_basic_element, false);
+  assert.match(skills.mage_basic_element.desc, /공격이 모두 끝난 뒤 살아 있고 체력이 20% 이하/);
 
   assert.equal(skills.priest_basic_smite.active.cooldown, 5);
   assert.equal(skills.priest_basic_smite.active.healMaxPct, 0.25);

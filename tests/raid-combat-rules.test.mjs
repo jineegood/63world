@@ -432,17 +432,49 @@ test('charge and player chill remain when every attack hit misses', () => {
   assert.equal(fighter.statuses.chillTurns, 1);
 });
 
-test('elemental explosion executes a monster left at the learned HP threshold', () => {
+test('elemental barrier triggers after all incoming hits only when the mage survives at 20 percent HP or less', () => {
   const mage = member('mage', {
-    klass:'mage', attack:10, skills:{ mage_basic_element:5 },
+    klass:'mage', slot:'middle', maxHp:100, hp:35, attack:1,
+    skills:{ mage_basic_element:5 },
   });
-  const target = monster({ maxHp:200, hp:20, attack:1 });
+  const target = monster({ attack:10 });
   const result = resolve({
     members:[mage], target,
-    submissions:{ mage:{ correct:true, actionId:'basic' } },
+    submissions:{ mage:{ correct:false, actionId:'basic' } },
+    plan:{ name:'연속 공격', kind:'single', hits:2 },
+    rng:constant(0.5),
   });
-  assert.equal(target.hp, 0);
-  assert.ok(result.events.some((event) => event.kind === 'monster-execute' && event.audioId === 'execution'));
+  const hits = result.events.filter((event) => event.kind === 'monster-hit' && !event.missed);
+  const barrier = result.events.find((event) => event.skillId === 'mage_basic_element');
+  assert.equal(hits.length, 2);
+  assert.equal(mage.hp, 5);
+  assert.equal(mage.shield, 30);
+  assert.equal(barrier?.kind, 'party-shield');
+  assert.equal(barrier?.amount, 30);
+  assert.ok(result.events.indexOf(barrier) > result.events.indexOf(hits[1]));
+
+  const second = resolve({
+    members:[mage], target,
+    submissions:{ mage:{ correct:false, actionId:'basic' } },
+    plan:{ name:'약한 공격', kind:'single', hits:1 },
+    rng:constant(0.5),
+  });
+  assert.equal(second.events.some((event) => event.skillId === 'mage_basic_element'), false);
+});
+
+test('elemental barrier does not trigger when the final hit kills the mage', () => {
+  const mage = member('mage', {
+    klass:'mage', slot:'middle', maxHp:100, hp:15, attack:1,
+    skills:{ mage_basic_element:5 },
+  });
+  const result = resolve({
+    members:[mage], target:monster({ attack:20 }),
+    submissions:{ mage:{ correct:false, actionId:'basic' } },
+    rng:constant(0.5),
+  });
+  assert.equal(mage.hp, 0);
+  assert.equal(mage.shield, 0);
+  assert.equal(result.events.some((event) => event.skillId === 'mage_basic_element'), false);
 });
 
 test('a wrong zero-damage shadow mark neither adds stacks nor spends cooldown', () => {

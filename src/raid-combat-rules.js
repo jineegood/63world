@@ -80,6 +80,7 @@
       buffs:normalizeBuffs(member.buffs || member.combatBuffs),
       chargeActive:member.chargeActive === true,
       bastionUsed:member.bastionUsed === true,
+      elementalBarrierUsed:member.elementalBarrierUsed === true,
     };
   }
 
@@ -111,6 +112,7 @@
     member.buffs = normalizeBuffs();
     member.chargeActive = false;
     member.bastionUsed = false;
+    member.elementalBarrierUsed = false;
     return member;
   }
 
@@ -833,22 +835,17 @@
     if (landedAction && chargePending) member.chargeActive = false;
     if (landedAction && chillPending) member.statuses.chillTurns = Math.max(0, member.statuses.chillTurns - 1);
 
-    /* 원소 폭발과 옛 스킬 트리의 처형도 마지막 유효 타격 뒤에 판정한다. */
+    /* 옛 스킬 트리의 처형은 마지막 유효 타격 뒤에 판정한다. */
     if (totalDamage > 0 && monster.hp > 0) {
-      const elementalRank = skillRank(member, 'mage_basic_element');
-      const elementalThreshold = Math.max(0, integer(defs.mage_basic_element?.executeHp?.[elementalRank]));
       const executePct = isSkill ? Math.max(0, number(active.executePct)) : 0;
       const percentageExecute = executePct > 0 && monster.hp / monster.maxHp <= executePct;
-      const elementalExecute = elementalThreshold > 0 && monster.hp <= elementalThreshold;
-      if (percentageExecute || elementalExecute) {
+      if (percentageExecute) {
         const remainingHp = monster.hp;
         monster.hp = 0;
         events.push(eventBase(member, action, {
           kind:'monster-execute', amount:remainingHp, hpDamage:remainingHp,
           monsterHp:0, audioId:'execution',
-          text:elementalExecute
-            ? `${member.name}의 원소 폭발! 남은 생명력 ${remainingHp}을 불태워 처형했습니다!`
-            : `${member.name}의 처형 효과가 발동했습니다!`,
+          text:`${member.name}의 처형 효과가 발동했습니다!`,
         }));
       }
     }
@@ -1083,6 +1080,7 @@
       });
     });
     members.forEach((member) => applyBlockTraining(member, defs, events));
+    const hpBeforeEnemyDamage = new Map(members.map((member) => [String(member.id), member.hp]));
 
     /* 지난 턴에 잡은 반격 자세는 여기까지다(파티 턴 동안만 유효). */
     monster.counterMode = null;
@@ -1413,6 +1411,38 @@
           text:`${member.name}이(가) 불굴의 의지로 상태 이상에서 벗어났습니다!`,
         });
       }
+    });
+
+    members.forEach((member) => {
+      const elementalRank = skillRank(member, 'mage_basic_element');
+      const triggerHpPct = number(defs.mage_basic_element?.triggerHpPct);
+      const shieldPct = number(defs.mage_basic_element?.emergencyShieldPct?.[elementalRank]);
+      const hpBefore = number(hpBeforeEnemyDamage.get(String(member.id)));
+      if (
+        member.elementalBarrierUsed
+        || !(elementalRank > 0)
+        || !(shieldPct > 0)
+        || !(member.hp > 0)
+        || !(member.hp < hpBefore)
+        || !(member.hp / Math.max(1, member.maxHp) <= triggerHpPct)
+      ) return;
+      member.elementalBarrierUsed = true;
+      const beforeShield = Math.max(0, integer(member.shield));
+      const requested = Math.max(1, Math.ceil(member.maxHp * shieldPct));
+      const amount = addShield(member, requested);
+      events.push({
+        kind:'party-shield', memberId:member.id, memberName:member.name,
+        actorMemberId:member.id, targetMemberId:member.id,
+        actionId:'mage_basic_element', skillId:'mage_basic_element', passive:true,
+        amount, shield:member.shield, memberHp:member.hp, audioId:'blockShield',
+        debugCalc:shieldDebug({
+          baseName:'최대 HP', baseValue:member.maxHp, rate:shieldPct,
+          requestedShield:requested, actualShield:amount,
+          beforeShield, afterShield:member.shield,
+          reason:'적의 공격이 모두 끝난 뒤 생존한 상태로 HP가 20% 이하가 되어 전투당 1회 발동했습니다.',
+        }),
+        text:`${member.name}의 원소 보호막 발동! 보호막 ${amount} 생성!`,
+      });
     });
   }
 

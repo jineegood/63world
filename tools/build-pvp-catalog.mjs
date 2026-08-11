@@ -9,6 +9,7 @@ const fields = [
   'bonuses', 'flatBonuses',
   'guardShieldPct', 'armorBonusPct', 'cleanseChance', 'reviveHealPct',
   'reviveCooldown', 'reflectPct', 'doubleAttackPct', 'executeHp',
+  'triggerHpPct', 'emergencyShieldPct',
   'activeStunChance', 'critChanceBonus', 'critDmgBonus', 'monsterMissChance',
   'healBoost', 'shadowLifestealChance', 'shadowCritChance',
 ];

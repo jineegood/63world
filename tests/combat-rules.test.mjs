@@ -33,10 +33,6 @@ test('desert and swamp monster stats apply monster balance before a single regio
   );
 });
 
-test('element explosion uses absolute remaining HP thresholds by rank', () => {
-  assert.deepEqual(Array.from({ length: 6 }, (_, rank) => rules.executeHpThreshold(rank)), [0, 3, 6, 9, 12, 15]);
-});
-
 test('universal and basic critical damage remains fixed at 150 percent', () => {
   for (const [damage, expected] of [[10, 15], [11, 17], [20, 30]]) {
     assert.equal(rules.mageBasicCriticalDamage(damage), expected);

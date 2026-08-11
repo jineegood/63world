@@ -7,7 +7,6 @@
     snake: 1.30,
     stomp: 1.20,
   };
-  const EXECUTE_HP = [0, 3, 6, 9, 12, 15];
   const COMBAT_EVENT_ORDER = [
     'answer-correct',
     'answer-wrong',
@@ -49,11 +48,6 @@
     };
     Object.defineProperty(scaled, '__zoneScale', { value: zone, enumerable: false });
     return scaled;
-  }
-
-  function executeHpThreshold(rank) {
-    const safeRank = Math.max(0, Math.min(5, Number(rank) || 0));
-    return EXECUTE_HP[safeRank];
   }
 
   function mageBasicCriticalDamage(damage) {
@@ -307,7 +301,6 @@
     shortenCombatDelay,
     deduplicateCombatStatusEvents,
     scaleMonsterStats,
-    executeHpThreshold,
     mageBasicCriticalDamage,
     shieldChargeDamage,
     resolveShieldedDamage,

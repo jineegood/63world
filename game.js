@@ -188,6 +188,7 @@ const game = {
   dialogue: { page: 0, selected: 0, mode: 'base' },
   currentCombatAction: null,
   combatShield: 0,
+  elementalBarrierUsed: false,
   settings: window.YuksamAudioDefaults.defaultSettings(),
   audio: { ctx: null, master: null, bgmGain: null, bgmTimer: null, started: false, file: null, fileGain: 0 },
   combatHpDisplay: null,
@@ -3105,6 +3106,7 @@ function enterBaseCombat(monster) {
   game.currentQuestion = null;
   game.currentCombatAction = null;
   game.combatShield = 0;
+  game.elementalBarrierUsed = false;
   // [시트개편] 전투별 상태 초기화: 차지/버프/부활/기절/냉기
   game.chargeActive = false;
   game.combatBuffs = {};
@@ -8609,6 +8611,7 @@ function updateQuestTracker() {
       }
     }
 
+    const hpBeforeEnemyDamage = Math.max(0, Number(game.player.hp) || 0);
     const hitPlans = [];
     let projectedShield = Math.max(0, game.combatShield || 0) + guardGain;
     let projectedHp = Math.min(game.player.maxHp, Math.max(0, game.player.hp || 0));
@@ -8753,7 +8756,7 @@ function updateQuestTracker() {
     }
 
     const counterMsg = monsterEvents.at(-1)?.text || actionText;
-    queueCombatSequence(monsterEvents, () => {
+    const finishCounterSequence = () => {
       tickSkillCooldowns();
       savePlayer?.(); updateHud?.();
       const fresh = currentCombatMonster();
@@ -8794,6 +8797,28 @@ function updateQuestTracker() {
       } else {
         renderCombatMenu(counterMsg);
       }
+    };
+    queueCombatSequence(monsterEvents, () => {
+      const elementalRank = getSkillRank('mage_basic_element');
+      const elementalDef = SKILL_DEFS.mage_basic_element;
+      const triggerHpPct = Number(elementalDef?.triggerHpPct) || 0;
+      const shieldPct = Number(elementalDef?.emergencyShieldPct?.[elementalRank]) || 0;
+      const survivedAtLowHp = game.player.hp > 0
+        && game.player.hp < hpBeforeEnemyDamage
+        && game.player.hp / Math.max(1, game.player.maxHp) <= triggerHpPct;
+      if (!game.elementalBarrierUsed && survivedAtLowHp && shieldPct > 0) {
+        game.elementalBarrierUsed = true;
+        const shieldAmount = Math.max(1, Math.ceil(game.player.maxHp * shieldPct));
+        queueCombatSequence([{
+          type:'player-support',
+          text:`원소 보호막 발동! 보호막 ${shieldAmount} 생성!`,
+          tone:'player-action',
+          audioId:'blockShield',
+          effect:makeCounterEffect('player-support', { kind:'shield', amount:shieldAmount }),
+        }], finishCounterSequence);
+        return;
+      }
+      finishCounterSequence();
     });
   };
   window.submitCombatAnswer = function submitCombatAnswerV25() {
@@ -8854,7 +8879,6 @@ function updateQuestTracker() {
     let lastDamageHitIndex = -1;
     actionHits.forEach((hit, index) => { if (hit.dmg > 0) lastDamageHitIndex = index; });
     const effectBatchId = `${monster.id}:player:${game.combatEffectSerial = (Number(game.combatEffectSerial) || 0) + 1}`;
-    const elementalExecuteHp = YuksamCombatRules.executeHpThreshold(getSkillRank('mage_basic_element'));
     const skillLogDelay = activeSkill ? PLAYER_ATTACK_NOTICE_DELAY_V46 + 1000 : PLAYER_ATTACK_NOTICE_DELAY_V46;
     const playerEvents = [{ type:'answer-correct', text:'정답!', duration:CORRECT_ANSWER_NOTICE_DELAY_V48 }];
     if (actionHits.length) {
@@ -8886,7 +8910,6 @@ function updateQuestTracker() {
             finalHit,
             resolutionId:effectBatchId,
             executePct:finalHit && activeSkill ? Number(act.executePct) || 0 : 0,
-            executeHp:finalHit ? elementalExecuteHp : 0,
           } } : {}),
           fx:{
             ...activeFxProfile,
@@ -8916,7 +8939,6 @@ function updateQuestTracker() {
           finalHit:true,
           resolutionId:effectBatchId,
           executePct:activeSkill ? Number(act.executePct) || 0 : 0,
-          executeHp:elementalExecuteHp,
         },
         fx:{ ...activeFxProfile, hitIndex:0, hitStage:'primary' },
         ...(actionAudioId ? { audioId:actionAudioId } : {}),

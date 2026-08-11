@@ -31,18 +31,19 @@ export const PVP_SKILLS = Object.freeze({
   },
   "mage_basic_element": {
     "classOnly": "mage",
-    "executeHp": [
+    "emergencyShieldPct": [
       0,
-      3,
-      6,
-      9,
-      12,
-      15
+      0.1,
+      0.15,
+      0.2,
+      0.25,
+      0.3
     ],
     "id": "mage_basic_element",
     "line": 2,
     "maxPoints": 5,
-    "name": "원소 폭발"
+    "name": "원소 보호막",
+    "triggerHpPct": 0.2
   },
   "mage_basic_mana": {
     "bonuses": {
