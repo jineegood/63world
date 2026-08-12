@@ -1016,7 +1016,15 @@
     const ids = new Set(roster.map((member) => member.id));
     Object.keys(networkDraftPlacement).forEach((id) => { if (!ids.has(id)) delete networkDraftPlacement[id]; });
     roster.forEach((member) => {
-      if (!Object.hasOwn(networkDraftPlacement, member.id)) networkDraftPlacement[member.id] = member.slot || null;
+      /* 참가자는 입장 직후 세 자리 모두 null인 초안을 먼저 그린다. 방장이
+         대형을 저장한 뒤 서버 slot이 도착해도 기존 null 키가 있다는 이유로
+         무시하면 참가자 화면에는 준비 버튼이 영원히 나타나지 않는다.
+         방장이 고르는 중인 실제 자리 초안은 보존하되, 비어 있던 초안에는
+         서버에서 확정된 자리를 받아 세 화면을 같은 상태로 맞춘다. */
+      if (!Object.hasOwn(networkDraftPlacement, member.id)
+        || (!networkDraftPlacement[member.id] && member.slot)) {
+        networkDraftPlacement[member.id] = member.slot || null;
+      }
     });
     return networkDraftPlacement;
   }

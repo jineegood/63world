@@ -239,6 +239,37 @@ test('온라인 대기실은 정확히 세 명·대형 저장·전원 준비 후
   assert.match(uiSource, /session\.client\.start\(session\.room\.id\)/);
 });
 
+test('참가자는 방장이 나중에 확정한 대형을 받아 준비 버튼을 볼 수 있다', async () => {
+  const guest = networkUiHarness({ mode:'join', identityUserId:'bob' });
+  guest.members.push(
+    {
+      roomId:'room-1', userId:'bob', joinOrder:2, slot:null, ready:false, active:true,
+      profile:{ userId:'bob', name:'보라', className:'mage', spec:'원소', level:6, maxHp:38, attack:11 },
+      state:{ hp:38, maxHp:38, shield:0, cooldowns:{}, statuses:{} },
+    },
+    {
+      roomId:'room-1', userId:'carol', joinOrder:3, slot:null, ready:false, active:true,
+      profile:{ userId:'carol', name:'초록', className:'priest', spec:'신성', level:5, maxHp:40, attack:8 },
+      state:{ hp:40, maxHp:40, shield:0, cooldowns:{}, statuses:{} },
+    },
+  );
+
+  assert.equal(await guest.context.YuksamRaidRunUi.openNetworkLobby({ mode:'join', code:'0427' }), true);
+  assert.doesNotMatch(guest.html(), /id="raidReadyBtn"/);
+
+  guest.members[0].slot = 'front';
+  guest.members[1].slot = 'middle';
+  guest.members[2].slot = 'back';
+  guest.room.version = 2;
+  const realtimeListener = guest.calls.find(([kind]) => kind === 'subscribe')?.[2];
+  realtimeListener?.();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  assert.match(guest.html(), /대형이 정해졌습니다\. 각자 준비를 눌러 주세요\./);
+  assert.match(guest.html(), /id="raidReadyBtn"/);
+  assert.match(guest.html(), />준비<\/button>/);
+});
+
 test('전원 준비 카운트다운은 모두에게 들리고 방장만 0에 서버 출발을 요청한다', async () => {
   const host = networkUiHarness();
   fillReadyNetworkRoster(host);
