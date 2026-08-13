@@ -171,7 +171,7 @@ Extend the focused smoke with isolated jsdom cases proving:
 
 **Files:**
 - Modify: docs/archive/handoffs/HANDOFF-2026-07-16.md
-- Create: docs/audits/2026-07-16-corrupt-player-preservation-result.md
+- Create: docs/archive/audits/2026-07-16-corrupt-player-preservation-result.md
 - Create: backups/2026-07-16-pre-corrupt-player-preservation.zip
 - Create: backups/2026-07-16-pre-corrupt-player-preservation.sha256.txt
 

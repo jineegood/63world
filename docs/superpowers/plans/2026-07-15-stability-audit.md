@@ -40,7 +40,7 @@
 ### Task 3: Write Prioritized Audit
 
 **Files:**
-- Create: `docs/audits/2026-07-15-stability-and-boundary-audit.md`
+- Create: `docs/archive/audits/2026-07-15-stability-and-boundary-audit.md`
 
 - [ ] Rank concrete risks from S1 to S4 with evidence and likely failure modes.
 - [ ] Define recommended module boundaries and dependencies.

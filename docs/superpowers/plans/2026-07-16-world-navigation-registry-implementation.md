@@ -8,7 +8,7 @@
 
 **Tech Stack:** Classic browser JavaScript, Node test runner, `node:vm`, jsdom browser-smoke harness, PowerShell baseline runner.
 
-**Status:** Completed and verified on 2026-07-16. See `docs/audits/2026-07-16-world-navigation-registry-result.md`.
+**Status:** Completed and verified on 2026-07-16. See `docs/archive/audits/2026-07-16-world-navigation-registry-result.md`.
 
 ## Global Constraints
 
@@ -89,7 +89,7 @@
 **Files:**
 - Modify: `tools/run-baseline.ps1`
 - Modify: `package.json`
-- Create: `docs/audits/2026-07-16-world-navigation-registry-result.md`
+- Create: `docs/archive/audits/2026-07-16-world-navigation-registry-result.md`
 - Modify: `docs/archive/handoffs/HANDOFF-2026-07-16.md`
 
 **Interfaces:**

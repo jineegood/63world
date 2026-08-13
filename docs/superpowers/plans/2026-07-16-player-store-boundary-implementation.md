@@ -4,7 +4,7 @@
 
 **Constraints:** Preserve corrupt bytes, trimmed keys, normalization, timestamps, sorting, reward behavior, and every existing browser contract. Do not touch workbooks, teacher settings, UI, gameplay, or save migration.
 
-**Status:** Completed and verified on 2026-07-16. See `docs/audits/2026-07-16-player-store-boundary-result.md`.
+**Status:** Completed and verified on 2026-07-16. See `docs/archive/audits/2026-07-16-player-store-boundary-result.md`.
 
 ## Task 1 — Recovery and contract tests
 

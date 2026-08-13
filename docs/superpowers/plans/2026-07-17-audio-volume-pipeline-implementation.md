@@ -54,7 +54,7 @@
 **Files:**
 - Modify: `package.json`
 - Modify: `tools/run-baseline.ps1`
-- Create: `docs/audits/2026-07-17-audio-volume-pipeline-result.md`
+- Create: `docs/archive/audits/2026-07-17-audio-volume-pipeline-result.md`
 - Modify: `docs/archive/handoffs/HANDOFF-2026-07-16.md`
 - Create: `backups/2026-07-17-pre-audio-volume-pipeline.zip`
 - Create: `backups/2026-07-17-post-audio-volume-pipeline.zip`

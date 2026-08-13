@@ -54,7 +54,7 @@
 ### Task 3: Verify and Record
 
 **Files:**
-- Create: docs/audits/2026-07-16-admin-authorization-result.md
+- Create: docs/archive/audits/2026-07-16-admin-authorization-result.md
 - Modify: docs/archive/handoffs/HANDOFF-2026-07-16.md
 
 **Interfaces:**

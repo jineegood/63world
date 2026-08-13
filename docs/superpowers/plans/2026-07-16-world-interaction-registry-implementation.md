@@ -8,7 +8,7 @@
 
 **Tech Stack:** Classic browser JavaScript, Node test runner, `node:vm`, jsdom browser-smoke harness, PowerShell baseline runner.
 
-**Status:** Completed and verified on 2026-07-16. All task checklists below are retained as the execution record; completion evidence is in `docs/audits/2026-07-16-world-interaction-registry-result.md`.
+**Status:** Completed and verified on 2026-07-16. All task checklists below are retained as the execution record; completion evidence is in `docs/archive/audits/2026-07-16-world-interaction-registry-result.md`.
 
 ## Global Constraints
 
@@ -106,7 +106,7 @@
 **Files:**
 - Modify: `tools/run-baseline.ps1`
 - Modify: `package.json`
-- Create: `docs/audits/2026-07-16-world-interaction-registry-result.md`
+- Create: `docs/archive/audits/2026-07-16-world-interaction-registry-result.md`
 - Modify: `docs/archive/handoffs/HANDOFF-2026-07-16.md`
 
 **Interfaces:**

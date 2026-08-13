@@ -6,7 +6,7 @@
 
 **Tech Stack:** Classic browser JavaScript, Node test runner, `node:vm`, jsdom browser smoke, PowerShell baseline runner.
 
-**Status:** Completed and verified on 2026-07-16. See `docs/audits/2026-07-16-world-render-pipeline-result.md`.
+**Status:** Completed and verified on 2026-07-16. See `docs/archive/audits/2026-07-16-world-render-pipeline-result.md`.
 
 ## Constraints
 

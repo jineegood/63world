@@ -4,7 +4,7 @@
 
 **Architecture:** Newest preparation before one base calculation; historical modifiers afterward in explicit ascending order.
 
-**Status:** Completed and verified on 2026-07-16. See `docs/audits/2026-07-16-total-stats-pipeline-result.md`.
+**Status:** Completed and verified on 2026-07-16. See `docs/archive/audits/2026-07-16-total-stats-pipeline-result.md`.
 
 ## Task 1: Baseline and RED
 

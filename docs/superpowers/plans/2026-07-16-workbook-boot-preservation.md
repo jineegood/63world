@@ -194,7 +194,7 @@ Run try_player_storage.js and require its existing corrupt direct-read, non-arra
 
 **Files:**
 - Modify: docs/archive/handoffs/HANDOFF-2026-07-16.md
-- Create: docs/audits/2026-07-16-workbook-boot-preservation-result.md
+- Create: docs/archive/audits/2026-07-16-workbook-boot-preservation-result.md
 
 **Interfaces:**
 - Consumes: the completed Package 1 change

@@ -19,7 +19,7 @@ Create a recoverable checkpoint of the current game and produce a read-only audi
 
 - `backups/2026-07-15-pre-audit-checkpoint.zip`
 - `backups/2026-07-15-pre-audit-checkpoint.sha256.txt`
-- `docs/audits/2026-07-15-stability-and-boundary-audit.md`
+- `docs/archive/audits/2026-07-15-stability-and-boundary-audit.md`
 
 ## Verification
 
