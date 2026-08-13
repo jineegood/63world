@@ -137,8 +137,8 @@ Excel은 네 시트를 모두 렌더링해 글자와 표 배치를 확인했고 
 - 상태이상, 보호막, 피해 숫자, 전투 로그, 효과음
 - PVP 모든 피해 50% 적용
 
-더 오래된 상세 내역은 `docs/HANDOFF-2026-08-02-Codex-to-Claude-Opus.md`와 `docs/HANDOFF-2026-07-31-Codex-to-Claude-Opus.md`를 참고한다. 충돌할 경우 이 최신 문서의 17마리 규칙을 우선한다.
+더 오래된 상세 내역은 `docs/archive/handoffs/HANDOFF-2026-08-02-Codex-to-Claude-Opus.md`와 `docs/archive/handoffs/HANDOFF-2026-07-31-Codex-to-Claude-Opus.md`를 참고한다. 충돌할 경우 이 최신 문서의 17마리 규칙을 우선한다.
 
 ## 9. 새 Opus에게 바로 보낼 문장
 
-`C:\Users\fiost\Desktop\63world (1)\00_63월드_새배포본\docs\HANDOFF-2026-08-02-Codex-to-Claude-Opus-LATEST.md를 처음부터 끝까지 읽고, 17마리 최종 Excel을 게임에 반영하는 작업부터 이어서 해줘. 39마리 확장안은 폐기된 참고 자료이므로 신규 몬스터를 추가하지 말고, 같은 방의 세 학생이 동일한 랜덤 조우 목록을 보며 재접속해도 유지되게 만들어줘.`
+`C:\Users\fiost\Desktop\63world (1)\00_63월드_새배포본\docs\archive\handoffs\HANDOFF-2026-08-02-Codex-to-Claude-Opus-LATEST.md를 처음부터 끝까지 읽고, 17마리 최종 Excel을 게임에 반영하는 작업부터 이어서 해줘. 39마리 확장안은 폐기된 참고 자료이므로 신규 몬스터를 추가하지 말고, 같은 방의 세 학생이 동일한 랜덤 조우 목록을 보며 재접속해도 유지되게 만들어줘.`

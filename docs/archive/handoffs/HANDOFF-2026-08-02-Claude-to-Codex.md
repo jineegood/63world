@@ -155,8 +155,8 @@ Claude가 고쳤다고 보고했으나 **제작자가 실제 화면에서 다시
 ## 7. Codex에게 바로 보낼 문장
 
 ```text
-C:\Users\fiost\Desktop\63world (1)\00_63월드_새배포본\docs\HANDOFF-2026-08-02-Codex-to-Claude-Opus-LATEST.md 를
-기준 계획으로 삼고, docs\HANDOFF-2026-08-02-Claude-to-Codex.md 의 "지뢰밭"과 "아직 안 된 것"을 먼저 읽어줘.
+C:\Users\fiost\Desktop\63world (1)\00_63월드_새배포본\docs\archive\handoffs\HANDOFF-2026-08-02-Codex-to-Claude-Opus-LATEST.md 를
+기준 계획으로 삼고, docs\archive\handoffs\HANDOFF-2026-08-02-Claude-to-Codex.md 의 "지뢰밭"과 "아직 안 된 것"을 먼저 읽어줘.
 17마리 Excel 반영과 층 확장을 이어서 하되, 스킬 고유 효과(기절·독·보호막 등)와 투사체 연출은
 사냥터 전투 코드를 재구현하지 말고 그대로 호출해서 붙여줘.
 작업이 끝나면 묻지 말고 커밋·푸시·Vercel 배포까지 하고 링크를 줘.

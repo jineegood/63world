@@ -90,7 +90,7 @@
 - Modify: `tools/run-baseline.ps1`
 - Modify: `package.json`
 - Create: `docs/audits/2026-07-16-world-navigation-registry-result.md`
-- Modify: `docs/HANDOFF-2026-07-16.md`
+- Modify: `docs/archive/handoffs/HANDOFF-2026-07-16.md`
 
 **Interfaces:**
 - Produces: `npm.cmd run test:world-navigation-registry`

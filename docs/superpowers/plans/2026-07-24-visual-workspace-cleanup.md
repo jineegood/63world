@@ -144,7 +144,7 @@ $targets = @(
   (Join-Path $project 'package-lock.json'),
   (Join-Path $project 'README.md'),
   (Join-Path $project 'schema.sql'),
-  (Join-Path $project '인수인계.txt')
+  (Join-Path $project 'docs/archive/handoffs/인수인계.txt')
 )
 foreach ($target in $targets) {
   $item = Get-Item -LiteralPath $target -Force
@@ -179,7 +179,7 @@ $targets = @(
   (Join-Path $project 'package-lock.json'),
   (Join-Path $project 'README.md'),
   (Join-Path $project 'schema.sql'),
-  (Join-Path $project '인수인계.txt')
+  (Join-Path $project 'docs/archive/handoffs/인수인계.txt')
 )
 $targets | ForEach-Object {
   $item = Get-Item -LiteralPath $_ -Force

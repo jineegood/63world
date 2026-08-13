@@ -25,7 +25,7 @@
 - 도구 상태: `.agents`, `.codex_work`, `.git`, `.superpowers`
 - 설치·검사 자료: `node_modules`, `docs`, `tests`, `tools`
 - 서버·보조 자료: `supabase`, `vendor`, `시트`, `작업자료`
-- 관리 파일: `.gitignore`, `package.json`, `package-lock.json`, `README.md`, `schema.sql`, `인수인계.txt`
+- 관리 파일: `.gitignore`, `package.json`, `package-lock.json`, `README.md`, `schema.sql`, `docs/archive/handoffs/인수인계.txt`
 
 기본 탐색기 화면에는 앱의 주요 구성만 남는다.
 

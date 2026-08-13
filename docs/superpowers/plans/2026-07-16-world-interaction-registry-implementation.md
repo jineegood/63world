@@ -107,7 +107,7 @@
 - Modify: `tools/run-baseline.ps1`
 - Modify: `package.json`
 - Create: `docs/audits/2026-07-16-world-interaction-registry-result.md`
-- Modify: `docs/HANDOFF-2026-07-16.md`
+- Modify: `docs/archive/handoffs/HANDOFF-2026-07-16.md`
 
 **Interfaces:**
 - Produces: `npm.cmd run test:world-interaction-registry` and default-gate coverage

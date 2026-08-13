@@ -27,4 +27,4 @@
 - Add `combat-sequence-controller` mode and package script.
 - Syntax-check the new production module and include its suite in `all`.
 - Run `npm.cmd test` and require zero failures.
-- Write the result audit, update `docs/HANDOFF-2026-07-16.md`, and create a post-package ZIP plus SHA-256 manifest.
+- Write the result audit, update `docs/archive/handoffs/HANDOFF-2026-07-16.md`, and create a post-package ZIP plus SHA-256 manifest.

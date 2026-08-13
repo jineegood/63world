@@ -219,7 +219,7 @@ git push origin recovery/local-engine-20260726
 
 전체 게임의 더 오래된 기능, 보안 구조, PVP 30초 동기화, 퀘스트와 UI 작업은 아래 문서에 상세히 남아 있다.
 
-`docs/HANDOFF-2026-07-31-Codex-to-Claude-Opus.md`
+`docs/archive/handoffs/HANDOFF-2026-07-31-Codex-to-Claude-Opus.md`
 
 새 작업자는 이 문서를 먼저 읽고, 과거 배경이 더 필요할 때 7월 31일 문서를 이어서 보면 된다.
 

@@ -1,6 +1,6 @@
 # S1 Storage Preservation Implementation Plan
 
-> **Status correction (2026-07-16): HISTORICAL PARTIAL PLAN — DO NOT RE-RUN ITS UNCHECKED TASKS.** The pet/direct-read work is already applied. Its tests seed corrupt workbook data after script boot and miss `ensureSwampWorkbook()` overwriting it during initialization. Create a new plan from `docs/HANDOFF-2026-07-16.md` instead.
+> **Status correction (2026-07-16): HISTORICAL PARTIAL PLAN — DO NOT RE-RUN ITS UNCHECKED TASKS.** The pet/direct-read work is already applied. Its tests seed corrupt workbook data after script boot and miss `ensureSwampWorkbook()` overwriting it during initialization. Create a new plan from `docs/archive/handoffs/HANDOFF-2026-07-16.md` instead.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

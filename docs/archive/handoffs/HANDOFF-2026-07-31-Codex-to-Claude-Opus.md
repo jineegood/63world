@@ -369,6 +369,6 @@ npx.cmd vercel --prod --yes
 ## 11. 새 Claude Opus 채팅에 그대로 보낼 첫 문장
 
 ```text
-C:\Users\fiost\Desktop\63world (1)\00_63월드_새배포본\docs\HANDOFF-2026-07-31-Codex-to-Claude-Opus.md 를 처음부터 끝까지 읽고 이어서 작업해줘. 실제 작업 폴더는 00_63월드_새배포본이고 브랜치는 recovery/local-engine-20260726이야. origin/main으로 바꾸거나 일반 몬스터 전투를 서버 권위형으로 되돌리지 말고, 먼저 git status와 현재 배포 상태를 확인해줘.
+C:\Users\fiost\Desktop\63world (1)\00_63월드_새배포본\docs\archive\handoffs\HANDOFF-2026-07-31-Codex-to-Claude-Opus.md 를 처음부터 끝까지 읽고 이어서 작업해줘. 실제 작업 폴더는 00_63월드_새배포본이고 브랜치는 recovery/local-engine-20260726이야. origin/main으로 바꾸거나 일반 몬스터 전투를 서버 권위형으로 되돌리지 말고, 먼저 git status와 현재 배포 상태를 확인해줘.
 ```
 

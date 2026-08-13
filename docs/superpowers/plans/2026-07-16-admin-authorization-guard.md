@@ -55,7 +55,7 @@
 
 **Files:**
 - Create: docs/audits/2026-07-16-admin-authorization-result.md
-- Modify: docs/HANDOFF-2026-07-16.md
+- Modify: docs/archive/handoffs/HANDOFF-2026-07-16.md
 
 **Interfaces:**
 - Produces: RED-GREEN evidence, full test results, hashes, and next-package handoff

@@ -1,6 +1,6 @@
 # S1 Storage Preservation Design
 
-> **Status correction (2026-07-16): HISTORICAL PARTIAL EVIDENCE — DO NOT EXECUTE AS A CURRENT SPEC.** Direct `getWorkbooks()` reads preserve corrupt bytes, but the boot-time `ensureSwampWorkbook()` migration later overwrites them. See `docs/HANDOFF-2026-07-16.md` and create a new dedicated plan from its “First Task” requirements.
+> **Status correction (2026-07-16): HISTORICAL PARTIAL EVIDENCE — DO NOT EXECUTE AS A CURRENT SPEC.** Direct `getWorkbooks()` reads preserve corrupt bytes, but the boot-time `ensureSwampWorkbook()` migration later overwrites them. See `docs/archive/handoffs/HANDOFF-2026-07-16.md` and create a new dedicated plan from its “First Task” requirements.
 
 ## Goal
 
