@@ -425,3 +425,30 @@ if ($Mode -eq 'all' -or $Mode -eq 'current-data') {
 if ($Mode -eq 'all' -or $Mode -eq 'safety-net') {
   Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', 'tests/safety-net.test.mjs')
 }
+
+# 전용 실행 모드는 없지만 기본 전체 검사에서 반드시 실행해야 하는 독립 검사들.
+# 새 테스트가 이 목록을 포함한 러너 어디에도 등록되지 않으면 baseline 검사가 막는다.
+if ($Mode -eq 'all') {
+  $standaloneTestFiles = @(
+    'tests/audio-defaults.test.mjs'
+    'tests/chatgpt-prompt.test.mjs'
+    'tests/login-bgm-flow.test.mjs'
+    'tests/login-keys.test.mjs'
+    'tests/production-guard.test.mjs'
+    'tests/profile-portrait.test.mjs'
+    'tests/profile-security-audit-v1.test.mjs'
+    'tests/quest-dialogue-theme.test.mjs'
+    'tests/raid-pattern-effects.test.mjs'
+    'tests/raid-progress.test.mjs'
+    'tests/recovery-ui-features.test.mjs'
+    'tests/remote-motion.test.mjs'
+    'tests/safe-server-boundary-v2.test.mjs'
+    'tests/teacher-cheat-function.test.mjs'
+    'tests/teacher-cheat-ui.test.mjs'
+    'tests/usability-polish-v62.test.mjs'
+    'tests/workbook-import.test.mjs'
+  )
+  foreach ($testFile in $standaloneTestFiles) {
+    Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', $testFile)
+  }
+}

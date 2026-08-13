@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -42,8 +42,15 @@ test('default runner covers every production script and standalone unit suite', 
   for (const script of scripts) {
     assert.ok(runner.includes(`'${script}'`), `${script} should be syntax checked by the default runner`);
   }
-  assert.ok(runner.includes("'tests/audio-manifest.test.mjs'"));
-  assert.ok(runner.includes("'tests/weapon-tier.test.mjs'"));
+  const testFiles = readdirSync(join(root, 'tests'))
+    .filter((file) => file.endsWith('.test.mjs'))
+    .sort();
+  for (const testFile of testFiles) {
+    assert.ok(
+      runner.includes(`'tests/${testFile}'`),
+      `tests/${testFile} should run in the default suite`,
+    );
+  }
 });
 
 test('index.html keeps core static game contracts', () => {
