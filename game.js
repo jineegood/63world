@@ -2298,6 +2298,33 @@ function drawHumanoid(ctx, x, y, appearance, klass, state, scale = 1, isNpc = fa
     ctx.save(); ctx.globalAlpha = .35; ctx.fillStyle = '#fef9c3';
     ctx.beginPath(); ctx.ellipse(0, 0, 22 * scale, 20 * scale, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
   }
+  if (accessoryItem?.look?.type === 'batWing') {
+    // 밤빛 박쥐 날개: 몸 뒤에서 좌우 날개 끝이 천천히 펄럭임
+    const flap = Math.sin(performance.now() / 430) * 0.12;
+    const wingColor = accessoryItem.look.color || '#7c3aed';
+    for (const dir of [-1, 1]) {
+      ctx.save();
+      ctx.translate(dir * 9 * scale, -1 * scale);
+      ctx.scale(dir, 1);
+      ctx.rotate(flap);
+      ctx.fillStyle = wingColor;
+      ctx.strokeStyle = 'rgba(196,181,253,.72)';
+      ctx.lineWidth = 1.1 * scale;
+      ctx.beginPath();
+      ctx.moveTo(0, 2 * scale);
+      ctx.quadraticCurveTo(13 * scale, -17 * scale, 30 * scale, -13 * scale);
+      ctx.lineTo(25 * scale, -3 * scale);
+      ctx.quadraticCurveTo(20 * scale, -7 * scale, 16 * scale, 2 * scale);
+      ctx.quadraticCurveTo(11 * scale, -3 * scale, 7 * scale, 8 * scale);
+      ctx.quadraticCurveTo(3 * scale, 4 * scale, 0, 10 * scale);
+      ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      ctx.globalAlpha = .42;
+      ctx.strokeStyle = '#f5d0fe';
+      ctx.beginPath(); ctx.moveTo(2 * scale, 2 * scale); ctx.lineTo(27 * scale, -11 * scale); ctx.stroke();
+      ctx.restore();
+    }
+  }
   const wingLook = accessoryItem?.look?.type === 'wing' ? accessoryItem.look : null;
   if (appearance.accessory === 'wing' || wingLook || accessoryItem?.id === 'featherWing' || accessoryItem?.id === 'sixthWing') {
     ctx.fillStyle = wingLook?.color || (accessoryItem?.id === 'sixthWing' ? 'rgba(196,181,253,.94)' : 'rgba(255,255,255,.92)');
@@ -2427,6 +2454,28 @@ function drawHumanoid(ctx, x, y, appearance, klass, state, scale = 1, isNpc = fa
     ctx.beginPath(); ctx.moveTo(0, 7.6 * scale); ctx.lineTo(5 * scale, 4 * scale); ctx.lineTo(5 * scale, 11 * scale); ctx.closePath(); ctx.fill();
     ctx.fillStyle = '#fff1f2';
     ctx.beginPath(); ctx.arc(0, 7.6 * scale, 2 * scale, 0, Math.PI * 2); ctx.fill();
+  } else if (armorItem?.look?.type === 'cloudHoodie') {
+    // 구름 후드티: 둥근 후드와 앞주머니, 구름 무늬가 있는 포근한 상의
+    const hoodieColor = armorItem.look.color || '#7dd3fc';
+    ctx.fillStyle = hoodieColor;
+    ctx.beginPath(); ctx.arc(0, -16 * scale, 15 * scale, 0, Math.PI * 2); ctx.fill();
+    roundRect(ctx, -12 * scale, -5 * scale, 24 * scale, 26 * scale, 8 * scale); ctx.fill();
+    ctx.fillStyle = 'rgba(224,242,254,.92)';
+    ctx.beginPath();
+    ctx.arc(-4 * scale, 6 * scale, 3.5 * scale, 0, Math.PI * 2);
+    ctx.arc(0, 4.5 * scale, 4.5 * scale, 0, Math.PI * 2);
+    ctx.arc(5 * scale, 6 * scale, 3.2 * scale, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.88)';
+    ctx.lineWidth = 1.2 * scale;
+    ctx.beginPath(); ctx.arc(0, -16 * scale, 13 * scale, Math.PI * .08, Math.PI * .92); ctx.stroke();
+    ctx.strokeStyle = '#e0f2fe';
+    ctx.lineWidth = 1.4 * scale;
+    ctx.beginPath(); ctx.moveTo(-4 * scale, -3 * scale); ctx.lineTo(-4 * scale, 5 * scale); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(4 * scale, -3 * scale); ctx.lineTo(4 * scale, 5 * scale); ctx.stroke();
+    ctx.fillStyle = '#f8fafc';
+    ctx.beginPath(); ctx.arc(-4 * scale, 5 * scale, 1.4 * scale, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(4 * scale, 5 * scale, 1.4 * scale, 0, Math.PI * 2); ctx.fill();
   } else if (armorItem?.look?.type === 'robe') {
     // [피드백] 사제 제의: 망토가 아니라 '입는 옷' — 몸통 덮개 + 아랫단 치마
     ctx.fillStyle = armorItem.look.color;
@@ -2479,6 +2528,27 @@ function drawHumanoid(ctx, x, y, appearance, klass, state, scale = 1, isNpc = fa
     ctx.strokeStyle = col; ctx.lineWidth = 1.5 * scale;
     ctx.beginPath(); ctx.moveTo(-2 * scale, 2.6 * scale); ctx.quadraticCurveTo(-4 * scale, 7 * scale, -1.4 * scale, 9 * scale); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(2 * scale, 2.6 * scale); ctx.quadraticCurveTo(4 * scale, 7 * scale, 1.4 * scale, 9 * scale); ctx.stroke();
+    ctx.restore();
+  }
+  if (accessoryItem?.look?.type === 'bellNecklace') {
+    // 황금 방울 목걸이: 가슴 앞에서 작게 흔들리는 방울
+    const bellSway = Math.sin(performance.now() / 360) * 0.12;
+    ctx.save();
+    ctx.strokeStyle = '#fef3c7';
+    ctx.lineWidth = 1.5 * scale;
+    ctx.beginPath(); ctx.arc(0, -6 * scale, 7.5 * scale, 0.22 * Math.PI, 0.78 * Math.PI); ctx.stroke();
+    ctx.translate(0, 2 * scale);
+    ctx.rotate(bellSway);
+    ctx.fillStyle = accessoryItem.look.color || '#facc15';
+    ctx.beginPath();
+    ctx.moveTo(-4.2 * scale, 2 * scale);
+    ctx.quadraticCurveTo(-3.6 * scale, -4 * scale, 0, -5 * scale);
+    ctx.quadraticCurveTo(3.6 * scale, -4 * scale, 4.2 * scale, 2 * scale);
+    ctx.lineTo(5.2 * scale, 4.2 * scale);
+    ctx.lineTo(-5.2 * scale, 4.2 * scale);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#fef3c7';
+    ctx.beginPath(); ctx.arc(0, 5 * scale, 1.5 * scale, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   }
   if (accessoryItem?.look?.type === 'necklace') {
@@ -2569,7 +2639,33 @@ function drawHumanoid(ctx, x, y, appearance, klass, state, scale = 1, isNpc = fa
     ctx.stroke();
   }
 
-  if (headItem?.look?.type === 'bunnyEars') {
+  if (headItem?.look?.type === 'catEars') {
+    // 고양이 머리띠: 삼각 귀와 가운데 작은 방울
+    const wig = Math.sin(performance.now() / 520) * 0.8 * scale;
+    const earColor = headItem.look.color || '#475569';
+    ctx.strokeStyle = earColor;
+    ctx.lineWidth = 2.5 * scale;
+    ctx.beginPath(); ctx.arc(0, -22 * scale, 12.5 * scale, Math.PI * 1.1, Math.PI * -0.1); ctx.stroke();
+    for (const dir of [-1, 1]) {
+      const baseX = dir * 7 * scale;
+      ctx.fillStyle = earColor;
+      ctx.beginPath();
+      ctx.moveTo(baseX - dir * 6 * scale, -25 * scale);
+      ctx.lineTo(baseX + dir * 1.5 * scale, -39 * scale + wig);
+      ctx.lineTo(baseX + dir * 7 * scale, -24 * scale);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#f9a8d4';
+      ctx.beginPath();
+      ctx.moveTo(baseX - dir * 2.5 * scale, -27 * scale);
+      ctx.lineTo(baseX + dir * 1.2 * scale, -35 * scale + wig * .6);
+      ctx.lineTo(baseX + dir * 4 * scale, -26 * scale);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath(); ctx.arc(0, -24 * scale, 2.2 * scale, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fef3c7';
+    ctx.beginPath(); ctx.arc(-.6 * scale, -24.8 * scale, .7 * scale, 0, Math.PI * 2); ctx.fill();
+  } else if (headItem?.look?.type === 'bunnyEars') {
     // [v56] 토끼 머리띠: 긴 귀 두 짝이 살랑이고 안쪽은 분홍
     const wig = Math.sin(performance.now() / 560) * 0.13;
     const band = headItem.look.color || '#fbcfe8';

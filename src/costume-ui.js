@@ -18,36 +18,48 @@
   }
   function iconOf(item) {
     return ({
-      cs_bunnyBand: '🐰', cs_flowerCrown: '🌸', cs_starCrown: '👑',
-      cs_sailorCape: '🎀', cs_starryRobe: '🌌', cs_peachDress: '👗',
-      cs_ribbon: '🎗️', cs_questSproutRibbon: '🌱', cs_angelWing: '🎐', cs_strangeWing: '🪽', cs_rainbowAura: '🌈',
+      cs_bunnyBand: '🐰', cs_catBand: '🐱', cs_flowerCrown: '🌸', cs_starCrown: '👑', cs_violetMagicHat: '🪄',
+      cs_sailorCape: '🎀', cs_cloudHoodie: '☁️', cs_starryRobe: '🌌', cs_peachDress: '👗', cs_forestFairyCape: '🍃',
+      cs_ribbon: '🎗️', cs_questSproutRibbon: '🌱', cs_goldenBell: '🔔', cs_angelWing: '🎐', cs_strangeWing: '🪽', cs_rainbowAura: '🌈', cs_twilightBatWing: '🦇',
     })[item.id] || '✨';
   }
 
   /* ── 상점 ── */
   window.openCostumeShopV55 = function openCostumeShopV55() {
     const p = ensureFields(); if (!p) return;
-    const cards = Object.values(defs()).filter((item) => !item.questOnly).map((item) => {
+    const shopItems = Object.values(defs()).filter((item) => !item.questOnly);
+    const cardHtml = (item) => {
       const owned = p.costumeInventory.includes(item.id);
       const afford = (p.gold || 0) >= item.price;
-      return `<div class="panel-card" style="display:flex;gap:12px;align-items:center;padding:12px">
-        <div style="font-size:30px;width:46px;text-align:center">${iconOf(item)}</div>
-        <div style="flex:1 1 auto;min-width:0">
-          <b>${esc(item.name)}</b> <small class="muted">· ${SLOTS.find(([s]) => s === item.slot)?.[1] || item.slot}</small>
-          <p class="muted" style="margin:3px 0 0;font-size:12.5px">${esc(item.desc)}</p>
+      return `<article class="panel-card costume-shop-card">
+        <div class="costume-shop-card-main">
+          <div class="costume-shop-item-icon" aria-hidden="true">${iconOf(item)}</div>
+          <div class="costume-shop-item-copy">
+            <b>${esc(item.name)}</b>
+            <p class="muted">${esc(item.desc)}</p>
+          </div>
         </div>
-        <div style="text-align:right;flex:0 0 auto">
-          <div style="font-weight:800;color:#fde68a;margin-bottom:5px">🪙 ${item.price}</div>
+        <div class="costume-shop-card-footer">
+          <div class="costume-shop-price">🪙 ${item.price}</div>
           <button class="${owned ? 'ghost' : 'primary'} small" ${owned || !afford ? 'disabled' : ''} onclick="buyCostumeV55('${item.id}')">${owned ? '보유 중' : (afford ? '구매' : '골드 부족')}</button>
         </div>
-      </div>`;
+      </article>`;
+    };
+    const sections = SLOTS.map(([slot, label]) => {
+      const items = shopItems.filter((item) => item.slot === slot);
+      return `<section class="costume-shop-section" data-costume-slot="${slot}">
+        <h3 class="costume-shop-section-title"><span>${label}</span><small>${items.length}종</small></h3>
+        <div class="costume-shop-grid">${items.map(cardHtml).join('')}</div>
+      </section>`;
     }).join('');
     call('openModal')?.(`
-      <h2>🧵 옷 상인 상남</h2>
-      <p class="muted" style="margin:2px 0 10px">“능력치는 안 오르지만, 멋과 귀여움은 확실히 올라!”<br>코스튬은 <b>성능은 그대로 두고 겉모습만</b> 바꿔줍니다. (상태창 → 코스튬 칸에서 착용)</p>
-      <div class="resource-balance-banner resource-gold"><span>현재 보유 골드</span><b>🪙 ${p.gold || 0}</b></div>
-      <div style="display:grid;gap:8px">${cards}</div>
-      <button class="ghost wide" onclick="closeModal()" style="margin-top:12px">닫기</button>
+      <div class="costume-shop">
+        <h2>🧵 옷 상인 상남</h2>
+        <p class="muted costume-shop-intro">“능력치는 안 오르지만, 멋과 귀여움은 확실히 올라!”<br>코스튬은 <b>성능은 그대로 두고 겉모습만</b> 바꿔줍니다. (상태창 → 코스튬 칸에서 착용)</p>
+        <div class="resource-balance-banner resource-gold"><span>현재 보유 골드</span><b>🪙 ${p.gold || 0}</b></div>
+        <div class="costume-shop-sections">${sections}</div>
+        <button class="ghost wide" onclick="closeModal()" style="margin-top:12px">닫기</button>
+      </div>
     `, { type: 'costumeShop', pause: true });
   };
 
