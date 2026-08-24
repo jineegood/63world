@@ -89,7 +89,7 @@
       </div>`;
     }).join('');
     const owned = p.costumeInventory.map((id) => defs()[id]).filter(Boolean);
-    const bag = owned.length ? owned.map((item) => {
+    const bagCardHtml = (item) => {
       const on = p.costume[item.slot] === item.id;
       return `<div class="bag-slot compact-item-slot-v26 bag-card-v27">
         <div class="bag-icon">${iconOf(item)}</div>
@@ -97,7 +97,17 @@
         <small>${SLOTS.find(([s]) => s === item.slot)?.[1] || item.slot}</small>
         <button class="${on ? 'ghost' : 'primary'} small" onclick="${on ? `unequipCostumeV55('${item.slot}')` : `equipCostumeV55('${item.id}')`}">${on ? '해제' : '착용'}</button>
       </div>`;
-    }).join('') : '<p class="muted" style="grid-column:1/-1;text-align:center;padding:18px">아직 코스튬이 없습니다.<br>특별 상점의 <b>옷 상인 상남</b>에게서 구매할 수 있어요.</p>';
+    };
+    const bag = SLOTS.map(([slot, label]) => {
+      const items = owned.filter((item) => item.slot === slot);
+      const itemHtml = items.length
+        ? items.map(bagCardHtml).join('')
+        : `<p class="muted costume-inventory-empty">보유 중인 ${label} 코스튬이 없습니다.</p>`;
+      return `<section class="costume-inventory-section" data-costume-inventory-slot="${slot}">
+        <h4 class="costume-inventory-section-title"><span>${label}</span><small>${items.length}개</small></h4>
+        <div class="bag-grid costume-inventory-grid">${itemHtml}</div>
+      </section>`;
+    }).join('');
 
     call('openModal')?.(`<div class="character-window-v27 character-window-v32">
       <header class="character-head-v27"><h2>🧵 코스튬</h2><p>능력치는 착용 중인 장비 그대로 유지되고, 보이는 모습만 코스튬으로 바뀝니다.</p></header>
@@ -112,7 +122,8 @@
         <div>
           <div class="panel-card">
             <h3>코스튬 보관함</h3>
-            <div class="bag-grid">${bag}</div>
+            ${owned.length ? '' : '<p class="muted costume-inventory-intro">아직 코스튬이 없습니다. 특별 상점의 <b>옷 상인 상남</b>에게서 구매할 수 있어요.</p>'}
+            <div class="costume-inventory-sections">${bag}</div>
           </div>
           <button class="primary wide" onclick="openCharacterPanel()" style="margin-top:10px">← 상태창으로 돌아가기</button>
         </div>

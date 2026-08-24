@@ -3148,6 +3148,51 @@ body.defeated #app { filter: grayscale(1) brightness(.62); transition: filter .3
   white-space: nowrap;
 }
 
+/* 코스튬 보관함: 착용 부위별로 나눠 원하는 아이템을 빠르게 찾는다. */
+.costume-inventory-intro { margin: 0 0 12px; line-height: 1.5; }
+.costume-inventory-sections {
+  display: grid;
+  gap: 12px;
+}
+.costume-inventory-section {
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 18px;
+  background: rgba(255,255,255,.025);
+}
+.costume-inventory-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 9px;
+  color: #f8fafc;
+  font-family: "Jua", "Gowun Dodum", "Noto Sans KR", system-ui;
+  font-size: 17px;
+}
+.costume-inventory-section-title small {
+  display: inline-flex;
+  margin: 0;
+  padding: 3px 8px;
+  border: 1px solid rgba(196,181,253,.28);
+  border-radius: 999px;
+  background: rgba(139,92,246,.11);
+  color: #ddd6fe;
+  font-size: 11px;
+}
+.costume-inventory-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.costume-inventory-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 12px 8px;
+  border: 1px dashed rgba(255,255,255,.08);
+  border-radius: 13px;
+  text-align: center;
+  font-size: 12px;
+}
+
 @media (max-width: 900px) {
   .costume-shop-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -3156,4 +3201,6 @@ body.defeated #app { filter: grayscale(1) brightness(.62); transition: filter .3
   .costume-shop-section { padding: 10px; }
   .costume-shop-grid { grid-template-columns: minmax(0, 1fr); }
   .costume-shop-card { min-height: 0; }
+  .costume-inventory-section { padding: 9px; }
+  .costume-inventory-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
