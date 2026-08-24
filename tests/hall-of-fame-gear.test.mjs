@@ -49,3 +49,12 @@ test('명예의 전당이 장착 펫을 캐릭터 옆에 그린다', () => {
   // 전설 펫은 눈에 띄게 표시한다.
   assert.match(hallSource, /pet\.legendary/);
 });
+
+test('명예의 전당 캐릭터는 1920×1080 기준 약 1cm 위로 이동한다', () => {
+  assert.match(hallSource, /const HALL_AVATAR_RAISE_Y = 38;/);
+  assert.match(hallSource, /const CANVAS_H = 210 \+ HALL_AVATAR_RAISE_Y/);
+  assert.match(hallSource, /margin-top:-\$\{HALL_AVATAR_RAISE_Y\}px/);
+  assert.match(hallSource, /canvas\.height - 58 - HALL_AVATAR_RAISE_Y/);
+  assert.match(hallSource, /canvas\.height - 66 - HALL_AVATAR_RAISE_Y \+ bob/);
+  assert.match(hallSource, /canvas\.height - 46 - HALL_AVATAR_RAISE_Y/);
+});

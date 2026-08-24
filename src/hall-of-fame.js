@@ -10,6 +10,8 @@
 
   const MEDALS = ['🥇', '🥈', '🥉', '', ''];
   const STAND_H = [96, 72, 56, 34, 26];
+  // 1920×1080 화면의 CSS 96dpi 기준 1cm(37.8px)만 캐릭터와 동행 펫을 위로 올린다.
+  const HALL_AVATAR_RAISE_Y = 38;
   const STAND_COLOR = [
     'linear-gradient(180deg,#fde047,#b45309)',
     'linear-gradient(180deg,#e2e8f0,#64748b)',
@@ -42,13 +44,14 @@
     const order = [3, 1, 0, 2, 4];
     const SLOT_W = 176;   // 슬롯 폭 확대 → 좌우 간격·텍스트 공간 확보
     const CANVAS_W = 176; // 캔버스 폭 확대 → 무기(칼) 좌우 잘림 방지
-    const CANVAS_H = 210; // 캔버스 높이 확대 → 위쪽 무기 잘림 방지
+    // 위로 올린 만큼 캔버스를 늘리고 음수 여백으로 상쇄해 시상대·이름 위치는 유지한다.
+    const CANVAS_H = 210 + HALL_AVATAR_RAISE_Y;
     const slots = order.map((rank) => {
       const p = players[rank];
       if (!p) return `<div class="hof-slot-v52" style="width:${SLOT_W}px"></div>`;
       return `<div class="hof-slot-v52" style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end;width:${SLOT_W}px">
         <div style="font-size:${rank === 0 ? 26 : 19}px;line-height:1.2;min-height:${rank < 3 ? 30 : 8}px">${MEDALS[rank]}</div>
-        <canvas id="hofCanvasV52_${rank}" width="${CANVAS_W}" height="${CANVAS_H}" style="display:block"></canvas>
+        <canvas id="hofCanvasV52_${rank}" width="${CANVAS_W}" height="${CANVAS_H}" style="display:block;margin-top:-${HALL_AVATAR_RAISE_Y}px"></canvas>
         <div style="background:${STAND_COLOR[rank]};width:118px;height:${STAND_H[rank]}px;border-radius:8px 8px 0 0;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:${rank === 0 ? 22 : 17}px;color:rgba(15,23,42,.82);box-shadow:inset 0 3px 6px rgba(255,255,255,.35), 0 4px 10px rgba(0,0,0,.35)">${rank + 1}</div>
         <div style="margin-top:6px;text-align:center;line-height:1.35;width:100%;padding:0 4px">
           <b>${esc(p.name)}</b><br>
@@ -86,7 +89,7 @@
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         try {
           drawPetBeside(ctx, canvas, p, rank, performance.now());
-          draw(ctx, canvas.width / 2, canvas.height - 58, p.appearance, p.class, {
+          draw(ctx, canvas.width / 2, canvas.height - 58 - HALL_AVATAR_RAISE_Y, p.appearance, p.class, {
             attack: 0,
             moving: true, // 걷기 모션으로 살아있는 느낌
             dance: 0,
@@ -113,13 +116,13 @@
     const scale = rank === 0 ? 1.25 : 1.1;
     const bob = Math.sin(now / 320 + (pet.bob || 0)) * 4;
     const x = canvas.width / 2 - (rank === 0 ? 58 : 52);
-    const y = canvas.height - 66 + bob;
+    const y = canvas.height - 66 - HALL_AVATAR_RAISE_Y + bob;
 
     ctx.save();
     // 발밑 그림자
     ctx.fillStyle = 'rgba(6,12,22,.28)';
     ctx.beginPath();
-    ctx.ellipse(x, canvas.height - 46, 13 * scale, 4.5 * scale, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, canvas.height - 46 - HALL_AVATAR_RAISE_Y, 13 * scale, 4.5 * scale, 0, 0, Math.PI * 2);
     ctx.fill();
     // 전설 펫은 은은하게 빛난다
     if (pet.legendary) {

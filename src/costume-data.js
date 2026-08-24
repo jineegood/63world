@@ -10,7 +10,7 @@
       desc: '명진쌤의 부탁을 받은 상남이 처음 모험을 축하하며 선물한 초록 리본.',
       look: { type: 'butterflyRibbon', color: '#4ade80' },
     },
-    /* ── 머리 5종 ── */
+    /* ── 머리 7종 ── */
     cs_bunnyBand: {
       id: 'cs_bunnyBand', name: '토끼 머리띠', slot: 'head', classOnly: null, price: 120, costume: true,
       desc: '폭신폭신한 토끼 귀 머리띠. 능력치는 없지만 아주 귀엽습니다.',
@@ -36,7 +36,17 @@
       desc: '달빛을 머금은 보랏빛 마법 모자. 누구나 오늘만큼은 꼬마 마법사입니다.',
       look: { type: 'wizardHat', color: '#7c3aed' },
     },
-    /* ── 옷 5종 ── */
+    cs_ninjaMask: {
+      id: 'cs_ninjaMask', name: '그림자 닌자 복면', slot: 'head', classOnly: null, price: 620, costume: true,
+      desc: '눈빛만 드러나는 검은 닌자 복면. 말없이 서 있기만 해도 고수처럼 보입니다.',
+      look: { type: 'ninjaMask', color: '#111827' },
+    },
+    cs_spartanHelm: {
+      id: 'cs_spartanHelm', name: '스파르타 투구', slot: 'head', classOnly: null, price: 700, costume: true,
+      desc: '붉은 말총 장식과 황동빛 얼굴 가리개가 달린 용맹한 전사 투구.',
+      look: { type: 'spartanHelm', color: '#d97706' },
+    },
+    /* ── 옷 7종 ── */
     cs_sailorCape: {
       id: 'cs_sailorCape', name: '세일러 교복', slot: 'armor', classOnly: null, price: 150, costume: true,
       desc: '남색 카라와 붉은 스카프, 주름 치마가 한 벌인 세일러 교복.',
@@ -62,7 +72,17 @@
       desc: '싱그러운 잎빛 천으로 만든 요정 망토. 걸을 때마다 숲바람처럼 나부낍니다.',
       look: { type: 'cloak', color: '#16a34a' },
     },
-    /* ── 악세서리 6종 ── */
+    cs_ninjaSuit: {
+      id: 'cs_ninjaSuit', name: '그림자 닌자복', slot: 'armor', classOnly: null, price: 520, costume: true,
+      desc: '붉은 허리띠와 교차 끈으로 단단히 여민 검은 닌자복. 발소리까지 작아질 것 같습니다.',
+      look: { type: 'ninjaSuit', color: '#111827' },
+    },
+    cs_spartanArmor: {
+      id: 'cs_spartanArmor', name: '스파르타 전투갑옷', slot: 'armor', classOnly: null, price: 640, costume: true,
+      desc: '황동 흉갑과 붉은 전투 치마를 갖춘 스파르타식 갑옷. 오늘만큼은 물러서지 않습니다.',
+      look: { type: 'spartanArmor', color: '#d97706' },
+    },
+    /* ── 악세서리 8종 ── */
     cs_ribbon: {
       id: 'cs_ribbon', name: '나비 리본', slot: 'accessory', classOnly: null, price: 100, costume: true,
       desc: '목에 매는 커다란 나비 모양 리본. 살랑살랑 흔들립니다.',
@@ -72,6 +92,16 @@
       id: 'cs_goldenBell', name: '황금 방울 목걸이', slot: 'accessory', classOnly: null, price: 220, costume: true,
       desc: '걸음을 옮길 때마다 맑은 빛이 반짝이는 작은 황금 방울 목걸이.',
       look: { type: 'bellNecklace', color: '#facc15' },
+    },
+    cs_giantFishPack: {
+      id: 'cs_giantFishPack', name: '대왕 생선 등짐', slot: 'accessory', classOnly: null, price: 260, costume: true,
+      desc: '방금 잡은 듯 싱싱한 대왕 생선을 등에 멨습니다. 강해 보이는지는 잘 모르겠습니다.',
+      look: { type: 'giantFishPack', color: '#38bdf8' },
+    },
+    cs_duckFloat: {
+      id: 'cs_duckFloat', name: '고무 오리 튜브', slot: 'accessory', classOnly: null, price: 340, costume: true,
+      desc: '전투 중에도 물놀이 기분을 잃지 않게 해 주는 노란 고무 오리 튜브.',
+      look: { type: 'duckFloat', color: '#facc15' },
     },
     cs_angelWing: {
       id: 'cs_angelWing', name: '하얀 줄끈', slot: 'accessory', classOnly: null, price: 380, costume: true,
