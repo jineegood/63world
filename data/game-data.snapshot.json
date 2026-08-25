@@ -2,7 +2,7 @@
   "meta": {
     "sourceFile": "game.js",
     "detectedVersion": "v35",
-    "generatedAt": "2026-08-25T06:02:55.255Z"
+    "generatedAt": "2026-08-25T06:37:15.776Z"
   },
   "classes": {
     "warrior": {
@@ -747,6 +747,19 @@
         "color": "#fda4af"
       }
     },
+    "cs_sharkHood": {
+      "id": "cs_sharkHood",
+      "name": "아기 상어 후드",
+      "slot": "head",
+      "classOnly": null,
+      "price": 360,
+      "costume": true,
+      "desc": "동그란 눈과 삐죽한 이빨이 얼굴을 감싸는 익살스러운 아기 상어 후드.",
+      "look": {
+        "type": "sharkHood",
+        "color": "#38bdf8"
+      }
+    },
     "cs_starCrown": {
       "id": "cs_starCrown",
       "name": "별빛 왕관",
@@ -799,6 +812,19 @@
         "color": "#d97706"
       }
     },
+    "cs_blackDragonHelm": {
+      "id": "cs_blackDragonHelm",
+      "name": "흑룡 뿔투구",
+      "slot": "head",
+      "classOnly": null,
+      "price": 780,
+      "costume": true,
+      "desc": "뒤로 휘어진 쌍뿔과 자줏빛 용안 보석이 박힌 검은 용기사 투구.",
+      "look": {
+        "type": "blackDragonHelm",
+        "color": "#111827"
+      }
+    },
     "cs_sailorCape": {
       "id": "cs_sailorCape",
       "name": "세일러 교복",
@@ -836,6 +862,19 @@
       "look": {
         "type": "starryRobe",
         "color": "#312e81"
+      }
+    },
+    "cs_sharkSuit": {
+      "id": "cs_sharkSuit",
+      "name": "아기 상어 인형옷",
+      "slot": "armor",
+      "classOnly": null,
+      "price": 420,
+      "costume": true,
+      "desc": "하얀 배와 통통한 옆지느러미가 달린 파란 상어 인형옷. 육지에서도 첨벙첨벙!",
+      "look": {
+        "type": "sharkSuit",
+        "color": "#38bdf8"
       }
     },
     "cs_peachDress": {
@@ -890,6 +929,19 @@
         "color": "#d97706"
       }
     },
+    "cs_blackDragonArmor": {
+      "id": "cs_blackDragonArmor",
+      "name": "흑룡 비늘갑옷",
+      "slot": "armor",
+      "classOnly": null,
+      "price": 820,
+      "costume": true,
+      "desc": "검은 용비늘을 겹쳐 만든 갑옷. 어깨 가시와 가슴의 용안 보석이 사납게 빛납니다.",
+      "look": {
+        "type": "blackDragonArmor",
+        "color": "#1f2937"
+      }
+    },
     "cs_ribbon": {
       "id": "cs_ribbon",
       "name": "나비 리본",
@@ -942,6 +994,19 @@
         "color": "#facc15"
       }
     },
+    "cs_sharkBuddy": {
+      "id": "cs_sharkBuddy",
+      "name": "아기 상어 친구",
+      "slot": "accessory",
+      "classOnly": null,
+      "price": 380,
+      "costume": true,
+      "desc": "어깨 옆에서 보글보글 물방울을 내뿜으며 헤엄치는 통통한 아기 상어 친구.",
+      "look": {
+        "type": "sharkBuddy",
+        "color": "#38bdf8"
+      }
+    },
     "cs_angelWing": {
       "id": "cs_angelWing",
       "name": "하얀 줄끈",
@@ -992,6 +1057,19 @@
       "look": {
         "type": "batWing",
         "color": "#7c3aed"
+      }
+    },
+    "cs_blackDragonShield": {
+      "id": "cs_blackDragonShield",
+      "name": "흑룡 가시방패",
+      "slot": "accessory",
+      "classOnly": null,
+      "price": 740,
+      "costume": true,
+      "desc": "검은 비늘과 보랏빛 가시로 두른 용기사 방패. 중앙의 용안이 사납게 빛납니다.",
+      "look": {
+        "type": "blackDragonAegis",
+        "color": "#18181b"
       }
     }
   },

@@ -21,8 +21,16 @@ run(root, async ({ window, $, asyncErrors }) => {
     ['cs_spartanArmor', { armor:'cs_spartanArmor' }],
     ['cs_giantFishPack', { accessory:'cs_giantFishPack' }],
     ['cs_duckFloat', { accessory:'cs_duckFloat' }],
+    ['cs_sharkHood', { head:'cs_sharkHood' }],
+    ['cs_blackDragonHelm', { head:'cs_blackDragonHelm' }],
+    ['cs_sharkSuit', { armor:'cs_sharkSuit' }],
+    ['cs_blackDragonArmor', { armor:'cs_blackDragonArmor' }],
+    ['cs_sharkBuddy', { accessory:'cs_sharkBuddy' }],
+    ['cs_blackDragonShield', { accessory:'cs_blackDragonShield' }],
     ['ninja set', { head:'cs_ninjaMask', armor:'cs_ninjaSuit' }],
     ['Spartan set', { head:'cs_spartanHelm', armor:'cs_spartanArmor' }],
+    ['black dragon set', { head:'cs_blackDragonHelm', armor:'cs_blackDragonArmor', accessory:'cs_blackDragonShield' }],
+    ['baby shark set', { head:'cs_sharkHood', armor:'cs_sharkSuit', accessory:'cs_sharkBuddy' }],
   ];
   const failures = [];
 
@@ -48,7 +56,7 @@ run(root, async ({ window, $, asyncErrors }) => {
   }
 
   if (!failures.length && !asyncErrors.length) {
-    console.log('PASS: all twelve additions and two themed sets render without browser errors');
+    console.log('PASS: all eighteen additions and four themed sets render without browser errors');
     process.exit(0);
   }
   console.log(`FAIL: ${[...failures, ...asyncErrors].join(' | ')}`);

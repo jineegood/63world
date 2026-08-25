@@ -57,7 +57,7 @@ function renderCostumePanel(defs, costumeInventory, costume = {}) {
   return markup;
 }
 
-test('the paid costume catalog has four added choices per body part', () => {
+test('the expanded costume catalog has two new choices per body part', () => {
   const defs = loadCostumeDefs();
   const paid = Object.values(defs).filter((item) => !item.questOnly);
   const countBySlot = Object.fromEntries(['head', 'armor', 'accessory'].map((slot) => [
@@ -65,9 +65,9 @@ test('the paid costume catalog has four added choices per body part', () => {
     paid.filter((item) => item.slot === slot).length,
   ]));
 
-  assert.equal(Object.keys(defs).length, 23);
-  assert.equal(paid.length, 22);
-  assert.deepEqual(countBySlot, { head:7, armor:7, accessory:8 });
+  assert.equal(Object.keys(defs).length, 29);
+  assert.equal(paid.length, 28);
+  assert.deepEqual(countBySlot, { head:9, armor:9, accessory:10 });
 
   const additions = {
     cs_catBand:['head', 'catEars'],
@@ -82,6 +82,12 @@ test('the paid costume catalog has four added choices per body part', () => {
     cs_spartanArmor:['armor', 'spartanArmor'],
     cs_giantFishPack:['accessory', 'giantFishPack'],
     cs_duckFloat:['accessory', 'duckFloat'],
+    cs_sharkHood:['head', 'sharkHood'],
+    cs_blackDragonHelm:['head', 'blackDragonHelm'],
+    cs_sharkSuit:['armor', 'sharkSuit'],
+    cs_blackDragonArmor:['armor', 'blackDragonArmor'],
+    cs_sharkBuddy:['accessory', 'sharkBuddy'],
+    cs_blackDragonShield:['accessory', 'blackDragonAegis'],
   };
   for (const [id, [slot, lookType]] of Object.entries(additions)) {
     const item = defs[id];
@@ -104,10 +110,10 @@ test('the costume merchant groups paid items by slot and keeps the quest gift hi
   const accessory = markup.indexOf('data-costume-slot="accessory"');
 
   assert.ok(head >= 0 && armor > head && accessory > armor);
-  assert.equal((markup.match(/class="panel-card costume-shop-card"/g) || []).length, 22);
-  assert.match(markup, /data-costume-slot="head"[\s\S]*?<small>7종<\/small>/);
-  assert.match(markup, /data-costume-slot="armor"[\s\S]*?<small>7종<\/small>/);
-  assert.match(markup, /data-costume-slot="accessory"[\s\S]*?<small>8종<\/small>/);
+  assert.equal((markup.match(/class="panel-card costume-shop-card"/g) || []).length, 28);
+  assert.match(markup, /data-costume-slot="head"[\s\S]*?<small>9종<\/small>/);
+  assert.match(markup, /data-costume-slot="armor"[\s\S]*?<small>9종<\/small>/);
+  assert.match(markup, /data-costume-slot="accessory"[\s\S]*?<small>10종<\/small>/);
   assert.doesNotMatch(markup, /새싹 리본|cs_questSproutRibbon/);
   assert.doesNotMatch(markup, /✨/);
 });
@@ -122,6 +128,7 @@ test('the merchant uses three vertical body-part lanes and every new look render
   for (const type of [
     'catEars', 'arcaneMoonHat', 'cloudHoodie', 'forestLeafMantle', 'bellNecklace', 'batWing',
     'ninjaMask', 'spartanHelm', 'ninjaSuit', 'spartanArmor', 'giantFishPack', 'duckFloat',
+    'sharkHood', 'blackDragonHelm', 'sharkSuit', 'blackDragonArmor', 'sharkBuddy', 'blackDragonAegis',
   ]) {
     assert.match(game, new RegExp(`look\\?\\.type === '${type}'`));
   }
@@ -170,10 +177,10 @@ test('the extracted data snapshot includes the expanded costume catalog', () => 
   assert.deepEqual(costumeIds.sort(), Object.keys(defs).sort());
 });
 
-test('all twelve additions and the two themed sets render through the live player sprite', { timeout:15000 }, () => {
+test('all eighteen additions and four themed sets render through the live player sprite', { timeout:25000 }, () => {
   const script = path.join(root, 'tools', 'browser-smoke', 'try_costume_items.js');
-  const result = spawnSync(process.execPath, [script, root], { encoding:'utf8', timeout:12000 });
+  const result = spawnSync(process.execPath, [script, root], { encoding:'utf8', timeout:20000 });
 
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
-  assert.match(result.stdout, /PASS: all twelve additions and two themed sets render without browser errors/);
+  assert.match(result.stdout, /PASS: all eighteen additions and four themed sets render without browser errors/);
 });

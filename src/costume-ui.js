@@ -19,9 +19,9 @@
   }
   function iconOf(item) {
     return ({
-      cs_bunnyBand: '🐰', cs_catBand: '🐱', cs_flowerCrown: '🌸', cs_starCrown: '👑', cs_violetMagicHat: '🌙', cs_ninjaMask: '🥷', cs_spartanHelm: '🪖',
-      cs_sailorCape: '🎀', cs_cloudHoodie: '☁️', cs_starryRobe: '🌌', cs_peachDress: '👗', cs_forestFairyCape: '🌿', cs_ninjaSuit: '🥷', cs_spartanArmor: '🛡️',
-      cs_ribbon: '🎗️', cs_questSproutRibbon: '🌱', cs_goldenBell: '🔔', cs_giantFishPack: '🐟', cs_duckFloat: '🦆', cs_angelWing: '🎐', cs_strangeWing: '🪽', cs_rainbowAura: '🌈', cs_twilightBatWing: '🦇',
+      cs_bunnyBand: '🐰', cs_catBand: '🐱', cs_flowerCrown: '🌸', cs_sharkHood: '🦈', cs_starCrown: '👑', cs_violetMagicHat: '🌙', cs_ninjaMask: '🥷', cs_spartanHelm: '🪖', cs_blackDragonHelm: '🐲',
+      cs_sailorCape: '🎀', cs_cloudHoodie: '☁️', cs_starryRobe: '🌌', cs_sharkSuit: '🦈', cs_peachDress: '👗', cs_forestFairyCape: '🌿', cs_ninjaSuit: '🥷', cs_spartanArmor: '🛡️', cs_blackDragonArmor: '🐉',
+      cs_ribbon: '🎗️', cs_questSproutRibbon: '🌱', cs_goldenBell: '🔔', cs_giantFishPack: '🐟', cs_duckFloat: '🦆', cs_sharkBuddy: '🫧', cs_angelWing: '🎐', cs_strangeWing: '🪽', cs_rainbowAura: '🌈', cs_twilightBatWing: '🦇', cs_blackDragonShield: '🛡️',
     })[item.id] || '✨';
   }
 

@@ -2363,6 +2363,45 @@ function drawHumanoid(ctx, x, y, appearance, klass, state, scale = 1, isNpc = fa
       ctx.restore();
     }
   }
+  if (accessoryItem?.look?.type === 'blackDragonAegis') {
+    // 흑룡 가시방패: 왼쪽 등 뒤에 걸친 세로형 방패와 보랏빛 용안 문양.
+    const pulse = .55 + Math.abs(Math.sin(t * 3.2)) * .45;
+    ctx.save();
+    ctx.translate(-18 * scale, 5 * scale);
+    ctx.rotate(-.13);
+    ctx.fillStyle = accessoryItem.look.color || '#18181b';
+    ctx.strokeStyle = '#6d28d9';
+    ctx.lineWidth = 1.5 * scale;
+    ctx.beginPath();
+    ctx.moveTo(0, -19 * scale);
+    ctx.lineTo(12 * scale, -10 * scale);
+    ctx.lineTo(10 * scale, 13 * scale);
+    ctx.lineTo(0, 24 * scale);
+    ctx.lineTo(-10 * scale, 13 * scale);
+    ctx.lineTo(-12 * scale, -10 * scale);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    // 방패 가장자리의 용뿔 가시
+    ctx.fillStyle = '#0f172a';
+    [[-12, -8, -19, -13], [12, -8, 19, -13], [-10, 10, -17, 15], [10, 10, 17, 15]].forEach(([x1, y1, x2, y2]) => {
+      ctx.beginPath();
+      ctx.moveTo(x1 * scale, (y1 - 3) * scale);
+      ctx.lineTo(x2 * scale, y2 * scale);
+      ctx.lineTo(x1 * scale, (y1 + 4) * scale);
+      ctx.closePath(); ctx.fill();
+    });
+    ctx.shadowColor = '#a855f7';
+    ctx.shadowBlur = 8 * scale * pulse;
+    ctx.fillStyle = '#a855f7';
+    ctx.beginPath();
+    ctx.moveTo(-6 * scale, -1 * scale);
+    ctx.quadraticCurveTo(0, -7 * scale, 6 * scale, -1 * scale);
+    ctx.quadraticCurveTo(0, 5 * scale, -6 * scale, -1 * scale);
+    ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#fef08a';
+    ctx.beginPath(); ctx.ellipse(0, -1 * scale, 1.2 * scale, 3.3 * scale, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
   const wingLook = accessoryItem?.look?.type === 'wing' ? accessoryItem.look : null;
   if (appearance.accessory === 'wing' || wingLook || accessoryItem?.id === 'featherWing' || accessoryItem?.id === 'sixthWing') {
     ctx.fillStyle = wingLook?.color || (accessoryItem?.id === 'sixthWing' ? 'rgba(196,181,253,.94)' : 'rgba(255,255,255,.92)');
@@ -2411,6 +2450,47 @@ function drawHumanoid(ctx, x, y, appearance, klass, state, scale = 1, isNpc = fa
       ctx.arc(px * scale, (py + Math.sin(t * 2 + phase) * 2) * scale, 1.2 * scale, 0, Math.PI * 2);
       ctx.fill();
     });
+    ctx.restore();
+  }
+
+  if (armorItem?.look?.type === 'blackDragonArmor') {
+    // 흑룡 비늘갑옷 뒷자락: 갈라진 가죽 코트가 다리 뒤에서 짧게 흔들린다.
+    const tailSway = Math.sin(t * 3.4) * 1.8 * scale;
+    ctx.save();
+    ctx.fillStyle = '#0f172a';
+    for (const dir of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(dir * 3 * scale, 9 * scale);
+      ctx.lineTo(dir * 14 * scale, 13 * scale);
+      ctx.lineTo((dir * 17 * scale) + tailSway, 29 * scale);
+      ctx.lineTo((dir * 6 * scale) + tailSway * .35, 24 * scale);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(139,92,246,.68)';
+      ctx.lineWidth = .8 * scale;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  if (armorItem?.look?.type === 'sharkSuit') {
+    // 아기 상어 인형옷의 등지느러미와 꼬리는 몸 뒤 레이어에 둔다.
+    const finWobble = Math.sin(t * 4) * 1.4 * scale;
+    const sharkColor = armorItem.look.color || '#38bdf8';
+    ctx.save();
+    ctx.fillStyle = '#0284c7';
+    ctx.beginPath();
+    ctx.moveTo(7 * scale, -2 * scale);
+    ctx.lineTo(21 * scale + finWobble, -11 * scale);
+    ctx.lineTo(16 * scale, 7 * scale);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = sharkColor;
+    ctx.beginPath();
+    ctx.moveTo(0, 18 * scale);
+    ctx.lineTo(-10 * scale - finWobble, 27 * scale);
+    ctx.lineTo(0, 25 * scale);
+    ctx.lineTo(10 * scale - finWobble, 30 * scale);
+    ctx.lineTo(8 * scale, 18 * scale);
+    ctx.closePath(); ctx.fill();
     ctx.restore();
   }
 
@@ -2639,6 +2719,102 @@ function drawHumanoid(ctx, x, y, appearance, klass, state, scale = 1, isNpc = fa
       ctx.lineTo((i * 5 - 1) * scale, 27 * scale);
       ctx.closePath(); ctx.fill();
     }
+  } else if (armorItem?.look?.type === 'blackDragonArmor') {
+    // 흑룡 비늘갑옷: 뿔 견갑, 겹비늘 흉갑, 자줏빛 용안 보석과 톱니 전투치마.
+    const armorColor = armorItem.look.color || '#1f2937';
+    ctx.save();
+    ctx.fillStyle = armorColor;
+    roundRect(ctx, -13 * scale, -6 * scale, 26 * scale, 24 * scale, 5 * scale); ctx.fill();
+    ctx.strokeStyle = '#6d28d9';
+    ctx.lineWidth = 1.1 * scale;
+    ctx.stroke();
+    // 좌우 견갑과 뒤로 솟은 뿔
+    for (const dir of [-1, 1]) {
+      ctx.fillStyle = '#111827';
+      ctx.beginPath();
+      ctx.moveTo(dir * 9 * scale, -4 * scale);
+      ctx.lineTo(dir * 18 * scale, -10 * scale);
+      ctx.lineTo(dir * 15 * scale, 1 * scale);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#312e81';
+      ctx.beginPath();
+      ctx.moveTo(dir * 13 * scale, -7 * scale);
+      ctx.lineTo(dir * 23 * scale, -12 * scale);
+      ctx.lineTo(dir * 16 * scale, -2 * scale);
+      ctx.closePath(); ctx.fill();
+    }
+    // 세 줄로 포개진 비늘
+    for (let row = 0; row < 3; row++) {
+      const y = (1 + row * 5.4) * scale;
+      const count = row === 0 ? 4 : 5;
+      for (let col = 0; col < count; col++) {
+        const sx = ((col - (count - 1) / 2) * 5) * scale;
+        ctx.fillStyle = (row + col) % 2 ? '#1e293b' : '#334155';
+        ctx.beginPath();
+        ctx.moveTo((sx - 3 * scale), y);
+        ctx.lineTo((sx + 3 * scale), y);
+        ctx.lineTo(sx, y + 4.8 * scale);
+        ctx.closePath(); ctx.fill();
+      }
+    }
+    // 중앙 용안 보석
+    const eyePulse = .6 + Math.abs(Math.sin(t * 3.6)) * .4;
+    ctx.shadowColor = '#c084fc';
+    ctx.shadowBlur = 7 * scale * eyePulse;
+    ctx.fillStyle = '#a855f7';
+    ctx.beginPath();
+    ctx.moveTo(-4.4 * scale, -1 * scale);
+    ctx.quadraticCurveTo(0, -5.5 * scale, 4.4 * scale, -1 * scale);
+    ctx.quadraticCurveTo(0, 3.5 * scale, -4.4 * scale, -1 * scale);
+    ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#fef08a';
+    ctx.beginPath(); ctx.ellipse(0, -1 * scale, 1 * scale, 2.5 * scale, 0, 0, Math.PI * 2); ctx.fill();
+    // 톱니처럼 갈라진 전투치마
+    ctx.fillStyle = '#0f172a';
+    for (let i = -2; i <= 2; i++) {
+      ctx.beginPath();
+      ctx.moveTo((i * 5 - 2.6) * scale, 16 * scale);
+      ctx.lineTo((i * 5 + 2.6) * scale, 16 * scale);
+      ctx.lineTo(i * 5 * scale, (i % 2 ? 27 : 24) * scale);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  } else if (armorItem?.look?.type === 'sharkSuit') {
+    // 아기 상어 인형옷: 파란 몸통, 하얀 배, 옆지느러미와 아가미 무늬.
+    const sharkColor = armorItem.look.color || '#38bdf8';
+    const finWobble = Math.sin(t * 4.2) * 1.2 * scale;
+    ctx.save();
+    ctx.fillStyle = sharkColor;
+    roundRect(ctx, -13 * scale, -6 * scale, 26 * scale, 29 * scale, 8 * scale); ctx.fill();
+    for (const dir of [-1, 1]) {
+      ctx.fillStyle = '#0ea5e9';
+      ctx.beginPath();
+      ctx.moveTo(dir * 10 * scale, 0);
+      ctx.lineTo(dir * (22 * scale + finWobble), 6 * scale);
+      ctx.lineTo(dir * 11 * scale, 11 * scale);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.fillStyle = '#e0f2fe';
+    ctx.beginPath(); ctx.ellipse(0, 9 * scale, 8.2 * scale, 12.5 * scale, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#075985';
+    ctx.lineWidth = 1 * scale;
+    ctx.beginPath(); ctx.moveTo(0, -3 * scale); ctx.lineTo(0, 20 * scale); ctx.stroke();
+    ctx.fillStyle = '#f8fafc';
+    for (const y of [2, 8, 14]) {
+      ctx.beginPath(); ctx.arc(0, y * scale, 1.2 * scale, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.strokeStyle = '#0369a1';
+    ctx.lineWidth = 1.1 * scale;
+    for (const dir of [-1, 1]) {
+      for (let gill = 0; gill < 3; gill++) {
+        ctx.beginPath();
+        ctx.moveTo(dir * 8 * scale, (4 + gill * 3) * scale);
+        ctx.lineTo(dir * 12 * scale, (3 + gill * 3) * scale);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
   } else if (armorItem?.look?.type === 'robe') {
     // [피드백] 사제 제의: 망토가 아니라 '입는 옷' — 몸통 덮개 + 아랫단 치마
     ctx.fillStyle = armorItem.look.color;
@@ -2671,6 +2847,23 @@ function drawHumanoid(ctx, x, y, appearance, klass, state, scale = 1, isNpc = fa
     ctx.beginPath(); ctx.moveTo(-10 * scale, -5 * scale); ctx.lineTo(9 * scale, 19 * scale); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(10 * scale, -5 * scale); ctx.lineTo(-9 * scale, 19 * scale); ctx.stroke();
   }
+  if (accessoryItem?.look?.type === 'blackDragonAegis') {
+    // 등에 멘 흑룡 방패의 두 가죽 고정끈은 갑옷 앞쪽에 보인다.
+    ctx.save();
+    ctx.strokeStyle = '#4c1d95';
+    ctx.lineWidth = 2.2 * scale;
+    ctx.beginPath();
+    ctx.moveTo(-10 * scale, -5 * scale);
+    ctx.lineTo(7 * scale, 19 * scale);
+    ctx.stroke();
+    ctx.strokeStyle = '#111827';
+    ctx.lineWidth = 1.1 * scale;
+    ctx.beginPath();
+    ctx.moveTo(10 * scale, -4 * scale);
+    ctx.lineTo(-6 * scale, 18 * scale);
+    ctx.stroke();
+    ctx.restore();
+  }
   if (accessoryItem?.look?.type === 'duckFloat') {
     // 앞쪽 반원과 오리 머리는 옷 위에 그린다.
     const duckColor = accessoryItem.look.color || '#facc15';
@@ -2688,6 +2881,53 @@ function drawHumanoid(ctx, x, y, appearance, klass, state, scale = 1, isNpc = fa
     ctx.closePath(); ctx.fill();
     ctx.fillStyle = '#111827';
     ctx.beginPath(); ctx.arc(17 * scale, 3.5 * scale, 1.2 * scale, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  if (accessoryItem?.look?.type === 'sharkBuddy') {
+    // 아기 상어 친구: 무기에 가리지 않도록 왼쪽 어깨 옆에서 헤엄친다.
+    const bob = Math.sin(t * 4.1) * 2.2 * scale;
+    const buddyColor = accessoryItem.look.color || '#38bdf8';
+    ctx.save();
+    ctx.translate(-26 * scale, -5 * scale + bob);
+    ctx.fillStyle = buddyColor;
+    ctx.beginPath(); ctx.ellipse(0, 0, 10 * scale, 6.3 * scale, -.08, 0, Math.PI * 2); ctx.fill();
+    // 꼬리와 등지느러미
+    ctx.fillStyle = '#0ea5e9';
+    ctx.beginPath();
+    ctx.moveTo(-8 * scale, 0);
+    ctx.lineTo(-16 * scale, -6 * scale);
+    ctx.lineTo(-14 * scale, 1 * scale);
+    ctx.lineTo(-16 * scale, 7 * scale);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-1 * scale, -5 * scale);
+    ctx.lineTo(3 * scale, -12 * scale);
+    ctx.lineTo(6 * scale, -4 * scale);
+    ctx.closePath(); ctx.fill();
+    // 하얀 배와 웃는 입
+    ctx.fillStyle = '#e0f2fe';
+    ctx.beginPath(); ctx.ellipse(2 * scale, 2.6 * scale, 6.5 * scale, 2.8 * scale, -.08, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#0f172a';
+    ctx.beginPath(); ctx.arc(5.2 * scale, -1.9 * scale, 1.15 * scale, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = .9 * scale;
+    ctx.beginPath(); ctx.arc(7 * scale, 1.2 * scale, 3 * scale, .65 * Math.PI, 1.25 * Math.PI); ctx.stroke();
+    ctx.fillStyle = '#f8fafc';
+    ctx.beginPath();
+    ctx.moveTo(5.5 * scale, 2 * scale);
+    ctx.lineTo(7 * scale, 4.4 * scale);
+    ctx.lineTo(8.3 * scale, 1.8 * scale);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+    // 보글보글 거품은 상어와 같은 박자로 위로 떠오른다.
+    ctx.save();
+    ctx.strokeStyle = 'rgba(186,230,253,.85)';
+    ctx.lineWidth = 1 * scale;
+    [[-31, -16, 2], [-36, -23, 1.4], [-29, -29, 1]].forEach(([bx, by, radius], i) => {
+      const rise = ((t * 7 + i * 5) % 8) * scale;
+      ctx.globalAlpha = .75 - (rise / (14 * scale));
+      ctx.beginPath(); ctx.arc(bx * scale, by * scale - rise, radius * scale, 0, Math.PI * 2); ctx.stroke();
+    });
     ctx.restore();
   }
   if (accessoryItem?.look?.type === 'butterflyRibbon') {
@@ -2828,7 +3068,128 @@ function drawHumanoid(ctx, x, y, appearance, klass, state, scale = 1, isNpc = fa
     ctx.stroke();
   }
 
-  if (headItem?.look?.type === 'ninjaMask') {
+  if (headItem?.look?.type === 'blackDragonHelm') {
+    // 흑룡 뿔투구: 얼굴 중앙은 열어 두고 쌍뿔·비늘 이마·턱가드로 실루엣을 만든다.
+    const helmColor = headItem.look.color || '#111827';
+    const gemPulse = .55 + Math.abs(Math.sin(t * 3.3)) * .45;
+    ctx.save();
+    // 뒤로 휘어진 좌우 용뿔
+    for (const dir of [-1, 1]) {
+      ctx.fillStyle = '#334155';
+      ctx.beginPath();
+      ctx.moveTo(dir * 8 * scale, -27 * scale);
+      ctx.bezierCurveTo(dir * 12 * scale, -34 * scale, dir * 18 * scale, -42 * scale, dir * 28 * scale, -45 * scale);
+      ctx.bezierCurveTo(dir * 23 * scale, -39 * scale, dir * 22 * scale, -33 * scale, dir * 18 * scale, -29 * scale);
+      ctx.bezierCurveTo(dir * 14 * scale, -32 * scale, dir * 11 * scale, -29 * scale, dir * 8 * scale, -27 * scale);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#a78bfa';
+      ctx.lineWidth = .8 * scale;
+      ctx.stroke();
+      for (let ridge = 0; ridge < 3; ridge++) {
+        ctx.strokeStyle = 'rgba(196,181,253,.62)';
+        ctx.beginPath();
+        ctx.moveTo(dir * (12 + ridge * 4) * scale, (-31 - ridge * 3.2) * scale);
+        ctx.lineTo(dir * (17 + ridge * 3.6) * scale, (-29 - ridge * 3.1) * scale);
+        ctx.stroke();
+      }
+    }
+    // 이마를 덮는 검은 비늘 반구
+    ctx.fillStyle = helmColor;
+    ctx.beginPath();
+    ctx.moveTo(-14 * scale, -21 * scale);
+    ctx.quadraticCurveTo(-11 * scale, -35 * scale, 0, -37 * scale);
+    ctx.quadraticCurveTo(11 * scale, -35 * scale, 14 * scale, -21 * scale);
+    ctx.lineTo(8 * scale, -22 * scale);
+    ctx.quadraticCurveTo(0, -27 * scale, -8 * scale, -22 * scale);
+    ctx.closePath(); ctx.fill();
+    // 볼 옆 가드와 아래턱 가드
+    for (const dir of [-1, 1]) {
+      ctx.fillStyle = '#1f2937';
+      ctx.beginPath();
+      ctx.moveTo(dir * 14 * scale, -22 * scale);
+      ctx.lineTo(dir * 16 * scale, -8 * scale);
+      ctx.lineTo(dir * 10 * scale, -5 * scale);
+      ctx.lineTo(dir * 10 * scale, -18 * scale);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#4c1d95';
+      ctx.beginPath();
+      ctx.moveTo(dir * 10 * scale, -20 * scale);
+      ctx.lineTo(dir * 3 * scale, -22 * scale);
+      ctx.lineTo(dir * 8 * scale, -17 * scale);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.strokeStyle = '#6d28d9';
+    ctx.lineWidth = 3 * scale;
+    ctx.beginPath(); ctx.arc(0, -9 * scale, 8 * scale, .12 * Math.PI, .88 * Math.PI); ctx.stroke();
+    // 이마 중앙의 세로 용안 보석
+    ctx.shadowColor = '#c084fc';
+    ctx.shadowBlur = 8 * scale * gemPulse;
+    ctx.fillStyle = '#a855f7';
+    ctx.beginPath();
+    ctx.moveTo(0, -34 * scale);
+    ctx.lineTo(4 * scale, -29 * scale);
+    ctx.lineTo(0, -23 * scale);
+    ctx.lineTo(-4 * scale, -29 * scale);
+    ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#fef08a';
+    ctx.beginPath(); ctx.ellipse(0, -29 * scale, .9 * scale, 2.6 * scale, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  } else if (headItem?.look?.type === 'sharkHood') {
+    // 아기 상어 후드: 얼굴을 물고 있는 듯한 파란 후드, 등지느러미와 작은 이빨.
+    const hoodColor = headItem.look.color || '#38bdf8';
+    const wiggle = Math.sin(t * 3.8) * .7 * scale;
+    ctx.save();
+    // 꼭대기 등지느러미
+    ctx.fillStyle = '#0284c7';
+    ctx.beginPath();
+    ctx.moveTo(-3 * scale, -34 * scale);
+    ctx.lineTo(2 * scale + wiggle, -47 * scale);
+    ctx.lineTo(8 * scale, -33 * scale);
+    ctx.closePath(); ctx.fill();
+    // 위쪽 상어 머리와 좌우 턱
+    ctx.fillStyle = hoodColor;
+    ctx.beginPath();
+    ctx.moveTo(-15 * scale, -21 * scale);
+    ctx.quadraticCurveTo(-14 * scale, -36 * scale, 0, -39 * scale);
+    ctx.quadraticCurveTo(14 * scale, -36 * scale, 15 * scale, -21 * scale);
+    ctx.lineTo(9 * scale, -23 * scale);
+    ctx.quadraticCurveTo(0, -28 * scale, -9 * scale, -23 * scale);
+    ctx.closePath(); ctx.fill();
+    roundRect(ctx, -16 * scale, -23 * scale, 5.5 * scale, 18 * scale, 2.5 * scale); ctx.fill();
+    roundRect(ctx, 10.5 * scale, -23 * scale, 5.5 * scale, 18 * scale, 2.5 * scale); ctx.fill();
+    // 상어 얼굴의 점눈과 콧구멍
+    ctx.fillStyle = '#0f172a';
+    ctx.beginPath(); ctx.arc(-6 * scale, -30 * scale, 1.5 * scale, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(6 * scale, -30 * scale, 1.5 * scale, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(-2 * scale, -25.5 * scale, .7 * scale, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(2 * scale, -25.5 * scale, .7 * scale, 0, Math.PI * 2); ctx.fill();
+    // 하얀 잇몸과 얼굴 쪽으로 삐죽한 이빨
+    ctx.strokeStyle = '#e0f2fe';
+    ctx.lineWidth = 2.3 * scale;
+    ctx.beginPath();
+    ctx.moveTo(-10 * scale, -23 * scale);
+    ctx.quadraticCurveTo(0, -27 * scale, 10 * scale, -23 * scale);
+    ctx.stroke();
+    ctx.fillStyle = '#f8fafc';
+    [-8, -4, 0, 4, 8].forEach((tx, i) => {
+      ctx.beginPath();
+      ctx.moveTo((tx - 1.7) * scale, (-23 + Math.abs(tx) * .08) * scale);
+      ctx.lineTo((tx + 1.7) * scale, (-23 + Math.abs(tx) * .08) * scale);
+      ctx.lineTo(tx * scale, (-18.5 + (i % 2) * .8) * scale);
+      ctx.closePath(); ctx.fill();
+    });
+    for (const dir of [-1, 1]) {
+      [-16, -11].forEach((ty) => {
+        ctx.beginPath();
+        ctx.moveTo(dir * 11 * scale, (ty - 1.6) * scale);
+        ctx.lineTo(dir * 11 * scale, (ty + 1.6) * scale);
+        ctx.lineTo(dir * 7.8 * scale, ty * scale);
+        ctx.closePath(); ctx.fill();
+      });
+    }
+    ctx.restore();
+  } else if (headItem?.look?.type === 'ninjaMask') {
     // 그림자 닌자 복면: 눈만 드러나는 두건과 붉은 머리끈
     const maskColor = headItem.look.color || '#111827';
     ctx.fillStyle = maskColor;
