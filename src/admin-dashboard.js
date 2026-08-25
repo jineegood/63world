@@ -23,6 +23,8 @@ let editingWorkbookQuestionV2 = null;
 let workbookImportReportV2 = null;
 let workbookToolV2 = 'direct';
 let selectedWorkbookV2 = '';
+let workbookCreateOpenV2 = false;
+let workbookCreatePendingV2 = false;
 const checkedWorkbookQuestionsV2 = new Set();
 let secureAdminWorkbookRefreshV2 = false;
 let secureAdminWorkbookSyncedAtV2 = 0;
@@ -400,6 +402,8 @@ function teacherWorkbooksHtml(){
   const workbooks = SECURE_ADMIN_MODE_V2 && secureAdminSharedV2
     ? secureAdminSharedV2.getWorkbooks()
     : getWorkbooks();
+  const workbookCreateReady = !SECURE_ADMIN_MODE_V2
+    || Boolean(secureAdminSharedV2 && secureAdminWorkbookSyncedAtV2 && !secureAdminWorkbookRefreshV2);
   if (!workbooks.some((wb) => wb.id === selectedWorkbookV2)) selectedWorkbookV2 = workbooks[0]?.id || '';
   const workbookOptions = workbooks.map((wb) => (
     `<option value="${wb.id}" ${wb.id === selectedWorkbookV2 ? 'selected' : ''}>${escapeHtml(wb.name)} (${wb.questions.length}문제)</option>`
@@ -483,8 +487,24 @@ function teacherWorkbooksHtml(){
   ];
 
   return `<div class="teacher-body">
-    <h3>내 문제집</h3>
-    ${SECURE_ADMIN_MODE_V2 ? `<p class="workbook-sync-state">${secureAdminWorkbookSyncedAtV2 ? '🟢 서버 문제집과 동기화됨' : '🔄 서버 문제집 확인 중'}</p>` : ''}
+    <div class="workbook-heading-row">
+      <h3>내 문제집</h3>
+      <button class="primary tiny" onclick="adminOpenWorkbookCreator()" ${workbookCreateReady ? '' : 'disabled title="서버 문제집을 확인하고 있습니다."'}>＋ 문제집 추가</button>
+    </div>
+    ${SECURE_ADMIN_MODE_V2 ? `<p class="workbook-sync-state">${secureAdminWorkbookSyncedAtV2 && !secureAdminWorkbookRefreshV2 ? '🟢 서버 문제집과 동기화됨' : '🔄 서버 문제집 확인 중'}</p>` : ''}
+    ${workbookCreateOpenV2 ? `<form class="panel-card workbook-create-card" onsubmit="event.preventDefault();adminCreateWorkbook();">
+      <h3>새 문제집 만들기</h3>
+      <p class="muted">빈 문제집을 만든 뒤 아래 문제 추가 도구에서 직접 채울 수 있습니다.</p>
+      <div class="workbook-create-grid">
+        <label>문제집 이름 <input id="adminNewWorkbookName" maxlength="100" placeholder="예: 5학년 1학기 수학" /></label>
+        <label>과목 <input id="adminNewWorkbookSubject" maxlength="80" placeholder="예: 수학 (선택사항)" /></label>
+        <label>대표 지역 <select id="adminNewWorkbookZone">${teacherZoneOptions('silent_forest')}</select></label>
+      </div>
+      <div class="workbook-create-actions">
+        <button class="primary" type="submit" id="adminCreateWorkbookBtn">문제집 만들기</button>
+        <button class="ghost" type="button" id="adminCancelWorkbookBtn" onclick="adminCancelWorkbookCreator()">취소</button>
+      </div>
+    </form>` : ''}
     <div>${cards}</div>
     <div class="panel-card workbook-tools-wrap" style="margin-top:12px">
       <h3>문제 추가 도구</h3>
@@ -498,6 +518,23 @@ function teacherWorkbooksHtml(){
     ${workbookImportReportHtml()}
   </div>`;
 }
+
+window.adminOpenWorkbookCreator = function adminOpenWorkbookCreator(){
+  if (!requireTeacherAuth()) return;
+  if (SECURE_ADMIN_MODE_V2 && !secureAdminSharedV2) {
+    toast('클라우드 문제집 설정을 확인해 주세요.');
+    return;
+  }
+  workbookCreateOpenV2 = true;
+  openAdminPanel('workbooks', { keepScroll:true, skipWorkbookRefresh:true });
+  requestAnimationFrame(() => $('adminNewWorkbookName')?.focus());
+};
+
+window.adminCancelWorkbookCreator = function adminCancelWorkbookCreator(){
+  if (workbookCreatePendingV2) return;
+  workbookCreateOpenV2 = false;
+  openAdminPanel('workbooks', { keepScroll:true, skipWorkbookRefresh:true });
+};
 
 window.adminRememberWorkbook = function adminRememberWorkbook(workbookId){
   selectedWorkbookV2 = String(workbookId || '');
@@ -1062,12 +1099,17 @@ function openAdminPanel(tab, options) {
     && !(options && options.skipWorkbookRefresh) && !secureAdminWorkbookRefreshV2) {
     secureAdminWorkbookRefreshV2 = true;
     secureAdminSharedV2.refreshWorkbooks()
-      .then(() => {
-        secureAdminWorkbookSyncedAtV2 = Date.now();
-        openAdminPanel('workbooks', { ...(options || {}), keepScroll:true, skipWorkbookRefresh:true });
+      .then((result) => {
+        secureAdminWorkbookSyncedAtV2 = result?.offline ? 0 : Date.now();
       })
-      .catch((error) => toast(error?.message || '서버 문제집을 불러오지 못했어요.'))
-      .finally(() => { secureAdminWorkbookRefreshV2 = false; });
+      .catch((error) => {
+        secureAdminWorkbookSyncedAtV2 = 0;
+        toast(error?.message || '서버 문제집을 불러오지 못했어요.');
+      })
+      .finally(() => {
+        secureAdminWorkbookRefreshV2 = false;
+        openAdminPanel('workbooks', { ...(options || {}), keepScroll:true, skipWorkbookRefresh:true });
+      });
   }
   // [v58] 문제집 관리에서 토글·삭제 시 스크롤이 맨 위로 튀지 않도록 위치 보존
   const keepScroll = options && options.keepScroll;
@@ -1125,6 +1167,79 @@ function hasAdminQuestionDuplicate(workbook, question, answer){
   const answerKey = key(answer);
   return workbook.questions.some((item) => key(item.q) === questionKey && key(item.answer) === answerKey);
 }
+
+window.adminCreateWorkbook = async function adminCreateWorkbook(){
+  if (!requireTeacherAuth() || workbookCreatePendingV2) return;
+  const name = String($('adminNewWorkbookName')?.value || '').normalize('NFKC').trim();
+  const subject = String($('adminNewWorkbookSubject')?.value || '').normalize('NFKC').trim() || '미분류';
+  const zone = String($('adminNewWorkbookZone')?.value || '');
+  if (!name) { toast('문제집 이름을 입력하세요.'); return; }
+  if (name.length > 100 || /[\u0000-\u001f\u007f-\u009f]/.test(name)) {
+    toast('문제집 이름은 100자 이내로 입력하세요.');
+    return;
+  }
+  if (subject.length > 80 || /[\u0000-\u001f\u007f-\u009f]/.test(subject)) {
+    toast('과목은 80자 이내로 입력하세요.');
+    return;
+  }
+  if (!['silent_forest', 'desert_wasteland', 'spooky_swamp'].includes(zone)) {
+    toast('대표 지역을 다시 선택하세요.');
+    return;
+  }
+
+  const createButton = $('adminCreateWorkbookBtn');
+  const cancelButton = $('adminCancelWorkbookBtn');
+  workbookCreatePendingV2 = true;
+  if (createButton) { createButton.disabled = true; createButton.textContent = '만드는 중...'; }
+  if (cancelButton) cancelButton.disabled = true;
+  try {
+    if (SECURE_ADMIN_MODE_V2) {
+      let refreshed;
+      try {
+        refreshed = await secureAdminSharedV2.refreshWorkbooks();
+      } catch (error) {
+        secureAdminWorkbookSyncedAtV2 = 0;
+        throw error;
+      }
+      if (refreshed?.offline) {
+        secureAdminWorkbookSyncedAtV2 = 0;
+        throw new Error('인터넷 연결을 확인한 뒤 다시 시도해 주세요.');
+      }
+      secureAdminWorkbookSyncedAtV2 = Date.now();
+    }
+    const workbooks = getAdminWorkbooksV2().map((book) => ({ ...book, questions:[...book.questions] }));
+    if (workbooks.length >= 50) { toast('문제집은 최대 50개까지 만들 수 있습니다.'); return; }
+    const nameKey = name.toLocaleLowerCase('ko');
+    if (workbooks.some((book) => String(book.name || '').normalize('NFKC').trim().toLocaleLowerCase('ko') === nameKey)) {
+      toast('같은 이름의 문제집이 이미 있습니다.');
+      return;
+    }
+    let id = `wb_${uid()}`;
+    while (workbooks.some((book) => book.id === id)) id = `wb_${uid()}`;
+    workbooks.push({
+      id, name, zone, subject,
+      prompt:'교사가 직접 만든 문제집',
+      enabled:true,
+      createdAt:Date.now(),
+      questions:[],
+    });
+    if (!(await saveAdminWorkbooksV2(workbooks))) return;
+    selectedWorkbookV2 = id;
+    workbookToolV2 = 'direct';
+    workbookCreateOpenV2 = false;
+    workbookImportReportV2 = null;
+    openAdminPanel('workbooks', { keepScroll:true, skipWorkbookRefresh:true });
+    toast(`『${name}』 문제집을 만들었습니다. 이제 문제를 추가해 주세요.`);
+  } catch (error) {
+    toast(error?.message || '문제집을 만들지 못했어요.');
+  } finally {
+    workbookCreatePendingV2 = false;
+    const currentCreateButton = $('adminCreateWorkbookBtn');
+    const currentCancelButton = $('adminCancelWorkbookBtn');
+    if (currentCreateButton) { currentCreateButton.disabled = false; currentCreateButton.textContent = '문제집 만들기'; }
+    if (currentCancelButton) currentCancelButton.disabled = false;
+  }
+};
 
 window.addAdminQuestion = async function addAdminQuestion() {
   if (!requireTeacherAuth()) return;

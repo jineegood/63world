@@ -24,3 +24,4 @@ test('secure teacher dashboard uses the separate shared-state service in safe se
 
 test('teacher manages shared workbooks and classroom state without legacy writes', () => runMode('manage'));
 test('teacher workbook save failures are shown safely without changing local state', () => runMode('save-error'));
+test('teacher never creates from an offline workbook fallback', () => runMode('offline-create'));

@@ -24,6 +24,7 @@ run(root, async ({ window, $, asyncErrors }) => {
   window.grantBuildingToStudent(playerName);
   window.adminToggleWorkbook(workbookId);
   window.adminSetServerOpen(false);
+  window.adminCreateWorkbook();
   const afterBlocked = {
     player: window.localStorage.getItem(playerKey),
     workbooks: window.localStorage.getItem(workbooksKey),
@@ -42,12 +43,46 @@ run(root, async ({ window, $, asyncErrors }) => {
   window.grantBuildingToStudent(playerName);
   window.adminToggleWorkbook(workbookId);
   window.adminSetServerOpen(false);
+  window.openAdminPanel('workbooks');
+  const addWorkbookButton = [...window.document.querySelectorAll('#modal button')]
+    .find((button) => button.textContent.includes('문제집 추가'));
+  check('workbook add button is available in local teacher mode', Boolean(addWorkbookButton));
+  window.adminOpenWorkbookCreator();
+  const countBeforeBlank = JSON.parse(window.localStorage.getItem(workbooksKey)).length;
+  await window.adminCreateWorkbook();
+  check('blank workbook name is blocked', JSON.parse(window.localStorage.getItem(workbooksKey)).length === countBeforeBlank);
+  $('adminNewWorkbookName').value = '직접 만든 로컬 문제집';
+  $('adminNewWorkbookSubject').value = '사회';
+  $('adminNewWorkbookZone').value = 'desert_wasteland';
+  await window.adminCreateWorkbook();
 
   const player = JSON.parse(window.localStorage.getItem(playerKey));
   const workbooks = JSON.parse(window.localStorage.getItem(workbooksKey));
   const teacher = JSON.parse(window.localStorage.getItem(teacherKey));
   check('authenticated player mutation succeeds', player.building === JSON.parse(before.player).building + 1);
   check('authenticated workbook mutation succeeds', workbooks[0].enabled !== JSON.parse(before.workbooks)[0].enabled);
+  const createdWorkbook = workbooks.find((book) => book.name === '직접 만든 로컬 문제집');
+  check('authenticated workbook creation succeeds', createdWorkbook?.subject === '사회'
+    && createdWorkbook?.zone === 'desert_wasteland' && createdWorkbook?.enabled === true
+    && Array.isArray(createdWorkbook?.questions) && createdWorkbook.questions.length === 0);
+  check('new local workbook is selected for question entry', $('adminWorkbook')?.value === createdWorkbook?.id);
+  window.adminOpenWorkbookCreator();
+  $('adminNewWorkbookName').value = '  직접 만든 로컬 문제집  ';
+  await window.adminCreateWorkbook();
+  check('normalized duplicate workbook name is blocked', JSON.parse(window.localStorage.getItem(workbooksKey)).length === workbooks.length);
+  window.adminCancelWorkbookCreator();
+
+  const limitBooks = Array.from({ length:50 }, (_, index) => ({
+    ...workbooks[0], id:`limit-${index}`, name:`한도 문제집 ${index + 1}`, questions:[],
+  }));
+  window.localStorage.setItem(workbooksKey, JSON.stringify(limitBooks));
+  window.openAdminPanel('workbooks');
+  window.adminOpenWorkbookCreator();
+  $('adminNewWorkbookName').value = '51번째 문제집';
+  await window.adminCreateWorkbook();
+  const afterLimit = JSON.parse(window.localStorage.getItem(workbooksKey));
+  check('the fifty-workbook limit blocks another workbook', afterLimit.length === 50
+    && !afterLimit.some((book) => book.name === '51번째 문제집'));
   check('authenticated teacher setting mutation succeeds', teacher.serverOpen === false);
   check('administrator authorization smoke has no async errors', asyncErrors.length === 0);
 

@@ -107,7 +107,12 @@
         return raw ? validate(JSON.parse(raw)) : fallback;
       } catch (_) { return fallback; }
     }
-    function commit(key, value) { storage.setItem(key, JSON.stringify(value)); }
+    function hasCache(key) {
+      try { return storage.getItem(key) !== null; } catch (_) { return false; }
+    }
+    function commit(key, value) {
+      try { storage.setItem(key, JSON.stringify(value)); } catch (_) {}
+    }
     async function readRemote(key) {
       const { data, error } = await client.from('shared_state_v2').select('data,updated_at').eq('key', key).maybeSingle();
       if (error) throw mapError(error, 'LOAD_FAILED');
@@ -136,15 +141,15 @@
         const remote = await readRemote('workbooks');
         if (remote == null) {
           workbooks = readCache(WORKBOOK_CACHE, validateWorkbooks, defaults);
-          return freeze({ workbooks, source:storage.getItem(WORKBOOK_CACHE) ? 'cache' : 'default' });
+          return freeze({ workbooks, source:hasCache(WORKBOOK_CACHE) ? 'cache' : 'default', offline:false });
         }
         workbooks = validateWorkbooks(remote);
         commit(WORKBOOK_CACHE, { version:1, items:workbooks });
-        return freeze({ workbooks, source:'remote' });
+        return freeze({ workbooks, source:'remote', offline:false });
       } catch (error) {
         if (error?.code !== 'OFFLINE') throw error;
         workbooks = readCache(WORKBOOK_CACHE, validateWorkbooks, defaults);
-        return freeze({ workbooks, source:storage.getItem(WORKBOOK_CACHE) ? 'cache' : 'default' });
+        return freeze({ workbooks, source:hasCache(WORKBOOK_CACHE) ? 'cache' : 'default', offline:true });
       }
     }
     async function write(key, data) {

@@ -36,6 +36,9 @@ window.YuksamSupabaseClient = {
       from(table) {
         if (table === 'shared_state_v2') return {
           select() { return { eq(column, rowKey) { return { async maybeSingle() {
+            if (rowKey === 'workbooks' && window.__failWorkbookRefresh) {
+              return { data:null, error:new TypeError('Failed to fetch') };
+            }
             return { data:{ data:window.__sharedRows[rowKey] }, error:null };
           } }; } }; },
           async upsert(payload) {
@@ -73,14 +76,46 @@ run(root, async ({ window, $, sleep, asyncErrors }) => {
   await window.adminTeacherLogin();
   await sleep(20);
   window.openAdminPanel('workbooks');
+  await sleep(20);
   check('cloud workbook loads in teacher dashboard', window.document.querySelector('#modal').textContent.includes('Cloud Math'));
+  const addWorkbookButton = [...window.document.querySelectorAll('#modal button')]
+    .find((button) => button.textContent.includes('문제집 추가'));
+  check('workbook add button is visible', Boolean(addWorkbookButton));
+  check('workbook add button is enabled after the server refresh', addWorkbookButton?.disabled === false);
+  check('workbook add button opens the creator', addWorkbookButton?.getAttribute('onclick') === 'adminOpenWorkbookCreator()');
 
-  if (mode === 'save-error') {
+  if (mode === 'save-error' || mode === 'offline-create') {
     const before = JSON.stringify(window.__sharedRows.workbooks);
-    await window.adminToggleWorkbook('cloud-book');
-    check('failed save leaves cloud workbook unchanged', JSON.stringify(window.__sharedRows.workbooks) === before);
-    check('failed save shows a safe message', $('toast').textContent.length > 0);
+    window.adminOpenWorkbookCreator();
+    $('adminNewWorkbookName').value = mode === 'offline-create' ? '오프라인 문제집' : '저장 실패 문제집';
+    $('adminNewWorkbookSubject').value = '과학';
+    $('adminNewWorkbookZone').value = 'spooky_swamp';
+    if (mode === 'offline-create') window.__failWorkbookRefresh = true;
+    await window.adminCreateWorkbook();
+    check('blocked create leaves cloud workbooks unchanged', JSON.stringify(window.__sharedRows.workbooks) === before);
+    check('blocked create performs no workbook write', !window.__sharedWrites.some((write) => write.key === 'workbooks'));
+    check('blocked create keeps the retry form open', Boolean($('adminNewWorkbookName')));
+    check('blocked create restores the create button', $('adminCreateWorkbookBtn')?.disabled === false);
+    check('blocked create shows a safe message', $('toast').textContent.length > 0);
   } else {
+    window.adminOpenWorkbookCreator();
+    $('adminNewWorkbookName').value = '직접 만든 과학 문제집';
+    $('adminNewWorkbookSubject').value = '과학';
+    $('adminNewWorkbookZone').value = 'spooky_swamp';
+    await window.adminCreateWorkbook();
+    const createdBook = window.__sharedRows.workbooks.items.find((book) => book.name === '직접 만든 과학 문제집');
+    check('new workbook is saved to cloud', Boolean(createdBook));
+    check('new workbook has safe empty defaults', createdBook?.subject === '과학'
+      && createdBook?.zone === 'spooky_swamp' && createdBook?.enabled === true
+      && Array.isArray(createdBook?.questions) && createdBook.questions.length === 0);
+    check('new workbook is selected for question entry', $('adminWorkbook')?.value === createdBook?.id);
+    check('new workbook card is visible immediately', window.document.querySelector('#modal').textContent.includes('직접 만든 과학 문제집'));
+    $('adminQuestion').value = '물이 어는 온도는?';
+    $('adminAnswer').value = '0도';
+    await window.addAdminQuestion();
+    check('direct question entry continues in the new workbook', window.__sharedRows.workbooks.items
+      .find((book) => book.id === createdBook.id)?.questions.some((question) => question.q === '물이 어는 온도는?'));
+
     $('adminWorkbook').value = 'cloud-book';
     $('adminQuestion').value = '2+2?';
     $('adminAnswer').value = '4';
@@ -117,7 +152,8 @@ run(root, async ({ window, $, sleep, asyncErrors }) => {
     check('server open is saved to cloud', window.__sharedRows.classroom_settings.serverOpen === true);
 
     await window.deleteWorkbook('cloud-book');
-    check('workbook deletion is saved to cloud', window.__sharedRows.workbooks.items.length === 0);
+    check('workbook deletion is saved to cloud', !window.__sharedRows.workbooks.items.some((book) => book.id === 'cloud-book'));
+    check('newly created workbook remains after deleting another workbook', window.__sharedRows.workbooks.items.some((book) => book.id === createdBook.id));
   }
 
   const legacyKeys = ['ysb_teacher_v1', 'ysb_workbooks_v3', 'ysb_questions_v2'];

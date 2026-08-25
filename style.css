@@ -2448,6 +2448,12 @@ body.defeated #app { filter: grayscale(1) brightness(.62); transition: filter .3
   border-radius: 14px; padding: 13px 16px; margin: 9px 0;
 }
 .wb-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.workbook-heading-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.workbook-heading-row h3, .workbook-create-card h3 { margin: 0; }
+.workbook-create-card { margin: 9px 0 12px; border-color: rgba(99,213,255,.28); }
+.workbook-create-card > p { margin: 7px 0 12px; }
+.workbook-create-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0 10px; }
+.workbook-create-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 
 /* 전투 키보드 조작: 방향키로 선택된 행동 버튼 표시 (하늘색 외곽선 + 글로우) */
 .kb-select {

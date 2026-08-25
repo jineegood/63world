@@ -79,6 +79,22 @@ test('teacher writes exact fixed rows only after complete validation', async () 
     (error) => error.code === 'INVALID_SHARED_STATE');
 });
 
+test('a successful remote workbook save stays successful when browser cache writes fail', async () => {
+  const remote = setup();
+  const unavailableCache = {
+    getItem() { return null; },
+    setItem() { throw new Error('quota unavailable'); },
+  };
+  const service = loadApi().create({ client:remote.client, storage:unavailableCache, defaultWorkbooks:defaultBooks });
+  const next = [...defaultBooks, { ...defaultBooks[0], id:'saved-without-cache', name:'캐시 없이 저장' }];
+
+  await service.saveWorkbooks(next);
+
+  assert.equal(service.getWorkbooks().length, 2);
+  assert.equal(service.getWorkbooks()[1].id, 'saved-without-cache');
+  assert.equal(remote.calls.filter(([name]) => name === 'upsert').length, 1);
+});
+
 test('local workbook preparation updates memory without writing cache or cloud', () => {
   const remote = setup();
   const service = loadApi().create({ client:remote.client, storage:remote.store, defaultWorkbooks:defaultBooks });
