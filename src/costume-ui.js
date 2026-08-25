@@ -4,6 +4,7 @@
   window.__COSTUME_UI_V55__ = true;
 
   const SLOTS = [['head', '머리'], ['armor', '옷'], ['accessory', '악세서리']];
+  const inventoryScrollTopV55 = { head:0, armor:0, accessory:0 };
   const g = () => (typeof game !== 'undefined' ? game : window.__G);
   const call = (n) => (typeof window[n] === 'function' ? window[n] : null);
   const esc = (t) => (call('escapeHtml') ? window.escapeHtml(t) : String(t));
@@ -18,8 +19,8 @@
   }
   function iconOf(item) {
     return ({
-      cs_bunnyBand: '🐰', cs_catBand: '🐱', cs_flowerCrown: '🌸', cs_starCrown: '👑', cs_violetMagicHat: '🪄', cs_ninjaMask: '🥷', cs_spartanHelm: '🪖',
-      cs_sailorCape: '🎀', cs_cloudHoodie: '☁️', cs_starryRobe: '🌌', cs_peachDress: '👗', cs_forestFairyCape: '🍃', cs_ninjaSuit: '🥷', cs_spartanArmor: '🛡️',
+      cs_bunnyBand: '🐰', cs_catBand: '🐱', cs_flowerCrown: '🌸', cs_starCrown: '👑', cs_violetMagicHat: '🌙', cs_ninjaMask: '🥷', cs_spartanHelm: '🪖',
+      cs_sailorCape: '🎀', cs_cloudHoodie: '☁️', cs_starryRobe: '🌌', cs_peachDress: '👗', cs_forestFairyCape: '🌿', cs_ninjaSuit: '🥷', cs_spartanArmor: '🛡️',
       cs_ribbon: '🎗️', cs_questSproutRibbon: '🌱', cs_goldenBell: '🔔', cs_giantFishPack: '🐟', cs_duckFloat: '🦆', cs_angelWing: '🎐', cs_strangeWing: '🪽', cs_rainbowAura: '🌈', cs_twilightBatWing: '🦇',
     })[item.id] || '✨';
   }
@@ -91,10 +92,9 @@
     const owned = p.costumeInventory.map((id) => defs()[id]).filter(Boolean);
     const bagCardHtml = (item) => {
       const on = p.costume[item.slot] === item.id;
-      return `<div class="bag-slot compact-item-slot-v26 bag-card-v27">
+      return `<div class="bag-slot compact-item-slot-v26 bag-card-v27" title="${esc(item.name)}">
         <div class="bag-icon">${iconOf(item)}</div>
         <b>${esc(item.name)}</b>
-        <small>${SLOTS.find(([s]) => s === item.slot)?.[1] || item.slot}</small>
         <button class="${on ? 'ghost' : 'primary'} small" onclick="${on ? `unequipCostumeV55('${item.slot}')` : `equipCostumeV55('${item.id}')`}">${on ? '해제' : '착용'}</button>
       </div>`;
     };
@@ -105,13 +105,13 @@
         : `<p class="muted costume-inventory-empty">보유 중인 ${label} 코스튬이 없습니다.</p>`;
       return `<section class="costume-inventory-section" data-costume-inventory-slot="${slot}">
         <h4 class="costume-inventory-section-title"><span>${label}</span><small>${items.length}개</small></h4>
-        <div class="bag-grid costume-inventory-grid">${itemHtml}</div>
+        <div class="bag-grid costume-inventory-grid" data-costume-inventory-list="${slot}" tabindex="0" aria-label="${label} 코스튬 목록">${itemHtml}</div>
       </section>`;
     }).join('');
 
-    call('openModal')?.(`<div class="character-window-v27 character-window-v32">
+    call('openModal')?.(`<div class="character-window-v27 character-window-v32 costume-panel-v55">
       <header class="character-head-v27"><h2>🧵 코스튬</h2><p>능력치는 착용 중인 장비 그대로 유지되고, 보이는 모습만 코스튬으로 바뀝니다.</p></header>
-      <div class="character-panel character-panel-v7 character-panel-v26 character-panel-v27">
+      <div class="character-panel character-panel-v7 character-panel-v26 character-panel-v27 costume-panel-layout-v55">
         <div class="panel-card paperdoll-card-v7">
           <h3>미리보기</h3>
           <div class="paperdoll paperdoll-v7">
@@ -119,8 +119,8 @@
             ${slotHtml}
           </div>
         </div>
-        <div>
-          <div class="panel-card">
+        <div class="costume-panel-closet-v55">
+          <div class="panel-card costume-inventory-card-v55">
             <h3>코스튬 보관함</h3>
             ${owned.length ? '' : '<p class="muted costume-inventory-intro">아직 코스튬이 없습니다. 특별 상점의 <b>옷 상인 상남</b>에게서 구매할 수 있어요.</p>'}
             <div class="costume-inventory-sections">${bag}</div>
@@ -129,8 +129,31 @@
         </div>
       </div>
     </div>`, { type: 'costume', pause: true });
-    setTimeout(drawPreview, 20);
+    setTimeout(() => {
+      restoreInventoryScrollV55();
+      drawPreview();
+    }, 20);
   };
+
+  function rememberInventoryScrollV55() {
+    const lists = document.querySelectorAll?.('[data-costume-inventory-list]') || [];
+    lists.forEach((list) => {
+      const slot = list.getAttribute('data-costume-inventory-list');
+      if (Object.prototype.hasOwnProperty.call(inventoryScrollTopV55, slot)) {
+        inventoryScrollTopV55[slot] = Number(list.scrollTop) || 0;
+      }
+    });
+  }
+
+  function restoreInventoryScrollV55() {
+    const lists = document.querySelectorAll?.('[data-costume-inventory-list]') || [];
+    lists.forEach((list) => {
+      const slot = list.getAttribute('data-costume-inventory-list');
+      if (Object.prototype.hasOwnProperty.call(inventoryScrollTopV55, slot)) {
+        list.scrollTop = inventoryScrollTopV55[slot];
+      }
+    });
+  }
 
   function drawPreview() {
     const p = g()?.player;
@@ -153,12 +176,14 @@
   window.equipCostumeV55 = function equipCostumeV55(id) {
     const p = ensureFields(); const item = defs()[id];
     if (!p || !item || !p.costumeInventory.includes(id)) return;
+    rememberInventoryScrollV55();
     p.costume[item.slot] = id;
     call('savePlayer')?.(); call('playSfx')?.('open');
     window.openCostumePanelV55();
   };
   window.unequipCostumeV55 = function unequipCostumeV55(slot) {
     const p = ensureFields(); if (!p) return;
+    rememberInventoryScrollV55();
     delete p.costume[slot];
     call('savePlayer')?.(); call('playSfx')?.('open');
     window.openCostumePanelV55();

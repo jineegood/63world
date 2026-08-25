@@ -2,7 +2,7 @@
   "meta": {
     "sourceFile": "game.js",
     "detectedVersion": "v35",
-    "generatedAt": "2026-08-24T00:18:19.350Z"
+    "generatedAt": "2026-08-25T06:02:55.255Z"
   },
   "classes": {
     "warrior": {
@@ -767,10 +767,10 @@
       "classOnly": null,
       "price": 540,
       "costume": true,
-      "desc": "달빛을 머금은 보랏빛 마법 모자. 누구나 오늘만큼은 꼬마 마법사입니다.",
+      "desc": "휘어진 달빛 고깔과 초승달 장식, 별가루가 맴도는 보랏빛 마법 모자.",
       "look": {
-        "type": "wizardHat",
-        "color": "#7c3aed"
+        "type": "arcaneMoonHat",
+        "color": "#6d28d9"
       }
     },
     "cs_ninjaMask": {
@@ -858,10 +858,10 @@
       "classOnly": null,
       "price": 460,
       "costume": true,
-      "desc": "싱그러운 잎빛 천으로 만든 요정 망토. 걸을 때마다 숲바람처럼 나부낍니다.",
+      "desc": "겹겹의 나뭇잎과 덩굴 깃, 도토리 브로치로 엮은 살아 있는 숲요정 망토.",
       "look": {
-        "type": "cloak",
-        "color": "#16a34a"
+        "type": "forestLeafMantle",
+        "color": "#15803d"
       }
     },
     "cs_ninjaSuit": {

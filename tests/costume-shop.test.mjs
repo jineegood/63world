@@ -71,9 +71,9 @@ test('the paid costume catalog has four added choices per body part', () => {
 
   const additions = {
     cs_catBand:['head', 'catEars'],
-    cs_violetMagicHat:['head', 'wizardHat'],
+    cs_violetMagicHat:['head', 'arcaneMoonHat'],
     cs_cloudHoodie:['armor', 'cloudHoodie'],
-    cs_forestFairyCape:['armor', 'cloak'],
+    cs_forestFairyCape:['armor', 'forestLeafMantle'],
     cs_goldenBell:['accessory', 'bellNecklace'],
     cs_twilightBatWing:['accessory', 'batWing'],
     cs_ninjaMask:['head', 'ninjaMask'],
@@ -93,6 +93,8 @@ test('the paid costume catalog has four added choices per body part', () => {
     assert.ok(item.price > 0);
     assert.equal('stats' in item, false);
   }
+  assert.notEqual(defs.cs_violetMagicHat.look.type, 'wizardHat');
+  assert.notEqual(defs.cs_forestFairyCape.look.type, 'cloak');
 });
 
 test('the costume merchant groups paid items by slot and keeps the quest gift hidden', () => {
@@ -110,22 +112,22 @@ test('the costume merchant groups paid items by slot and keeps the quest gift hi
   assert.doesNotMatch(markup, /✨/);
 });
 
-test('the merchant uses a responsive three-column layout and every new look renders', () => {
+test('the merchant uses three vertical body-part lanes and every new look renders', () => {
   const style = read('style.css');
   const game = read('game.js');
 
-  assert.match(style, /\.costume-shop-grid\s*\{[\s\S]*?grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/);
-  assert.match(style, /@media \(max-width:\s*900px\)[\s\S]*?\.costume-shop-grid\s*\{\s*grid-template-columns:\s*repeat\(2,/);
-  assert.match(style, /@media \(max-width:\s*620px\)[\s\S]*?\.costume-shop-grid\s*\{\s*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+  assert.match(style, /\.costume-shop-sections\s*\{[\s\S]*?grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(style, /\.costume-shop-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+  assert.match(style, /@media \(max-width:\s*900px\)[\s\S]*?\.costume-shop-sections\s*\{[\s\S]*?grid-template-columns:\s*repeat\(3,\s*minmax\(250px,/);
   for (const type of [
-    'catEars', 'cloudHoodie', 'bellNecklace', 'batWing',
+    'catEars', 'arcaneMoonHat', 'cloudHoodie', 'forestLeafMantle', 'bellNecklace', 'batWing',
     'ninjaMask', 'spartanHelm', 'ninjaSuit', 'spartanArmor', 'giantFishPack', 'duckFloat',
   ]) {
     assert.match(game, new RegExp(`look\\?\\.type === '${type}'`));
   }
 });
 
-test('the character costume inventory is grouped by body part with per-section counts', () => {
+test('the character costume inventory uses three independently scrollable vertical lanes', () => {
   const markup = renderCostumePanel(loadCostumeDefs(), [
     'cs_ninjaMask', 'cs_spartanHelm',
     'cs_ninjaSuit', 'cs_spartanArmor',
@@ -141,8 +143,15 @@ test('the character costume inventory is grouped by body part with per-section c
   assert.match(markup, /data-costume-inventory-slot="armor"[\s\S]*?<small>2개<\/small>[\s\S]*?그림자 닌자복[\s\S]*?스파르타 전투갑옷/);
   assert.match(markup, /data-costume-inventory-slot="accessory"[\s\S]*?<small>2개<\/small>[\s\S]*?대왕 생선 등짐[\s\S]*?고무 오리 튜브/);
   assert.match(markup, /onclick="unequipCostumeV55\('head'\)">해제<\/button>/);
-  assert.match(style, /\.costume-inventory-grid\s*\{[\s\S]*?grid-template-columns:\s*repeat\(3,/);
-  assert.match(style, /@media \(max-width:\s*620px\)[\s\S]*?\.costume-inventory-grid\s*\{\s*grid-template-columns:\s*repeat\(2,/);
+  assert.equal((markup.match(/tabindex="0" aria-label="[^\"]+ 코스튬 목록"/g) || []).length, 3);
+  assert.match(style, /\.costume-inventory-card-v55\s*\{[\s\S]*?height:\s*clamp\(/);
+  assert.match(style, /\.costume-inventory-sections\s*\{[\s\S]*?grid-template-columns:\s*repeat\(3,/);
+  assert.match(style, /\.costume-inventory-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\)[\s\S]*?max-height:\s*100%[\s\S]*?overflow-y:\s*auto[\s\S]*?overscroll-behavior:\s*contain/);
+  assert.match(style, /@media \(min-width:\s*1240px\)[\s\S]*?\.costume-panel-layout-v55\s*\{[\s\S]*?minmax\(500px,[\s\S]*?minmax\(600px,/);
+  assert.match(style, /@media \(max-width:\s*1100px\)[\s\S]*?\.costume-panel-layout-v55\s*\{\s*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+  const ui = read('src/costume-ui.js');
+  assert.match(ui, /rememberInventoryScrollV55\(\)/);
+  assert.match(ui, /restoreInventoryScrollV55\(\)/);
 });
 
 test('empty costume body-part groups stay visible and explain what is missing', () => {

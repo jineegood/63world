@@ -2370,6 +2370,50 @@ function drawHumanoid(ctx, x, y, appearance, klass, state, scale = 1, isNpc = fa
     ctx.beginPath(); ctx.ellipse(14 * scale, 4 * scale, 10 * scale, 16 * scale, .65, 0, Math.PI * 2); ctx.fill();
   }
 
+  if (armorItem?.look?.type === 'forestLeafMantle') {
+    // 숲요정 망토 뒷면: 한 장짜리 천 대신 서로 다른 길이의 잎 다섯 장이 겹쳐 흔들린다.
+    const sway = Math.sin(t * 3.1) * 1.8;
+    const leaves = [
+      [-8, -19 + sway, 27, 7, '#166534'],
+      [-4, -11 + sway * .55, 31, 8, '#15803d'],
+      [0, 0, 33, 8.5, '#16a34a'],
+      [4, 11 - sway * .55, 31, 8, '#22c55e'],
+      [8, 19 - sway, 27, 7, '#4ade80'],
+    ];
+    ctx.save();
+    leaves.forEach(([baseX, tipX, tipY, width, color]) => {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(baseX * scale, -3 * scale);
+      ctx.bezierCurveTo(
+        (baseX - width) * scale, 5 * scale,
+        (tipX - width * .55) * scale, (tipY - 9) * scale,
+        tipX * scale, tipY * scale,
+      );
+      ctx.bezierCurveTo(
+        (tipX + width * .55) * scale, (tipY - 9) * scale,
+        (baseX + width) * scale, 5 * scale,
+        baseX * scale, -3 * scale,
+      );
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(187,247,208,.72)';
+      ctx.lineWidth = .8 * scale;
+      ctx.beginPath();
+      ctx.moveTo(baseX * scale, 0);
+      ctx.lineTo(tipX * scale, (tipY - 3) * scale);
+      ctx.stroke();
+    });
+    // 작은 숲빛 알갱이는 망토와 함께 천천히 떠다닌다.
+    [[-20, 7, 0], [18, 13, 1.7], [-13, 23, 3.1]].forEach(([px, py, phase]) => {
+      ctx.globalAlpha = .48 + Math.sin(t * 3 + phase) * .22;
+      ctx.fillStyle = '#bef264';
+      ctx.beginPath();
+      ctx.arc(px * scale, (py + Math.sin(t * 2 + phase) * 2) * scale, 1.2 * scale, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.restore();
+  }
+
   const cloakLook = armorItem?.look?.type === 'cloak' ? armorItem.look : null;
   if (appearance.accessory === 'cape' || cloakLook || armorItem?.id === 'forestCloak' || armorItem?.id === 'starCape') {
     const cloakColor = cloakLook?.color || (armorItem?.id === 'starCape' ? '#4c1d95' : (armorItem?.id === 'forestCloak' ? '#166534' : '#7c3aed'));
@@ -2415,7 +2459,43 @@ function drawHumanoid(ctx, x, y, appearance, klass, state, scale = 1, isNpc = fa
   }
 
   // [추가] 가슴 계열 착용 외형: 흉갑(갑옷) / 목걸이·배지(악세서리)
-  if (armorItem?.look?.type === 'sailorSuit') {
+  if (armorItem?.look?.type === 'forestLeafMantle') {
+    // 숲요정 망토 앞면: 짙은 숲빛 튜닉과 잎사귀 어깨깃, 도토리 브로치.
+    ctx.save();
+    const tunic = ctx.createLinearGradient(-12 * scale, -5 * scale, 12 * scale, 20 * scale);
+    tunic.addColorStop(0, '#14532d');
+    tunic.addColorStop(1, armorItem.look.color || '#15803d');
+    ctx.fillStyle = tunic;
+    roundRect(ctx, -12 * scale, -5 * scale, 24 * scale, 26 * scale, 7 * scale); ctx.fill();
+    const collarLeaves = [
+      [-9, -4, -.82, '#4ade80'], [-5, -6, -.4, '#22c55e'], [0, -7, 0, '#86efac'],
+      [5, -6, .4, '#22c55e'], [9, -4, .82, '#4ade80'],
+    ];
+    collarLeaves.forEach(([lx, ly, angle, color]) => {
+      ctx.save();
+      ctx.translate(lx * scale, ly * scale);
+      ctx.rotate(angle);
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(0, -2 * scale);
+      ctx.bezierCurveTo(-3.8 * scale, 1 * scale, -3.5 * scale, 6 * scale, 0, 10 * scale);
+      ctx.bezierCurveTo(3.5 * scale, 6 * scale, 3.8 * scale, 1 * scale, 0, -2 * scale);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+    });
+    ctx.strokeStyle = '#a3e635';
+    ctx.lineWidth = 1.2 * scale;
+    ctx.beginPath();
+    ctx.moveTo(-10 * scale, 11 * scale);
+    ctx.quadraticCurveTo(0, 15 * scale, 10 * scale, 11 * scale);
+    ctx.stroke();
+    // 중앙 도토리 브로치
+    ctx.fillStyle = '#a16207';
+    ctx.beginPath(); ctx.ellipse(0, 0, 2.8 * scale, 3.5 * scale, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#713f12';
+    roundRect(ctx, -3.2 * scale, -3.2 * scale, 6.4 * scale, 2.4 * scale, 1.2 * scale); ctx.fill();
+    ctx.restore();
+  } else if (armorItem?.look?.type === 'sailorSuit') {
     // [v56] 세일러 교복: 흰 상의 + 남색 카라 + 붉은 스카프 + 주름치마
     ctx.fillStyle = '#f8fafc';
     roundRect(ctx, -11 * scale, -8 * scale, 22 * scale, 20 * scale, 5 * scale); ctx.fill();
@@ -2917,6 +2997,63 @@ function drawHumanoid(ctx, x, y, appearance, klass, state, scale = 1, isNpc = fa
     ctx.globalAlpha = .35; ctx.fillStyle = '#fff';
     ctx.beginPath(); ctx.arc(-4 * scale, -30 * scale, 4 * scale, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = 1;
+  } else if (headItem?.look?.type === 'arcaneMoonHat') {
+    // 보랏빛 마법 모자: 장비 고깔과 다른 물결 챙·휘어진 달빛 고깔·초승달 장식.
+    const hatColor = headItem.look.color || '#6d28d9';
+    const tilt = Math.sin(t * 2.4) * .025;
+    ctx.save();
+    ctx.rotate(tilt);
+    const glow = ctx.createRadialGradient(0, -35 * scale, 2 * scale, 0, -35 * scale, 23 * scale);
+    glow.addColorStop(0, 'rgba(196,181,253,.30)');
+    glow.addColorStop(1, 'rgba(109,40,217,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(0, -35 * scale, 23 * scale, 0, Math.PI * 2); ctx.fill();
+    // 좌우 끝이 살짝 들린 비대칭 물결 챙
+    ctx.fillStyle = '#4c1d95';
+    ctx.beginPath();
+    ctx.moveTo(-19 * scale, -26 * scale);
+    ctx.quadraticCurveTo(-8 * scale, -31 * scale, 1 * scale, -27 * scale);
+    ctx.quadraticCurveTo(10 * scale, -23 * scale, 19 * scale, -29 * scale);
+    ctx.quadraticCurveTo(11 * scale, -20 * scale, 0, -24 * scale);
+    ctx.quadraticCurveTo(-10 * scale, -21 * scale, -19 * scale, -26 * scale);
+    ctx.closePath(); ctx.fill();
+    // 오른쪽으로 접혀 내려오는 부드러운 고깔
+    ctx.fillStyle = hatColor;
+    ctx.beginPath();
+    ctx.moveTo(-11 * scale, -27 * scale);
+    ctx.bezierCurveTo(-12 * scale, -39 * scale, -6 * scale, -49 * scale, 4 * scale, -47 * scale);
+    ctx.bezierCurveTo(10 * scale, -46 * scale, 10 * scale, -41 * scale, 17 * scale, -39 * scale);
+    ctx.bezierCurveTo(12 * scale, -34 * scale, 10 * scale, -30 * scale, 9 * scale, -27 * scale);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 2 * scale;
+    ctx.beginPath();
+    ctx.moveTo(-10 * scale, -29 * scale);
+    ctx.quadraticCurveTo(0, -25 * scale, 11 * scale, -29 * scale);
+    ctx.stroke();
+    // 초승달 문양
+    ctx.fillStyle = '#fde68a';
+    ctx.beginPath(); ctx.arc(-2 * scale, -38 * scale, 4.6 * scale, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = hatColor;
+    ctx.beginPath(); ctx.arc(.4 * scale, -39.4 * scale, 4.4 * scale, 0, Math.PI * 2); ctx.fill();
+    // 접힌 끝의 별 장식
+    ctx.strokeStyle = '#fef3c7';
+    ctx.lineWidth = .8 * scale;
+    ctx.beginPath(); ctx.moveTo(16 * scale, -39 * scale); ctx.lineTo(18 * scale, -34 * scale); ctx.stroke();
+    ctx.fillStyle = '#fef08a';
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const rr = (i % 2 === 0 ? 2.8 : 1.2) * scale;
+      const angle = (i / 10) * Math.PI * 2 - Math.PI / 2;
+      ctx[i === 0 ? 'moveTo' : 'lineTo'](18 * scale + Math.cos(angle) * rr, -32 * scale + Math.sin(angle) * rr);
+    }
+    ctx.closePath(); ctx.fill();
+    [[-16, -37, 0], [13, -48, 1.7], [-10, -47, 3.3]].forEach(([sx, sy, phase]) => {
+      ctx.globalAlpha = .45 + Math.sin(t * 3.4 + phase) * .25;
+      ctx.fillStyle = '#e9d5ff';
+      ctx.beginPath(); ctx.arc(sx * scale, sy * scale, 1.2 * scale, 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.restore();
   } else if (headItem?.look?.type === 'wizardHat') {
     // 마법 고깔: 챙 + 원뿔
     ctx.fillStyle = headItem.look.color;

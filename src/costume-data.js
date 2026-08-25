@@ -33,8 +33,8 @@
     },
     cs_violetMagicHat: {
       id: 'cs_violetMagicHat', name: '보랏빛 마법 모자', slot: 'head', classOnly: null, price: 540, costume: true,
-      desc: '달빛을 머금은 보랏빛 마법 모자. 누구나 오늘만큼은 꼬마 마법사입니다.',
-      look: { type: 'wizardHat', color: '#7c3aed' },
+      desc: '휘어진 달빛 고깔과 초승달 장식, 별가루가 맴도는 보랏빛 마법 모자.',
+      look: { type: 'arcaneMoonHat', color: '#6d28d9' },
     },
     cs_ninjaMask: {
       id: 'cs_ninjaMask', name: '그림자 닌자 복면', slot: 'head', classOnly: null, price: 620, costume: true,
@@ -69,8 +69,8 @@
     },
     cs_forestFairyCape: {
       id: 'cs_forestFairyCape', name: '숲요정 망토', slot: 'armor', classOnly: null, price: 460, costume: true,
-      desc: '싱그러운 잎빛 천으로 만든 요정 망토. 걸을 때마다 숲바람처럼 나부낍니다.',
-      look: { type: 'cloak', color: '#16a34a' },
+      desc: '겹겹의 나뭇잎과 덩굴 깃, 도토리 브로치로 엮은 살아 있는 숲요정 망토.',
+      look: { type: 'forestLeafMantle', color: '#15803d' },
     },
     cs_ninjaSuit: {
       id: 'cs_ninjaSuit', name: '그림자 닌자복', slot: 'armor', classOnly: null, price: 520, costume: true,

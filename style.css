@@ -3074,10 +3074,14 @@ body.defeated #app { filter: grayscale(1) brightness(.62); transition: filter .3
   background: rgba(94,222,150,.16);
 }
 
-/* 코스튬 상점: 머리·옷·악세서리를 나눠 한 줄에 세 상품씩 비교한다. */
+/* 코스튬 상점: 머리·옷·악세서리 세 레인을 세로 목록으로 나란히 비교한다. */
+.modal-box:has(.costume-shop),
+.modal-box:has(.costume-panel-v55) { width: min(1280px, 100%); }
 .costume-shop-intro { margin: 2px 0 10px; }
 .costume-shop-sections {
   display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
   gap: 18px;
   margin-top: 16px;
 }
@@ -3105,7 +3109,7 @@ body.defeated #app { filter: grayscale(1) brightness(.62); transition: filter .3
 }
 .costume-shop-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
 }
 .costume-shop-card {
@@ -3150,12 +3154,30 @@ body.defeated #app { filter: grayscale(1) brightness(.62); transition: filter .3
 
 /* 코스튬 보관함: 착용 부위별로 나눠 원하는 아이템을 빠르게 찾는다. */
 .costume-inventory-intro { margin: 0 0 12px; line-height: 1.5; }
+.costume-panel-layout-v55 { align-items: start; }
+.costume-panel-closet-v55 { min-width: 0; }
+.costume-inventory-card-v55 {
+  display: flex;
+  min-height: 0;
+  height: clamp(430px, calc(88vh - 180px), 560px);
+  flex-direction: column;
+  overflow: hidden;
+}
+.costume-inventory-card-v55 > h3 { flex: 0 0 auto; }
 .costume-inventory-sections {
   display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
   gap: 12px;
 }
 .costume-inventory-section {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   padding: 11px;
   border: 1px solid rgba(255,255,255,.09);
   border-radius: 18px;
@@ -3181,7 +3203,24 @@ body.defeated #app { filter: grayscale(1) brightness(.62); transition: filter .3
   font-size: 11px;
 }
 .costume-inventory-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  min-height: 0;
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-right: 4px;
+}
+.costume-panel-v55 .costume-inventory-grid .bag-card-v27 { min-height: 126px; }
+.costume-inventory-grid::-webkit-scrollbar { width: 7px; }
+.costume-inventory-grid::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(255,255,255,.035);
+}
+.costume-inventory-grid::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(196,181,253,.38);
 }
 .costume-inventory-empty {
   grid-column: 1 / -1;
@@ -3193,14 +3232,34 @@ body.defeated #app { filter: grayscale(1) brightness(.62); transition: filter .3
   font-size: 12px;
 }
 
+@media (min-width: 1240px) {
+  .costume-panel-layout-v55 {
+    grid-template-columns: minmax(500px, .9fr) minmax(600px, 1.1fr);
+  }
+}
+
+@media (max-width: 1100px) {
+  .costume-panel-layout-v55 { grid-template-columns: minmax(0, 1fr); }
+}
+
 @media (max-width: 900px) {
-  .costume-shop-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .costume-shop-sections {
+    grid-template-columns: repeat(3, minmax(250px, 1fr));
+    overflow-x: auto;
+    padding-bottom: 7px;
+    scroll-snap-type: x proximity;
+  }
+  .costume-shop-section { scroll-snap-align: start; }
 }
 
 @media (max-width: 620px) {
   .costume-shop-section { padding: 10px; }
-  .costume-shop-grid { grid-template-columns: minmax(0, 1fr); }
   .costume-shop-card { min-height: 0; }
   .costume-inventory-section { padding: 9px; }
-  .costume-inventory-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .costume-inventory-sections {
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 5px;
+  }
 }
