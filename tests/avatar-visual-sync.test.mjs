@@ -85,7 +85,8 @@ test('raid and realtime player renderers carry the same profile visuals', () => 
   assert.match(raidRun, /weaponTier:Math\.max/);
   assert.match(raidUi, /raidSpriteState\(member/);
   assert.match(multiplayer, /activePet:[\s\S]*?petSide,[\s\S]*?weaponTier:/);
-  assert.match(multiplayer, /spriteStateFor\([\s\S]*?weaponTier:p\.weaponTier/);
+  assert.match(multiplayer, /function remoteSpriteState\(remote, moving\)[\s\S]*?spriteStateFor\([\s\S]*?weaponTier:remote\.weaponTier/);
+  assert.match(multiplayer, /const spriteState = remoteSpriteState\(p, moving\)/);
   assert.doesNotMatch(multiplayer, /fillText\(pet\.name/);
   assert.ok(
     html.indexOf('src/avatar-visual-sync.js') < html.indexOf('src/raid-run-ui.js'),

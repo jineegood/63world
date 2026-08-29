@@ -24,6 +24,7 @@
     AUDIT_FAILED:'보안 알림을 불러오지 못했어요.',
   });
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const RAID_NAMEPLATES = new Set(['raid_20_steel', 'raid_40_twilight', 'raid_63_summit']);
 
   function error(code) {
     return new AdminDataV2Error(code, MESSAGES[code] || MESSAGES.LOAD_FAILED);
@@ -93,13 +94,36 @@
     return Object.freeze(result);
   }
 
-  function summarize(row) {
+  function raidFloorForGroup(value) {
+    const group = Math.min(7, nonNegativeInteger(value));
+    return group === 7 ? 63 : group * 10;
+  }
+
+  function sanitizeStudentStatus(row) {
+    const raidTopGroup = Math.min(7, nonNegativeInteger(row?.raid_top_group));
+    return Object.freeze({
+      userId:safeText(row?.user_id, 36),
+      isOnline:row?.is_online === true,
+      presenceLastSeenAt:safeText(row?.presence_last_seen_at, 40),
+      currentMap:safeText(row?.current_map, 40),
+      raidTopGroup,
+      raidTopFloor:raidFloorForGroup(raidTopGroup),
+    });
+  }
+
+  function summarize(row, status) {
     const data = row?.data && typeof row.data === 'object' && !Array.isArray(row.data) ? row.data : {};
     const records = data.records && typeof data.records === 'object' && !Array.isArray(data.records) ? data.records : {};
+    const safeStatus = status || sanitizeStudentStatus(null);
     return Object.freeze({
       userId:safeText(row?.user_id, 36),
       displayName:safeText(row?.display_name, 20),
       updatedAt:safeText(row?.updated_at, 40),
+      isOnline:safeStatus.isOnline,
+      presenceLastSeenAt:safeStatus.presenceLastSeenAt,
+      currentMap:safeStatus.currentMap,
+      raidTopGroup:safeStatus.raidTopGroup,
+      raidTopFloor:safeStatus.raidTopFloor,
       className:safeText(data.class, 40),
       spec:safeText(data.spec, 40),
       level:Math.max(1, nonNegativeInteger(data.level)),
@@ -180,12 +204,26 @@
 
     async function listStudents() {
       await requireTeacher();
-      const { data, error:listError } = await client
-        .from('player_profiles_v2')
-        .select('user_id,display_name,data,updated_at')
-        .order('updated_at', { ascending:false });
+      if (typeof client.rpc !== 'function') throw error('LOAD_FAILED');
+      const [profileResult, statusResult] = await Promise.all([
+        client
+          .from('player_profiles_v2')
+          .select('user_id,display_name,data,updated_at')
+          .order('updated_at', { ascending:false }),
+        client.rpc('teacher_student_status_v1'),
+      ]);
+      const { data, error:listError } = profileResult || {};
       if (listError) throw mapError(listError, 'LOAD_FAILED');
-      return Object.freeze((Array.isArray(data) ? data : []).map(summarize));
+      const { data:statusRows, error:statusError } = statusResult || {};
+      if (statusError) throw mapError(statusError, 'LOAD_FAILED');
+      const statusByUserId = new Map(
+        (Array.isArray(statusRows) ? statusRows : [])
+          .map(sanitizeStudentStatus)
+          .filter((status) => UUID.test(status.userId))
+          .map((status) => [status.userId, status]),
+      );
+      return Object.freeze((Array.isArray(data) ? data : [])
+        .map((row) => summarize(row, statusByUserId.get(row?.user_id))));
     }
 
     async function findDisplayName(userId) {
@@ -240,6 +278,11 @@
         displayName:safeText(data.displayName, 20),
         action,
         snapshot:Object.freeze({ ...data.snapshot }),
+        newNameplates:Object.freeze(
+          (Array.isArray(data.newNameplates) ? data.newNameplates : [])
+            .map(String)
+            .filter((id) => RAID_NAMEPLATES.has(id)),
+        ),
       });
     }
 

@@ -24,6 +24,9 @@ test('resource cheat buttons delegate to the teacher-only server action', () => 
 test('dungeon progress cheat is visible as one ten-floor advance button', () => {
   assert.match(index, /id="testRaidProgressBtn"[^>]*>🏢 던전 \+10층<\/button>/);
   assert.match(dashboard, /raidAdvance:`던전 \$\{Math\.min\(63,/);
+  assert.match(dashboard, /result\.newNameplates/);
+  assert.match(dashboard, /YuksamRaidNameplatesV1\?\.definition/);
+  assert.match(dashboard, /해금!/);
 });
 
 test('teacher combat detail log is toggleable, collapsible, and shows calculation factors', () => {

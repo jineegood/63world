@@ -6,7 +6,7 @@
   function reveal({ root, correctAnswer, onComplete, setTimer = global.setTimeout } = {}) {
     const answer = String(correctAnswer ?? '');
     const choiceButtons = Array.from(root?.querySelectorAll?.('.choice-grid button') || []);
-    const answerInput = root?.querySelector?.('#combatAnswer') || null;
+    const answerInput = root?.querySelector?.('[data-answer-review-input], #combatAnswer') || null;
     const submitButton = root?.querySelector?.('.answer-row button') || null;
 
     choiceButtons.forEach((button) => {

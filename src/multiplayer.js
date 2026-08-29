@@ -1,149 +1,887 @@
-/* v53: 실시간 멀티플레이 — 같은 맵의 다른 학생을 화면에 표시하고 채팅을 공유한다.
-   Supabase Realtime Broadcast 사용(DB 저장 없음 → 무료 한도 넉넉).
-   설정(src/cloud-config.js)이 비어 있으면 완전히 비활성(싱글 플레이와 동일). */
-(function multiplayerV53() {
-  if (window.__MULTIPLAYER_V53__) return;
-  window.__MULTIPLAYER_V53__ = true;
+/* v55: 학급용 멀티플레이.
+   명단·검증된 외형·채팅·전역 알림·채널 인원은 인증 DB RPC가 2초마다 동기화한다.
+   위치/이동/춤만 인증 private Realtime 채널로 작게 보내 화면 움직임을 부드럽게
+   유지한다. 일반 채팅과 캐릭터 명단은 같은 월드 채널(1~5) 안에서만 공유된다. */
+(function multiplayerV55() {
+  if (window.__MULTIPLAYER_V54__) return;
+  window.__MULTIPLAYER_V54__ = true;
+  window.__MULTIPLAYER_V53__ = true; // 기존 진단·테스트 호환 이름
 
   const cfg = window.YUKSAM_CLOUD || {};
-  const multiplayerCore = window.YuksamMultiplayerCore;
   const avatarVisualSync = window.YuksamAvatarVisualSync;
+  const worldAnnouncements = window.YuksamWorldAnnouncementsV1;
+  const g = () => (typeof game !== 'undefined' ? game : window.__G);
   const enabled = typeof cfg.url === 'string' && cfg.url.startsWith('http')
     && typeof cfg.anonKey === 'string' && cfg.anonKey.length > 20
-    && typeof multiplayerCore?.realtimeWebSocketUrl === 'function';
-  const SEND_MS = 220;       // 내 위치 전송 주기
-  const STALE_MS = 6000;     // 이 시간 동안 소식 없으면 화면에서 제거
-  const remotes = new Map(); // name -> { x, y, map, class, spec, level, equipment, appearance, moving, bubble, at }
+    && typeof window.secureStudentAccessV2?.getClient === 'function';
+  const MAINTENANCE_MS = 220;
+  const MOTION_BROADCAST_MS = 250;
+  const PRESENCE_SYNC_MS = 2000;
+  const RPC_TIMEOUT_MS = 4500;
+  const STALE_MS = 10000;
+  const CHANNEL_COUNT = 5;
+  const CHANNEL_CAPACITY = 8;
+  const CHANNEL_SWITCH_COOLDOWN_MS = 3000;
+  const CHANNEL_STORAGE_KEY = 'yuksam_world_channel_v1';
+  const MOTION_TOPIC_PREFIX = 'world-motion-v1:channel-';
+  const CONTROL_CHARACTERS_RE = /[\u0000-\u001f\u007f-\u009f]/;
+  const remotes = new Map(); // name -> server-verified current-map state
   const motions = new Map(); // name -> 도착한 위치 사이를 부드럽게 이어주는 계산기
-  const IDLE_KEEPALIVE_MS = 2000; // 가만히 서 있으면 이 주기로만 알린다(무료 한도 절약)
+  const remoteRenderStats = {
+    directPaints:0,
+    crowdLayouts:0,
+    visualNormalizations:0,
+    renderCalls:0,
+    renderLastMs:0,
+    renderEmaMs:0,
+    renderMaxMs:0,
+    estimatedFps:0,
+    lastRenderAt:0,
+  };
   let remoteBounds = [];
-  let lastPayloadKey = '';
-  let lastKeepaliveAt = 0;
+  let activeClient = null;
+  let presenceSyncPromise = null;
+  let lastSuccessfulSyncAt = 0;
+  const pendingChats = [];
+  const seenChatIds = new Set();
+  const seenChatOrder = [];
+  const visualCache = new Map(); // userId -> server-verified appearance + version
+  let lastChatId = '0';
+  let sameMapRosterSize = 1;
+  let visibleSameMapSize = 1;
+  let lastBadgeText = '';
+  let onlineBadgeElement = null;
+  let rosterMap = null;
+  let motionChannel = null;
+  let motionChannelNumber = 0;
+  let motionSubscribed = false;
+  let motionConnecting = false;
+  let motionSendInFlight = false;
+  let motionSequence = 0;
+  let motionSessionId = createMessageId();
+  let lastMotionSignature = '';
+  let lastMotionSentAt = 0;
+  const receivedMotionSequences = new Map();
+  const channelListeners = new Set();
+  const channelCounts = Object.fromEntries(
+    Array.from({ length:CHANNEL_COUNT }, (_, index) => [String(index + 1), 0]),
+  );
+  let currentChannel = readPreferredChannel();
+  let channelJoined = false;
+  let channelStatus = enabled ? 'waiting-login' : 'off';
+  let channelSwitching = false;
+  let channelCooldownUntil = 0;
+  let channelReason = null;
+  let lastChannelStateSignature = '';
+
+  function normalizeChannel(value) {
+    const number = Number(value);
+    return Number.isInteger(number) && number >= 1 && number <= CHANNEL_COUNT ? number : null;
+  }
+
+  function readPreferredChannel() {
+    try {
+      return normalizeChannel(window.localStorage?.getItem?.(CHANNEL_STORAGE_KEY)) || 1;
+    } catch { return 1; }
+  }
+
+  function savePreferredChannel(channel) {
+    try { window.localStorage?.setItem?.(CHANNEL_STORAGE_KEY, String(channel)); } catch {}
+  }
+
+  function normalizeChannelCounts(value) {
+    for (let channel = 1; channel <= CHANNEL_COUNT; channel += 1) {
+      const count = Number(value?.[String(channel)] ?? value?.[channel]);
+      channelCounts[String(channel)] = Number.isFinite(count)
+        ? Math.max(0, Math.min(CHANNEL_CAPACITY, Math.round(count)))
+        : 0;
+    }
+  }
+
+  function activityBlockReason() {
+    const G = g();
+    if (!G?.player || !document.querySelector?.('#game.active')) return 'NOT_IN_GAME';
+    const modalType = String(G.modalState?.type || '');
+    if (G.currentCombatMonsterId || G.currentMap === 'raidTower'
+      || window.getActivePvpMatchV1?.()
+      || window.YuksamRaidRunUi?.hasSession?.()
+      || /^raid/i.test(modalType)) return 'IN_ACTIVITY';
+    return null;
+  }
+
+  function getChannelState() {
+    const now = Date.now();
+    const activityReason = activityBlockReason();
+    const cooldown = now < channelCooldownUntil;
+    const reason = channelSwitching
+      ? 'SWITCHING'
+      : cooldown ? 'COOLDOWN'
+        : activityReason || channelReason;
+    return Object.freeze({
+      channel:currentChannel,
+      channelCounts:Object.freeze({ ...channelCounts }),
+      maxChannels:CHANNEL_COUNT,
+      capacity:CHANNEL_CAPACITY,
+      status:channelStatus,
+      switching:channelSwitching,
+      cooldownUntil:channelCooldownUntil,
+      canChange:!channelSwitching && !cooldown && !activityReason,
+      reason:reason || null,
+    });
+  }
+
+  function notifyChannelState(force = false) {
+    const state = getChannelState();
+    const signature = JSON.stringify(state);
+    if (!force && signature === lastChannelStateSignature) return;
+    lastChannelStateSignature = signature;
+    channelListeners.forEach((listener) => {
+      try { listener(state); } catch {}
+    });
+  }
+
+  function subscribeChannelState(listener) {
+    if (typeof listener !== 'function') return () => {};
+    channelListeners.add(listener);
+    try { listener(getChannelState()); } catch {}
+    return () => channelListeners.delete(listener);
+  }
+
+  window.YuksamWorldChannelsV1 = Object.freeze({
+    getState:getChannelState,
+    changeChannel,
+    subscribe:subscribeChannelState,
+  });
 
   // 위치가 띄엄띄엄 도착해도 화면에서는 이어 보이게 한다. 모듈이 없으면 예전처럼 그대로 그린다.
   function trackRemoteMotion(name, x, y, snap) {
     const api = window.YuksamRemoteMotion;
     if (!api || typeof x !== 'number' || typeof y !== 'number') return;
     let motion = motions.get(name);
-    if (!motion) { motion = api.create(); motions.set(name, motion); }
+    if (!motion) {
+      motion = api.create({
+        defaultStepMs:MOTION_BROADCAST_MS,
+        maxStepMs:700,
+        snapDistance:800,
+      });
+      motions.set(name, motion);
+    }
     motion.push(x, y, Date.now(), { snap });
   }
 
   function forgetRemote(name) {
+    const userId = remotes.get(name)?.userId;
     remotes.delete(name);
     motions.delete(name);
+    if (userId) receivedMotionSequences.delete(String(userId));
+    if (remotes.size === 0) {
+      remoteBounds = [];
+      visibleSameMapSize = 1;
+    }
   }
 
   window.__remotePlayersV53 = remotes;
-  window.__multiplayerStatusV53 = enabled ? 'connecting' : 'off';
+  window.__multiplayerStatusV53 = enabled ? 'waiting-login' : 'off';
+  window.__multiplayerPresenceStatusV1 = enabled ? 'waiting-login' : 'off';
   if (!enabled) return;
 
-  const g = () => (typeof game !== 'undefined' ? game : window.__G);
-  let socket = null, ref = 0, joined = false, lastSent = 0, heartbeat = null;
-  const TOPIC = 'realtime:yuksam-world';
+  function copyObject(value, maxBytes = 5000) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    try {
+      const raw = JSON.stringify(value);
+      if (raw.length > maxBytes) return {};
+      return JSON.parse(raw);
+    } catch { return {}; }
+  }
 
-  function connect() {
-    const wsUrl = multiplayerCore.realtimeWebSocketUrl(cfg.url, cfg.anonKey);
-    if (!wsUrl) { window.__multiplayerStatusV53 = 'offline'; return; }
-    try { socket = new WebSocket(wsUrl); } catch { window.__multiplayerStatusV53 = 'offline'; return; }
-    socket.onopen = () => {
-      send({ topic: TOPIC, event: 'phx_join', payload: { config: { broadcast: { self: false } } } });
-      heartbeat = setInterval(() => send({ topic: 'phoenix', event: 'heartbeat', payload: {} }), 25000);
+  function normalizeVisualPayload(value) {
+    if (!value || typeof value !== 'object') return null;
+    const userId = String(value.u || '').slice(0, 80);
+    const name = String(value.name || '').normalize('NFKC').trim().slice(0, 20);
+    const visualVersion = String(value.v || '').slice(0, 32);
+    if (!userId || !name || !/^[0-9a-f]{32}$/.test(visualVersion)) return null;
+    return {
+      userId,
+      name,
+      visualVersion,
+      level:Math.max(1, Math.min(100, Math.round(Number(value.level) || 1))),
+      class:String(value.class || 'warrior').slice(0, 40),
+      spec:value.spec == null ? null : String(value.spec).slice(0, 40),
+      equipment:copyObject(value.equipment),
+      appearance:copyObject(value.appearance),
+      costume:copyObject(value.costume),
+      nameplate:value.nameplate && typeof value.nameplate === 'object'
+        ? copyObject(value.nameplate, 1000)
+        : null,
+      activePet:typeof value.activePet === 'string' ? value.activePet.slice(0, 80) : null,
+      weaponTier:Math.max(0, Math.min(4, Math.round(Number(value.weaponTier) || 0))),
     };
-    socket.onmessage = (ev) => {
-      let msg; try { msg = JSON.parse(ev.data); } catch { return; }
-      if (msg.event === 'phx_reply' && msg.topic === TOPIC) { joined = true; window.__multiplayerStatusV53 = 'online'; return; }
-      if (msg.event !== 'broadcast') return;
-      const p = msg.payload?.payload || msg.payload;
-      if (!p || !p.name) return;
-      const me = g()?.player?.name;
-      if (p.name === me) return;
-      if (p.type === 'leave') { forgetRemote(p.name); return; }
-      if (p.type === 'chat') {
-        const prev = remotes.get(p.name) || {};
-        remotes.set(p.name, { ...prev, name: p.name, bubble: { text: p.text, until: Date.now() + 4200 }, at: Date.now() });
-        try { window.appendChatMessage?.('user', p.name, p.text); } catch {}
-        return;
+  }
+
+  function normalizeCompactPayload(value, map) {
+    if (!value || typeof value !== 'object') return null;
+    const userId = String(value.u || '').slice(0, 80);
+    const visualVersion = String(value.v || '').slice(0, 32);
+    const x = Number(value.x);
+    const y = Number(value.y);
+    const facing = copyObject(value.f, 200);
+    if (!userId || !/^[0-9a-f]{32}$/.test(visualVersion)
+      || !Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return {
+      userId,
+      visualVersion,
+      map,
+      x:Math.round(x),
+      y:Math.round(y),
+      facing:{ x:Number(facing.x) || 0, y:Number(facing.y) || 1 },
+      petSide:value.ps === 'right' ? 'right' : 'left',
+      pvpAvailable:value.pv === true,
+      moving:value.mv === true,
+      dance:value.dn === true,
+    };
+  }
+
+  // visual은 서버 버전이 바뀔 때만 한 번 정규화된다. 매 2초 위치 snapshot마다
+  // equipment/appearance/costume를 JSON 복제하면 28명 환경에서 주기적인 끊김이
+  // 생기므로, 검증된 visual 객체를 그대로 재사용하고 작은 위치 필드만 합친다.
+  function mergeVerifiedRemotePayload(visual, compact) {
+    return {
+      type:'pos',
+      userId:compact.userId,
+      name:visual.name,
+      map:compact.map,
+      visualVersion:compact.visualVersion,
+      x:compact.x,
+      y:compact.y,
+      level:visual.level,
+      class:visual.class,
+      spec:visual.spec,
+      equipment:visual.equipment,
+      appearance:visual.appearance,
+      costume:visual.costume,
+      nameplate:visual.nameplate,
+      activePet:visual.activePet,
+      weaponTier:visual.weaponTier,
+      facing:compact.facing,
+      petSide:compact.petSide,
+      pvpAvailable:compact.pvpAvailable,
+      moving:compact.moving,
+      dance:compact.dance,
+    };
+  }
+
+  function localPresencePayload(G, chat, channel = currentChannel, resetCursor = false) {
+    const weaponId = G.player.equipment?.weapon || null;
+    const petSide = avatarVisualSync?.petSideFromFacing(G.player._petSide, G.lastMove)
+      || G.player._petSide
+      || 'left';
+    G.player._petSide = petSide;
+    const payload = {
+      userId:window.getPvpIdentityV1?.()?.userId || null,
+      name:G.player.name,
+      map:G.currentMap,
+      channel,
+      x:Math.round(G.player.x), y:Math.round(G.player.y),
+      level:G.player.level, class:G.player.class, spec:G.player.spec || null,
+      equipment:G.player.equipment || {}, appearance:G.player.appearance || {},
+      costume:G.player.costume || {},
+      nameplate:G.player.nameplate && typeof G.player.nameplate === 'object'
+        ? { ...G.player.nameplate }
+        : null,
+      activePet:typeof G.player.activePet === 'string' ? G.player.activePet : null,
+      petSide,
+      weaponTier:avatarVisualSync?.normalizeTier(
+        weaponId ? G.player.weaponUpgrades?.[weaponId] : 0,
+      ) || 0,
+      facing:{ x:Number(G.lastMove?.x) || 0, y:Number(G.lastMove?.y) || 1 },
+      pvpAvailable:G.currentMap === 'town' && !G.modalState?.pause && !G.currentCombatMonsterId,
+      moving:!!G.isMoving,
+      dance:Number(G.danceTimer || 0) > 0,
+    };
+    const knownVisuals = {};
+    if (!resetCursor) {
+      visualCache.forEach((visual, userId) => {
+        if (visual?.visualVersion) knownVisuals[userId] = visual.visualVersion;
+      });
+    }
+    payload.knownVisuals = knownVisuals;
+    payload.lastChatId = resetCursor ? '0' : lastChatId;
+    payload.lastAnnouncementId = worldAnnouncements?.getCursor?.() || '0';
+    if (chat) payload.chat = { id:chat.id, text:chat.text };
+    return payload;
+  }
+
+  function updateOnlineBadge() {
+    const badge = onlineBadgeElement || document.getElementById?.('onlineBadge');
+    if (!badge) return;
+    onlineBadgeElement = badge;
+    const status = window.__multiplayerPresenceStatusV1;
+    const label = status === 'online'
+      ? `채널 ${currentChannel} · 같은 지역 ${sameMapRosterSize}명 · 화면 ${visibleSameMapSize}명`
+      : status === 'offline' ? `채널 ${currentChannel} · 동기화 재시도 중`
+        : `채널 ${currentChannel} · 동기화 중`;
+    if (label === lastBadgeText) return;
+    lastBadgeText = label;
+    badge.textContent = label;
+    badge.dataset.state = status;
+  }
+
+  function applyPresenceSnapshot(items, visualItems, map) {
+    const G = g();
+    if (!G?.player || map !== G.currentMap || !Array.isArray(items) || !Array.isArray(visualItems)) return false;
+    visualItems.forEach((item) => {
+      const visual = normalizeVisualPayload(item);
+      if (visual) {
+        remoteRenderStats.visualNormalizations += 1;
+        visualCache.set(visual.userId, visual);
       }
-      const previous = remotes.get(p.name);
-      // 새로 들어온 학생은 내가 가만히 서 있어도 나를 바로 볼 수 있어야 한다
-      if (!previous) lastPayloadKey = '';
-      remotes.set(p.name, { ...(previous || {}), ...p, at: Date.now() });
-      // 처음 보이거나 맵을 옮겼으면 미끄러지지 않고 즉시 그 자리에 그린다
+    });
+    const now = Date.now();
+    const me = window.getPvpIdentityV1?.();
+    const seenIds = new Set();
+    let validCount = 0;
+    items.forEach((item) => {
+      const compact = normalizeCompactPayload(item, map);
+      const visual = compact ? visualCache.get(compact.userId) : null;
+      if (!compact || !visual || visual.visualVersion !== compact.visualVersion) return;
+      const p = mergeVerifiedRemotePayload(visual, compact);
+      if (!p || p.map !== map) return;
+      validCount += 1;
+      seenIds.add(p.userId);
+      if ((me?.userId && p.userId === me.userId) || p.name === G.player.name) return;
+      let previous = remotes.get(p.name);
+      if (!previous) {
+        const renamed = [...remotes.entries()].find(([, remote]) => remote?.userId === p.userId);
+        if (renamed) {
+          previous = renamed[1];
+          forgetRemote(renamed[0]);
+        }
+      }
+      remotes.set(p.name, {
+        ...(previous || {}), ...p,
+        bubble:previous?.bubble,
+        at:now,
+        _presenceV54:true,
+      });
       trackRemoteMotion(p.name, p.x, p.y, !previous || previous.map !== p.map);
-    };
-    socket.onclose = () => {
-      window.__multiplayerStatusV53 = 'offline'; joined = false;
-      if (heartbeat) { clearInterval(heartbeat); heartbeat = null; }
-      setTimeout(connect, 3000); // 자동 재접속
-    };
-    socket.onerror = () => { try { socket.close(); } catch {} };
+    });
+    remotes.forEach((remote, name) => {
+      if (remote?._presenceV54 && remote.map === map && !seenIds.has(remote.userId)) forgetRemote(name);
+    });
+    visualCache.forEach((_, userId) => {
+      if (!seenIds.has(userId)) visualCache.delete(userId);
+    });
+    sameMapRosterSize = Math.max(1, validCount);
+    refreshCrowdOffsets(G);
+    window.__multiplayerPresenceStatusV1 = 'online';
+    updateOnlineBadge();
+    return validCount === items.length;
   }
 
-  function send(obj) {
-    if (!socket || socket.readyState !== 1) return;
-    try { socket.send(JSON.stringify({ ref: String(++ref), join_ref: '1', ...obj })); } catch {}
+  function clearRemoteRoster(clearVisuals = true) {
+    remotes.forEach((_, name) => forgetRemote(name));
+    motions.clear();
+    receivedMotionSequences.clear();
+    remoteBounds = [];
+    sameMapRosterSize = 1;
+    visibleSameMapSize = 1;
+    rosterMap = null;
+    if (clearVisuals) visualCache.clear();
   }
-  function broadcast(payload) {
-    if (!joined) return;
-    send({ topic: TOPIC, event: 'broadcast', payload: { type: 'broadcast', event: 'p', payload } });
+
+  function disconnectMotionChannel() {
+    const channel = motionChannel;
+    motionChannel = null;
+    motionChannelNumber = 0;
+    motionSubscribed = false;
+    motionConnecting = false;
+    motionSendInFlight = false;
+    lastMotionSignature = '';
+    lastMotionSentAt = 0;
+    receivedMotionSequences.clear();
+    if (channel && activeClient?.removeChannel) {
+      try { activeClient.removeChannel(channel); } catch {}
+    }
   }
+
+  function normalizeMotionPayload(eventPayload) {
+    const value = eventPayload?.payload && typeof eventPayload.payload === 'object'
+      ? eventPayload.payload
+      : eventPayload;
+    if (!value || typeof value !== 'object') return null;
+    const userId = String(value.u || '').slice(0, 80);
+    const session = String(value.s || '').slice(0, 80);
+    const channel = normalizeChannel(value.c);
+    const map = String(value.m || '').slice(0, 40);
+    const x = Number(value.x);
+    const y = Number(value.y);
+    const sequence = Number(value.q);
+    if (!userId || !session || channel == null || !/^[A-Za-z][A-Za-z0-9_-]{0,39}$/.test(map)
+      || !Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 8192 || y < 0 || y > 8192
+      || !Number.isInteger(sequence) || sequence < 1) return null;
+    return {
+      userId,
+      session,
+      channel,
+      map,
+      sequence,
+      x:Math.round(x),
+      y:Math.round(y),
+      facing:{
+        x:Math.max(-1, Math.min(1, Number(value.f?.x) || 0)),
+        y:Math.max(-1, Math.min(1, Number(value.f?.y) || 0)),
+      },
+      petSide:value.ps === 'right' ? 'right' : 'left',
+      pvpAvailable:value.pv === true,
+      moving:value.mv === true,
+      dance:value.dn === true,
+    };
+  }
+
+  function applyMotionBroadcast(eventPayload, expectedChannel) {
+    const value = normalizeMotionPayload(eventPayload);
+    const G = g();
+    if (!value || !G?.player || value.channel !== currentChannel
+      || value.channel !== expectedChannel || value.map !== G.currentMap) return false;
+    const found = [...remotes.entries()].find(([, remote]) => remote?.userId === value.userId);
+    if (!found) return false; // RPC가 검증해 준 현재 채널 명단만 움직일 수 있다.
+    const previousSequence = receivedMotionSequences.get(value.userId);
+    if (previousSequence?.session === value.session && value.sequence <= previousSequence.sequence) return false;
+    receivedMotionSequences.set(value.userId, { session:value.session, sequence:value.sequence });
+    const [name, previous] = found;
+    remotes.set(name, {
+      ...previous,
+      x:value.x,
+      y:value.y,
+      facing:value.facing,
+      petSide:value.petSide,
+      pvpAvailable:value.pvpAvailable,
+      moving:value.moving,
+      dance:value.dance,
+      at:Date.now(),
+    });
+    trackRemoteMotion(name, value.x, value.y, false);
+    return true;
+  }
+
+  async function authenticateRealtime(client) {
+    if (typeof client?.realtime?.setAuth !== 'function') return true;
+    if (typeof client?.auth?.getSession !== 'function') return false;
+    try {
+      const result = await client.auth.getSession();
+      const token = result?.data?.session?.access_token;
+      if (!token) return false;
+      await client.realtime.setAuth(token);
+      return true;
+    } catch { return false; }
+  }
+
+  async function connectMotionChannel(client, channel) {
+    if (!client || typeof client.channel !== 'function' || normalizeChannel(channel) == null) return false;
+    if (motionChannel && motionChannelNumber === channel && (motionSubscribed || motionConnecting)) return true;
+    disconnectMotionChannel();
+    channelStatus = 'connecting';
+    notifyChannelState();
+    if (!await authenticateRealtime(client) || client !== activeClient || currentChannel !== channel) {
+      if (client === activeClient) {
+        channelStatus = 'offline';
+        channelReason = 'REALTIME_AUTH_FAILED';
+        notifyChannelState();
+      }
+      return false;
+    }
+    let nextChannel = null;
+    try {
+      nextChannel = client.channel(`${MOTION_TOPIC_PREFIX}${channel}`, {
+        config:{ private:true, broadcast:{ self:false, ack:false } },
+      });
+      motionChannel = nextChannel;
+      motionChannelNumber = channel;
+      motionConnecting = true;
+      nextChannel
+        .on('broadcast', { event:'motion' }, (payload) => applyMotionBroadcast(payload, channel))
+        .subscribe((status) => {
+          if (motionChannel !== nextChannel || currentChannel !== channel) return;
+          if (status === 'SUBSCRIBED') {
+            motionSubscribed = true;
+            motionConnecting = false;
+            channelStatus = 'online';
+            channelReason = null;
+          } else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) {
+            motionSubscribed = false;
+            motionConnecting = false;
+            channelStatus = 'offline';
+            channelReason = 'REALTIME_UNAVAILABLE';
+          }
+          notifyChannelState();
+        });
+      return true;
+    } catch {
+      if (motionChannel === nextChannel) disconnectMotionChannel();
+      else if (nextChannel && client.removeChannel) {
+        try { client.removeChannel(nextChannel); } catch {}
+      }
+      channelStatus = 'offline';
+      channelReason = 'REALTIME_UNAVAILABLE';
+      notifyChannelState();
+      return false;
+    }
+  }
+
+  function broadcastMotion() {
+    const G = g();
+    const channel = motionChannel;
+    if (!motionSubscribed || !channel || motionChannelNumber !== currentChannel
+      || motionSendInFlight || !G?.player || !document.querySelector?.('#game.active')) return false;
+    const identity = window.getPvpIdentityV1?.();
+    if (!identity?.userId) return false;
+    const now = Date.now();
+    const petSide = avatarVisualSync?.petSideFromFacing(G.player._petSide, G.lastMove)
+      || G.player._petSide || 'left';
+    const payload = {
+      u:String(identity.userId).slice(0, 80),
+      s:motionSessionId,
+      q:++motionSequence,
+      c:currentChannel,
+      m:String(G.currentMap || '').slice(0, 40),
+      x:Math.round(Number(G.player.x) || 0),
+      y:Math.round(Number(G.player.y) || 0),
+      f:{ x:Number(G.lastMove?.x) || 0, y:Number(G.lastMove?.y) || 1 },
+      ps:petSide === 'right' ? 'right' : 'left',
+      pv:G.currentMap === 'town' && !G.modalState?.pause && !G.currentCombatMonsterId,
+      mv:!!G.isMoving,
+      dn:Number(G.danceTimer || 0) > 0,
+    };
+    const signature = JSON.stringify([payload.m, payload.x, payload.y, payload.f.x, payload.f.y,
+      payload.ps, payload.pv, payload.mv, payload.dn]);
+    if (signature === lastMotionSignature && now - lastMotionSentAt < 1000) return false;
+    lastMotionSignature = signature;
+    lastMotionSentAt = now;
+    motionSendInFlight = true;
+    try {
+      Promise.resolve(channel.send({ type:'broadcast', event:'motion', payload }))
+        .catch(() => {})
+        .finally(() => { motionSendInFlight = false; });
+      return true;
+    } catch {
+      motionSendInFlight = false;
+      return false;
+    }
+  }
+
+  function clearPresenceState(status = 'waiting-login') {
+    disconnectMotionChannel();
+    activeClient = null;
+    lastSuccessfulSyncAt = 0;
+    pendingChats.length = 0;
+    seenChatIds.clear();
+    seenChatOrder.length = 0;
+    clearRemoteRoster(true);
+    worldAnnouncements?.reset?.();
+    lastChatId = '0';
+    channelJoined = false;
+    channelStatus = status;
+    channelReason = null;
+    motionSessionId = createMessageId();
+    motionSequence = 0;
+    window.__multiplayerStatusV53 = status;
+    window.__multiplayerPresenceStatusV1 = status;
+    updateOnlineBadge();
+    notifyChannelState();
+  }
+
+  function ensureRpcClient(G) {
+    const client = window.secureStudentAccessV2?.getClient?.() || null;
+    if (!client || typeof client.rpc !== 'function' || !G?.player) {
+      if (activeClient) clearPresenceState('waiting-login');
+      return null;
+    }
+    if (client !== activeClient) {
+      clearPresenceState('connecting');
+      activeClient = client;
+    }
+    return client;
+  }
+
+  function normalizeChatMessage(value) {
+    if (!value || typeof value !== 'object') return null;
+    const id = String(value.id || '').slice(0, 80);
+    const userId = String(value.userId || '').slice(0, 80);
+    const name = String(value.name || '').normalize('NFKC').trim().slice(0, 20);
+    const text = String(value.text || '').normalize('NFKC').trim().slice(0, 120);
+    if (!/^\d+$/.test(id) || !userId || !name || !text || CONTROL_CHARACTERS_RE.test(text)) return null;
+    return { id, userId, name, text };
+  }
+
+  function rememberChatId(id) {
+    if (seenChatIds.has(id)) return false;
+    seenChatIds.add(id);
+    seenChatOrder.push(id);
+    while (seenChatOrder.length > 500) seenChatIds.delete(seenChatOrder.shift());
+    return true;
+  }
+
+  function applyChatMessages(items) {
+    if (!Array.isArray(items)) return;
+    const me = window.getPvpIdentityV1?.();
+    items.forEach((item) => {
+      const message = normalizeChatMessage(item);
+      if (!message) return;
+      lastChatId = message.id;
+      if (!rememberChatId(message.id)) return;
+      if ((me?.userId && message.userId === me.userId) || message.name === g()?.player?.name) return;
+      const found = [...remotes.entries()].find(([name, remote]) => (
+        remote?.userId === message.userId || name === message.name
+      ));
+      if (found) {
+        remotes.set(found[0], {
+          ...found[1],
+          bubble:{ text:message.text, until:Date.now() + 4200 },
+          at:Date.now(),
+        });
+      }
+      try { window.appendChatMessage?.('user', message.name, message.text); } catch {}
+    });
+  }
+
+  function createMessageId() {
+    try {
+      const value = window.crypto?.randomUUID?.();
+      if (value) return value;
+    } catch {}
+    const bytes = Array.from({ length:16 }, () => Math.floor(Math.random() * 256));
+    bytes[6] = (bytes[6] & 15) | 64;
+    bytes[8] = (bytes[8] & 63) | 128;
+    const hex = bytes.map((value) => value.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+
   window.__mpBroadcastChatV53 = function (text) {
-    const G = g(); if (!G?.player) return;
-    broadcast({ type: 'chat', name: G.player.name, text: String(text).slice(0, 120) });
+    const G = g();
+    if (!ensureRpcClient(G)) return false;
+    const message = String(text || '').normalize('NFKC').trim().slice(0, 120);
+    if (!message || CONTROL_CHARACTERS_RE.test(message)) return false;
+    if (pendingChats.length >= 20) {
+      try { window.toast?.('채팅 전송이 잠시 밀렸어요. 잠깐 뒤 다시 보내 주세요.'); } catch {}
+      return false;
+    }
+    pendingChats.push({ id:createMessageId(), text:message });
+    return true;
   };
+
+  function rpcWithTimeout(client, payload) {
+    let timer = null;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('WORLD_PRESENCE_TIMEOUT')), RPC_TIMEOUT_MS);
+    });
+    return Promise.race([
+      Promise.resolve(client.rpc('sync_world_presence_v3', { p_state:payload })),
+      timeout,
+    ]).finally(() => clearTimeout(timer));
+  }
+
+  function leastAvailableChannel(excludedChannel = null) {
+    return Array.from({ length:CHANNEL_COUNT }, (_, index) => index + 1)
+      .filter((channel) => channel !== excludedChannel && channelCounts[String(channel)] < CHANNEL_CAPACITY)
+      .sort((left, right) => (
+        channelCounts[String(left)] - channelCounts[String(right)] || left - right
+      ))[0] || null;
+  }
+
+  async function performPresenceSync(options = {}) {
+    const G = g();
+    if (!G?.player || !document.querySelector('#game.active')) return false;
+    const client = ensureRpcClient(G);
+    if (!client) return false;
+    const sentMap = G.currentMap;
+    let requestedChannel = normalizeChannel(options.channel) || currentChannel;
+    const changingChannel = channelJoined && requestedChannel !== currentChannel;
+    const resetCursor = changingChannel || !channelJoined;
+    const sentChat = changingChannel ? null : (pendingChats[0] || null);
+    try {
+      let response = await rpcWithTimeout(
+        client,
+        localPresencePayload(G, sentChat, requestedChannel, resetCursor),
+      );
+      let data = response?.data;
+      if (response?.error) throw response.error;
+      if (client !== activeClient || g()?.currentMap !== sentMap) return false;
+      if (data?.ok === false && data?.code === 'CHANNEL_FULL') {
+        normalizeChannelCounts(data.channelCounts);
+        const fallback = !channelJoined && options.manual !== true
+          ? leastAvailableChannel(requestedChannel)
+          : null;
+        if (fallback != null) {
+          requestedChannel = fallback;
+          response = await rpcWithTimeout(
+            client,
+            localPresencePayload(G, null, requestedChannel, true),
+          );
+          data = response?.data;
+          if (response?.error) throw response.error;
+          if (client !== activeClient || g()?.currentMap !== sentMap) return false;
+        }
+      }
+      if (data?.ok === false && data?.code === 'CHANNEL_FULL') {
+        normalizeChannelCounts(data.channelCounts);
+        channelStatus = channelJoined ? 'online' : 'full';
+        channelReason = 'CHANNEL_FULL';
+        notifyChannelState(true);
+        updateOnlineBadge();
+        return Object.freeze({
+          ok:false,
+          code:'CHANNEL_FULL',
+          channel:normalizeChannel(data.channel) || requestedChannel,
+          previousChannel:normalizeChannel(data.previousChannel),
+          channelCounts:Object.freeze({ ...channelCounts }),
+        });
+      }
+      const responseChannel = normalizeChannel(data?.channel);
+      if (!data || data.ok !== true || data.map !== sentMap || responseChannel !== requestedChannel
+        || !Array.isArray(data.players) || !Array.isArray(data.visuals)
+        || !Array.isArray(data.messages) || !Array.isArray(data.announcements)) {
+        throw new Error('WORLD_PRESENCE_INVALID');
+      }
+      normalizeChannelCounts(data.channelCounts);
+      const channelChanged = channelJoined && currentChannel !== responseChannel;
+      if (channelChanged) {
+        disconnectMotionChannel();
+        clearRemoteRoster(true);
+        seenChatIds.clear();
+        seenChatOrder.length = 0;
+        lastChatId = '0';
+        if (pendingChats.length) {
+          pendingChats.length = 0;
+          try { window.toast?.('채널을 변경해 전송 대기 중이던 채팅을 비웠어요.'); } catch {}
+        }
+      } else if (rosterMap != null && rosterMap !== sentMap) {
+        clearRemoteRoster(false);
+      }
+      currentChannel = responseChannel;
+      rosterMap = sentMap;
+      channelJoined = true;
+      savePreferredChannel(currentChannel);
+      if (!applyPresenceSnapshot(data.players, data.visuals, sentMap)) {
+        throw new Error('WORLD_PRESENCE_VISUAL_MISSING');
+      }
+      applyChatMessages(data.messages);
+      worldAnnouncements?.consume?.(data.announcements);
+      if (sentChat && data.acceptedChatId === sentChat.id && pendingChats[0]?.id === sentChat.id) {
+        pendingChats.shift();
+      }
+      lastSuccessfulSyncAt = Date.now();
+      window.__multiplayerStatusV53 = 'online';
+      window.__multiplayerPresenceStatusV1 = 'online';
+      channelStatus = motionSubscribed && motionChannelNumber === currentChannel ? 'online' : 'connecting';
+      channelReason = null;
+      updateOnlineBadge();
+      notifyChannelState(true);
+      void connectMotionChannel(client, currentChannel);
+      return Object.freeze({
+        ok:true,
+        channel:currentChannel,
+        channelCounts:Object.freeze({ ...channelCounts }),
+      });
+    } catch (error) {
+      if (client === activeClient) {
+        window.__multiplayerStatusV53 = 'offline';
+        window.__multiplayerPresenceStatusV1 = 'offline';
+        channelStatus = 'offline';
+        channelReason = String(error?.code || error?.message || 'SYNC_FAILED').slice(0, 80);
+        updateOnlineBadge();
+        notifyChannelState(true);
+      }
+      return false;
+    }
+  }
+
+  function syncPresence(options = {}) {
+    if (presenceSyncPromise) {
+      if (options.waitForCurrent === true) {
+        return presenceSyncPromise.then(() => syncPresence({ ...options, waitForCurrent:false }));
+      }
+      return Promise.resolve(false);
+    }
+    const task = performPresenceSync(options);
+    presenceSyncPromise = task.finally(() => {
+      if (presenceSyncPromise === wrapped) presenceSyncPromise = null;
+    });
+    const wrapped = presenceSyncPromise;
+    return wrapped;
+  }
+
+  async function changeChannel(value) {
+    const target = normalizeChannel(value);
+    if (target == null) return Object.freeze({ ok:false, code:'INVALID_CHANNEL', state:getChannelState() });
+    const blockReason = activityBlockReason();
+    if (channelSwitching) return Object.freeze({ ok:false, code:'SWITCHING', state:getChannelState() });
+    if (Date.now() < channelCooldownUntil) {
+      return Object.freeze({ ok:false, code:'COOLDOWN', state:getChannelState() });
+    }
+    if (blockReason) return Object.freeze({ ok:false, code:blockReason, state:getChannelState() });
+    if (channelJoined && target === currentChannel) {
+      return Object.freeze({ ok:true, code:'ALREADY_IN_CHANNEL', channel:currentChannel, state:getChannelState() });
+    }
+    channelSwitching = true;
+    channelReason = null;
+    notifyChannelState(true);
+    let outcome = null;
+    try {
+      const result = await syncPresence({ channel:target, manual:true, waitForCurrent:true });
+      if (result?.ok === true && result.channel === target) {
+        channelCooldownUntil = Date.now() + CHANNEL_SWITCH_COOLDOWN_MS;
+        channelReason = null;
+        setTimeout(() => notifyChannelState(true), CHANNEL_SWITCH_COOLDOWN_MS + 25);
+        outcome = result;
+      } else {
+        if (result?.code === 'CHANNEL_FULL') channelReason = 'CHANNEL_FULL';
+        outcome = result || { ok:false, code:'SYNC_FAILED' };
+      }
+    } finally {
+      channelSwitching = false;
+      notifyChannelState(true);
+    }
+    return Object.freeze({ ...outcome, state:getChannelState() });
+  }
 
   function tick() {
     const G = g();
     const now = Date.now();
-    remotes.forEach((v, k) => { if (now - (v.at || 0) > STALE_MS) forgetRemote(k); });
-    if (G?.player && now - lastSent >= SEND_MS && document.querySelector('#game.active')) {
-      lastSent = now;
-      const weaponId = G.player.equipment?.weapon || null;
-      const petSide = avatarVisualSync?.petSideFromFacing(G.player._petSide, G.lastMove)
-        || G.player._petSide
-        || 'left';
-      G.player._petSide = petSide;
-      const payload = {
-        type: 'pos',
-        userId:window.getPvpIdentityV1?.()?.userId || null,
-        name: G.player.name,
-        map: G.currentMap,
-        x: Math.round(G.player.x), y: Math.round(G.player.y),
-        level: G.player.level, class: G.player.class, spec: G.player.spec || null,
-        equipment: G.player.equipment || {}, appearance: G.player.appearance || {},
-        costume: G.player.costume || {},
-        nameplate:G.player.nameplate && typeof G.player.nameplate === 'object'
-          ? { ...G.player.nameplate }
-          : null,
-        activePet:typeof G.player.activePet === 'string' ? G.player.activePet : null,
-        petSide,
-        weaponTier:avatarVisualSync?.normalizeTier(
-          weaponId ? G.player.weaponUpgrades?.[weaponId] : 0,
-        ) || 0,
-        facing:{
-          x:Number(G.lastMove?.x) || 0,
-          y:Number(G.lastMove?.y) || 1,
-        },
-        pvpAvailable:G.currentMap === 'town' && !G.modalState?.pause && !G.currentCombatMonsterId,
-        moving: !!G.isMoving,
-        dance: Number(G.danceTimer || 0) > 0,
-      };
-      // 달라진 게 없으면 굳이 보내지 않는다. 대신 사라지지 않도록 가끔은 알린다.
-      const key = `${payload.userId || ''}|${payload.map}|${payload.x}|${payload.y}|${payload.moving}|${payload.dance}|${payload.pvpAvailable}|${payload.level}|${payload.activePet || ''}|${payload.petSide}|${payload.weaponTier}|${JSON.stringify(payload.nameplate || {})}|${payload.facing.x},${payload.facing.y}`;
-      if (key !== lastPayloadKey || now - lastKeepaliveAt >= IDLE_KEEPALIVE_MS) {
-        lastPayloadKey = key;
-        lastKeepaliveAt = now;
-        broadcast(payload);
+    remotes.forEach((value, name) => {
+      if (now - (value.at || 0) > STALE_MS) forgetRemote(name);
+    });
+    if (G?.player && document.querySelector('#game.active')) {
+      ensureRpcClient(G);
+      if (lastSuccessfulSyncAt && now - lastSuccessfulSyncAt > STALE_MS) {
+        window.__multiplayerStatusV53 = 'offline';
+        window.__multiplayerPresenceStatusV1 = 'offline';
+        channelStatus = 'offline';
+        channelReason = 'SYNC_STALE';
       }
+    } else if (activeClient) {
+      clearPresenceState('waiting-login');
     }
+    updateOnlineBadge();
+    notifyChannelState();
   }
-  setInterval(tick, SEND_MS);
-  window.addEventListener('beforeunload', () => {
-    const G = g();
-    if (G?.player) broadcast({ type: 'leave', name: G.player.name });
+
+  setInterval(tick, MAINTENANCE_MS);
+  setInterval(broadcastMotion, MOTION_BROADCAST_MS);
+  setInterval(() => { syncPresence(); }, PRESENCE_SYNC_MS);
+  window.__mpSyncPresenceV54 = syncPresence;
+  window.__mpPendingChatCountV54 = () => pendingChats.length;
+  window.__mpMultiplayerCountsV54 = () => Object.freeze({
+    sameMap:sameMapRosterSize,
+    visible:visibleSameMapSize,
   });
-  connect();
+  window.__mpRemoteRenderStatsV54 = () => Object.freeze({
+    ...remoteRenderStats,
+    renderLastMs:Number(remoteRenderStats.renderLastMs.toFixed(3)),
+    renderEmaMs:Number(remoteRenderStats.renderEmaMs.toFixed(3)),
+    renderMaxMs:Number(remoteRenderStats.renderMaxMs.toFixed(3)),
+    estimatedFps:Number(remoteRenderStats.estimatedFps.toFixed(1)),
+  });
+  window.addEventListener('beforeunload', () => clearPresenceState('waiting-login'));
 
   /* ── 렌더: 같은 맵의 다른 플레이어 그리기 ── */
   function drawRemotePet(ctx, remote, worldX, worldY, toScreen, now, moving) {
@@ -230,43 +968,124 @@
     });
   }
 
+  // 신규 학생들이 같은 스폰 좌표에 정확히 겹치면 28명이 한 명처럼 보인다.
+  // 실제 충돌 좌표는 바꾸지 않고 화면상의 원격 캐릭터만 펼친다. 계산은 새
+  // presence snapshot이 왔을 때 한 번, 군집별 정렬도 한 번만 한다.
+  function refreshCrowdOffsets(G) {
+    remoteRenderStats.crowdLayouts += 1;
+    const members = [{
+      id:String(window.getPvpIdentityV1?.()?.userId || G?.player?.name || 'me'),
+      x:Number(G?.player?.x),
+      y:Number(G?.player?.y),
+      remote:null,
+    }];
+    remotes.forEach((remote, name) => {
+      if (!remote || remote.map !== G?.currentMap) return;
+      remote._crowdOffset = { x:0, y:0 };
+      members.push({
+        id:String(remote.userId || name),
+        x:Number(remote.x),
+        y:Number(remote.y),
+        remote,
+      });
+    });
+    const visited = new Set();
+    members.forEach((seed, seedIndex) => {
+      if (visited.has(seedIndex)) return;
+      const queue = [seedIndex];
+      const cluster = [];
+      visited.add(seedIndex);
+      while (queue.length) {
+        const index = queue.shift();
+        const current = members[index];
+        cluster.push(current);
+        members.forEach((candidate, candidateIndex) => {
+          if (visited.has(candidateIndex)) return;
+          if (Math.hypot(candidate.x - current.x, candidate.y - current.y) > 16) return;
+          visited.add(candidateIndex);
+          queue.push(candidateIndex);
+        });
+      }
+      if (cluster.length < 2) return;
+      cluster.sort((a, b) => a.id.localeCompare(b.id));
+      cluster.forEach((member, index) => {
+        if (!member.remote) return;
+        const ringIndex = Math.floor(index / 10);
+        const ringStart = ringIndex * 10;
+        const ringSize = Math.min(10, cluster.length - ringStart);
+        const angle = ((index - ringStart) / Math.max(1, ringSize)) * Math.PI * 2 - Math.PI / 2;
+        const radius = 30 + ringIndex * 24;
+        member.remote._crowdOffset = {
+          x:Math.cos(angle) * radius,
+          y:Math.sin(angle) * radius * 0.58,
+        };
+      });
+    });
+  }
+
+  function remoteSpriteState(remote, moving) {
+    return avatarVisualSync?.spriteStateFor({
+      class:remote.class,
+      equipment:remote.equipment || {},
+      costume:remote.costume || {},
+      weaponTier:remote.weaponTier,
+    }, {
+      attack:0,
+      moving,
+      dance:remote.dance ? 1 : 0,
+      remote:true,
+    }) || {
+      attack:0,
+      moving,
+      dance:remote.dance ? 1 : 0,
+      remote:true,
+      equipment:remote.equipment || {},
+      costume:remote.costume || {},
+    };
+  }
+
   function renderRemotes() {
     const G = g();
-    if (!G?.player || !G.ctx) return;
+    // 혼자 접속한 경우 멀티플레이 렌더 계층은 프레임 작업을 전혀 하지 않는다.
+    // 빈 명단에서도 진단 계산과 DOM 상태 확인이 매 프레임 반복되던 회귀를 막는다.
+    if (!G?.player || !G.ctx || remotes.size === 0) return;
     const draw = (typeof drawPlayerSprite === 'function') ? drawPlayerSprite : null;
     const toScreen = (typeof worldToScreen === 'function') ? worldToScreen : null;
     if (!draw || !toScreen) return;
     const ctx = G.ctx;
     remoteBounds = [];
     const now = Date.now();
+    const renderStarted = Number(window.performance?.now?.()) || now;
+    if (remoteRenderStats.lastRenderAt > 0) {
+      const frameInterval = renderStarted - remoteRenderStats.lastRenderAt;
+      if (frameInterval > 0 && frameInterval < 1000) {
+        const instantFps = Math.min(240, 1000 / frameInterval);
+        remoteRenderStats.estimatedFps = remoteRenderStats.estimatedFps > 0
+          ? remoteRenderStats.estimatedFps * 0.9 + instantFps * 0.1
+          : instantFps;
+      }
+    }
+    remoteRenderStats.lastRenderAt = renderStarted;
+    remoteRenderStats.renderCalls += 1;
+    let visibleRemotes = 0;
     remotes.forEach((p, name) => {
       if (!p || p.map !== G.currentMap || typeof p.x !== 'number') return;
       // 마지막으로 받은 좌표로 튀지 않고, 두 지점 사이를 채운 위치에 그린다
       const eased = motions.get(name)?.sample(now) || null;
-      const worldX = eased ? eased.x : p.x;
-      const worldY = eased ? eased.y : p.y;
+      const baseX = eased ? eased.x : p.x;
+      const baseY = eased ? eased.y : p.y;
+      const worldX = baseX + (Number(p._crowdOffset?.x) || 0);
+      const worldY = baseY + (Number(p._crowdOffset?.y) || 0);
       const s = toScreen(worldX, worldY);
       if (s.x < -120 || s.y < -120 || s.x > G.width + 120 || s.y > G.height + 120) return;
+      visibleRemotes += 1;
       drawRemotePet(ctx, p, worldX, worldY, toScreen, now, !!p.moving || !!eased?.moving);
       ctx.save();
       ctx.globalAlpha = 0.96;
       try {
-        const spriteState = avatarVisualSync?.spriteStateFor({
-          klass:p.class,
-          equipment:p.equipment || {},
-          costume:p.costume || {},
-          weaponTier:p.weaponTier,
-        }, {
-          attack:0,
-          moving:!!p.moving || !!eased?.moving,
-          dance:p.dance ? 1 : 0,
-        }) || {
-          attack:0,
-          moving:!!p.moving || !!eased?.moving,
-          dance:p.dance ? 1 : 0,
-          equipment:p.equipment || {},
-          costume:p.costume || {},
-        };
+        const moving = !!p.moving || !!eased?.moving;
+        remoteRenderStats.directPaints += 1;
+        const spriteState = remoteSpriteState(p, moving);
         draw(ctx, s.x, s.y, p.appearance || {}, p.class || 'warrior',
           spriteState,
           (typeof PLAYER_WORLD_SCALE !== 'undefined' ? PLAYER_WORLD_SCALE : 1.26), p.spec || null);
@@ -287,19 +1106,27 @@
       try { drawRemoteNameplate(ctx, s, p); } catch {}
 
       // 말풍선은 이름표와 별개로 캐릭터 머리 위에 둔다.
-      ctx.save();
-      ctx.font = '700 12px "Noto Sans KR", sans-serif';
-      ctx.textAlign = 'center';
-      if (p.bubble && p.bubble.until > Date.now()) {
+      if (p.bubble && p.bubble.until > now) {
+        ctx.save();
+        ctx.font = '700 12px "Noto Sans KR", sans-serif';
+        ctx.textAlign = 'center';
         const t = p.bubble.text;
         const bw = Math.min(220, ctx.measureText(t).width + 18);
         ctx.fillStyle = 'rgba(255,255,255,.94)';
         ctx.beginPath(); ctx.roundRect(s.x - bw / 2, s.y - 92, bw, 24, 10); ctx.fill();
         ctx.fillStyle = '#0f172a';
         ctx.fillText(t, s.x, s.y - 75);
+        ctx.restore();
       }
-      ctx.restore();
     });
+    visibleSameMapSize = 1 + visibleRemotes;
+    const renderFinished = Number(window.performance?.now?.()) || Date.now();
+    const renderMs = Math.max(0, renderFinished - renderStarted);
+    remoteRenderStats.renderLastMs = renderMs;
+    remoteRenderStats.renderEmaMs = remoteRenderStats.renderCalls > 1
+      ? remoteRenderStats.renderEmaMs * 0.9 + renderMs * 0.1
+      : renderMs;
+    remoteRenderStats.renderMaxMs = Math.max(remoteRenderStats.renderMaxMs, renderMs);
   }
 
   g()?.canvas?.addEventListener?.('contextmenu', (event) => {
@@ -321,7 +1148,8 @@
       worldRenderPipeline.registerLayer({
         id: 'remote-players-v53',
         priority: 335, // 플레이어(340)보다 살짝 뒤
-        when: ({ map }) => !['petShopInterior', 'upgradeShopInterior', 'raidTower'].includes(map),
+        when: ({ map }) => remotes.size > 0
+          && !['petShopInterior', 'upgradeShopInterior', 'raidTower'].includes(map),
         render: renderRemotes,
       });
       return true;

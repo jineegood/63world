@@ -15,10 +15,19 @@ test('환경설정 하단은 눈에 띄는 도움말과 관리자 모드 두 버
   const end = gameSource.indexOf('function monsterBase', start);
   const settings = start >= 0 && end > start ? gameSource.slice(start, end) : '';
   assert.match(settings, /class="settings-actions-v1"/);
+  assert.match(settings, /id="worldChannelSettingsV1"/);
+  assert.match(settings, /5개 채널 · 채널당 최대 8명/);
+  assert.match(settings, /mountWorldChannelSettingsV1\(\)/);
   assert.match(settings, /class="help-launch-v1"[^>]*onclick="openGameHelpV1\(\)"[^>]*>❓ 도움말/);
   assert.match(settings, /onclick="openAdminPanel\(\)"[^>]*>🔐 관리자 모드/);
   assert.doesNotMatch(settings, /관리자 창 열기/);
   assert.match(styleSource, /button\.help-launch-v1\s*\{[\s\S]*?#fde047[\s\S]*?#86efac/);
+});
+
+test('게임 화면에서 ESC는 전투·PVP·던전이 아닐 때 환경설정을 연다', () => {
+  assert.match(gameSource, /k === 'escape'[\s\S]*?game\.currentMap !== 'raidTower'[\s\S]*?YuksamRaidRunUi\?\.hasSession\?\.\(\)[\s\S]*?openSettingsModal\(\)/);
+  assert.match(gameSource, /game\.modalState\.type === 'combat'\) window\.escapeCombat\(\)/);
+  assert.match(gameSource, /!window\.getActivePvpMatchV1\?\.\(\)/);
 });
 
 test('도움말은 여덟 항목을 탭으로 구분하고 기존 이동·전투·PVP 튜토리얼 문구를 재사용한다', () => {

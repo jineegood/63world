@@ -21,6 +21,35 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
 
   const G = window.__G;
   const worlds = window.YuksamData.worldDefs;
+  const hintRenderProbe = window.eval(`(() => {
+    const element = document.getElementById('interactionHint');
+    const originalLookup = getNearestInteractable;
+    let renderedValue = element.textContent;
+    let writes = 0;
+    let label = '__interaction_hint_dedupe_probe_a__';
+    Object.defineProperty(element, 'textContent', {
+      configurable:true,
+      get:() => renderedValue,
+      set:(next) => { writes += 1; renderedValue = String(next); },
+    });
+    try {
+      getNearestInteractable = () => ({ label });
+      updateInteractionHint();
+      updateInteractionHint();
+      updateInteractionHint();
+      label = '__interaction_hint_dedupe_probe_b__';
+      updateInteractionHint();
+      return { writes, renderedValue };
+    } finally {
+      getNearestInteractable = originalLookup;
+      delete element.textContent;
+      element.textContent = renderedValue;
+    }
+  })()`);
+  check('unchanged interaction hint skips repeated DOM writes',
+    hintRenderProbe.writes === 2 && hintRenderProbe.renderedValue === '__interaction_hint_dedupe_probe_b__',
+    JSON.stringify(hintRenderProbe));
+
   function candidate(map, point) {
     G.currentMap = map;
     G.player.map = map;

@@ -73,6 +73,15 @@ function createHarness({ clearedGroup = 0 } = {}) {
     YuksamRaidRunUi:{
       async openNetworkLobby(options) { calls.push(options); return true; },
     },
+    YuksamRaidNameplatesV1:{
+      rewardForGroup(group) {
+        return ({
+          2:{ icon:'▣', floorLabel:'20층', name:'강철 승강기 이름표', shortName:'강철 승강기' },
+          4:{ icon:'◆', floorLabel:'40층', name:'황혼의 창 이름표', shortName:'황혼의 창' },
+          7:{ icon:'♛', floorLabel:'63층', name:'육삼 정상 이름표', shortName:'육삼의 정상' },
+        })[group] || null;
+      },
+    },
     /* 구간 해금은 플레이어의 raidTopGroup으로 정해진다. */
     game:{ player:{ raidTopGroup:clearedGroup } },
   };
@@ -178,6 +187,17 @@ test('방 만들기 층 목록은 실제로 깬 구간에만 Clear 표시를 붙
   assert.match(h.html(), /11–20층<em class="raid-floor-clear">Clear!<\/em>/);
   assert.doesNotMatch(h.html(), /21–30층<em class="raid-floor-clear">Clear!<\/em>/);
   assert.match(source, /\.raid-floor-clear\{[^}]*background:#86efac/);
+});
+
+test('20·40·63층 구간에는 이름표 보상이 미리 표시된다', () => {
+  const h = createHarness({ clearedGroup:7 });
+  h.context.YuksamRaidEntryUi.openFloorSelection();
+
+  assert.equal((h.html().match(/class="raid-floor-reward/g) || []).length, 3);
+  assert.match(h.html(), /title="강철 승강기 이름표">▣ 강철 승강기/);
+  assert.match(h.html(), /title="황혼의 창 이름표">◆ 황혼의 창/);
+  assert.match(h.html(), /class="raid-floor-reward summit" title="육삼 정상 이름표">♛ 육삼의 정상/);
+  assert.match(source, /\.raid-floor-reward\.summit\{[^}]*#67e8f9/);
 });
 
 test('마지막 구간까지 깨도 목록은 일곱 구간 그대로다', () => {

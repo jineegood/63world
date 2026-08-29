@@ -13,6 +13,7 @@ let secureAdminStudentsV2 = [];
 let secureAdminStudentsStatusV2 = 'idle';
 let secureAdminStudentsErrorV2 = '';
 let secureAdminMutationV2 = false;
+let secureAdminPasswordResetPendingV2 = false;
 let secureAdminAlertsV1 = [];
 let secureAdminAlertsStatusV1 = 'idle';
 let secureAdminAlertsErrorV1 = '';
@@ -108,8 +109,12 @@ window.adminApplyCurrentStudentCheatV3 = async function adminApplyCurrentStudent
       heal:'HP 100% 회복',
       raidAdvance:`던전 ${Math.min(63, Number(result.snapshot?.raidTopGroup || 0) * 10)}층까지 Clear!`,
     };
-    toast(`테스트: ${labels[action] || '치트 적용 완료'}`);
-    appendChatMessage?.('system', '테스트', labels[action] || '치트 적용 완료');
+    const unlocked = (Array.isArray(result.newNameplates) ? result.newNameplates : [])
+      .map((id) => window.YuksamRaidNameplatesV1?.definition?.(id)?.name)
+      .filter(Boolean);
+    const message = `${labels[action] || '치트 적용 완료'}${unlocked.length ? ` · ${unlocked.join(', ')} 해금!` : ''}`;
+    toast(`테스트: ${message}`);
+    appendChatMessage?.('system', '테스트', message);
   } catch (error) {
     toast(error?.message || '서버 치트를 적용하지 못했어요.');
   } finally {
@@ -122,6 +127,24 @@ function fmtAcc(rec){
   const correct = rec && rec.correct ? rec.correct : 0;
   const pct = answered ? Math.round((correct/answered)*100) : 0;
   return `${pct}% <span class="muted">(${correct}/${answered})</span>`;
+}
+
+function adminStudentPresenceHtmlV2(student) {
+  if (student?.isOnline) {
+    const mapLabel = student.currentMap ? ` · ${student.currentMap}` : '';
+    return `<span class="badge" title="최근 접속 신호 ${escapeHtml(fmtDate(student.presenceLastSeenAt))}">🟢 접속 중${escapeHtml(mapLabel)}</span>`;
+  }
+  const lastSeen = student?.presenceLastSeenAt
+    ? ` title="마지막 접속 신호 ${escapeHtml(fmtDate(student.presenceLastSeenAt))}"`
+    : '';
+  return `<span class="badge muted"${lastSeen}>⚪ 오프라인</span>`;
+}
+
+function adminStudentRaidProgressV2(student) {
+  const group = Math.max(0, Math.min(7, Math.trunc(Number(student?.raidTopGroup) || 0)));
+  if (group <= 0) return '<span class="muted">미돌파</span>';
+  const floor = group === 7 ? 63 : group * 10;
+  return `<b>${group}구간 · ${floor}층</b>`;
 }
 
 function teacherZoneLabel(zone){
@@ -292,6 +315,8 @@ function teacherStudentsHtml(){
           <td><button class="ghost tiny" onclick="adminOpenStudentDetailV2('${student.userId}')"><b>${escapeHtml(student.displayName)}</b></button></td>
           <td>${escapeHtml(classMeta.name || '')}${spec}</td>
           <td>Lv.${student.level}</td>
+          <td>${adminStudentPresenceHtmlV2(student)}</td>
+          <td>${adminStudentRaidProgressV2(student)}</td>
           <td>${fmtAcc(student.records)}</td>
           <td>${student.gold}</td>
           <td>${student.building}</td>
@@ -299,7 +324,9 @@ function teacherStudentsHtml(){
           <td class="t-actions">
             <button class="primary tiny" onclick="adminOpenGrantModalV2('${student.userId}')">보상</button>
             <button class="ghost tiny" onclick="adminOpenWrongLogV2('${student.userId}')">오답</button>
-            <button class="ghost tiny" onclick="adminOpenResetPasswordV2('${student.userId}')">비밀번호 재설정</button>
+            <button class="ghost tiny" onclick="adminOpenStudentEquipmentV2('${student.userId}')">장비창 보기</button>
+            <button class="ghost tiny" onclick="adminOpenStudentSkillsV2('${student.userId}')">스킬창 보기</button>
+            <button class="ghost tiny" onclick="adminOpenResetPasswordV2('${student.userId}')">임시 비밀번호</button>
             <button class="ghost tiny danger-text" onclick="adminConfirmDeleteStudentV2('${student.userId}')">계정 삭제</button>
           </td>
         </tr>`;
@@ -311,7 +338,7 @@ function teacherStudentsHtml(){
           <button class="ghost tiny danger-text" ${checkedAdminStudentsV2.size ? '' : 'disabled'}
             onclick="adminConfirmDeleteSelectedStudentsV2()">선택 계정 삭제 (${checkedAdminStudentsV2.size})</button>
         </div>
-        <table class="teacher-table"><thead><tr><th>선택</th><th>이름</th><th>직업</th><th>레벨</th><th>정답률</th><th>골드</th><th>빌딩</th><th>최근 저장</th><th>관리</th></tr></thead>
+        <table class="teacher-table"><thead><tr><th>선택</th><th>이름</th><th>직업</th><th>레벨</th><th>현재 접속</th><th>던전 최고 돌파</th><th>정답률</th><th>골드</th><th>빌딩</th><th>최근 저장</th><th>관리</th></tr></thead>
         <tbody id="secureAdminStudentRows">${rows}</tbody></table>
       </div>`;
     }
@@ -332,7 +359,6 @@ function teacherStudentsHtml(){
       <td>${fmtAcc(p.records)}</td>
       <td>${p.gold}</td>
       <td>${p.building}</td>
-      <td><code>${escapeHtml(p.password)}</code></td>
       <td class="muted">${fmtDate(p.updatedAt)}</td>
       <td class="t-actions">
         <button class="primary tiny" onclick="adminOpenGrantModal('${escapeJs(p.name)}')">보상지급</button>
@@ -343,7 +369,7 @@ function teacherStudentsHtml(){
   }).join('');
   return `<div class="teacher-body">
     <table class="teacher-table">
-      <tr><th>이름</th><th>직업</th><th>레벨</th><th>정답률</th><th>골드</th><th>빌딩</th><th>비밀번호</th><th>최근저장</th><th>관리</th></tr>
+      <tr><th>이름</th><th>직업</th><th>레벨</th><th>정답률</th><th>골드</th><th>빌딩</th><th>최근저장</th><th>관리</th></tr>
       ${rows}
     </table>
   </div>`;
@@ -352,12 +378,13 @@ function teacherStudentsHtml(){
 function teacherQuestionRowHtml(wb, q, qi){
   const selectionKey = `${wb.id}:${q.id}`;
   const checked = checkedWorkbookQuestionsV2.has(selectionKey);
+  const selectionAttrs = `data-workbook-question-select="true" data-workbook-id="${escapeHtml(wb.id)}" data-question-id="${escapeHtml(q.id)}"`;
   const editing = editingWorkbookQuestionV2
     && editingWorkbookQuestionV2.workbookId === wb.id
     && editingWorkbookQuestionV2.questionId === q.id;
   if (!editing) {
     return `<tr>
-      <td class="workbook-question-number"><input type="checkbox" ${checked ? 'checked' : ''} aria-label="${qi + 1}번 문제 선택" onchange="adminToggleWorkbookQuestion('${escapeJs(wb.id)}','${escapeJs(q.id)}',this.checked)"> <span>${qi + 1}</span></td>
+      <td class="workbook-question-number"><input type="checkbox" ${selectionAttrs} ${checked ? 'checked' : ''} aria-label="${qi + 1}번 문제 선택" onchange="adminToggleWorkbookQuestion('${escapeJs(wb.id)}','${escapeJs(q.id)}',this.checked)"> <span>${qi + 1}</span></td>
       <td>${escapeHtml(q.q)}</td>
       <td class="good-text">${escapeHtml(q.answer)}</td>
       <td class="t-actions">
@@ -368,7 +395,7 @@ function teacherQuestionRowHtml(wb, q, qi){
   }
   const choiceText = Array.isArray(q.choices) ? q.choices.join(', ') : '';
   return `<tr>
-    <td class="workbook-question-number"><input type="checkbox" ${checked ? 'checked' : ''} aria-label="${qi + 1}번 문제 선택" onchange="adminToggleWorkbookQuestion('${escapeJs(wb.id)}','${escapeJs(q.id)}',this.checked)"> <span>${qi + 1}</span></td>
+    <td class="workbook-question-number"><input type="checkbox" ${selectionAttrs} ${checked ? 'checked' : ''} aria-label="${qi + 1}번 문제 선택" onchange="adminToggleWorkbookQuestion('${escapeJs(wb.id)}','${escapeJs(q.id)}',this.checked)"> <span>${qi + 1}</span></td>
     <td colspan="2">
       <input id="editQuestionText" value="${escapeHtml(q.q)}" placeholder="문제" />
       <input id="editQuestionAnswer" value="${escapeHtml(q.answer)}" placeholder="정답" />
@@ -408,7 +435,9 @@ function teacherWorkbooksHtml(){
   const workbookOptions = workbooks.map((wb) => (
     `<option value="${wb.id}" ${wb.id === selectedWorkbookV2 ? 'selected' : ''}>${escapeHtml(wb.name)} (${wb.questions.length}문제)</option>`
   )).join('');
-  const cards = workbooks.length ? workbooks.map((wb, i) => `
+  const cards = workbooks.length ? workbooks.map((wb, i) => {
+    const selectedQuestionCount = wb.questions.filter((q) => checkedWorkbookQuestionsV2.has(`${wb.id}:${q.id}`)).length;
+    return `
     <div class="workbook-card${wb.enabled === false ? ' wb-disabled' : ''}">
       <div class="wb-head">
         <div>
@@ -430,7 +459,7 @@ function teacherWorkbooksHtml(){
         <div class="workbook-bulk-actions">
           <button class="ghost tiny" onclick="adminSelectAllWorkbookQuestions('${escapeJs(wb.id)}', true)">전체 선택</button>
           <button class="ghost tiny" onclick="adminSelectAllWorkbookQuestions('${escapeJs(wb.id)}', false)">선택 해제</button>
-          <button class="ghost tiny danger-text" onclick="adminDeleteSelectedWorkbookQuestions('${escapeJs(wb.id)}')">선택한 문제 삭제 (${wb.questions.filter((q) => checkedWorkbookQuestionsV2.has(`${wb.id}:${q.id}`)).length})</button>
+          <button class="ghost tiny danger-text" data-workbook-selection-delete="true" data-workbook-id="${escapeHtml(wb.id)}" ${selectedQuestionCount ? '' : 'disabled'} onclick="adminDeleteSelectedWorkbookQuestions('${escapeJs(wb.id)}')">선택한 문제 삭제 (${selectedQuestionCount})</button>
         </div>
         <table class="teacher-table" style="margin-top:8px">
           <tr><th>선택 · #</th><th>문제</th><th>정답</th><th></th></tr>
@@ -438,7 +467,8 @@ function teacherWorkbooksHtml(){
         </table>
       </details>
     </div>
-  `).join('') : '<div class="empty-state">등록된 문제집이 없습니다.</div>';
+  `;
+  }).join('') : '<div class="empty-state">등록된 문제집이 없습니다.</div>';
 
   const tools = {
     direct:`<div class="panel-card workbook-tool-panel">
@@ -547,12 +577,33 @@ window.adminOpenWorkbookTool = function adminOpenWorkbookTool(tool){
   openAdminPanel('workbooks', { keepScroll:true });
 };
 
+function syncWorkbookQuestionSelectionUiV2(workbookId){
+  const workbook = getAdminWorkbooksV2().find((book) => book.id === workbookId);
+  const questionIds = new Set((workbook?.questions || []).map((question) => question.id));
+  let selectedCount = 0;
+  questionIds.forEach((questionId) => {
+    if (checkedWorkbookQuestionsV2.has(`${workbookId}:${questionId}`)) selectedCount += 1;
+  });
+
+  document.querySelectorAll('[data-workbook-question-select="true"]').forEach((checkbox) => {
+    if (checkbox.dataset.workbookId !== workbookId) return;
+    checkbox.checked = checkedWorkbookQuestionsV2.has(`${workbookId}:${checkbox.dataset.questionId}`);
+  });
+  document.querySelectorAll('[data-workbook-selection-delete="true"]').forEach((button) => {
+    if (button.dataset.workbookId !== workbookId) return;
+    button.disabled = selectedCount === 0;
+    button.textContent = `선택한 문제 삭제 (${selectedCount})`;
+  });
+}
+
 window.adminToggleWorkbookQuestion = function adminToggleWorkbookQuestion(workbookId, questionId, checked){
   const key = `${workbookId}:${questionId}`;
   if (checked) checkedWorkbookQuestionsV2.add(key);
   else checkedWorkbookQuestionsV2.delete(key);
   openWorkbookDetailsV2.add(workbookId);
-  openAdminPanel('workbooks', { keepScroll:true, skipWorkbookRefresh:true });
+  // 체크할 때 전체 모달을 다시 만들면 내부 .teacher-body 스크롤과 포커스가 초기화된다.
+  // 선택 상태와 개수만 제자리에서 갱신해 현재 문제를 계속 보게 한다.
+  syncWorkbookQuestionSelectionUiV2(workbookId);
 };
 
 window.adminSelectAllWorkbookQuestions = function adminSelectAllWorkbookQuestions(workbookId, checked){
@@ -564,7 +615,7 @@ window.adminSelectAllWorkbookQuestions = function adminSelectAllWorkbookQuestion
     else checkedWorkbookQuestionsV2.delete(key);
   });
   openWorkbookDetailsV2.add(workbookId);
-  openAdminPanel('workbooks', { keepScroll:true, skipWorkbookRefresh:true });
+  syncWorkbookQuestionSelectionUiV2(workbookId);
 };
 
 window.adminDeleteSelectedWorkbookQuestions = async function adminDeleteSelectedWorkbookQuestions(workbookId){
@@ -813,18 +864,90 @@ window.adminTeacherLogout = async function adminTeacherLogout(){
   openTeacherLogin();
 };
 
+function adminRandomIndexV2(maximum) {
+  const cryptoApi = window.crypto;
+  if (!cryptoApi || typeof cryptoApi.getRandomValues !== 'function' || maximum < 1 || maximum > 256) {
+    throw new Error('WEB_CRYPTO_REQUIRED');
+  }
+  const bytes = new Uint8Array(1);
+  const unbiasedLimit = Math.floor(256 / maximum) * maximum;
+  do { cryptoApi.getRandomValues(bytes); } while (bytes[0] >= unbiasedLimit);
+  return bytes[0] % maximum;
+}
+
+function adminGenerateTemporaryPasswordV2() {
+  const groups = ['ABCDEFGHJKLMNPQRSTUVWXYZ', 'abcdefghijkmnopqrstuvwxyz', '23456789'];
+  const all = groups.join('');
+  const characters = groups.map((group) => group[adminRandomIndexV2(group.length)]);
+  while (characters.length < 14) characters.push(all[adminRandomIndexV2(all.length)]);
+  for (let index = characters.length - 1; index > 0; index -= 1) {
+    const swapIndex = adminRandomIndexV2(index + 1);
+    [characters[index], characters[swapIndex]] = [characters[swapIndex], characters[index]];
+  }
+  return characters.join('');
+}
+
+window.adminCopyTemporaryPasswordV2 = async function adminCopyTemporaryPasswordV2() {
+  const output = $('secureAdminTemporaryPasswordV2');
+  const temporaryPassword = output?.textContent || '';
+  if (!temporaryPassword) { toast('복사할 임시 비밀번호가 없어요.'); return false; }
+  try {
+    if (window.navigator?.clipboard?.writeText) {
+      await window.navigator.clipboard.writeText(temporaryPassword);
+    } else {
+      const temporaryInput = document.createElement('textarea');
+      temporaryInput.value = temporaryPassword;
+      temporaryInput.setAttribute('readonly', '');
+      temporaryInput.style.position = 'fixed';
+      temporaryInput.style.opacity = '0';
+      document.body.appendChild(temporaryInput);
+      let copied = false;
+      try {
+        temporaryInput.select();
+        copied = typeof document.execCommand === 'function' && document.execCommand('copy');
+      } finally {
+        temporaryInput.value = '';
+        temporaryInput.remove();
+      }
+      if (!copied) throw new Error('COPY_UNAVAILABLE');
+    }
+    toast('임시 비밀번호를 복사했어요.');
+    return true;
+  } catch (_) {
+    toast('자동 복사가 차단됐어요. 표시된 임시 비밀번호를 직접 복사해 주세요.');
+    return false;
+  }
+};
+
 window.adminResetStudentPassword = async function adminResetStudentPassword(){
-  if (!SECURE_ADMIN_MODE_V2 || !requireTeacherAuth() || !secureAdminAuthV2) return;
+  if (!SECURE_ADMIN_MODE_V2 || !requireTeacherAuth() || !secureAdminAuthV2
+    || secureAdminPasswordResetPendingV2) return;
   const studentName = $('secureAdminStudentName')?.value || '';
-  const newPassword = $('secureAdminStudentPw')?.value || '';
+  const passwordOutput = $('secureAdminTemporaryPasswordV2');
+  if (passwordOutput?.dataset?.applied === 'true') return;
+  const newPassword = passwordOutput?.textContent || '';
+  const button = $('applyTemporaryPasswordV2Btn');
+  secureAdminPasswordResetPendingV2 = true;
+  if (button) { button.disabled = true; button.textContent = '적용 중...'; }
   try {
     const result = await secureAdminAuthV2.resetStudentPassword(studentName, newPassword);
-    const passwordInput = $('secureAdminStudentPw');
-    if (passwordInput) passwordInput.value = '';
-    toast(`${result.displayName} 학생의 비밀번호를 바꿨어요.`);
+    if (passwordOutput) passwordOutput.dataset.applied = 'true';
+    const status = $('temporaryPasswordStatusV2');
+    if (status) status.textContent = '적용 완료 · 이 창을 닫으면 다시 확인할 수 없습니다.';
+    if (button) { button.disabled = true; button.textContent = '임시 비밀번호 적용 완료'; }
+    toast(`${result.displayName} 학생에게 임시 비밀번호를 적용했어요.`);
   } catch (error) {
     toast(error?.message || '학생 비밀번호를 바꾸지 못했어요.');
+    if (button) { button.disabled = false; button.textContent = '이 임시 비밀번호 적용'; }
+  } finally {
+    secureAdminPasswordResetPendingV2 = false;
   }
+};
+
+window.adminFinishTemporaryPasswordV2 = function adminFinishTemporaryPasswordV2() {
+  const output = $('secureAdminTemporaryPasswordV2');
+  if (output) output.textContent = '';
+  openAdminPanel('students');
 };
 
 function secureAdminStudentByIdV2(userId){
@@ -867,6 +990,86 @@ function adminStudentTotalStatsV2(student) {
   return total;
 }
 
+const ADMIN_EQUIPMENT_SLOT_NAMES_V2 = Object.freeze({
+  weapon:'무기', armor:'방어구', head:'머리', accessory:'장신구',
+});
+
+function adminEquipmentNameV2(student, itemId) {
+  if (!itemId) return '없음';
+  const item = window.YuksamData?.ITEM_DEFS?.[itemId];
+  const tier = item?.slot === 'weapon'
+    ? Math.max(0, Math.min(4, Number(student?.weaponUpgrades?.[itemId]) || 0))
+    : 0;
+  const tierName = tier > 0 ? `${window.TIER_INFO_V27?.[tier]?.name || `${tier}강`} · ` : '';
+  return `${tierName}${item?.name || itemId}`;
+}
+
+function adminReadOnlyNoticeV2(kind) {
+  return `<div class="panel-card" style="border-color:rgba(96,165,250,.55)">
+    <span class="badge">🔒 읽기 전용</span>
+    <p class="muted" style="margin-bottom:0">학생의 현재 ${escapeHtml(kind)}을 확인하는 화면입니다. 이곳에서는 변경할 수 없습니다.</p>
+  </div>`;
+}
+
+window.adminOpenStudentEquipmentV2 = function adminOpenStudentEquipmentV2(userId) {
+  if (!SECURE_ADMIN_MODE_V2 || !requireTeacherAuth()) return;
+  const student = secureAdminStudentByIdV2(userId);
+  if (!student) { toast('학생 계정을 찾지 못했어요.'); return; }
+  const equippedIds = new Set(Object.values(student.equipment || {}).filter(Boolean));
+  const equippedHtml = Object.entries(ADMIN_EQUIPMENT_SLOT_NAMES_V2).map(([slot, label]) => {
+    const itemId = student.equipment?.[slot];
+    return `<div class="panel-card" style="padding:10px">
+      <small class="muted">${label}</small><br><b>${escapeHtml(adminEquipmentNameV2(student, itemId))}</b>
+    </div>`;
+  }).join('');
+  const inventoryIds = [...new Set(Array.isArray(student.inventory) ? student.inventory : [])];
+  const inventoryHtml = inventoryIds.length ? inventoryIds.map((itemId) => {
+    const item = window.YuksamData?.ITEM_DEFS?.[itemId];
+    const slot = ADMIN_EQUIPMENT_SLOT_NAMES_V2[item?.slot] || item?.slot || '기타';
+    return `<div class="panel-card" style="padding:10px">
+      <b>${escapeHtml(adminEquipmentNameV2(student, itemId))}</b>
+      <div><small class="muted">${escapeHtml(slot)}${equippedIds.has(itemId) ? ' · 장착 중' : ''}</small></div>
+    </div>`;
+  }).join('') : '<div class="empty-state">보유 장비가 없습니다.</div>';
+  openModal(`
+    <h2>🛡️ 장비창 · ${escapeHtml(student.displayName)}</h2>
+    ${adminReadOnlyNoticeV2('장비')}
+    <h3>장착 장비</h3>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">${equippedHtml}</div>
+    <h3>보유 장비</h3>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">${inventoryHtml}</div>
+    <button class="ghost wide" onclick="openAdminPanel('students')" style="margin-top:14px">학생 목록으로 돌아가기</button>
+  `, { type:'admin', pause:false });
+};
+
+window.adminOpenStudentSkillsV2 = function adminOpenStudentSkillsV2(userId) {
+  if (!SECURE_ADMIN_MODE_V2 || !requireTeacherAuth()) return;
+  const student = secureAdminStudentByIdV2(userId);
+  if (!student) { toast('학생 계정을 찾지 못했어요.'); return; }
+  const learned = Object.entries(student.skills || {})
+    .filter(([, rank]) => Number(rank) > 0)
+    .map(([skillId, rank]) => ({
+      skill:window.YuksamData?.SKILL_DEFS?.[skillId],
+      skillId,
+      rank:Math.max(1, Number(rank) || 1),
+    }))
+    .sort((a, b) => (Number(a.skill?.line) || 0) - (Number(b.skill?.line) || 0));
+  const skillsHtml = learned.length ? learned.map(({ skill, skillId, rank }) => `
+    <div class="panel-card" style="padding:11px">
+      <div><b>${escapeHtml(skill?.icon || '✦')} ${escapeHtml(skill?.name || skillId)}</b>
+        <span class="badge">Lv.${rank}${skill?.maxPoints ? `/${Math.max(1, Number(skill.maxPoints) || 1)}` : ''}</span></div>
+      ${skill?.desc ? `<p class="muted" style="margin-bottom:0">${escapeHtml(skill.desc)}</p>` : ''}
+    </div>`).join('') : '<div class="empty-state">아직 배운 스킬이 없습니다.</div>';
+  openModal(`
+    <h2>✨ 스킬창 · ${escapeHtml(student.displayName)}</h2>
+    ${adminReadOnlyNoticeV2('스킬')}
+    <div class="panel-card"><b>남은 스킬 포인트 ${student.skillPoints}</b></div>
+    <h3>배운 스킬</h3>
+    <div style="display:grid;gap:8px">${skillsHtml}</div>
+    <button class="ghost wide" onclick="openAdminPanel('students')" style="margin-top:14px">학생 목록으로 돌아가기</button>
+  `, { type:'admin', pause:false });
+};
+
 window.adminOpenStudentDetailV2 = function adminOpenStudentDetailV2(userId) {
   if (!SECURE_ADMIN_MODE_V2 || !requireTeacherAuth()) return;
   const student = secureAdminStudentByIdV2(userId);
@@ -877,7 +1080,7 @@ window.adminOpenStudentDetailV2 = function adminOpenStudentDetailV2(userId) {
   const calculatedMaxHp = Math.max(1, 8 + (Number(stats.체력) || 1) * 3 + student.level * 2);
   const maxHp = student.maxHp > 0 ? student.maxHp : calculatedMaxHp;
   const hp = Math.min(maxHp, Math.max(0, student.hp));
-  const slotNames = { weapon:'무기', armor:'방어구', head:'머리', accessory:'장신구' };
+  const slotNames = ADMIN_EQUIPMENT_SLOT_NAMES_V2;
   const equipmentHtml = Object.entries(slotNames).map(([slot, label]) => {
     const itemId = student.equipment?.[slot];
     const item = itemId ? data.ITEM_DEFS?.[itemId] : null;
@@ -994,14 +1197,29 @@ window.adminOpenResetPasswordV2 = function adminOpenResetPasswordV2(userId){
   if (!SECURE_ADMIN_MODE_V2 || !requireTeacherAuth()) return;
   const student = secureAdminStudentByIdV2(userId);
   if (!student) { toast('학생 계정을 찾지 못했어요.'); return; }
+  let temporaryPassword = '';
+  try {
+    temporaryPassword = adminGenerateTemporaryPasswordV2();
+  } catch (_) {
+    toast('이 브라우저에서는 안전한 임시 비밀번호를 만들 수 없어요. 최신 브라우저에서 다시 시도해 주세요.');
+    return;
+  }
   openModal(`
-    <h2>🔑 비밀번호 재설정 · ${escapeHtml(student.displayName)}</h2>
+    <h2>🔑 임시 비밀번호 발급 · ${escapeHtml(student.displayName)}</h2>
     <input type="hidden" id="secureAdminStudentName" value="${escapeHtml(student.displayName)}" />
-    <label>새 비밀번호</label>
-    <input type="password" id="secureAdminStudentPw" autocomplete="new-password" placeholder="6자 이상" />
+    <div class="panel-card">
+      <p><b>현재 비밀번호는 볼 수 없습니다.</b></p>
+      <p class="muted">Supabase Auth는 기존 비밀번호 원문을 제공하지 않습니다. 아래 값은 Web Crypto로 지금 만든 관리자용 임시 비밀번호이며, 이 창에서만 한 번 확인할 수 있습니다.</p>
+      <label>새 임시 비밀번호</label>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <output id="secureAdminTemporaryPasswordV2" style="font:800 20px/1.4 monospace;letter-spacing:.08em;user-select:all">${escapeHtml(temporaryPassword)}</output>
+        <button class="ghost" type="button" onclick="adminCopyTemporaryPasswordV2()">복사</button>
+      </div>
+      <p id="temporaryPasswordStatusV2" class="muted">학생에게 전달하기 전에 복사한 뒤 적용해 주세요. 창을 닫으면 같은 값을 다시 볼 수 없습니다.</p>
+    </div>
     <div class="action-row">
-      <button class="primary" onclick="adminResetStudentPassword()">비밀번호 바꾸기</button>
-      <button class="ghost" onclick="openAdminPanel('students')">취소</button>
+      <button class="primary" id="applyTemporaryPasswordV2Btn" onclick="adminResetStudentPassword()">이 임시 비밀번호 적용</button>
+      <button class="ghost" onclick="adminFinishTemporaryPasswordV2()">닫기</button>
     </div>
   `, { type:'admin', pause:false });
 };
@@ -1111,10 +1329,15 @@ function openAdminPanel(tab, options) {
         openAdminPanel('workbooks', { ...(options || {}), keepScroll:true, skipWorkbookRefresh:true });
       });
   }
-  // [v58] 문제집 관리에서 토글·삭제 시 스크롤이 맨 위로 튀지 않도록 위치 보존
+  // 문제집 관리에서 저장·삭제 등으로 다시 그릴 때 바깥 모달뿐 아니라
+  // 실제 목록 스크롤 컨테이너인 .teacher-body 위치도 함께 보존한다.
   const keepScroll = options && options.keepScroll;
   const box = document.querySelector('#modal .modal-box');
-  const prevTop = keepScroll && box ? box.scrollTop : null;
+  const teacherBody = document.querySelector('#modal .teacher-body');
+  const prevScroll = keepScroll ? {
+    modalTop:box ? box.scrollTop : null,
+    teacherBodyTop:teacherBody ? teacherBody.scrollTop : null,
+  } : null;
   openModal(buildAdminPanelHtml(tab), { type: 'admin', pause: false });
   if (SECURE_ADMIN_MODE_V2 && (tab || 'students') === 'students'
     && !(options && options.skipSecureLoad)
@@ -1126,10 +1349,12 @@ function openAdminPanel(tab, options) {
     && secureAdminAlertsStatusV1 !== 'loading') {
     loadSecurityAlertsV1();
   }
-  if (prevTop != null) {
+  if (prevScroll) {
     const restore = () => {
       const next = document.querySelector('#modal .modal-box');
-      if (next) next.scrollTop = prevTop;
+      const nextTeacherBody = document.querySelector('#modal .teacher-body');
+      if (next && prevScroll.modalTop != null) next.scrollTop = prevScroll.modalTop;
+      if (nextTeacherBody && prevScroll.teacherBodyTop != null) nextTeacherBody.scrollTop = prevScroll.teacherBodyTop;
     };
     restore();
     requestAnimationFrame(restore);

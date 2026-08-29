@@ -82,6 +82,27 @@ function safeInteger(value, minimum = 0, maximum = Number.MAX_SAFE_INTEGER) {
   return Math.max(minimum, Math.min(maximum, Math.trunc(number)));
 }
 
+const RAID_NAMEPLATE_REWARDS = Object.freeze({
+  2:Object.freeze({
+    id:'raid_20_steel', floorGroup:2, floorLabel:'20층',
+    questTitle:'[파티] 함께 오른 스무 층', name:'강철 승강기 이름표',
+  }),
+  4:Object.freeze({
+    id:'raid_40_twilight', floorGroup:4, floorLabel:'40층',
+    questTitle:'[파티] 빌딩의 허리를 넘어서', name:'황혼의 창 이름표',
+  }),
+  7:Object.freeze({
+    id:'raid_63_summit', floorGroup:7, floorLabel:'63층',
+    questTitle:'[파티] 육삼의 정상', name:'육삼 정상 이름표',
+  }),
+});
+const RAID_NAMEPLATE_IDS = Object.freeze(Object.values(RAID_NAMEPLATE_REWARDS).map((entry) => entry.id));
+
+function safeRaidNameplates(value) {
+  const requested = new Set(Array.isArray(value) ? value.map((item) => String(item || '')) : []);
+  return RAID_NAMEPLATE_IDS.filter((id) => requested.has(id));
+}
+
 function raidCompletion(claim, profileData, progress, roomId, floorGroup) {
   const data = profileData && typeof profileData === 'object' && !Array.isArray(profileData)
     ? profileData
@@ -94,12 +115,20 @@ function raidCompletion(claim, profileData, progress, roomId, floorGroup) {
     gold:safeInteger(claim.gold_reward),
     building:safeInteger(claim.building_reward),
   } : { exp:0, gold:0, building:0 };
+  const safeFloorGroup = safeInteger(floorGroup, 1, 7);
+  const ownedNameplates = safeRaidNameplates(data.raidNameplates ?? data.raid_nameplates);
+  const requestedTheme = String(data.nameplate?.theme || 'default');
+  const equippedTheme = requestedTheme === 'default' || ownedNameplates.includes(requestedTheme)
+    ? requestedTheme
+    : 'default';
+  const nameplateReward = currentRoomAward ? RAID_NAMEPLATE_REWARDS[safeFloorGroup] || null : null;
   return {
     roomId:String(roomId || ''),
-    floorGroup:safeInteger(floorGroup, 1, 7),
+    floorGroup:safeFloorGroup,
     awarded:currentRoomAward,
     firstClear:currentRoomAward,
     reward,
+    nameplateReward:nameplateReward ? { ...nameplateReward } : null,
     levelGain:currentRoomAward ? safeInteger(claim.level_gain, 0, 9) : 0,
     fullyHealed:currentRoomAward && claim.fully_healed === true,
     player:{
@@ -112,6 +141,8 @@ function raidCompletion(claim, profileData, progress, roomId, floorGroup) {
       maxHp:safeInteger(data.maxHp, 1, 100000),
       raidTopGroup:safeInteger(progress?.top_group, 0, 7),
       raidRewardVersion:safeInteger(data.raidRewardVersion, 0, 7),
+      raidNameplates:ownedNameplates,
+      nameplate:{ theme:equippedTheme },
       fullyHealed:currentRoomAward && claim.fully_healed === true,
     },
   };

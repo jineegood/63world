@@ -140,16 +140,20 @@
       try {
         const remote = await readRemote('workbooks');
         if (remote == null) {
-          workbooks = readCache(WORKBOOK_CACHE, validateWorkbooks, defaults);
-          return freeze({ workbooks, source:hasCache(WORKBOOK_CACHE) ? 'cache' : 'default', offline:false });
+          // RLS에서 행을 숨겨도 PostgREST는 403이 아니라 "0행"을 돌려줄 수 있다.
+          // 보안 모드에서 이를 기본 문제집으로 조용히 대체하면 선생님이 올린 문제 대신
+          // 63마을·스네이크 기본 문제가 출제된다. 온라인 0행은 반드시 동기화 실패다.
+          throw fail('LOAD_FAILED');
         }
         workbooks = validateWorkbooks(remote);
         commit(WORKBOOK_CACHE, { version:1, items:workbooks });
         return freeze({ workbooks, source:'remote', offline:false });
       } catch (error) {
         if (error?.code !== 'OFFLINE') throw error;
-        workbooks = readCache(WORKBOOK_CACHE, validateWorkbooks, defaults);
-        return freeze({ workbooks, source:hasCache(WORKBOOK_CACHE) ? 'cache' : 'default', offline:true });
+        const cached = readCache(WORKBOOK_CACHE, validateWorkbooks, null);
+        if (!cached) throw error;
+        workbooks = cached;
+        return freeze({ workbooks, source:'cache', offline:true });
       }
     }
     async function write(key, data) {

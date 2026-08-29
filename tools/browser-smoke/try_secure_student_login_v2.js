@@ -33,7 +33,12 @@ window.YuksamSupabaseClient = {
       from(table) {
         if (table === 'shared_state_v2') {
           return { select() { return { eq(column, key) { return { async maybeSingle() {
-            return { data:key === 'classroom_settings' ? { data:{ version:1, serverOpen:true } } : null, error:null };
+            return {
+              data:key === 'classroom_settings'
+                ? { data:{ version:1, serverOpen:true } }
+                : { data:{ version:1, items:[] } },
+              error:null,
+            };
           } }; } }; } };
         }
         if (table !== 'player_profiles_v2') throw new Error('unexpected table ' + table);

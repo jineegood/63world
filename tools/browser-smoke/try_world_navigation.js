@@ -51,6 +51,30 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
     return { map:G.currentMap, x:G.player.x, y:G.player.y };
   }
 
+  setMap('town', worlds.town.playerSpawn);
+  const frameCacheProbe = window.eval(`(() => {
+    const originalBuilder = getBaseMapColliders;
+    let colliderBuilds = 0;
+    getBaseMapColliders = function(...args) {
+      colliderBuilds += 1;
+      return originalBuilder(...args);
+    };
+    try {
+      beginWorldColliderFrameV1();
+      const first = getCurrentMapColliders();
+      const second = getCurrentMapColliders();
+      endWorldColliderFrameV1();
+      getCurrentMapColliders();
+      return { colliderBuilds, reusedWithinFrame:first === second };
+    } finally {
+      endWorldColliderFrameV1();
+      getBaseMapColliders = originalBuilder;
+    }
+  })()`);
+  check('one frame reuses one collider array and releases it afterward',
+    frameCacheProbe.colliderBuilds === 2 && frameCacheProbe.reusedWithinFrame === true,
+    JSON.stringify(frameCacheProbe));
+
   // 기존 19개 + 63빌딩 던전에서 더한 2개(빌딩 본체, 원로 명진) = 21개
   const townUnique = uniqueSignatures('town');
   check('town keeps twenty-one unique collision shapes', townUnique.length === 21, `unique=${townUnique.length}, raw=${colliders('town').length}`);

@@ -19,6 +19,13 @@ test('admin data module loads before the dashboard and secure branches delegate 
   assert.match(source, /adminOpenWrongLogV2\(['"]?\$\{[^}]*userId/);
   assert.match(source, /adminOpenStudentDetailV2\(['"]?\$\{[^}]*userId/);
   assert.match(source, /function adminStudentTotalStatsV2\(student\)/);
+  assert.match(source, /adminOpenStudentEquipmentV2\(['"]?\$\{[^}]*userId/);
+  assert.match(source, /adminOpenStudentSkillsV2\(['"]?\$\{[^}]*userId/);
+  assert.match(source, /장비창 보기/);
+  assert.match(source, /스킬창 보기/);
+  assert.match(source, /읽기 전용/);
+  assert.match(source, /접속 중/);
+  assert.match(source, /던전 최고 돌파/);
 });
 
 test('secure cloud dashboard renders safe data and completes reward and deletion flows', () => {

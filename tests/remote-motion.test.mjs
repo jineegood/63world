@@ -108,3 +108,20 @@ test('diagonal movement interpolates both axes together', () => {
   assert.ok(middle.x > 70 && middle.x < 130, `x 보간 어긋남: ${middle.x}`);
   assert.ok(middle.y > 35 && middle.y < 65, `y 보간 어긋남: ${middle.y}`);
 });
+
+test('a two-second classroom poll cadence interpolates for the whole packet gap', () => {
+  const motion = loadApi().create({
+    defaultStepMs:2000,
+    maxStepMs:2300,
+    snapDistance:620,
+  });
+  motion.push(0, 0, 1000);
+  motion.push(384, 0, 3000);
+
+  const quarter = motion.sample(3500);
+  const middle = motion.sample(4000);
+  assert.ok(quarter.x > 90 && quarter.x < 102, `2초 보간 초반 위치 어긋남: ${quarter.x}`);
+  assert.ok(middle.x > 185 && middle.x < 200, `2초 보간 중간 위치 어긋남: ${middle.x}`);
+  assert.equal(middle.moving, true);
+  assert.equal(Math.round(motion.sample(5000).x), 384);
+});

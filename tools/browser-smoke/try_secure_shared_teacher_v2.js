@@ -129,6 +129,30 @@ run(root, async ({ window, $, sleep, asyncErrors }) => {
     await window.adminBulkImport();
     check('bulk questions are saved to cloud', window.__sharedRows.workbooks.items[0].questions.length === 4);
 
+    window.openAdminPanel('workbooks', { skipWorkbookRefresh:true });
+    const teacherBodyBeforeSelection = window.document.querySelector('#modal .teacher-body');
+    const questionCheckbox = window.document.querySelector('[data-workbook-question-select="true"][data-workbook-id="cloud-book"]');
+    const selectionDeleteButton = window.document.querySelector('[data-workbook-selection-delete="true"][data-workbook-id="cloud-book"]');
+    teacherBodyBeforeSelection.scrollTop = 321;
+    questionCheckbox.focus();
+    questionCheckbox.checked = true;
+    window.adminToggleWorkbookQuestion('cloud-book', questionCheckbox.dataset.questionId, true);
+    check('one-question selection keeps the same rendered checkbox', window.document.querySelector(`[data-workbook-question-select="true"][data-question-id="${questionCheckbox.dataset.questionId}"]`) === questionCheckbox);
+    check('one-question selection preserves the workbook list scroll', teacherBodyBeforeSelection.scrollTop === 321);
+    check('one-question selection preserves checkbox focus', window.document.activeElement === questionCheckbox);
+    check('one-question selection updates and enables bulk delete in place', selectionDeleteButton.textContent.includes('(1)') && selectionDeleteButton.disabled === false);
+
+    window.adminSelectAllWorkbookQuestions('cloud-book', true);
+    const cloudQuestionCheckboxes = [...window.document.querySelectorAll('[data-workbook-question-select="true"]')]
+      .filter((checkbox) => checkbox.dataset.workbookId === 'cloud-book');
+    check('select-all checks every question without rerendering', cloudQuestionCheckboxes.length === 4
+      && cloudQuestionCheckboxes.every((checkbox) => checkbox.checked)
+      && teacherBodyBeforeSelection.scrollTop === 321);
+    check('select-all updates the bulk delete count', selectionDeleteButton.textContent.includes('(4)'));
+    window.adminSelectAllWorkbookQuestions('cloud-book', false);
+    check('clear-selection disables bulk delete without moving the list', selectionDeleteButton.textContent.includes('(0)')
+      && selectionDeleteButton.disabled === true && teacherBodyBeforeSelection.scrollTop === 321);
+
     window.openAdminPanel('workbooks');
     $('adminWorkbook').value = 'cloud-book';
     $('adminQuestion').value = '2+2?';
@@ -141,8 +165,11 @@ run(root, async ({ window, $, sleep, asyncErrors }) => {
     await window.adminToggleWorkbook('cloud-book');
     check('workbook enable state is saved to cloud', window.__sharedRows.workbooks.items[0].enabled === false);
 
+    const teacherBodyBeforeDelete = window.document.querySelector('#modal .teacher-body');
+    teacherBodyBeforeDelete.scrollTop = 222;
     await window.removeQuestionFromWorkbook('cloud-book', 'q-old');
     check('question deletion is saved to cloud', !window.__sharedRows.workbooks.items[0].questions.some((question) => question.id === 'q-old'));
+    check('question deletion rerender preserves the workbook list scroll', window.document.querySelector('#modal .teacher-body')?.scrollTop === 222);
 
     window.openAdminPanel('settings');
     await window.adminSetServerOpen(false);

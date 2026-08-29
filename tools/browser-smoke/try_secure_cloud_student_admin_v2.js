@@ -12,7 +12,7 @@ window.__profileRows = [{
     hp:48, maxHp:70, skillPoints:2, baseStatsVersion:2,
     equipment:{ weapon:'ironwoodStaff', armor:'navyRobe', head:'navyWizardHat', accessory:null },
     inventory:['ironwoodStaff','navyRobe','navyWizardHat'],
-    skills:{ mage_basic_element:2, mage_fire_meteor_v24:1 }, weaponUpgrades:{ ironwoodStaff:2 },
+    skills:{ mage_basic_element:2, mage_fire_meteor_v24:1 }, weaponUpgrades:{ ironwoodStaff:2 }, raidTopGroup:4,
     password:'must-not-render', records:{ answered:12, correct:9, wrongLog:[{ q:'<img src=x>', a:'정답', mine:'<script>bad</script>', at:1, access_token:'hidden' }] } }
 }];
 window.YuksamSupabaseClient = {
@@ -37,6 +37,15 @@ window.YuksamSupabaseClient = {
         async getUser() { return window.__teacherSignedIn ? { data:{ user:teacher }, error:null } : { data:{ user:null }, error:{ code:'session_not_found' } }; },
         async signOut() { window.__teacherSignedIn = false; return { error:null }; },
         async updateUser() { return { data:{ user:teacher }, error:null }; },
+      },
+      async rpc(name) {
+        window.__adminCalls.push(['rpc', name]);
+        if (name !== 'teacher_student_status_v1') return { data:null, error:{ status:404 } };
+        return { data:window.__profileRows.map((row) => ({
+          user_id:row.user_id, is_online:true,
+          presence_last_seen_at:'2026-08-29T01:02:03.000Z', current_map:'town',
+          raid_top_group:4, raid_top_floor:40,
+        })), error:null };
       },
       from(table) {
         if (table === 'shared_state_v2') return {
@@ -91,6 +100,8 @@ run(root, async ({ window, $, sleep, asyncErrors }) => {
   await sleep(40);
 
   check('cloud student row is shown', window.document.querySelector('#secureAdminStudentRows')?.textContent.includes('별빛'));
+  check('current online status is shown', window.document.querySelector('#secureAdminStudentRows')?.textContent.includes('접속 중'));
+  check('real raid clear floor is shown', window.document.querySelector('#secureAdminStudentRows')?.textContent.includes('4구간 · 40층'));
   const dashboardHtml = window.document.querySelector('#modal').innerHTML;
   check('dashboard contains no credentials', !/must-not-render|access_token|teacher-secret|6363/.test(dashboardHtml));
 
@@ -99,6 +110,15 @@ run(root, async ({ window, $, sleep, asyncErrors }) => {
   check('student detail shows stats and equipment', /HP 48\/70/.test(detailText) && detailText.includes('수정 지팡이'));
   check('student detail shows learned skills', detailText.includes('원소') && detailText.includes('메테오'));
   check('student detail contains no credentials', !/must-not-render|access_token|teacher-secret/.test(window.document.querySelector('#modal').innerHTML));
+
+  window.adminOpenStudentEquipmentV2(studentId);
+  check('equipment opens in an explicit read-only modal', /장비창 · 별빛/.test(window.document.querySelector('#modal').textContent)
+    && window.document.querySelector('#modal').textContent.includes('읽기 전용')
+    && window.document.querySelector('#modal').textContent.includes('수정 지팡이'));
+  window.adminOpenStudentSkillsV2(studentId);
+  check('skills open in an explicit read-only modal', /스킬창 · 별빛/.test(window.document.querySelector('#modal').textContent)
+    && window.document.querySelector('#modal').textContent.includes('읽기 전용')
+    && window.document.querySelector('#modal').textContent.includes('메테오'));
 
   window.adminOpenWrongLogV2(studentId);
   check('wrong log is displayed as text', window.document.querySelector('#modal').textContent.includes('<img src=x>'));

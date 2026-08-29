@@ -23,6 +23,8 @@
     "test:raid-room-backend": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 raid-room-backend",
     "test:raid-multiplayer-integration": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 raid-multiplayer-integration",
     "test:hall-of-fame-gear": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 hall-of-fame-gear",
+    "test:world-announcements": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 world-announcements",
+    "test:world-channels": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 world-channels",
     "test:click-movement": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 click-movement",
     "test:click-movement-integration": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 click-movement-integration",
     "test:world-render-pipeline": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-baseline.ps1 world-render-pipeline",

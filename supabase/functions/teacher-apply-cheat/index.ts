@@ -2,6 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.110.8';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ACTIONS = new Set(['exp20', 'exp100', 'gold3000', 'building200', 'heal', 'raidKill', 'raidAdvance', 'raidPause']);
+const RAID_NAMEPLATES = new Set(['raid_20_steel', 'raid_40_twilight', 'raid_63_summit']);
 const XP_REQUIREMENTS: Record<number, number> = {
   1:10, 2:40, 3:80, 4:130, 5:200, 6:280, 7:370, 8:470, 9:580, 10:700,
 };
@@ -108,11 +109,22 @@ Deno.serve(async (req) => {
     );
     if (raidProgressError) return json(500, { ok:false, code:'CHEAT_FAILED' });
     const raidTopGroup = Math.max(0, Math.min(7, safeInteger(raidProgress?.raidTopGroup)));
+    const raidNameplates = Array.isArray(raidProgress?.raidNameplates)
+      ? raidProgress.raidNameplates.map(String).filter((id: string) => RAID_NAMEPLATES.has(id))
+      : [];
+    const requestedTheme = String(raidProgress?.nameplate?.theme || 'default');
+    const nameplateTheme = requestedTheme === 'default' || raidNameplates.includes(requestedTheme)
+      ? requestedTheme
+      : 'default';
+    const newNameplates = Array.isArray(raidProgress?.newNameplates)
+      ? raidProgress.newNameplates.map(String).filter((id: string) => RAID_NAMEPLATES.has(id))
+      : [];
     return json(200, {
       ok:true,
       displayName:profile.display_name,
       action,
-      snapshot:{ raidTopGroup },
+      snapshot:{ raidTopGroup, raidNameplates, nameplate:{ theme:nameplateTheme } },
+      newNameplates,
     });
   }
 

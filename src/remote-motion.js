@@ -14,11 +14,20 @@
     return Math.max(min, Math.min(max, value));
   }
 
-  function create() {
+  function positiveOption(value, fallback) {
+    const number = Number(value);
+    return Number.isFinite(number) && number > 0 ? number : fallback;
+  }
+
+  function create(options = {}) {
+    const defaultStepMs = positiveOption(options.defaultStepMs, DEFAULT_STEP_MS);
+    const minStepMs = Math.min(defaultStepMs, positiveOption(options.minStepMs, MIN_STEP_MS));
+    const maxStepMs = Math.max(defaultStepMs, positiveOption(options.maxStepMs, MAX_STEP_MS));
+    const snapDistance = positiveOption(options.snapDistance, SNAP_DISTANCE);
     let from = null;
     let to = null;
     let startedAt = 0;
-    let durationMs = DEFAULT_STEP_MS;
+    let durationMs = defaultStepMs;
     let lastPacketAt = 0;
 
     function sample(now) {
@@ -42,20 +51,20 @@
       const forceSnap = Boolean(options && options.snap);
       const current = sample(now);
 
-      if (!current || forceSnap || Math.hypot(nextX - current.x, nextY - current.y) > SNAP_DISTANCE) {
+      if (!current || forceSnap || Math.hypot(nextX - current.x, nextY - current.y) > snapDistance) {
         from = null;
         to = { x: nextX, y: nextY };
         startedAt = now;
-        durationMs = DEFAULT_STEP_MS;
+        durationMs = defaultStepMs;
         lastPacketAt = now;
         return;
       }
 
-      const gap = lastPacketAt ? now - lastPacketAt : DEFAULT_STEP_MS;
+      const gap = lastPacketAt ? now - lastPacketAt : defaultStepMs;
       from = { x: current.x, y: current.y };
       to = { x: nextX, y: nextY };
       startedAt = now;
-      durationMs = clamp(gap, MIN_STEP_MS, MAX_STEP_MS);
+      durationMs = clamp(gap, minStepMs, maxStepMs);
       lastPacketAt = now;
     }
 

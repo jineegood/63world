@@ -1689,7 +1689,7 @@
         });
         const nextPhase = snapshot.phase === 'battle' ? 'effects' : snapshot.phase;
         const monsterState = snapshot.monster ? { ...snapshot.monster, raidRound:snapshot.round } : {};
-        const currentFloor = snapshot.phase === 'battle'
+        const currentFloor = ['battle', 'wiped'].includes(snapshot.phase)
           ? displayFloorForProgress(snapshot, 1)
           : encounterFloors()[Math.max(0, Math.min(3, snapshot.encounterIndex - 1))];
         pending = {
@@ -3680,6 +3680,9 @@
       ? (completion.reward || { exp:0, gold:0, building:0 })
       : (snap.reward || {});
     const alreadyRewarded = !!(cleared && session && completion.awarded !== true);
+    const nameplateReward = cleared && session && completion.nameplateReward?.id
+      ? completion.nameplateReward
+      : null;
     const g = G();
 
     const group = currentFloorGroup();
@@ -3708,6 +3711,10 @@
     }
 
     const bossName = snap.monster?.name || '구간의 보스';
+    const nameplateRewardMarkup = nameplateReward
+      ? (call('renderRaidNameplateRewardV1', nameplateReward.id)
+        || `<p class="raid-unlock-note">🏅 ${esc(nameplateReward.name || '이름표 스킨')}을(를) 획득했습니다!</p>`)
+      : '';
     call('playSfx', cleared ? 'quest' : 'hit');
     call('openModal', `
       <h2>${cleared ? `🏆 ${esc(groupLabel)} 돌파!` : '전멸…'}</h2>
@@ -3717,11 +3724,24 @@
              ${alreadyRewarded
                ? '<p class="raid-unlock-note">이 구간의 첫 클리어 보상은 이미 받았습니다.</p>'
                : `<p>EXP +${reward.exp || 0} · Gold +${reward.gold || 0} · 빌딩 +${reward.building || 0}</p>`}
+             ${nameplateRewardMarkup}
              ${unlockedNext ? `<p class="raid-unlock-note">🔓 <strong>${esc(nextLabel)}</strong> 구간이 열렸습니다!</p>` : ''}`
           : '<p>다음에는 대형을 바꿔서 다시 도전해 보세요.</p>'}
         <div class="answer-row"><button class="primary" id="raidDoneBtn">확인</button></div>
       </div>
     `, { type:'raidResult', pause:true });
+
+    const equipNameplateBtn = global.document.getElementById('raidEquipNameplateBtnV1');
+    if (equipNameplateBtn && nameplateReward?.id) {
+      equipNameplateBtn.onclick = () => {
+        if (!global.YuksamRaidNameplatesV1?.equip?.(g?.player, nameplateReward.id)) return;
+        call('savePlayer');
+        call('playSfx', 'open');
+        call('toast', `${nameplateReward.name || '이름표'}을(를) 장착했습니다.`);
+        equipNameplateBtn.disabled = true;
+        equipNameplateBtn.textContent = '장착 완료';
+      };
+    }
 
     call('appendChatMessage', 'system', '63빌딩 던전',
       cleared ? `${groupLabel} 구간을 돌파했습니다!` : `${groupLabel} 구간에서 전멸했습니다.`);
@@ -4630,6 +4650,7 @@
   global.YuksamRaidRunUi = Object.freeze({
     openNetworkLobby,
     isRunning:() => !!active,
+    hasSession:() => !!active || !!networkSession,
     isTeacherPaused:() => teacherPaused(),
     refresh:() => refreshNetworkRoom(),
     /* 전투 로그를 재생하는 중인지. 재생 중에는 다음 답을 받지 않는다. */

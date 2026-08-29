@@ -43,6 +43,14 @@ window.YuksamSupabaseClient = {
             return { data:{ ok:true, displayName:'별빛' }, error:null };
           },
         },
+        async rpc(name) {
+          if (name !== 'teacher_student_status_v1') return { data:null, error:{ status:404 } };
+          return { data:[{
+            user_id:'22222222-2222-4222-8222-222222222222', is_online:true,
+            presence_last_seen_at:'2026-08-29T01:02:03.000Z', current_map:'town',
+            raid_top_group:2, raid_top_floor:20,
+          }], error:null };
+        },
         from(table) {
           if (table === 'shared_state_v2') return {
             select() { return { eq(column, key) { return { async maybeSingle() {
@@ -97,14 +105,24 @@ run(root, async ({ window, $, sleep, asyncErrors }) => {
     const dashboardText = window.document.querySelector('#modal').textContent;
     check('secure dashboard contains no legacy password hint', !dashboardText.includes('6363'));
     check('secure dashboard contains no password column', !/비밀번호\s*최근/.test(dashboardText));
+    check('secure dashboard shows live status and real raid progress', dashboardText.includes('접속 중')
+      && dashboardText.includes('2구간 · 20층'));
 
     window.adminOpenResetPasswordV2('22222222-2222-4222-8222-222222222222');
-    check('teacher can open student reset controls', Boolean($('secureAdminStudentName')) && Boolean($('secureAdminStudentPw')));
-    $('secureAdminStudentPw').value = 'new-student-password';
+    const temporaryPassword = $('secureAdminTemporaryPasswordV2')?.textContent || '';
+    check('teacher gets one visible Web Crypto temporary password', Boolean($('secureAdminStudentName'))
+      && temporaryPassword.length === 14
+      && !Boolean($('secureAdminStudentPw')));
+    await window.adminCopyTemporaryPasswordV2();
+    check('temporary password copy uses the exact one-time value', window.__copiedTemporaryPassword === temporaryPassword);
     await window.adminResetStudentPassword();
     check('reset uses the named server function', window.__studentReset?.name === 'teacher-reset-password');
     check('reset sends normalized student name', window.__studentReset?.input?.body?.normalizedName === '별빛');
-    check('reset field is cleared', $('secureAdminStudentPw').value === '');
+    check('reset applies the generated temporary password', window.__studentReset?.input?.body?.newPassword === temporaryPassword);
+    check('applied password remains only in its one-time modal until close', $('secureAdminTemporaryPasswordV2')?.textContent === temporaryPassword
+      && $('applyTemporaryPasswordV2Btn')?.disabled === true);
+    window.adminFinishTemporaryPasswordV2();
+    check('closing the one-time modal removes the temporary password', !window.document.querySelector('#modal').textContent.includes(temporaryPassword));
 
     window.openAdminPanel('settings');
     $('teacherNewPw').value = 'new-teacher-password';
@@ -124,6 +142,12 @@ run(root, async ({ window, $, sleep, asyncErrors }) => {
 }, {
   cloudConfigCode:"window.YUKSAM_CLOUD = { securityV2Enabled:true, url:'https://project.supabase.co', anonKey:'publishable-key-that-is-long-enough' };",
   scriptOverrides:{ 'vendor/supabase-client.bundle.js':fakeClientSource },
+  beforeLoad({ window }) {
+    Object.defineProperty(window.navigator, 'clipboard', {
+      configurable:true,
+      value:{ async writeText(value) { window.__copiedTemporaryPassword = value; } },
+    });
+  },
 }).catch((error) => {
   console.log(String(error?.stack || error));
   process.exit(1);

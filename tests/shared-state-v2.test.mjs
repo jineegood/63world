@@ -54,15 +54,34 @@ test('remote classroom and workbooks are validated, frozen, and cached only unde
   for (const legacy of ['ysb_teacher_v1','ysb_workbooks_v3','ysb_questions_v2']) assert.equal(remote.store.map.has(legacy), false);
 });
 
-test('network failure uses cache or defaults but authorization failure never does', async () => {
+test('network failure uses a verified cache but never unverified defaults', async () => {
   const failed = setup({}, { classroom_settings:new Error('Failed to fetch'), workbooks:new Error('Failed to fetch') });
   const service = loadApi().create({ client:failed.client, storage:failed.store, defaultWorkbooks:defaultBooks });
   assert.equal((await service.refreshClassroomSettings()).source, 'default');
   assert.equal((await service.refreshClassroomSettings()).serverOpen, true);
-  assert.equal((await service.refreshWorkbooks()).workbooks[0].id, 'default');
+  await assert.rejects(service.refreshWorkbooks(), (error) => error.code === 'OFFLINE');
+
+  const cachedBooks = [{ ...defaultBooks[0], id:'cached', name:'서버에서 확인한 문제집' }];
+  const cached = setup({}, { workbooks:new Error('Failed to fetch') });
+  cached.store.setItem('ysb_shared_v2_workbooks', JSON.stringify({ version:1, items:cachedBooks }));
+  const cachedService = loadApi().create({ client:cached.client, storage:cached.store, defaultWorkbooks:defaultBooks });
+  const cachedResult = await cachedService.refreshWorkbooks();
+  assert.equal(cachedResult.source, 'cache');
+  assert.equal(cachedResult.offline, true);
+  assert.equal(cachedResult.workbooks[0].id, 'cached');
+
   const denied = setup({}, { classroom_settings:{ code:'42501', message:'permission denied' } });
   await assert.rejects(loadApi().create({ client:denied.client, storage:denied.store, defaultWorkbooks:defaultBooks }).refreshClassroomSettings(),
     (error) => error.code === 'FORBIDDEN');
+});
+
+test('an online workbook query returning zero rows fails closed instead of loading bundled questions', async () => {
+  const remote = setup();
+  const service = loadApi().create({ client:remote.client, storage:remote.store, defaultWorkbooks:defaultBooks });
+
+  await assert.rejects(service.refreshWorkbooks(), (error) => error.code === 'LOAD_FAILED');
+  assert.equal(service.getWorkbooks()[0].id, 'default');
+  assert.equal(remote.store.map.has('ysb_shared_v2_workbooks'), false);
 });
 
 test('teacher writes exact fixed rows only after complete validation', async () => {

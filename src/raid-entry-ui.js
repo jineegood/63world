@@ -30,6 +30,7 @@
       unlocked:group.id <= highest,
       cleared:group.id <= cleared,
       needs:group.id - 1,
+      reward:global.YuksamRaidNameplatesV1?.rewardForGroup?.(group.id) || null,
     }));
   }
 
@@ -82,6 +83,11 @@
       .raid-floor-clear{display:inline-flex;padding:3px 8px;border-radius:999px;font-size:11px;
         line-height:1;font-style:normal;font-weight:1000;color:#052e16;background:#86efac;
         border:1px solid #bbf7d0;box-shadow:0 0 12px rgba(74,222,128,.45)}
+      .raid-floor-reward{display:inline-flex;align-items:center;gap:4px;padding:3px 7px;border-radius:999px;
+        font-size:10px;font-style:normal;font-weight:1000;color:#fef3c7;background:rgba(15,23,42,.6);
+        border:1px solid rgba(250,204,21,.66);box-shadow:0 0 9px rgba(250,204,21,.22)}
+      .raid-floor-reward.summit{color:#ecfeff;border-color:#67e8f9;background:linear-gradient(90deg,rgba(8,47,73,.78),rgba(88,28,135,.78));
+        box-shadow:0 0 8px #22d3ee,0 0 14px rgba(217,70,239,.55)}
       .raid-floor-card span{font-size:12px;color:rgba(255,255,255,.86);font-weight:800}
       /* 난이도 눈금 — 층이 올라갈수록 채워지는 칸이 늘어난다. */
       .raid-floor-heat{display:flex;gap:3px;justify-self:end}
@@ -160,7 +166,9 @@
       return `
       <button class="raid-floor-card tier${group.id}${group.unlocked ? '' : ' locked'}"
         data-raid-floor-group="${group.id}" ${group.unlocked ? '' : 'disabled aria-disabled="true"'}>
-        <strong>${group.label}${group.cleared ? '<em class="raid-floor-clear">Clear!</em>' : ''}</strong>
+        <strong>${group.label}${group.cleared ? '<em class="raid-floor-clear">Clear!</em>' : ''}${group.reward
+          ? `<em class="raid-floor-reward${group.id === 7 ? ' summit' : ''}" title="${group.reward.name}">${group.reward.icon} ${group.reward.shortName}</em>`
+          : ''}</strong>
         ${note}
         ${heatHtml(group.id)}
       </button>`;

@@ -7,6 +7,10 @@ import vm from 'node:vm';
 const root = path.resolve(import.meta.dirname, '..');
 const teacherId = '11111111-1111-4111-8111-111111111111';
 const studentId = '22222222-2222-4222-8222-222222222222';
+const statusMigration = fs.readFileSync(
+  path.join(root, 'supabase/migrations/202608280002_teacher_student_status_v1.sql'),
+  'utf8',
+);
 
 function loadApi() {
   const file = path.join(root, 'src/admin-data-v2.js');
@@ -36,6 +40,14 @@ function setup(overrides = {}) {
     },
   }];
   const teacher = overrides.teacher || { id:teacherId, app_metadata:{ role:'teacher' } };
+  const statusRows = overrides.statusRows || [{
+    user_id:studentId,
+    is_online:true,
+    presence_last_seen_at:'2026-08-29T01:02:03.000Z',
+    current_map:'town',
+    raid_top_group:4,
+    raid_top_floor:40,
+  }];
   const client = {
     auth:{
       async getUser() { calls.push(['getUser']); return { data:{ user:teacher }, error:null }; },
@@ -71,6 +83,10 @@ function setup(overrides = {}) {
         return overrides.invokeResult || { data:{ ok:true, displayName:'별빛' }, error:null };
       },
     },
+    async rpc(name) {
+      calls.push(['rpc', name]);
+      return { data:statusRows, error:overrides.statusError || null };
+    },
   };
   return { calls, service:loadApi().create({ client }) };
 }
@@ -83,6 +99,11 @@ test('listStudents returns only frozen sanitized summaries ordered by the backen
     userId:studentId,
     displayName:'별빛',
     updatedAt:'2026-07-23T01:02:03.000Z',
+    isOnline:true,
+    presenceLastSeenAt:'2026-08-29T01:02:03.000Z',
+    currentMap:'town',
+    raidTopGroup:4,
+    raidTopFloor:40,
     className:'mage', spec:'화염', level:7, exp:1234, gold:44, building:8,
     hp:51, maxHp:70, skillPoints:3, baseStatsVersion:2,
     equipment:{ weapon:'ironwoodStaff', armor:'navyRobe', head:null, accessory:'moonRing' },
@@ -98,6 +119,47 @@ test('listStudents returns only frozen sanitized summaries ordered by the backen
   assert.doesNotMatch(JSON.stringify(result), /password|email|token|must-not-leak|hidden/i);
   assert.deepEqual(calls.filter(([name]) => ['select', 'order'].includes(name)).map(([name]) => name), ['select', 'order']);
   assert.equal(calls.find(([name]) => name === 'select')[1], 'user_id,display_name,data,updated_at');
+  assert.deepEqual(calls.find(([name]) => name === 'rpc'), ['rpc', 'teacher_student_status_v1']);
+});
+
+test('student status is sanitized and raid group seven maps to the real 63rd floor', async () => {
+  const { service } = setup({ statusRows:[{
+    user_id:studentId,
+    is_online:false,
+    presence_last_seen_at:'2026-08-29T00:00:00.000Z',
+    current_map:'dungeon',
+    raid_top_group:99,
+    raid_top_floor:999,
+  }] });
+  const [student] = await service.listStudents();
+  assert.deepEqual({
+    isOnline:student.isOnline,
+    presenceLastSeenAt:student.presenceLastSeenAt,
+    currentMap:student.currentMap,
+    raidTopGroup:student.raidTopGroup,
+    raidTopFloor:student.raidTopFloor,
+  }, {
+    isOnline:false,
+    presenceLastSeenAt:'2026-08-29T00:00:00.000Z',
+    currentMap:'dungeon',
+    raidTopGroup:7,
+    raidTopFloor:63,
+  });
+});
+
+test('teacher status RPC is the only client boundary for world presence and authoritative raid progress', () => {
+  assert.match(statusMigration, /create or replace function public\.teacher_student_status_v1\(\)/i);
+  assert.match(statusMigration, /security definer/i);
+  assert.match(statusMigration, /if auth\.uid\(\) is null or not public\.is_teacher\(\)/i);
+  assert.match(statusMigration, /last_seen_at\s*>=\s*v_online_cutoff/i);
+  assert.match(statusMigration, /interval '8 seconds'/i);
+  assert.match(statusMigration, /left join public\.raid_progress_v1 as raid_progress/i);
+  assert.match(statusMigration, /coalesce\(raid_progress\.top_group, 0\)::integer as raid_top_group/i);
+  assert.match(statusMigration, /when coalesce\(raid_progress\.top_group, 0\) = 7 then 63/i);
+  assert.doesNotMatch(statusMigration, /profile\.data\s*->\s*'raidTopGroup'/i);
+  assert.match(statusMigration, /revoke all on table public\.world_presence_v1[\s\S]*from public, anon, authenticated/i);
+  assert.doesNotMatch(statusMigration, /grant\s+select\s+on\s+(?:table\s+)?public\.world_presence_v1/i);
+  assert.match(statusMigration, /grant execute on function public\.teacher_student_status_v1\(\)[\s\S]*to authenticated/i);
 });
 
 test('student or user_metadata teacher claims cannot list or mutate', async () => {
@@ -151,7 +213,9 @@ test('applyStudentCheat accepts only fixed actions and delegates to the teacher 
   await assert.rejects(service.applyStudentCheat('not-a-uuid', 'exp20'), (error) => error.code === 'STUDENT_NOT_FOUND');
 
   const result = await service.applyStudentCheat(studentId, 'exp20');
-  assert.deepEqual(JSON.parse(JSON.stringify(result)), { displayName:'별빛', action:'exp20', snapshot });
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), {
+    displayName:'별빛', action:'exp20', snapshot, newNameplates:[],
+  });
   const invoke = calls.find(([name, fn]) => name === 'invoke' && fn === 'teacher-apply-cheat');
   assert.deepEqual(JSON.parse(JSON.stringify(invoke[2])), {
     body:{ userId:studentId, action:'exp20' },
@@ -162,6 +226,32 @@ test('applyStudentCheat accepts only fixed actions and delegates to the teacher 
   const raidInvoke = calls.filter(([name, fn]) => name === 'invoke' && fn === 'teacher-apply-cheat').at(-1);
   assert.deepEqual(JSON.parse(JSON.stringify(raidInvoke[2])), {
     body:{ userId:studentId, action:'raidAdvance' },
+  });
+});
+
+test('raid progress cheat exposes only approved newly unlocked nameplates', async () => {
+  const snapshot = {
+    raidTopGroup:2,
+    raidNameplates:['raid_20_steel'],
+    nameplate:{ theme:'default' },
+  };
+  const { service } = setup({
+    invokeResult:{
+      data:{
+        ok:true,
+        displayName:'별빛',
+        snapshot,
+        newNameplates:['raid_20_steel', 'forged_nameplate'],
+      },
+      error:null,
+    },
+  });
+  const result = await service.applyStudentCheat(studentId, 'raidAdvance');
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), {
+    displayName:'별빛',
+    action:'raidAdvance',
+    snapshot,
+    newNameplates:['raid_20_steel'],
   });
 });
 

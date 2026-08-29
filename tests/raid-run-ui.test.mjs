@@ -163,7 +163,9 @@ test('던전 문은 예전 1층 연습 버튼이 아니라 방 생성·코드 �
 test('openNetworkLobby는 방 생성과 참가를 서버 클라이언트에 연결한다', async () => {
   const created = networkUiHarness();
   assert.equal(typeof created.context.YuksamRaidRunUi.openNetworkLobby, 'function');
+  assert.equal(created.context.YuksamRaidRunUi.hasSession(), false);
   assert.equal(await created.context.YuksamRaidRunUi.openNetworkLobby({ mode:'create', floorGroup:1 }), true);
+  assert.equal(created.context.YuksamRaidRunUi.hasSession(), true);
   const createCall = created.calls.find(([kind]) => kind === 'create');
   assert.equal(createCall?.[0], 'create');
   assert.equal(createCall?.[1]?.floorGroup, 1);
@@ -1035,6 +1037,11 @@ test('끝난 판은 누구도 결과 화면을 놓치지 않고, 보상은 한 �
     '온라인 보상은 서버의 절대 저장값으로 맞춘다');
   assert.match(finish, /completion\.awarded !== true/);
   assert.match(finish, /첫 클리어 보상은 이미 받았습니다/);
+  assert.match(finish, /completion\.nameplateReward\?\.id/,
+    '서버가 이번 최초 클리어에 지급한 이름표만 결과창에 표시한다');
+  assert.match(finish, /renderRaidNameplateRewardV1/);
+  assert.match(finish, /YuksamRaidNameplatesV1\?\.equip/);
+  assert.match(finish, /raidEquipNameplateBtnV1/);
   const onlineBranch = finish.match(/if \(session\) \{[\s\S]*?\} else \{/)?.[0] || '';
   assert.doesNotMatch(onlineBranch, /addExp|addGold|reward\.building/,
     '온라인 완료 응답을 다시 받아도 로컬 가산으로 중복 지급하면 안 된다');
@@ -1073,4 +1080,8 @@ test('반격 안내에 50% 확률이 적혀 있다', () => {
   assert.match(uiSource, /때릴 때마다 50% 확률로 때린 사람이 반격을 받습니다/);
   assert.match(combatSource, /50% 확률로 파티 전체에 반격합니다/);
   assert.match(combatSource, /50% 확률로 반격합니다/);
+});
+
+test('전멸 기록은 직전 몬스터가 아니라 실제 도전 중인 층을 보낸다', () => {
+  assert.match(uiSource, /\['battle', 'wiped'\]\.includes\(snapshot\.phase\)[\s\S]*?displayFloorForProgress\(snapshot, 1\)/);
 });

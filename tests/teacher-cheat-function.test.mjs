@@ -13,8 +13,8 @@ const raidKillMigration = fs.readFileSync(
   path.join(root, 'supabase/migrations/202608090005_teacher_raid_kill_v1.sql'),
   'utf8',
 );
-const raidBalanceMigration = fs.readFileSync(
-  path.join(root, 'supabase/migrations/202608090006_raid_balance_and_teacher_progress_v1.sql'),
+const hallAndNameplateMigration = fs.readFileSync(
+  path.join(root, 'supabase/migrations/202608270004_hall_of_fame_and_teacher_nameplates_v1.sql'),
   'utf8',
 );
 const raidPauseMigration = fs.readFileSync(
@@ -52,16 +52,24 @@ test('dungeon pause is server-only and preserves the remaining question time', (
   assert.match(raidPauseMigration, /grant execute[\s\S]*?to service_role/i);
 });
 
-test('dungeon progress cheat advances only server-owned progress without granting rewards', () => {
+test('dungeon progress cheat advances progress and grants only milestone cosmetics', () => {
   assert.match(source, /private_teacher_advance_raid_progress_v1/);
-  assert.match(raidBalanceMigration, /top_group = least\(7, public\.raid_progress_v1\.top_group \+ 1\)/i);
-  assert.match(raidBalanceMigration, /jsonb_build_object\('ok', true, 'raidTopGroup', v_top_group\)/i);
+  assert.match(hallAndNameplateMigration, /top_group = least\(7, public\.raid_progress_v1\.top_group \+ 1\)/i);
+  assert.match(hallAndNameplateMigration, /create table if not exists public\.raid_nameplate_grants_v1/i);
+  assert.match(hallAndNameplateMigration, /values \(2::smallint\), \(4::smallint\), \(7::smallint\)/i);
+  assert.match(hallAndNameplateMigration, /on conflict \(user_id, floor_group\) do nothing/i);
+  assert.match(hallAndNameplateMigration, /'raidNameplates'[\s\S]*'nameplate'[\s\S]*'newNameplates'/i);
   assert.doesNotMatch(
-    raidBalanceMigration.match(/create or replace function public\.private_teacher_advance_raid_progress_v1[\s\S]*?\$\$;/i)?.[0] || '',
-    /raid_reward_claims_v1|v_reward_exp|gold|building/i,
+    hallAndNameplateMigration.match(/create or replace function public\.private_teacher_advance_raid_progress_v1[\s\S]*?\$\$;/i)?.[0] || '',
+    /raid_reward_claims_v1|raidRewardVersion|v_reward_exp|exp_reward|gold_reward|building_reward/i,
   );
-  assert.match(raidBalanceMigration, /revoke all[\s\S]*private_teacher_advance_raid_progress_v1[\s\S]*authenticated/i);
-  assert.match(raidBalanceMigration, /grant execute[\s\S]*private_teacher_advance_raid_progress_v1[\s\S]*service_role/i);
+  assert.match(hallAndNameplateMigration, /revoke all on table public\.raid_nameplate_grants_v1[\s\S]*public, anon, authenticated/i);
+  assert.match(hallAndNameplateMigration, /grant select, insert on table public\.raid_nameplate_grants_v1[\s\S]*to service_role/i);
+  assert.match(hallAndNameplateMigration, /revoke all[\s\S]*private_teacher_advance_raid_progress_v1[\s\S]*authenticated/i);
+  assert.match(hallAndNameplateMigration, /grant execute[\s\S]*private_teacher_advance_raid_progress_v1[\s\S]*service_role/i);
+  assert.match(source, /const RAID_NAMEPLATES = new Set/);
+  assert.match(source, /snapshot:\{ raidTopGroup, raidNameplates, nameplate:\{ theme:nameplateTheme \} \}/);
+  assert.match(source, /newNameplates/);
 });
 
 test('dungeon instant kill is teacher-only and becomes one authoritative server round', () => {

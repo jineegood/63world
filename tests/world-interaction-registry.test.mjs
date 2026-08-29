@@ -98,6 +98,7 @@ test('real browser preserves final world candidates and actions', { timeout:3000
   assert.match(result.stdout, /PASS: pet automatic exit ignores E/);
   assert.match(result.stdout, /PASS: final room blocks lower-map candidate fallback/);
   assert.match(result.stdout, /PASS: final exit returns to its recorded map/);
+  assert.match(result.stdout, /PASS: unchanged interaction hint skips repeated DOM writes/);
 });
 
 test('production uses one registry boundary without versioned lookup or dispatch wrappers', () => {

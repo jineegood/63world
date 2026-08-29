@@ -50,7 +50,7 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   for (const map of ['town', 'forest', 'desert', 'swamp', 'bossRoom', 'equipmentShop', 'buildingShopInterior']) {
     const trace = drawMap(map);
     check(`${map} renders without error`, !trace.error, trace.error && String(trace.error));
-    check(`${map} renders one player stack`, trace.player === 1 && trace.nameplate === 1 && trace.aura === 2 && trace.speech === 1,
+    check(`${map} renders one player stack`, trace.player === 1 && trace.nameplate === 1 && trace.aura === 1 && trace.speech === 1,
       JSON.stringify(trace));
   }
 

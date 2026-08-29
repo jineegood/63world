@@ -181,14 +181,15 @@ test('real browser preserves collider, movement, and transition behavior', { tim
   assert.match(result.stdout, /PASS: boss ellipse rejects outside movement/);
   assert.match(result.stdout, /PASS: equipment exit returns beside its town door/);
   assert.match(result.stdout, /PASS: final room suppresses all automatic transitions/);
-  // 63빌딩 던전 충돌 검사 2개가 늘어 30개 → 32개가 되었다.
-  assert.match(result.stdout, /RESULT: PASS 37 \/ FAIL 0/);
+  assert.match(result.stdout, /PASS: one frame reuses one collider array and releases it afterward/);
+  // 63빌딩 던전 충돌 검사 2개와 프레임 캐시 검사 1개가 늘어 30개 → 33개가 되었다.
+  assert.match(result.stdout, /RESULT: PASS 38 \/ FAIL 0/);
 });
 
 test('production uses one navigation boundary without versioned wrappers', () => {
   assert.match(indexSource, /src\/world-navigation-registry\.js[\s\S]*game\.js/);
   assert.equal((gameSource.match(/YuksamWorldNavigationRegistry\.create\(/g) || []).length, 1);
-  assert.match(gameSource, /function getCurrentMapColliders\(\) \{\s*return worldNavigationRegistry\.getColliders\(/);
+  assert.match(gameSource, /function getCurrentMapColliders\(\) \{[\s\S]{0,700}worldNavigationRegistry\.getColliders\(/);
   assert.match(gameSource, /function checkAutoTransitions\(\) \{\s*worldNavigationRegistry\.runTransition\(/);
   assert.doesNotMatch(gameSource, /getCurrentMapColliders\s*=\s*function\s+getCurrentMapCollidersV\d+/);
   assert.doesNotMatch(gameSource, /checkAutoTransitions\s*=\s*function\s+checkAutoTransitionsV\d+/);

@@ -103,6 +103,49 @@ test('the expanded costume catalog has two new choices per body part', () => {
   assert.notEqual(defs.cs_forestFairyCape.look.type, 'cloak');
 });
 
+test('every paid costume is exactly half price while the quest gift stays free', () => {
+  const defs = loadCostumeDefs();
+  const expectedPrices = {
+    cs_bunnyBand:60,
+    cs_catBand:100,
+    cs_flowerCrown:130,
+    cs_sharkHood:115,
+    cs_starCrown:155,
+    cs_violetMagicHat:175,
+    cs_ninjaMask:200,
+    cs_spartanHelm:230,
+    cs_blackDragonHelm:255,
+    cs_sailorCape:75,
+    cs_cloudHoodie:115,
+    cs_starryRobe:105,
+    cs_sharkSuit:135,
+    cs_peachDress:135,
+    cs_forestFairyCape:150,
+    cs_ninjaSuit:170,
+    cs_spartanArmor:210,
+    cs_blackDragonArmor:265,
+    cs_ribbon:50,
+    cs_goldenBell:110,
+    cs_giantFishPack:130,
+    cs_duckFloat:110,
+    cs_sharkBuddy:125,
+    cs_angelWing:125,
+    cs_strangeWing:145,
+    cs_rainbowAura:165,
+    cs_twilightBatWing:180,
+    cs_blackDragonShield:240,
+  };
+  const paidPrices = Object.fromEntries(
+    Object.values(defs)
+      .filter((item) => !item.questOnly)
+      .map((item) => [item.id, item.price]),
+  );
+
+  assert.deepEqual(paidPrices, expectedPrices);
+  assert.equal(Object.keys(paidPrices).length, 28);
+  assert.equal(defs.cs_questSproutRibbon.price, 0);
+});
+
 test('the costume merchant groups paid items by slot and keeps the quest gift hidden', () => {
   const markup = renderShop(loadCostumeDefs());
   const head = markup.indexOf('data-costume-slot="head"');
@@ -169,12 +212,32 @@ test('empty costume body-part groups stay visible and explain what is missing', 
   assert.match(markup, /data-costume-inventory-slot="accessory"[\s\S]*?<small>0개<\/small>[\s\S]*?보유 중인 악세서리 코스튬이 없습니다/);
 });
 
+test('the costume closet includes the independently equipped raid nameplate collection', () => {
+  const ui = read('src/costume-ui.js');
+  const nameplates = read('src/raid-nameplates.js');
+  const style = read('style.css');
+  const index = read('index.html');
+
+  assert.match(ui, /renderRaidNameplatePickerV1/);
+  assert.match(ui, /\$\{nameplatePicker\}/);
+  assert.match(nameplates, /강철 승강기 이름표/);
+  assert.match(nameplates, /황혼의 창 이름표/);
+  assert.match(nameplates, /육삼 정상 이름표/);
+  assert.match(nameplates, /파티 던전 \$\{entry\.floorLabel\} 최초 돌파 시 획득/);
+  assert.match(style, /\.raid-nameplate-grid-v1\s*\{[^}]*grid-template-columns:\s*repeat\(3,/);
+  assert.match(style, /\.raid-nameplate-preview-v1\.raid-nameplate-steel-20[\s\S]*?#fb923c/);
+  assert.match(index, /<script src="src\/raid-nameplates\.js"><\/script>[\s\S]*?<script src="src\/raid-run-ui\.js"><\/script>/);
+});
+
 test('the extracted data snapshot includes the expanded costume catalog', () => {
   const defs = loadCostumeDefs();
   const snapshot = JSON.parse(read('data/game-data.snapshot.json'));
   const costumeIds = Object.keys(snapshot.items).filter((id) => snapshot.items[id]?.costume);
 
   assert.deepEqual(costumeIds.sort(), Object.keys(defs).sort());
+  for (const [id, item] of Object.entries(defs)) {
+    assert.equal(snapshot.items[id]?.price, item.price, `${id} snapshot price`);
+  }
 });
 
 test('all eighteen additions and four themed sets render through the live player sprite', { timeout:25000 }, () => {

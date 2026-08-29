@@ -33,6 +33,14 @@ const raidBalanceMigration = fs.readFileSync(
   path.join(root, 'supabase/migrations/202608090006_raid_balance_and_teacher_progress_v1.sql'),
   'utf8',
 );
+const raidNameplateMigration = fs.readFileSync(
+  path.join(root, 'supabase/migrations/202608270001_raid_nameplate_rewards_v1.sql'),
+  'utf8',
+);
+const hallAndTeacherNameplateMigration = fs.readFileSync(
+  path.join(root, 'supabase/migrations/202608270004_hall_of_fame_and_teacher_nameplates_v1.sql'),
+  'utf8',
+);
 const serviceUrl = pathToFileURL(path.join(root, 'supabase/functions/_shared/raid-room-service.mjs'));
 const errorUrl = pathToFileURL(path.join(root, 'supabase/functions/_shared/raid-room-error.mjs'));
 const storeUrl = pathToFileURL(path.join(root, 'supabase/functions/_shared/raid-room-store.mjs'));
@@ -146,6 +154,25 @@ test('던전 보상은 캐릭터·구간별 최초 한 번만 서버가 원자 �
   }
   assert.match(firstClearRewardMigration, /v_profile_data[\s\S]*raidRewardVersion[\s\S]*v_reward_version/i);
   assert.match(firstClearRewardMigration, /revoke all on table public\.raid_reward_claims_v1 from public, anon, authenticated/i);
+});
+
+test('20·40·63층 이름표는 실제 클리어 또는 교사 꾸미기 지급에서 파생되고 실제 보상은 분리된다', () => {
+  assert.match(hallAndTeacherNameplateMigration, /private_raid_nameplates_for_user_v1/i);
+  assert.match(hallAndTeacherNameplateMigration, /from public\.raid_reward_claims_v1 claim[\s\S]*union[\s\S]*from public\.raid_nameplate_grants_v1 grant_row/i);
+  assert.match(hallAndTeacherNameplateMigration, /when 2 then 'raid_20_steel'[\s\S]*when 4 then 'raid_40_twilight'[\s\S]*when 7 then 'raid_63_summit'/i);
+  assert.doesNotMatch(
+    hallAndTeacherNameplateMigration.match(/function public\.private_raid_nameplates_for_user_v1[\s\S]*?\$\$;/i)?.[0] || '',
+    /raid_progress_v1/,
+    '단순 진행도만으로 이름표를 지급하면 안 된다',
+  );
+  assert.match(raidNameplateMigration, /private_guard_raid_progress_profile_v1[\s\S]*raidNameplates/i);
+  assert.match(raidNameplateMigration, /v_incoming_theme <> 'default'[\s\S]*v_owned_nameplates \? v_incoming_theme/i);
+  assert.match(raidNameplateMigration, /update public\.player_profiles_v2 profile[\s\S]*floor_group in \(2, 4, 7\)/i);
+  assert.match(hallAndTeacherNameplateMigration, /revoke all on function public\.private_raid_nameplates_for_user_v1\(uuid\)/i);
+  const advance = hallAndTeacherNameplateMigration.match(
+    /create or replace function public\.private_teacher_advance_raid_progress_v1[\s\S]*?\$\$;/i,
+  )?.[0] || '';
+  assert.doesNotMatch(advance, /insert into public\.raid_reward_claims_v1|exp_reward|gold_reward|building_reward/i);
 });
 
 test('서버 sync는 방 version이 바뀌면 파티원과 이벤트를 다시 읽는다', async () => {
@@ -534,6 +561,22 @@ test('완료 응답은 최초 클리어만 보상을 표시하고 반복 클리�
   assert.equal(first.player.fullyHealed, true);
   assert.equal(first.player.raidTopGroup, 1);
   assert.equal(first.player.raidRewardVersion, 1);
+  assert.deepEqual(first.player.raidNameplates, []);
+  assert.deepEqual(first.player.nameplate, { theme:'default' });
+
+  const milestone = RaidRoomStoreRows.raidCompletion(
+    claim,
+    { ...player, raidNameplates:['raid_20_steel'], nameplate:{ theme:'raid_20_steel' } },
+    { top_group:2 },
+    'first-room',
+    2,
+  );
+  assert.deepEqual(milestone.nameplateReward, {
+    id:'raid_20_steel', floorGroup:2, floorLabel:'20층',
+    questTitle:'[파티] 함께 오른 스무 층', name:'강철 승강기 이름표',
+  });
+  assert.deepEqual(milestone.player.raidNameplates, ['raid_20_steel']);
+  assert.deepEqual(milestone.player.nameplate, { theme:'raid_20_steel' });
 
   const repeat = RaidRoomStoreRows.raidCompletion(
     claim, { ...player, gold:123 }, { top_group:1 }, 'repeat-room', 1,
@@ -541,6 +584,7 @@ test('완료 응답은 최초 클리어만 보상을 표시하고 반복 클리�
   assert.equal(repeat.awarded, false);
   assert.deepEqual(repeat.reward, { exp:0, gold:0, building:0 });
   assert.equal(repeat.levelGain, 0);
+  assert.equal(repeat.nameplateReward, null);
   assert.equal(repeat.player.gold, 123, '반복 클리어도 현재 서버 값을 돌려준다');
   assert.equal(repeat.player.fullyHealed, false);
 });
@@ -579,6 +623,9 @@ test('published events strip raw answers and reject an invalid next phase', asyn
   assert.equal(safe.events[0].correctAnswer, '2');
   assert.equal('submittedAnswer' in safe.events[0], false);
   assert.equal('requestId' in safe.events[0], false);
+  assert.equal(RaidRoomValidation.normalizePublishResult({
+    nextPhase:'wiped', encounterIndex:20, events:[],
+  }).encounterIndex, 4, 'one dungeon group has exactly four encounters');
   assert.throws(
     () => RaidRoomValidation.normalizePublishResult({ nextPhase:'question', events:[] }),
     (error) => error.code === 'INVALID_REQUEST',

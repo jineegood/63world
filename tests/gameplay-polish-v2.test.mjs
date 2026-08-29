@@ -22,13 +22,13 @@ test('death experience is protected before specialization and halved afterward',
 
 test('normal mushroom attack and slime hp are tuned without changing elites or input', () => {
   const api = loadApi();
-  const mushroom = { type:'mushroom', attack:5, hp:10, maxHp:10, elite:false };
+  const mushrooms = [3, 4, 5].map((attack) => ({ type:'mushroom', attack, hp:10, maxHp:10, elite:false }));
   const slime = { type:'slime', attack:4, hp:20, maxHp:20, elite:false };
   const elite = { type:'slime', attack:8, hp:40, maxHp:40, elite:true };
-  assert.deepEqual({ ...api.tuneNormalMonster(mushroom) }, { ...mushroom, attack:4 });
+  assert.deepEqual(mushrooms.map((monster) => api.tuneNormalMonster(monster).attack), [1, 2, 3]);
   assert.deepEqual({ ...api.tuneNormalMonster(slime) }, { ...slime, hp:22, maxHp:22 });
   assert.equal(api.tuneNormalMonster(elite).maxHp, 40);
-  assert.equal(mushroom.attack, 5);
+  assert.deepEqual(mushrooms.map((monster) => monster.attack), [3, 4, 5]);
   assert.equal(slime.maxHp, 20);
 });
 

@@ -50,6 +50,135 @@ if (!YuksamPatchData) throw new Error('YuksamPatchData must be loaded before gam
 const PET_DEFS_V27 = YuksamPatchData.PET_DEFS_V27;
 const TIER_INFO_V27 = YuksamPatchData.TIER_INFO_V27;
 
+function isLocalWorldSpecialActionFallbackV1() {
+  const feature = window.YuksamWorldAnnouncementsV1;
+  if (typeof feature?.isLocalTestEnvironment === 'function') {
+    return feature.isLocalTestEnvironment() && !window.secureStudentAccessV2?.getClient?.();
+  }
+  const protocol = String(window.location?.protocol || '').toLowerCase();
+  const hostname = String(window.location?.hostname || '').toLowerCase();
+  return (protocol === 'file:' || ['localhost', '127.0.0.1', '::1', '[::1]'].includes(hostname))
+    && !window.secureStudentAccessV2?.getClient?.();
+}
+
+function createWorldSpecialActionRequestIdV1() {
+  return window.YuksamWorldAnnouncementsV1?.requestId?.()
+    || window.crypto?.randomUUID?.()
+    || uid();
+}
+
+function worldSpecialActionUserIdV1() {
+  return String(window.secureStudentAccessV2?.getIdentity?.()?.userId || '').toLowerCase();
+}
+
+function loadPendingWorldSpecialActionV1(action) {
+  const userId = worldSpecialActionUserIdV1();
+  const pending = window.YuksamWorldAnnouncementsV1?.loadPending?.(action, userId) || null;
+  if (action === 'enhance') {
+    game.pendingUpgradeRequestIdV1 = pending?.requestId || null;
+    game.pendingUpgradeWeaponIdV1 = pending?.weaponId || null;
+    game.pendingUpgradeOldTierV1 = Number.isInteger(pending?.oldTier) ? pending.oldTier : null;
+  } else {
+    game.pendingPetSummonRequestIdV1 = pending?.requestId || null;
+  }
+  return pending;
+}
+
+function rememberPendingWorldSpecialActionV1(action, pending) {
+  const userId = worldSpecialActionUserIdV1();
+  const remembered = window.YuksamWorldAnnouncementsV1?.rememberPending?.(action, userId, pending) || pending;
+  if (action === 'enhance') {
+    game.pendingUpgradeRequestIdV1 = remembered.requestId;
+    game.pendingUpgradeWeaponIdV1 = remembered.weaponId;
+    game.pendingUpgradeOldTierV1 = remembered.oldTier;
+  } else {
+    game.pendingPetSummonRequestIdV1 = remembered.requestId;
+  }
+  return remembered;
+}
+
+function clearPendingWorldSpecialActionV1(action) {
+  const userId = worldSpecialActionUserIdV1();
+  window.YuksamWorldAnnouncementsV1?.clearPending?.(action, userId);
+  if (action === 'enhance') {
+    game.pendingUpgradeRequestIdV1 = null;
+    game.pendingUpgradeWeaponIdV1 = null;
+    game.pendingUpgradeOldTierV1 = null;
+  } else {
+    game.pendingPetSummonRequestIdV1 = null;
+  }
+}
+
+function worldSpecialActionErrorMessageV1(response) {
+  const messages = {
+    UNAUTHORIZED:'로그인이 만료되었습니다. 다시 로그인해 주세요.',
+    FORBIDDEN:'학생 캐릭터만 이용할 수 있습니다.',
+    INVALID_REQUEST:'요청 정보를 다시 확인해 주세요.',
+    REQUEST_ID_REUSED:'요청 확인에 실패했습니다. 다시 눌러 주세요.',
+    CHARACTER_NOT_FOUND:'서버 캐릭터 정보를 찾지 못했습니다.',
+    RATE_LIMITED:'처리 중입니다. 잠시 뒤 다시 시도해 주세요.',
+    WEAPON_NOT_EQUIPPED:'강화할 무기를 장착한 뒤 다시 시도해 주세요.',
+    MAX_TIER:'이미 전설 등급입니다.',
+    INSUFFICIENT_FUNDS:'빌딩 화폐가 부족합니다.',
+    INVALID_PET:'펫 소환 정보를 확인하지 못했습니다.',
+  };
+  return messages[String(response?.code || '')] || '서버에서 작업을 완료하지 못했습니다.';
+}
+
+function applyWorldSpecialActionResultV1(action, response) {
+  if (!game.player || !response?.ok || response.action !== action
+    || !response.state || typeof response.state !== 'object'
+    || !response.outcome || typeof response.outcome !== 'object') {
+    throw new Error('INVALID_WORLD_SPECIAL_ACTION_RESULT');
+  }
+  const building = Number(response.state.building);
+  if (!Number.isSafeInteger(building) || building < 0) {
+    throw new Error('INVALID_WORLD_SPECIAL_ACTION_BUILDING');
+  }
+
+  if (action === 'enhance') {
+    const weaponId = String(response.outcome.weaponId || '');
+    const oldTier = Number(response.outcome.oldTier);
+    const newTier = Number(response.outcome.newTier);
+    const upgrades = response.state.weaponUpgrades;
+    if (!weaponId || !upgrades || typeof upgrades !== 'object' || Array.isArray(upgrades)
+      || !Number.isInteger(oldTier) || oldTier < 0 || oldTier > 3
+      || !Number.isInteger(newTier) || newTier < 0 || newTier > 4
+      || Number(upgrades[weaponId]) !== newTier
+      || response.outcome.success !== (newTier === oldTier + 1)) {
+      throw new Error('INVALID_WORLD_ENHANCEMENT_RESULT');
+    }
+    const safeUpgrades = {};
+    Object.entries(upgrades).forEach(([itemId, tier]) => {
+      const parsed = Number(tier);
+      if (/^[A-Za-z][A-Za-z0-9_-]{0,79}$/.test(itemId)
+        && Number.isInteger(parsed) && parsed >= 0 && parsed <= 4) {
+        safeUpgrades[itemId] = parsed;
+      }
+    });
+    game.player.building = building;
+    game.player.weaponUpgrades = safeUpgrades;
+    return Object.freeze({ success:response.outcome.success, weaponId, oldTier, newTier });
+  }
+
+  const petId = String(response.outcome.petId || '');
+  const pets = Array.isArray(response.state.pets)
+    ? [...new Set(response.state.pets.map(String))].filter((id) => PET_DEFS_V27[id])
+    : null;
+  if (!PET_DEFS_V27[petId] || !pets || !pets.includes(petId)
+    || String(response.state.activePet || '') !== petId) {
+    throw new Error('INVALID_WORLD_PET_RESULT');
+  }
+  game.player.building = building;
+  game.player.pets = pets;
+  game.player.activePet = petId;
+  return Object.freeze({ petId });
+}
+
+function waitForWorldSpecialActionV1(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
 function getEquippedWeaponTierStyle(player) {
   const weaponId = player?.equipment?.weapon || null;
   const rawTier = weaponId ? Number(player?.weaponUpgrades?.[weaponId] || 0) : 0;
@@ -499,6 +628,15 @@ window.applyAuthoritySnapshotFromServerV3 = function applyAuthoritySnapshotFromS
     snapshot.raidRewardVersion,
     safeInteger(game.player.raidRewardVersion, 0),
   ));
+  /* 이름표 보유 목록도 재화와 같은 서버 완료 스냅샷만 신뢰한다.
+     이전 서버 응답처럼 필드가 아예 없을 때는 현재 장착 상태를 보존한다. */
+  if (Object.prototype.hasOwnProperty.call(snapshot, 'raidNameplates')) {
+    if (!window.YuksamRaidNameplatesV1?.applyServerSnapshot?.(game.player, snapshot)) {
+      const fields = normalizeRaidNameplateFieldsV1(snapshot);
+      game.player.raidNameplates = [...fields.raidNameplates];
+      game.player.nameplate = { ...fields.nameplate };
+    }
+  }
   ensurePlayerHp();
   if (snapshot.fullyHealed) {
     game.player.hp = game.player.maxHp;
@@ -529,6 +667,20 @@ function loadPlayer(name) {
   return playerStore.load(name);
 }
 
+function normalizeRaidNameplateFieldsV1(source = {}) {
+  const safeSource = source && typeof source === 'object' && !Array.isArray(source) ? source : {};
+  const fromFeature = window.YuksamRaidNameplatesV1?.normalizePlayerFields?.(safeSource);
+  if (fromFeature) return fromFeature;
+  const known = ['raid_20_steel', 'raid_40_twilight', 'raid_63_summit'];
+  const requestedOwned = new Set(Array.isArray(safeSource.raidNameplates) ? safeSource.raidNameplates.map(String) : []);
+  const raidNameplates = known.filter((id) => requestedOwned.has(id));
+  const requestedTheme = String(safeSource.nameplate?.theme || 'default');
+  const theme = requestedTheme === 'default' || raidNameplates.includes(requestedTheme)
+    ? requestedTheme
+    : 'default';
+  return { raidNameplates, nameplate:{ theme } };
+}
+
 function normalizePlayer(p) {
   const klass = p.class && CLASS_META[p.class] ? p.class : 'warrior';
   const combatStatuses = YuksamCombatRules.normalizeCombatStatuses({
@@ -537,6 +689,7 @@ function normalizePlayer(p) {
     chilledTurns: p.combatStatuses?.chilledTurns ?? p.chilledTurns,
     weakenTurns: p.combatStatuses?.weakenTurns ?? p.weakenTurns,
   });
+  const raidNameplateFields = normalizeRaidNameplateFieldsV1(p);
   const normalized = {
     name: p.name || '이름없음',
     class: klass,
@@ -581,6 +734,8 @@ function normalizePlayer(p) {
     /* 서버가 지급한 던전 최초 보상을 늦게 도착한 옛 저장이 덮지 못하게 하는
        영수증 버전. 일반 저장에서도 보존되어야 서버가 최신 저장을 구분한다. */
     raidRewardVersion: Math.max(0, Math.min(7, Math.trunc(Number(p.raidRewardVersion) || 0))),
+    raidNameplates: [...raidNameplateFields.raidNameplates],
+    nameplate: { ...raidNameplateFields.nameplate },
     updatedAt: p.updatedAt || Date.now(),
     records: (function(){
       const r = p.records || {};
@@ -647,6 +802,8 @@ function createNewPlayer(name) {
     skillPoints: 0,
     raidTopGroup: 0,
     raidRewardVersion: 0,
+    raidNameplates: [],
+    nameplate: { theme:'default' },
     updatedAt: Date.now(),
   });
 }
@@ -1054,6 +1211,110 @@ function playClassAttackSfx() {
   fallback();
 }
 
+function worldChannelStatusMessageV1(state = {}) {
+  const seconds = Math.max(0, Math.ceil((Number(state.cooldownUntil) - Date.now()) / 1000));
+  if (state.switching || state.reason === 'SWITCHING') return '선택한 채널로 이동하고 있습니다…';
+  if (state.reason === 'COOLDOWN' && seconds > 0) return `${seconds}초 후 다른 채널로 이동할 수 있습니다.`;
+  if (state.reason === 'CHANNEL_FULL') return '선택한 채널이 가득 찼습니다. 다른 채널을 골라 주세요.';
+  if (state.reason === 'IN_ACTIVITY') return '전투·PvP·파티 던전 중에는 채널을 변경할 수 없습니다.';
+  if (state.reason === 'NOT_IN_GAME') return '학생 캐릭터로 로그인하면 채널을 선택할 수 있습니다.';
+  if (state.status === 'offline') return '채널 서버에 다시 연결하고 있습니다…';
+  if (state.status !== 'online') return '현재 채널 정보를 불러오고 있습니다…';
+  return `현재 채널 ${Number(state.channel) || 1} · 일반 채팅과 캐릭터는 같은 채널끼리 보입니다.`;
+}
+
+function mountWorldChannelSettingsV1() {
+  const root = $('worldChannelSettingsV1');
+  if (!root) return;
+  try { window.__worldChannelSettingsCleanupV1?.(); } catch {}
+  window.__worldChannelSettingsCleanupV1 = null;
+  const api = window.YuksamWorldChannelsV1;
+  if (!api?.getState || !api?.changeChannel || !api?.subscribe) {
+    root.innerHTML = '<p class="muted">학생 캐릭터로 로그인하면 채널을 선택할 수 있습니다.</p>';
+    return;
+  }
+
+  const grid = $('worldChannelGridV1');
+  const status = $('worldChannelStatusV1');
+  let disposed = false;
+  let lastState = api.getState();
+  let pendingChannel = null;
+  let lastGridMarkup = '';
+  let lastStatusText = '';
+  const render = (nextState = api.getState()) => {
+    if (disposed || !root.isConnected) return;
+    lastState = nextState || lastState || {};
+    const current = Math.max(1, Math.min(5, Math.round(Number(lastState.channel) || 1)));
+    const capacity = 8;
+    const ready = lastState.status === 'online';
+    const cooldown = Date.now() < Number(lastState.cooldownUntil || 0);
+    const gridMarkup = Array.from({ length:5 }, (_, index) => {
+      const channel = index + 1;
+      const count = Math.max(0, Math.min(capacity,
+        Math.round(Number(lastState.channelCounts?.[String(channel)]) || 0)));
+      const isCurrent = channel === current;
+      const isFull = !isCurrent && count >= capacity;
+      const isConnecting = lastState.switching === true && channel === pendingChannel;
+      const disabled = isCurrent || isFull || !ready || lastState.switching
+        || cooldown || lastState.canChange === false;
+      const detail = isCurrent ? '현재 채널' : isFull ? '가득 참' : isConnecting ? '연결 중…' : '이동';
+      return `<button type="button" class="world-channel-card-v1${isCurrent ? ' current' : ''}${isFull ? ' full' : ''}${isConnecting ? ' connecting' : ''}" data-world-channel="${channel}" ${disabled ? 'disabled' : ''} aria-current="${isCurrent ? 'true' : 'false'}"><b>채널 ${channel}</b><span class="world-channel-count-v1">${count} / ${capacity}명</span><small>${detail}</small></button>`;
+    }).join('');
+    if (gridMarkup !== lastGridMarkup) {
+      lastGridMarkup = gridMarkup;
+      grid.innerHTML = gridMarkup;
+    }
+    const statusText = worldChannelStatusMessageV1(lastState);
+    if (statusText !== lastStatusText) {
+      lastStatusText = statusText;
+      status.textContent = statusText;
+    }
+  };
+
+  const channelErrorMessage = (code) => ({
+    CHANNEL_FULL:'선택한 채널이 가득 찼습니다. 다른 채널을 골라 주세요.',
+    COOLDOWN:'채널 이동 후 3초 동안은 다시 이동할 수 없습니다.',
+    IN_ACTIVITY:'전투·PvP·파티 던전 중에는 채널을 변경할 수 없습니다.',
+    NOT_IN_GAME:'학생 캐릭터로 로그인한 뒤 이용해 주세요.',
+    INVALID_CHANNEL:'올바른 채널을 선택해 주세요.',
+    SWITCHING:'이미 다른 채널로 이동 중입니다.',
+  }[String(code || '')] || '채널을 변경하지 못했습니다. 잠시 뒤 다시 시도해 주세요.');
+
+  grid.addEventListener('click', async (event) => {
+    const button = event.target?.closest?.('[data-world-channel]');
+    if (!button || button.disabled) return;
+    const channel = Number(button.dataset.worldChannel);
+    pendingChannel = channel;
+    render(api.getState());
+    try {
+      const result = await api.changeChannel(channel);
+      if (result?.ok) toast(`채널 ${result.channel || channel}로 이동했습니다.`);
+      else toast(channelErrorMessage(result?.code), 2600);
+    } catch {
+      toast('채널 서버에 연결하지 못했습니다. 잠시 뒤 다시 시도해 주세요.', 2600);
+    }
+    pendingChannel = null;
+    render(api.getState());
+  });
+
+  const unsubscribe = api.subscribe(render);
+  const timer = setInterval(() => {
+    if (!root.isConnected) {
+      window.__worldChannelSettingsCleanupV1?.();
+      return;
+    }
+    render(api.getState());
+  }, 250);
+  window.__worldChannelSettingsCleanupV1 = () => {
+    if (disposed) return;
+    disposed = true;
+    clearInterval(timer);
+    try { unsubscribe?.(); } catch {}
+    if (window.__worldChannelSettingsCleanupV1) window.__worldChannelSettingsCleanupV1 = null;
+  };
+  render(lastState);
+}
+
 function openSettingsModal() {
   openModal(`
     <h2>환경설정</h2>
@@ -1063,6 +1324,11 @@ function openSettingsModal() {
       <label><input type="checkbox" id="sfxEnabledBox" ${game.settings.sfxEnabled ? 'checked' : ''} /> 효과음 켜기</label>
       <div class="range-row"><span>효과음</span><input id="sfxVolumeRange" type="range" min="0" max="100" value="${Math.round(game.settings.sfxVolume * 100)}" /><b id="sfxVolumeText">${Math.round(game.settings.sfxVolume * 100)}</b></div>
       <p class="muted">로그인/캐릭터 생성/마을/사냥터별 배경음을 재생합니다.</p>
+      <section id="worldChannelSettingsV1" class="world-channel-settings-v1" aria-label="월드 채널 선택" aria-live="polite">
+        <div class="world-channel-head-v1"><strong>🌐 월드 채널</strong><span>5개 채널 · 채널당 최대 8명</span></div>
+        <div id="worldChannelGridV1" class="world-channel-grid-v1"></div>
+        <p id="worldChannelStatusV1" class="muted world-channel-status-v1">현재 채널 정보를 불러오고 있습니다…</p>
+      </section>
       <div class="settings-actions-v1">
         <button class="help-launch-v1" onclick="openGameHelpV1()">❓ 도움말</button>
         <button class="ghost" onclick="openAdminPanel()">🔐 관리자 모드</button>
@@ -1077,6 +1343,7 @@ function openSettingsModal() {
   sfxBox.addEventListener('change', () => { game.settings.sfxEnabled = sfxBox.checked; playSfx('open'); });
   bgmRange.addEventListener('input', () => { game.settings.bgmVolume = Number(bgmRange.value) / 100; $('bgmVolumeText').textContent = bgmRange.value; resumeAudio(); updateAudioVolumes(); });
   sfxRange.addEventListener('input', () => { game.settings.sfxVolume = Number(sfxRange.value) / 100; $('sfxVolumeText').textContent = sfxRange.value; playSfx('open'); });
+  mountWorldChannelSettingsV1();
 }
 
 function monsterBase({ id, type, name, level, x, y, r, hp, exp, gold, attack, speed, aggro }) {
@@ -1203,6 +1470,14 @@ function worldToScreen(x, y) {
   return { x: x - game.camera.x, y: y - game.camera.y };
 }
 
+function isWorldPointVisible(x, y, padding = 0) {
+  const margin = Math.max(0, padding || 0);
+  return x >= game.camera.x - margin
+    && x <= game.camera.x + game.width + margin
+    && y >= game.camera.y - margin
+    && y <= game.camera.y + game.height + margin;
+}
+
 function updateCamera() {
   const world = worldDefs[game.currentMap];
   game.camera.x = clamp(game.player.x - game.width / 2, 0, world.width - game.width);
@@ -1240,7 +1515,9 @@ function drawTown() {
     [540, 540, 1.1], [420, 920, .9], [740, 420, .9], [1640, 430, 1.0], [1780, 980, 1.1], [2040, 750, .95],
     [1630, 1440, 1.1], [920, 1450, 1.0], [520, 1400, .95], [2070, 1320, 1.0], [360, 680, .72], [1890, 570, .78]
   ];
-  deco.forEach(([x, y, s]) => drawTreeWorld(x, y, s));
+  deco.forEach(([x, y, s]) => {
+    if (isWorldPointVisible(x, y, 80)) drawTreeWorld(x, y, s);
+  });
   drawTownLampsAndFlowers();
   if (typeof drawMapDetailV36 === 'function') drawMapDetailV36('town');
   drawTitleLabel(world.label);
@@ -1251,6 +1528,7 @@ function drawTownBackdropDetails() {
   const ctx = game.ctx;
   const ponds = [[360, 1220, 160, 64], [1940, 1180, 140, 58]];
   ponds.forEach(([x, y, rx, ry]) => {
+    if (!isWorldPointVisible(x, y, rx + 8)) return;
     const p = worldToScreen(x, y);
     const g = ctx.createRadialGradient(p.x, p.y, 10, p.x, p.y, rx);
     g.addColorStop(0, 'rgba(167,243,208,.75)');
@@ -1279,9 +1557,13 @@ function drawPlazaWorld(x, y) {
 
 function drawTownLampsAndFlowers() {
   const lamps = [[1000,880],[1400,880],[975,1120],[1425,1120],[690,850],[1540,1045]];
-  lamps.forEach(([x,y], i) => drawLampWorld(x, y, i));
+  lamps.forEach(([x,y], i) => {
+    if (isWorldPointVisible(x, y, 80)) drawLampWorld(x, y, i);
+  });
   const flowers = [[840,970],[1020,760],[1500,820],[1830,960],[720,1040],[1300,1180],[480,780],[2060,980]];
-  flowers.forEach(([x,y], i) => drawFlowerClusterWorld(x, y, i));
+  flowers.forEach(([x,y], i) => {
+    if (isWorldPointVisible(x, y, 80)) drawFlowerClusterWorld(x, y, i);
+  });
 }
 
 function drawLampWorld(x, y, seed = 0) {
@@ -1571,7 +1853,7 @@ function drawForest() {
   const forestTrees = (typeof scatterPointsV37 === 'function') ? scatterPointsV37('forestTrees', 26, world.width, world.height, 230) : null;
   for (let i = 0; i < 26; i += 1) {
     const p = forestTrees ? forestTrees[i] : { x: 260 + (i * 101) % 3000, y: 200 + (i * 149) % 2100, s: .9 + (i % 4) * .08 };
-    if (p) drawTreeWorld(p.x, p.y, .78 + p.s * .35);
+    if (p && isWorldPointVisible(p.x, p.y, 80)) drawTreeWorld(p.x, p.y, .78 + p.s * .35);
   }
   drawForestPath();
   drawDeepForestMist();
@@ -1586,6 +1868,7 @@ function drawForest() {
 }
 
 function drawDeepForestMist() {
+  if (!isWorldPointVisible(2680, 780, 500)) return;
   const ctx = game.ctx;
   const p = worldToScreen(2680, 780);
   ctx.save();
@@ -1611,7 +1894,7 @@ function drawDesert() {
   const desertCacti = (typeof scatterPointsV37 === 'function') ? scatterPointsV37('desertCacti', 20, world.width, world.height, 230) : null;
   for (let i = 0; i < 20; i += 1) {
     const p = desertCacti ? desertCacti[i] : { x: 260 + (i * 173) % 3100, y: 200 + (i * 131) % 2050, s: .75 + (i % 3) * .12 };
-    if (p) drawCactusWorld(p.x, p.y, .68 + p.s * .35);
+    if (p && isWorldPointVisible(p.x, p.y, 80)) drawCactusWorld(p.x, p.y, .68 + p.s * .35);
   }
   if (typeof drawMapDetailV36 === 'function') drawMapDetailV36('desert');
   drawStagePortals(world.key);
@@ -2111,7 +2394,9 @@ function drawPlayerSprite(ctx, x, y, appearance, klass, state, scale = 1, spec =
   drawShadow(ctx, x, y + 30 * scale, 18 * scale, 6 * scale, .28);
   // [수정] 레벨업/전문화 오라: base drawWorld에서만 그려져 라이브 맵에서 안 보이던 것을
   // 플레이어 스프라이트 자체에 연결해 모든 경로(마을/필드/보스방)에서 표시
-  try { if (typeof drawLevelUpAura === 'function') drawLevelUpAura(ctx, x, y); } catch (err) {}
+  // 원격 캐릭터를 캐시로 합성할 때 현재 브라우저 사용자의 레벨업 효과가
+  // 모든 학생에게 복제되지 않도록 로컬 플레이어에게만 표시한다.
+  try { if (!state?.remote && typeof drawLevelUpAura === 'function') drawLevelUpAura(ctx, x, y); } catch (err) {}
   // [추가] 수호의 오라 악세서리: 캐릭터를 감싸는 은은한 원형 빛 (몸 뒤 레이어)
   const visEqV55 = window.resolveVisualEquipmentV55 ? window.resolveVisualEquipmentV55(state) : (state?.equipment || {});
   const auraItem = visEqV55.accessory ? getItemDefinition(visEqV55.accessory, klass) : null;
@@ -3595,10 +3880,15 @@ function screenPair(pair) {
 
 
 
+const interactionHintElementV1 = $('interactionHint');
+let renderedInteractionHintV1 = interactionHintElementV1?.textContent ?? null;
+
 function updateInteractionHint() {
   const nearest = getNearestInteractable();
   game.interactionHint = nearest ? nearest.label : '포탈과 NPC에 가까이 가면 E로 상호작용';
-  $('interactionHint').textContent = game.interactionHint;
+  if (!interactionHintElementV1 || renderedInteractionHintV1 === game.interactionHint) return;
+  interactionHintElementV1.textContent = game.interactionHint;
+  renderedInteractionHintV1 = game.interactionHint;
 }
 
 function dispatchBaseWorldInteraction(nearest) {
@@ -4171,7 +4461,32 @@ const worldNavigationRegistry = YuksamWorldNavigationRegistry.create({
   colliderFallback:() => getBaseMapColliders(),
   transitionFallback:() => runBaseAutoTransition(),
 });
-function getCurrentMapColliders() { return worldNavigationRegistry.getColliders(); }
+let worldColliderFrameCacheActiveV1 = false;
+let worldColliderFrameCacheMapV1 = null;
+let worldColliderFrameCacheValueV1 = null;
+function beginWorldColliderFrameV1() {
+  worldColliderFrameCacheActiveV1 = true;
+  worldColliderFrameCacheMapV1 = null;
+  worldColliderFrameCacheValueV1 = null;
+}
+function endWorldColliderFrameV1() {
+  worldColliderFrameCacheActiveV1 = false;
+  worldColliderFrameCacheMapV1 = null;
+  worldColliderFrameCacheValueV1 = null;
+}
+function getCurrentMapColliders() {
+  if (worldColliderFrameCacheActiveV1
+    && worldColliderFrameCacheMapV1 === game.currentMap
+    && worldColliderFrameCacheValueV1 !== null) {
+    return worldColliderFrameCacheValueV1;
+  }
+  const colliders = worldNavigationRegistry.getColliders();
+  if (worldColliderFrameCacheActiveV1) {
+    worldColliderFrameCacheMapV1 = game.currentMap;
+    worldColliderFrameCacheValueV1 = colliders;
+  }
+  return colliders;
+}
 function checkAutoTransitions() { worldNavigationRegistry.runTransition(); }
 
 const worldPositionGuardV1 = YuksamWorldNavigationRegistry.createPositionGuard({
@@ -4276,12 +4591,15 @@ window.cancelClickMovementV1 = function cancelClickMovementV1(options = {}) {
 function gameLoop(ts) {
   const dt = ts - game.lastTick;
   game.lastTick = ts;
+  beginWorldColliderFrameV1();
   // [수정] 프레임 오류 보호막: 한 프레임의 예외로 루프 전체가 영구 정지하지 않게 한다.
   // (??? 맵 프리즈처럼 "모든 게 멈추고 재로그인해도 그대로"인 증상의 근본 안전장치)
   try {
     update(dt || 16);
   } catch (err) {
     console.error('[63world] frame error:', err);
+  } finally {
+    endWorldColliderFrameV1();
   }
   requestAnimationFrame(gameLoop);
 }
@@ -4744,9 +5062,16 @@ function bindEvents() {
         }
       }
       if (k === 'e' && !isPaused() && !typing) interact();
-      if (k === 'escape' && !$('modal').classList.contains('hidden')) {
-        if (game.modalState.type === 'combat') window.escapeCombat();
-        else closeModal();
+      if (k === 'escape') {
+        if (!$('modal').classList.contains('hidden')) {
+          if (game.modalState.type === 'combat') window.escapeCombat();
+          else closeModal();
+        } else if (!typing && !game.currentCombatMonsterId && !window.getActivePvpMatchV1?.()
+          && game.currentMap !== 'raidTower' && !window.YuksamRaidRunUi?.hasSession?.()) {
+          e.preventDefault();
+          openSettingsModal();
+          return true;
+        }
       }
     }
   }});
@@ -5033,7 +5358,6 @@ function renderBaseWorld() {
   if (game.currentMap === 'buildingShopInterior') drawBuildingShopInterior();
   const ps = worldToScreen(game.player.x, game.player.y);
   drawPlayerSprite(ctx, ps.x, ps.y, game.player.appearance, game.player.class, { attack: game.attackTimer, moving: game.isMoving, dance: game.danceTimer, equipment: game.player.equipment, weaponTierStyle: getEquippedWeaponTierStyle(game.player) }, PLAYER_WORLD_SCALE, game.player.spec);
-  drawLevelUpAura(ctx, ps.x, ps.y);
   drawPlayerSpeechBubble(ctx, ps.x, ps.y);
   drawPlayerNameplate(ctx, ps.x, ps.y, game.player);
 }
@@ -6107,7 +6431,7 @@ function updateQuestTracker() {
     const swampTrees = (typeof scatterPointsV37 === 'function') ? scatterPointsV37('swampTrees', 28, world.width, world.height, 210) : null;
     for (let i = 0; i < 28; i += 1) {
       const p = swampTrees ? swampTrees[i] : { x: 220 + (i * 137) % 3300, y: 170 + (i * 191) % 2200, s: .72 + (i % 4) * .1 };
-      if (p) drawDeadTreeWorld(p.x, p.y, .62 + p.s * .38);
+      if (p && isWorldPointVisible(p.x, p.y, 80)) drawDeadTreeWorld(p.x, p.y, .62 + p.s * .38);
     }
     if (typeof drawMapDetailV36 === 'function') drawMapDetailV36('swamp');
     drawStagePortals(world.key);
@@ -6118,6 +6442,7 @@ function updateQuestTracker() {
     const ctx = game.ctx;
     const pools = [[780,1520,170,62],[1450,980,210,78],[2280,1480,190,70],[3050,880,230,84],[3150,1940,170,58]];
     pools.forEach(([x,y,rx,ry], i) => {
+      if (!isWorldPointVisible(x, y, rx + 8)) return;
       const p = worldToScreen(x,y);
       const grad = ctx.createRadialGradient(p.x,p.y,10,p.x,p.y,rx);
       grad.addColorStop(0,'rgba(45,212,191,.45)'); grad.addColorStop(1,'rgba(15,118,110,.18)');
@@ -6628,11 +6953,14 @@ function updateQuestTracker() {
   }
 
   window.openHealingWellModal = function openHealingWellModal() {
+    // 새 우물 화면은 이전 오답 리뷰 타이머를 무효화한다.
+    game.healingReviewGeneration = (Number(game.healingReviewGeneration) || 0) + 1;
+    game.healingAnswerReviewing = false;
     game.healingQuestion = getHealingQuestion();
     const q = game.healingQuestion;
     const choices = Array.isArray(q.choices) && q.choices.length === 4 ? q.choices : null;
-    const answerUi = choices ? `<div class="choice-grid healing-well-choice-grid">${choices.map((c) => `<button class="primary" onclick="submitHealingAnswer('${escapeJs(c)}')">${escapeHtml(c)}</button>`).join('')}</div>` : `
-      <div class="answer-row"><input id="healingAnswer" placeholder="정답 입력" onkeydown="if(event.key==='Enter') submitHealingAnswer(this.value)" autofocus /><button class="primary" onclick="submitHealingAnswer(document.getElementById('healingAnswer').value)">회복</button></div>`;
+    const answerUi = choices ? `<div class="choice-grid healing-well-choice-grid">${choices.map((c) => `<button class="primary" data-answer-key="${encodeURIComponent(String(c))}" onclick="submitHealingAnswer('${escapeJs(c)}')">${escapeHtml(c)}</button>`).join('')}</div>` : `
+      <div class="answer-row"><input id="healingAnswer" data-answer-review-input placeholder="정답 입력" onkeydown="if(event.key==='Enter') submitHealingAnswer(this.value)" autofocus /><button class="primary" onclick="submitHealingAnswer(document.getElementById('healingAnswer').value)">회복</button></div>`;
     openModal(`
       <h2>치유의 우물</h2>
       <div class="panel-card">
@@ -6649,6 +6977,7 @@ function updateQuestTracker() {
   window.submitHealingAnswer = function submitHealingAnswer(given) {
     const q = game.healingQuestion;
     if (!q) return closeModal();
+    if (game.healingAnswerReviewing) return;
     if (normalize(given) === normalize(q.answer)) {
       game.player.hp = game.player.maxHp;
       window.recordHealingQuestSuccessV3?.();
@@ -6656,13 +6985,29 @@ function updateQuestTracker() {
       playSfx('quest');
       showCinematicMessage('회복 완료!', '치유의 우물빛이 몸을 감싸며 HP가 모두 회복되었습니다.', 1500);
       appendChatMessage('system', '치유의 우물', '문제를 맞혀 HP를 모두 회복했습니다.');
+      game.healingQuestion = null;
     } else {
-      closeModal();
+      const reviewedQuestion = q;
+      const reviewGeneration = (Number(game.healingReviewGeneration) || 0) + 1;
+      game.healingReviewGeneration = reviewGeneration;
+      game.healingAnswerReviewing = true;
       playSfx('hit');
-      showCinematicMessage('회복 실패', '정답이 아닙니다. 다시 우물에 말을 걸어 도전하세요.', 1500);
-      appendChatMessage('system', '치유의 우물', '회복 문제에 실패했습니다.');
+      YuksamWrongAnswerReview.reveal({
+        root:$('modalContent'),
+        correctAnswer:q.answer,
+        onComplete:() => {
+          // 사용자가 X로 닫거나 새 우물/다른 창을 연 뒤에는 그 화면을 건드리지 않는다.
+          if (game.healingReviewGeneration !== reviewGeneration) return;
+          game.healingAnswerReviewing = false;
+          const sameQuestion = game.healingQuestion === reviewedQuestion;
+          if (sameQuestion) game.healingQuestion = null;
+          if (!sameQuestion || game.modalState?.type !== 'healingWell') return;
+          closeModal();
+          showCinematicMessage('회복 실패', '정답이 아닙니다. 다시 우물에 말을 걸어 도전하세요.', 1500);
+          appendChatMessage('system', '치유의 우물', '회복 문제에 실패했습니다.');
+        },
+      });
     }
-    game.healingQuestion = null;
   };
 
   const QUEST_ORDER_V19 = QUEST_ORDER;
@@ -12729,36 +13074,77 @@ function updateQuestTracker() {
         <button class="primary wide" onclick="openUpgradeShopModalV33()">확인</button>
       </div>`, { type:'upgradeResult', pause:true });
   }
-  window.upgradeCurrentWeaponV33 = function upgradeCurrentWeaponV33() {
+  window.upgradeCurrentWeaponV33 = async function upgradeCurrentWeaponV33() {
     try { ensurePlayerV27Fields?.(); } catch {}
     if (game.upgradeInProgress) return;
-    const weaponId = game.player?.equipment?.weapon;
-    const item = weaponId ? getItemDefinition(weaponId, game.player.class) : null;
-    if (!item || item.slot !== 'weapon') { toast('강화할 무기를 장착해 주세요.'); return; }
-    const tier = getWeaponTierV33(item.id);
-    if (tier >= 4) { toast('이미 전설 등급입니다.'); return; }
-    if ((game.player.building || 0) < 3) { toast('빌딩 화폐가 부족합니다. 강화에는 3빌딩이 필요합니다.'); return; }
+    const localFallback = isLocalWorldSpecialActionFallbackV1();
+    const pending = localFallback ? null : loadPendingWorldSpecialActionV1('enhance');
+    const weaponId = pending?.weaponId || game.player?.equipment?.weapon;
+    let item = weaponId ? getItemDefinition(weaponId, game.player.class) : null;
+    if (!pending && (!item || item.slot !== 'weapon')) { toast('강화할 무기를 장착해 주세요.'); return; }
+    if (pending && (!item || item.slot !== 'weapon')) {
+      item = ITEM_DEFS[weaponId] || { id:weaponId, name:'장착 무기', slot:'weapon' };
+    }
+    const tier = pending?.oldTier ?? getWeaponTierV33(item.id);
+    if (!pending && tier >= 4) { toast('이미 전설 등급입니다.'); return; }
+    if (!pending && (game.player.building || 0) < 3) { toast('빌딩 화폐가 부족합니다. 강화에는 3빌딩이 필요합니다.'); return; }
     const next = (window.TIER_INFO_V27 || [])[tier + 1];
     game.upgradeInProgress = true;
-    game.player.building -= 3;
-    try { window.recordQuestActionV38 && window.recordQuestActionV38('enhance'); } catch {}
-    updateHud?.(); savePlayer?.();
     renderUpgradeProgressV33(item, next);
     playSfx?.('upgradeCharge');
-    setTimeout(() => {
-      const success = YuksamCombatRules.rollEnhancement(next.chance, Math.random());
-      const newTier = success ? tier + 1 : Math.max(0, tier - 1);
-      game.player.weaponUpgrades[item.id] = newTier;
+    const animation = waitForWorldSpecialActionV1(4000);
+    let outcome;
+    try {
+      if (localFallback) {
+        await animation;
+        game.player.building -= 3;
+        const success = YuksamCombatRules.rollEnhancement(next.chance, Math.random());
+        const newTier = success ? tier + 1 : Math.max(0, tier - 1);
+        game.player.weaponUpgrades[item.id] = newTier;
+        outcome = Object.freeze({ success, weaponId:item.id, oldTier:tier, newTier });
+      } else {
+        const requestId = pending?.requestId || createWorldSpecialActionRequestIdV1();
+        if (!pending) rememberPendingWorldSpecialActionV1('enhance', {
+          requestId,
+          weaponId:item.id,
+          oldTier:tier,
+        });
+        const response = await secureStudentAccess.performWorldSpecialAction('enhance', requestId);
+        await animation;
+        if (!response.ok) {
+          clearPendingWorldSpecialActionV1('enhance');
+          game.upgradeInProgress = false;
+          openUpgradeShopModalV33();
+          toast(worldSpecialActionErrorMessageV1(response), 2600);
+          return;
+        }
+        outcome = applyWorldSpecialActionResultV1('enhance', response);
+        clearPendingWorldSpecialActionV1('enhance');
+      }
+
+      const resultItem = getItemDefinition(outcome.weaponId, game.player.class)
+        || ITEM_DEFS[outcome.weaponId]
+        || item;
+      try { window.recordQuestActionV38 && window.recordQuestActionV38('enhance'); } catch {}
       ensurePlayerHp?.(); savePlayer?.(); updateHud?.();
       game.upgradeInProgress = false;
-      playSfx?.(success ? 'upgradeSuccess' : 'upgradeFail');
-      if (success) {
-        try { showCinematicMessage('강화 성공!', `${item.name} · ${tierInfoV33(newTier).name} 등급`, 1600); } catch {}
+      playSfx?.(outcome.success ? 'upgradeSuccess' : 'upgradeFail');
+      if (outcome.success) {
+        try { showCinematicMessage('강화 성공!', `${resultItem.name} · ${tierInfoV33(outcome.newTier).name} 등급`, 1600); } catch {}
       }
-      const msg = success ? `${item.name} 강화 성공! ${tierInfoV33(newTier).name} 등급이 되었습니다.` : `${item.name} 강화 실패... ${tierInfoV33(newTier).name} 등급으로 하락했습니다.`;
+      const msg = outcome.success
+        ? `${resultItem.name} 강화 성공! ${tierInfoV33(outcome.newTier).name} 등급이 되었습니다.`
+        : `${resultItem.name} 강화 실패... ${tierInfoV33(outcome.newTier).name} 등급으로 하락했습니다.`;
       appendChatMessage?.('system', '강화', msg);
-      renderUpgradeResultV33(success, item, newTier, tier);
-    }, 4000);
+      renderUpgradeResultV33(outcome.success, resultItem, outcome.newTier, outcome.oldTier);
+    } catch (error) {
+      await animation;
+      game.upgradeInProgress = false;
+      openUpgradeShopModalV33();
+      toast(error?.message === 'secure request UUID generation is unavailable'
+        ? '이 브라우저에서는 안전한 강화 요청을 만들 수 없습니다.'
+        : '강화 결과를 확인하지 못했습니다. 잠시 뒤 다시 눌러 주세요.', 3000);
+    }
   };
 
   worldRenderPipeline.registerOwner({
@@ -13419,27 +13805,61 @@ function updateQuestTracker() {
     if (pet.id === 'yuksam') return `<span class="yuksam-face-icon-v35">🏢<span class="face">•‿•</span></span>`;
     return escapeHtml(pet.icon || '＋');
   }
-  window.rollPetV34 = function rollPetV35() {
+  window.rollPetV34 = async function rollPetV35() {
     try { ensurePlayerV27Fields?.(); } catch {}
-    if ((game.player.building || 0) < 10) { toast('빌딩 화폐가 부족합니다. 펫 소환에는 10빌딩이 필요합니다.'); return; }
-    const id = (typeof rollWeightedPetV34 === 'function') ? rollWeightedPetV34() : 'chick';
-    const pet = window.PET_DEFS_V27?.[id];
-    if (!pet) return;
+    if (game.petSummonInProgress) return;
+    const localFallback = isLocalWorldSpecialActionFallbackV1();
+    const pending = localFallback ? null : loadPendingWorldSpecialActionV1('summonPet');
+    if (!pending && (game.player.building || 0) < 10) { toast('빌딩 화폐가 부족합니다. 펫 소환에는 10빌딩이 필요합니다.'); return; }
+    game.petSummonInProgress = true;
     closeModal();
     playPetSummonSfxV35();
     const overlay = document.createElement('div');
     overlay.className = 'pet-summon-modal-v31';
     overlay.innerHTML = `<div class="pet-summon-box-v31"><div class="pet-orb-loader-v31"></div><h2>펫을 만나는 중...</h2><p>수정구 너머에서 작은 친구가 다가오고 있습니다.</p><div class="pet-loading-bar-v31"><b></b></div></div>`;
     document.body.appendChild(overlay);
-    setTimeout(() => {
-      game.player.building -= 10;
-      if (!game.player.pets.includes(id)) game.player.pets.push(id);
-      game.player.activePet = id;
+    const animation = waitForWorldSpecialActionV1(5000);
+    try {
+      let id;
+      if (localFallback) {
+        await animation;
+        id = (typeof rollWeightedPetV34 === 'function') ? rollWeightedPetV34() : 'chick';
+        if (!window.PET_DEFS_V27?.[id]) throw new Error('INVALID_LOCAL_PET_RESULT');
+        game.player.building -= 10;
+        if (!game.player.pets.includes(id)) game.player.pets.push(id);
+        game.player.activePet = id;
+      } else {
+        const requestId = pending?.requestId || createWorldSpecialActionRequestIdV1();
+        if (!pending) rememberPendingWorldSpecialActionV1('summonPet', { requestId });
+        const response = await secureStudentAccess.performWorldSpecialAction('summonPet', requestId);
+        await animation;
+        if (!response.ok) {
+          clearPendingWorldSpecialActionV1('summonPet');
+          game.petSummonInProgress = false;
+          overlay.remove();
+          window.openPetShopModalV34?.();
+          toast(worldSpecialActionErrorMessageV1(response), 2600);
+          return;
+        }
+        id = applyWorldSpecialActionResultV1('summonPet', response).petId;
+        clearPendingWorldSpecialActionV1('summonPet');
+      }
+      const pet = window.PET_DEFS_V27?.[id];
+      if (!pet) throw new Error('INVALID_WORLD_PET_DEFINITION');
       try { window.recordQuestActionV38 && window.recordQuestActionV38('pet'); } catch {}
       ensurePlayerHp?.(); savePlayer?.(); updateHud?.();
+      game.petSummonInProgress = false;
       overlay.innerHTML = `<div class="pet-summon-box-v31"><div class="pet-icon-result-v31">${renderPetIconV35(pet)}</div><h2>${escapeHtml(pet.name)}을(를) 만났습니다!</h2>${pet.legendary ? '<p class="badge gold">전설 펫</p>' : ''}<button class="primary wide" onclick="closePetSummonResultV31()">확인</button></div>`;
       appendChatMessage?.('system', '펫', `${pet.name}을(를) 만났습니다.`);
-    }, 5000);
+    } catch (error) {
+      await animation;
+      game.petSummonInProgress = false;
+      overlay.remove();
+      window.openPetShopModalV34?.();
+      toast(error?.message === 'secure request UUID generation is unavailable'
+        ? '이 브라우저에서는 안전한 소환 요청을 만들 수 없습니다.'
+        : '펫 소환 결과를 확인하지 못했습니다. 잠시 뒤 다시 눌러 주세요.', 3000);
+    }
   };
 
   // 6) 육삼이 펫 팔로워 얼굴 추가

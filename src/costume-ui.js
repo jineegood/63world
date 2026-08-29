@@ -108,6 +108,7 @@
         <div class="bag-grid costume-inventory-grid" data-costume-inventory-list="${slot}" tabindex="0" aria-label="${label} 코스튬 목록">${itemHtml}</div>
       </section>`;
     }).join('');
+    const nameplatePicker = call('renderRaidNameplatePickerV1')?.(p) || '';
 
     call('openModal')?.(`<div class="character-window-v27 character-window-v32 costume-panel-v55">
       <header class="character-head-v27"><h2>🧵 코스튬</h2><p>능력치는 착용 중인 장비 그대로 유지되고, 보이는 모습만 코스튬으로 바뀝니다.</p></header>
@@ -125,6 +126,7 @@
             ${owned.length ? '' : '<p class="muted costume-inventory-intro">아직 코스튬이 없습니다. 특별 상점의 <b>옷 상인 상남</b>에게서 구매할 수 있어요.</p>'}
             <div class="costume-inventory-sections">${bag}</div>
           </div>
+          ${nameplatePicker}
           <button class="primary wide" onclick="openCharacterPanel()" style="margin-top:10px">← 상태창으로 돌아가기</button>
         </div>
       </div>

@@ -99,10 +99,14 @@ test('로그인 정리 과정에서도 저장된 던전 해금값을 보존한�
   assert.match(normalizer, /raidTopGroup:\s*Math\.max\(0, Math\.min\(7,/);
   assert.match(normalizer, /p\.raidTopGroup \?\? p\.raid_top_group/);
   assert.match(normalizer, /raidRewardVersion:\s*Math\.max\(0, Math\.min\(7,/);
+  assert.match(normalizer, /raidNameplates:\s*\[\.\.\.raidNameplateFields\.raidNameplates\]/);
+  assert.match(normalizer, /nameplate:\s*\{ \.\.\.raidNameplateFields\.nameplate \}/);
 
   const creator = gameSource.match(/function createNewPlayer\(name\)[\s\S]*?\n}/)?.[0] || '';
   assert.match(creator, /raidTopGroup:\s*0/);
   assert.match(creator, /raidRewardVersion:\s*0/);
+  assert.match(creator, /raidNameplates:\s*\[\]/);
+  assert.match(creator, /nameplate:\s*\{ theme:'default' \}/);
 });
 
 test('서버 보상 스냅샷은 영수증 버전을 보존하고 레벨 5 전문화 안내도 복구한다', () => {
@@ -110,6 +114,8 @@ test('서버 보상 스냅샷은 영수증 버전을 보존하고 레벨 5 전�
   assert.notEqual(apply, '');
   assert.match(apply, /snapshot\.raidRewardVersion/);
   assert.match(apply, /game\.player\.raidRewardVersion/);
+  assert.match(apply, /hasOwnProperty\.call\(snapshot, 'raidNameplates'\)/);
+  assert.match(apply, /applyServerSnapshot/);
   assert.match(apply, /game\.player\.level >= 5 && !game\.player\.spec/);
   assert.match(apply, /setTimeout\(openSpecModal, 1800\)/);
 });

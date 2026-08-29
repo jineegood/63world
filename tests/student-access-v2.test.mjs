@@ -41,7 +41,10 @@ function dependencies(overrides = {}) {
   return {
     calls,
     identity,
-    clientFactory(url, key, options) { calls.push(['createClient', url, key, options]); return { auth:{} }; },
+    clientFactory(url, key, options) {
+      calls.push(['createClient', url, key, options]);
+      return overrides.client || { auth:{} };
+    },
     authApi:{ createAuthService({ client }) { calls.push(['createAuthService', client]); return authService; } },
     cloudApi:{ create({ client, storage }) { calls.push(['createCloudService', client, storage]); return cloudService; } },
     sharedApi:{ create({ client, storage }) { calls.push(['createSharedService', client, storage]); return sharedService; } },
@@ -125,6 +128,56 @@ test('open classroom refreshes authenticated workbooks before loading a profile'
   assert.equal(names.includes('refreshWorkbooks'), true);
   assert.ok(names.indexOf('refreshClassroomSettings') < names.indexOf('enterStudent'));
   assert.ok(names.indexOf('refreshWorkbooks') < names.indexOf('loadPlayer'));
+});
+
+test('login fails closed when workbooks came from cache instead of the teacher server', async () => {
+  const api = loadApi();
+  const deps = dependencies({ sharedService:{
+    async refreshWorkbooks() {
+      deps.calls.push(['refreshWorkbooks']);
+      return { workbooks:[{ id:'stale' }], source:'cache', offline:true };
+    },
+  } });
+  const service = api.create({ config:validConfig(), ...deps });
+
+  await assert.rejects(
+    service.enter('별빛', 'secret-123'),
+    (error) => error.code === 'WORKBOOK_SYNC_REQUIRED' && /다시 로그인/.test(error.message),
+  );
+  assert.equal(deps.calls.some(([name]) => name === 'loadPlayer'), false);
+  assert.equal(deps.calls.filter(([name]) => name === 'signOut').length, 1);
+  assert.equal(service.getIdentity(), null);
+});
+
+test('thrown workbook read failures become one clear login error and clear the Auth session', async () => {
+  const api = loadApi();
+  const original = Object.assign(new Error('row hidden by policy'), { code:'LOAD_FAILED' });
+  const deps = dependencies({
+    sharedService:{
+      async refreshWorkbooks() {
+        deps.calls.push(['refreshWorkbooks']);
+        throw original;
+      },
+    },
+    authService:{
+      async signOut() {
+        deps.calls.push(['signOut']);
+        throw new Error('signout network error');
+      },
+    },
+  });
+  const service = api.create({ config:validConfig(), ...deps });
+
+  await assert.rejects(
+    service.enter('별빛', 'secret-123'),
+    (error) => error.code === 'WORKBOOK_SYNC_REQUIRED'
+      && /선생님 문제집/.test(error.message)
+      && error.cause === original,
+  );
+  assert.equal(deps.calls.filter(([name]) => name === 'signOut').length, 1);
+  assert.equal(deps.calls.some(([name]) => name === 'loadPlayer'), false);
+  assert.equal(service.getIdentity(), null);
+  assert.equal(service.getClient(), null);
 });
 
 test('existing account returns only its authenticated profile', async () => {
@@ -219,4 +272,102 @@ test('closed controller exposes no authenticated PvP boundary', () => {
   const service = api.create({ config:{ securityV2Enabled:false } });
   assert.equal(service.getIdentity(), null);
   assert.equal(service.getClient(), null);
+});
+
+test('special actions flush queued saves before one idempotent server RPC result', async () => {
+  const api = loadApi();
+  const deps = dependencies();
+  const rpcCalls = [];
+  deps.clientFactory = (url, key, options) => {
+    deps.calls.push(['createClient', url, key, options]);
+    return {
+      auth:{},
+      async rpc(name, args) {
+        deps.calls.push(['rpc', name, args]);
+        rpcCalls.push({ name, args });
+        return {
+          data:{ ok:true, code:'OK', action:'enhance', outcome:{ success:true }, state:{} },
+          error:null,
+        };
+      },
+    };
+  };
+  const service = api.create({ config:validConfig(), ...deps });
+  await service.enter('별빛', 'secret-123');
+  service.savePlayer({ name:'별빛', building:20 });
+  const requestId = '00000000-0000-4000-8000-000000000123';
+  const response = await service.performWorldSpecialAction('enhance', requestId);
+
+  assert.equal(response.ok, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(rpcCalls)), [{
+    name:'perform_world_special_action_v1',
+    args:{ p_action:'enhance', p_request_id:requestId },
+  }]);
+  const ordered = deps.calls.map(([name]) => name);
+  assert.ok(ordered.lastIndexOf('flush') < ordered.lastIndexOf('rpc'));
+});
+
+test('an ambiguous RPC failure retries once with exactly the same request UUID', async () => {
+  const api = loadApi();
+  const deps = dependencies();
+  const attempts = [];
+  deps.clientFactory = (url, key, options) => {
+    deps.calls.push(['createClient', url, key, options]);
+    return {
+      auth:{},
+      async rpc(name, args) {
+        attempts.push({ name, args:JSON.parse(JSON.stringify(args)) });
+        if (attempts.length === 1) return { data:null, error:new Error('response lost after commit') };
+        return { data:{ ok:false, code:'RATE_LIMITED', action:'summonPet' }, error:null };
+      },
+    };
+  };
+  const service = api.create({ config:validConfig(), ...deps });
+  await service.enter('별빛', 'secret-123');
+  const requestId = '00000000-0000-4000-8000-000000000456';
+  const response = await service.performWorldSpecialAction('summonPet', requestId);
+
+  assert.equal(response.code, 'RATE_LIMITED');
+  assert.equal(attempts.length, 2);
+  assert.deepEqual(attempts[0], attempts[1]);
+  assert.equal(attempts[0].args.p_request_id, requestId);
+});
+
+test('hall ranking boundary calls v4 with a whitelisted scope and preserves sanitized visual metrics', async () => {
+  const rpcCalls = [];
+  const visual = {
+    name:' 등반왕 ', class:'warrior', spec:'guardian', level:8, exp:321, gold:50,
+    appearance:{ hair:'short' }, equipment:{ weapon:'sword' }, costume:{ body:'cape' },
+    weaponUpgrades:{ sword:3 }, activePet:'fox', nameplate:{ theme:'raid_20_steel' },
+  };
+  const deps = dependencies({ client:{
+    auth:{},
+    async rpc(name, args) {
+      rpcCalls.push([name, args]);
+      if (args.p_scope === 'raid') {
+        return { data:[{ ...visual, floorGroup:3, reachedFloor:28, encounterIndex:2, cleared:false }], error:null };
+      }
+      if (args.p_scope === 'pvp') {
+        return { data:[{ ...visual, wins:7, losses:2 }], error:null };
+      }
+      return { data:[], error:null };
+    },
+  } });
+  const service = loadApi().create({ config:validConfig(), ...deps });
+
+  const raid = await service.loadHallOfFame('raid');
+  assert.equal(JSON.stringify(rpcCalls[0]), JSON.stringify(['load_hall_of_fame_v4', { p_scope:'raid' }]));
+  assert.equal(raid[0].name, '등반왕');
+  assert.equal(raid[0].reachedFloor, 28);
+  assert.equal(raid[0].encounterIndex, 2);
+  assert.equal(raid[0].equipment.weapon, 'sword');
+  assert.equal(raid[0].appearance.hair, 'short');
+  assert.equal(raid[0].costume.body, 'cape');
+  assert.equal(raid[0].nameplate.theme, 'raid_20_steel');
+
+  const pvp = await service.loadHallOfFame('pvp');
+  assert.equal(pvp[0].wins, 7);
+  assert.equal(pvp[0].losses, 2);
+  await service.loadHallOfFame('not-a-real-scope');
+  assert.equal(JSON.stringify(rpcCalls.at(-1)), JSON.stringify(['load_hall_of_fame_v4', { p_scope:'all' }]));
 });

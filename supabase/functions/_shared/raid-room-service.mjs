@@ -145,7 +145,7 @@ function normalizePublishResult(raw) {
     .filter(Boolean);
   return {
     nextPhase,
-    encounterIndex:Math.max(0, Math.min(20, Math.trunc(Number(source.encounterIndex) || 0))),
+    encounterIndex:Math.max(0, Math.min(4, Math.trunc(Number(source.encounterIndex) || 0))),
     currentFloor:Math.max(1, Math.min(63, Math.trunc(Number(source.currentFloor) || 1))),
     monsterState:object(source.monsterState) || {},
     memberStates,

@@ -29,7 +29,10 @@
     const next = { ...monster };
     if (next.elite) return next;
     if (next.type === 'mushroom') {
-      next.attack = Math.max(1, Math.round(number(next.attack) * 0.8));
+      // 기존 배포값(원본 공격력의 80%)에서 30% 더 낮춘다. 원본 3~5에
+      // 곧바로 0.7을 곱하면 정수 반올림 결과가 기존과 같은 2~4가 된다.
+      const currentAttack = Math.max(1, Math.round(number(next.attack) * 0.8));
+      next.attack = Math.max(1, Math.round(currentAttack * 0.7));
     }
     if (next.type === 'slime') {
       next.maxHp = Math.max(1, Math.round(number(next.maxHp ?? next.hp) * 1.1));
