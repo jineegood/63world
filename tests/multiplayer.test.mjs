@@ -194,20 +194,24 @@ test('world roster, chat, and position stay server-verified on the Friday 2-seco
   assert.match(multiplayer, /const CHANNEL_COUNT = 5/);
   assert.match(multiplayer, /const CHANNEL_CAPACITY = 8/);
   assert.match(multiplayer, /const RPC_TIMEOUT_MS = 4500/);
+  assert.match(multiplayer, /const MOTION_BROADCAST_MS = 220/);
+  assert.match(multiplayer, /const MOTION_IDLE_KEEPALIVE_MS = 2000/);
   assert.match(multiplayer, /const PRESENCE_SYNC_MS = 2000/);
-  assert.match(multiplayer, /defaultStepMs:PRESENCE_SYNC_MS/);
-  assert.match(multiplayer, /maxStepMs:PRESENCE_SYNC_MS \+ 300/);
-  assert.match(multiplayer, /snapDistance:800/);
+  assert.match(multiplayer, /motion = api\.create\(\)/,
+    'the 220ms stream must reuse the original 90-600ms interpolation and portal snap defaults');
   assert.match(multiplayer, /CONTROL_CHARACTERS_RE = \/\[\\u0000-\\u001f\\u007f-\\u009f\]\//);
   assert.match(multiplayer, /payload\.knownVisuals = knownVisuals[\s\S]*payload\.lastChatId = resetCursor \? '0' : lastChatId[\s\S]*payload\.lastAnnouncementId/);
   assert.match(multiplayer, /client\.rpc\('sync_world_presence_v3'/);
   assert.match(multiplayer, /window\.YuksamWorldChannelsV1 = Object\.freeze/);
   assert.match(multiplayer, /channelStatus = 'online'/);
-  assert.doesNotMatch(multiplayer,
-    /MOTION_BROADCAST_MS|MOTION_TOPIC_PREFIX|connectMotionChannel|broadcastMotion|client\.channel\(|client\.realtime|\.send\(\{\s*type:'broadcast'/,
-    'Friday-smooth restoration must not create or send through a private Realtime motion channel');
-  assert.doesNotMatch(multiplayer, /setInterval\([^\n]*250|setInterval\(broadcastMotion/,
-    'there must be no 250ms motion timer');
+  assert.match(multiplayer, /MOTION_TOPIC_PREFIX = 'world-motion-v1:channel-'/);
+  assert.match(multiplayer, /client\.channel\(`\$\{MOTION_TOPIC_PREFIX\}\$\{channel\}`,[\s\S]*private:true/);
+  assert.match(multiplayer, /\.on\('broadcast', \{ event:'motion' \}/);
+  assert.match(multiplayer, /setInterval\(broadcastMotion, MOTION_BROADCAST_MS\)/);
+  assert.match(multiplayer, /preserveLiveMotion[\s\S]*next\.x = previous\.x/,
+    'a slower DB roster snapshot must not rewind a fresh Realtime position');
+  assert.doesNotMatch(multiplayer, /setInterval\([^\n]*250/,
+    'the restored movement cadence must be exactly the original 220ms, not 250ms');
   assert.match(multiplayer, /function remoteSpriteState[\s\S]*remote:true/);
   assert.match(multiplayer, /draw\(ctx, s\.x, s\.y/);
   assert.doesNotMatch(multiplayer,
@@ -228,9 +232,10 @@ test('world roster, chat, and position stay server-verified on the Friday 2-seco
   assert.match(multiplayer, /Promise\.race\(\[/);
 });
 
-test('five channels isolate 28-player rosters/chat while direct rendering follows each world frame', async () => {
+test('five channels isolate 28-player rosters/chat/220ms motion while direct rendering follows each world frame', async () => {
   const presenceRows = new Map();
   const chatRows = [];
+  const topics = new Map();
   let rpcCalls = 0;
 
   function channelCounts() {
@@ -261,23 +266,68 @@ test('five channels isolate 28-player rosters/chat while direct rendering follow
     };
   }
 
+  function removeRealtimeChannel(channel) {
+    topics.get(channel.topic)?.delete(channel);
+  }
+
+  class FakeRealtimeChannel {
+    constructor(client, topic) {
+      this.client = client;
+      this.topic = topic;
+      this.motionListener = null;
+    }
+    on(type, filter, listener) {
+      assert.equal(type, 'broadcast');
+      assert.equal(filter.event, 'motion');
+      this.motionListener = listener;
+      return this;
+    }
+    subscribe(onStatus) {
+      const selected = Number(this.topic.split('-').at(-1));
+      assert.equal(this.client.authorizedChannel, selected,
+        'the server presence admission must precede the private motion subscription');
+      if (!topics.has(this.topic)) topics.set(this.topic, new Set());
+      topics.get(this.topic).add(this);
+      onStatus?.('SUBSCRIBED');
+      return this;
+    }
+    async send(message) {
+      assert.equal(message.type, 'broadcast');
+      assert.equal(message.event, 'motion');
+      for (const target of topics.get(this.topic) || []) {
+        if (target !== this) target.motionListener?.({ payload:JSON.parse(JSON.stringify(message.payload)) });
+      }
+      return 'ok';
+    }
+  }
+
   class FakeClient {
     constructor(identity) {
       this.identity = identity;
-      this.unexpectedRealtimeCalls = 0;
+      this.authorizedChannel = null;
+      this.authSteps = [];
+      this.removedTopics = [];
       this.auth = {
         getSession:async () => {
-          this.unexpectedRealtimeCalls += 1;
+          this.authSteps.push('getSession');
           return { data:{ session:{ access_token:`token-${identity.userId}` } } };
         },
       };
       this.realtime = {
-        setAuth:async () => { this.unexpectedRealtimeCalls += 1; },
+        setAuth:async (token) => {
+          assert.equal(token, `token-${identity.userId}`);
+          this.authSteps.push('setAuth');
+        },
       };
     }
-    channel() {
-      this.unexpectedRealtimeCalls += 1;
-      throw new Error('private Realtime motion must stay disabled');
+    channel(topic, options) {
+      assert.equal(options?.config?.private, true);
+      assert.deepEqual(this.authSteps.slice(-2), ['getSession', 'setAuth']);
+      return new FakeRealtimeChannel(this, topic);
+    }
+    removeChannel(channel) {
+      this.removedTopics.push(channel.topic);
+      removeRealtimeChannel(channel);
     }
     async rpc(name, { p_state:state }) {
       assert.equal(name, 'sync_world_presence_v3');
@@ -309,6 +359,7 @@ test('five channels isolate 28-player rosters/chat while direct rendering follow
         name:this.identity.displayName,
       };
       presenceRows.set(this.identity.userId, saved);
+      this.authorizedChannel = saved.channel;
       if (submittedChat && !this.rejectChat && !chatRows.some((row) => (
         row.userId === this.identity.userId && row.clientId === submittedChat.id
       ))) {
@@ -463,7 +514,7 @@ test('five channels isolate 28-player rosters/chat while direct rendering follow
       nameplates, yuksamPaints, bitmapDraws, badge, domActivity, identity, client, storage };
   }
 
-  async function settleAsyncWork() {
+  async function settleRealtime() {
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
@@ -473,10 +524,10 @@ test('five channels isolate 28-player rosters/chat while direct rendering follow
   const preferred = (index) => index < 8 ? 1 : 2 + ((index - 8) % 4);
   const sessions = Array.from({ length:28 }, (_, index) => createSession(index, preferred(index)));
   await Promise.all(sessions.map((session) => session.window.__mpSyncPresenceV54()));
-  await settleAsyncWork();
+  await settleRealtime();
   rpcCalls = 0;
   await Promise.all(sessions.map((session) => session.window.__mpSyncPresenceV54()));
-  await settleAsyncWork();
+  await settleRealtime();
 
   assert.equal(rpcCalls, 28, 'each student still uses one bounded 2-second roster poll');
   assert.ok(sessions.every((session) => session.window.__multiplayerStatusV53 === 'online'));
@@ -493,22 +544,28 @@ test('five channels isolate 28-player rosters/chat while direct rendering follow
     },
   );
   assert.match(sessions[0].badge.textContent, /채널 1 · 같은 지역 8명/);
-  assert.ok(sessions.every((session) => session.client.unexpectedRealtimeCalls === 0));
+  assert.ok(sessions.every((session) => session.client.authSteps.includes('setAuth')));
   assert.ok(sessions.every((session) => (
     session.intervals.some(({ ms }) => ms === 2000)
+      && session.intervals.filter(({ ms }) => ms === 220).length >= 2
       && session.intervals.every(({ ms }) => ms !== 250)
-  )), 'every session must use the 2-second RPC timer and no 250ms motion timer');
+  )), 'every session must keep the 2-second roster poll and restore the original 220ms motion timer');
   const occupancy = Object.values(sessions[0].window.YuksamWorldChannelsV1.getState().channelCounts);
   assert.equal(occupancy.reduce((sum, count) => sum + count, 0), 28);
   assert.equal(Math.max(...occupancy), 8);
+  assert.equal(topics.size, 5, 'all five private motion channels should be active');
 
-  // Position follows the same authenticated 2-second snapshot path and remains channel-isolated.
+  // Only visual motion takes the low-latency path, and it stays inside the server-approved channel.
   sessions[0].game.player.x = 377;
   sessions[0].game.isMoving = true;
-  await sessions[0].window.__mpSyncPresenceV54();
-  await sessions[1].window.__mpSyncPresenceV54();
+  sessions[0].intervals.find((entry) => entry.fn.name === 'broadcastMotion').fn();
+  await settleRealtime();
   assert.equal(sessions[1].window.__remotePlayersV53.get('학생01').x, 377);
   assert.equal(sessions[8].window.__remotePlayersV53.has('학생01'), false);
+
+  // A slower DB snapshot still contains the sender's previous x=300 and must not rewind x=377.
+  await sessions[1].window.__mpSyncPresenceV54();
+  assert.equal(sessions[1].window.__remotePlayersV53.get('학생01').x, 377);
 
   assert.equal(sessions[0].window.__mpBroadcastChatV53(`막힘\u0085문자`), false);
   sessions[0].window.__mpBroadcastChatV53('1채널 안녕!');
@@ -574,11 +631,11 @@ test('five channels isolate 28-player rosters/chat while direct rendering follow
   assert.equal(full.code, 'CHANNEL_FULL');
   assert.equal(sessions[8].window.YuksamWorldChannelsV1.getState().channel, 2);
   const changed = await sessions[8].window.YuksamWorldChannelsV1.changeChannel(3);
-  await settleAsyncWork();
+  await settleRealtime();
   assert.equal(changed.ok, true);
   assert.equal(sessions[8].window.YuksamWorldChannelsV1.getState().channel, 3);
   assert.equal(sessions[8].storage.get('yuksam_world_channel_v1'), '3');
-  assert.equal(sessions[8].client.unexpectedRealtimeCalls, 0);
+  assert.ok(sessions[8].client.removedTopics.includes('world-motion-v1:channel-2'));
   assert.equal(sessions[8].window.__remotePlayersV53.has('학생13'), false,
     'the old channel roster must be cleared after switching');
   assert.equal((await sessions[8].window.YuksamWorldChannelsV1.changeChannel(6)).code, 'INVALID_CHANNEL');
@@ -588,7 +645,7 @@ test('five channels isolate 28-player rosters/chat while direct rendering follow
   const solo = createSession(98, 5);
   solo.game.currentMap = 'soloProbe';
   await solo.window.__mpSyncPresenceV54();
-  await settleAsyncWork();
+  await settleRealtime();
   assert.equal(solo.window.__remotePlayersV53.size, 0);
   const soloLayer = solo.layers[0];
   const soloContext = { map:solo.game.currentMap };

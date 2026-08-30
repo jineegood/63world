@@ -1,6 +1,7 @@
 /* v55: 학급용 멀티플레이.
-   명단·검증된 외형·위치·채팅·전역 알림·채널 인원은 인증 DB RPC가 2초마다
-   동기화한다. 일반 채팅과 캐릭터 명단은 같은 월드 채널(1~5) 안에서만 공유된다. */
+   명단·검증된 외형·채팅·전역 알림·채널 인원은 인증 DB RPC가 2초마다
+   동기화한다. 위치/방향/걷기/춤은 서버가 승인한 같은 월드 채널 안에서만
+   220ms private Realtime으로 전달해 예전의 부드러운 이동을 유지한다. */
 (function multiplayerV55() {
   if (window.__MULTIPLAYER_V54__) return;
   window.__MULTIPLAYER_V54__ = true;
@@ -14,6 +15,8 @@
     && typeof cfg.anonKey === 'string' && cfg.anonKey.length > 20
     && typeof window.secureStudentAccessV2?.getClient === 'function';
   const MAINTENANCE_MS = 220;
+  const MOTION_BROADCAST_MS = 220;
+  const MOTION_IDLE_KEEPALIVE_MS = 2000;
   const PRESENCE_SYNC_MS = 2000;
   const RPC_TIMEOUT_MS = 4500;
   const STALE_MS = 10000;
@@ -21,6 +24,7 @@
   const CHANNEL_CAPACITY = 8;
   const CHANNEL_SWITCH_COOLDOWN_MS = 3000;
   const CHANNEL_STORAGE_KEY = 'yuksam_world_channel_v1';
+  const MOTION_TOPIC_PREFIX = 'world-motion-v1:channel-';
   const CONTROL_CHARACTERS_RE = /[\u0000-\u001f\u007f-\u009f]/;
   const remotes = new Map(); // name -> server-verified current-map state
   const motions = new Map(); // name -> 도착한 위치 사이를 부드럽게 이어주는 계산기
@@ -38,6 +42,16 @@
   let lastBadgeText = '';
   let onlineBadgeElement = null;
   let rosterMap = null;
+  let motionChannel = null;
+  let motionChannelNumber = 0;
+  let motionSubscribed = false;
+  let motionConnecting = false;
+  let motionSendInFlight = false;
+  let motionSequence = 0;
+  let motionSessionId = createMessageId();
+  let lastMotionSignature = '';
+  let lastMotionSentAt = 0;
+  const receivedMotionSequences = new Map();
   const channelListeners = new Set();
   const channelCounts = Object.fromEntries(
     Array.from({ length:CHANNEL_COUNT }, (_, index) => [String(index + 1), 0]),
@@ -135,19 +149,18 @@
     if (!api || typeof x !== 'number' || typeof y !== 'number') return;
     let motion = motions.get(name);
     if (!motion) {
-      motion = api.create({
-        defaultStepMs:PRESENCE_SYNC_MS,
-        maxStepMs:PRESENCE_SYNC_MS + 300,
-        snapDistance:800,
-      });
+      // 예전 220ms 전송판의 90~600ms 보간·360px 순간이동 기준을 그대로 쓴다.
+      motion = api.create();
       motions.set(name, motion);
     }
     motion.push(x, y, Date.now(), { snap });
   }
 
   function forgetRemote(name) {
+    const userId = remotes.get(name)?.userId;
     remotes.delete(name);
     motions.delete(name);
+    if (userId) receivedMotionSequences.delete(String(userId));
     if (remotes.size === 0) {
       remoteBounds = [];
       visibleSameMapSize = 1;
@@ -330,13 +343,31 @@
           forgetRemote(renamed[0]);
         }
       }
-      remotes.set(p.name, {
+      // Realtime 좌표가 막 도착한 상태라면 최대 2초 늦을 수 있는 DB snapshot이
+      // 화면 위치를 뒤로 되감지 않게 한다. 외형·명단은 계속 서버 값을 따른다.
+      const preserveLiveMotion = previous?._motionAt
+        && previous.map === p.map
+        && now - previous._motionAt <= PRESENCE_SYNC_MS + 1000;
+      const next = {
         ...(previous || {}), ...p,
         bubble:previous?.bubble,
         at:now,
         _presenceV54:true,
-      });
-      trackRemoteMotion(p.name, p.x, p.y, !previous || previous.map !== p.map);
+      };
+      if (preserveLiveMotion) {
+        next.x = previous.x;
+        next.y = previous.y;
+        next.facing = previous.facing;
+        next.petSide = previous.petSide;
+        next.pvpAvailable = previous.pvpAvailable;
+        next.moving = previous.moving;
+        next.dance = previous.dance;
+        next._motionAt = previous._motionAt;
+      }
+      remotes.set(p.name, next);
+      if (!preserveLiveMotion) {
+        trackRemoteMotion(p.name, p.x, p.y, !previous || previous.map !== p.map);
+      }
     });
     remotes.forEach((remote, name) => {
       if (remote?._presenceV54 && remote.map === map && !seenIds.has(remote.userId)) forgetRemote(name);
@@ -354,6 +385,7 @@
   function clearRemoteRoster(clearVisuals = true) {
     remotes.forEach((_, name) => forgetRemote(name));
     motions.clear();
+    receivedMotionSequences.clear();
     remoteBounds = [];
     sameMapRosterSize = 1;
     visibleSameMapSize = 1;
@@ -361,7 +393,184 @@
     if (clearVisuals) visualCache.clear();
   }
 
+  function disconnectMotionChannel() {
+    const channel = motionChannel;
+    motionChannel = null;
+    motionChannelNumber = 0;
+    motionSubscribed = false;
+    motionConnecting = false;
+    motionSendInFlight = false;
+    lastMotionSignature = '';
+    lastMotionSentAt = 0;
+    receivedMotionSequences.clear();
+    if (channel && activeClient?.removeChannel) {
+      try { activeClient.removeChannel(channel); } catch {}
+    }
+  }
+
+  function normalizeMotionPayload(eventPayload) {
+    const value = eventPayload?.payload && typeof eventPayload.payload === 'object'
+      ? eventPayload.payload
+      : eventPayload;
+    if (!value || typeof value !== 'object') return null;
+    const userId = String(value.u || '').slice(0, 80);
+    const session = String(value.s || '').slice(0, 80);
+    const channel = normalizeChannel(value.c);
+    const map = String(value.m || '').slice(0, 40);
+    const x = Number(value.x);
+    const y = Number(value.y);
+    const sequence = Number(value.q);
+    if (!userId || !session || channel == null || !/^[A-Za-z][A-Za-z0-9_-]{0,39}$/.test(map)
+      || !Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 8192 || y < 0 || y > 8192
+      || !Number.isInteger(sequence) || sequence < 1) return null;
+    return {
+      userId,
+      session,
+      channel,
+      map,
+      sequence,
+      x:Math.round(x),
+      y:Math.round(y),
+      facing:{
+        x:Math.max(-1, Math.min(1, Number(value.f?.x) || 0)),
+        y:Math.max(-1, Math.min(1, Number(value.f?.y) || 0)),
+      },
+      petSide:value.ps === 'right' ? 'right' : 'left',
+      pvpAvailable:value.pv === true,
+      moving:value.mv === true,
+      dance:value.dn === true,
+    };
+  }
+
+  function applyMotionBroadcast(eventPayload, expectedChannel) {
+    const value = normalizeMotionPayload(eventPayload);
+    const G = g();
+    if (!value || !G?.player || value.channel !== currentChannel
+      || value.channel !== expectedChannel || value.map !== G.currentMap) return false;
+    const found = [...remotes.entries()].find(([, remote]) => remote?.userId === value.userId);
+    if (!found) return false; // 인증 RPC가 확인한 현재 채널 명단만 화면에서 움직인다.
+    const previousSequence = receivedMotionSequences.get(value.userId);
+    if (previousSequence?.session === value.session && value.sequence <= previousSequence.sequence) return false;
+    receivedMotionSequences.set(value.userId, { session:value.session, sequence:value.sequence });
+    const [name, previous] = found;
+    const now = Date.now();
+    remotes.set(name, {
+      ...previous,
+      x:value.x,
+      y:value.y,
+      facing:value.facing,
+      petSide:value.petSide,
+      pvpAvailable:value.pvpAvailable,
+      moving:value.moving,
+      dance:value.dance,
+      at:now,
+      _motionAt:now,
+    });
+    trackRemoteMotion(name, value.x, value.y, false);
+    return true;
+  }
+
+  async function authenticateRealtime(client) {
+    if (typeof client?.realtime?.setAuth !== 'function') return true;
+    if (typeof client?.auth?.getSession !== 'function') return false;
+    try {
+      const result = await client.auth.getSession();
+      const token = result?.data?.session?.access_token;
+      if (!token) return false;
+      await client.realtime.setAuth(token);
+      return true;
+    } catch { return false; }
+  }
+
+  async function connectMotionChannel(client, channel) {
+    if (!client || typeof client.channel !== 'function' || normalizeChannel(channel) == null) return false;
+    if (motionChannel && motionChannelNumber === channel && (motionSubscribed || motionConnecting)) return true;
+    disconnectMotionChannel();
+    if (!await authenticateRealtime(client) || client !== activeClient || currentChannel !== channel) {
+      if (client === activeClient) {
+        channelReason = 'MOTION_FALLBACK';
+        notifyChannelState();
+      }
+      return false;
+    }
+    let nextChannel = null;
+    try {
+      nextChannel = client.channel(`${MOTION_TOPIC_PREFIX}${channel}`, {
+        config:{ private:true, broadcast:{ self:false, ack:false } },
+      });
+      motionChannel = nextChannel;
+      motionChannelNumber = channel;
+      motionConnecting = true;
+      nextChannel
+        .on('broadcast', { event:'motion' }, (payload) => applyMotionBroadcast(payload, channel))
+        .subscribe((status) => {
+          if (motionChannel !== nextChannel || currentChannel !== channel) return;
+          if (status === 'SUBSCRIBED') {
+            motionSubscribed = true;
+            motionConnecting = false;
+            channelReason = null;
+          } else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) {
+            motionSubscribed = false;
+            motionConnecting = false;
+            channelReason = 'MOTION_FALLBACK';
+          }
+          notifyChannelState();
+        });
+      return true;
+    } catch {
+      if (motionChannel === nextChannel) disconnectMotionChannel();
+      else if (nextChannel && client.removeChannel) {
+        try { client.removeChannel(nextChannel); } catch {}
+      }
+      channelReason = 'MOTION_FALLBACK';
+      notifyChannelState();
+      return false;
+    }
+  }
+
+  function broadcastMotion() {
+    const G = g();
+    const channel = motionChannel;
+    if (!motionSubscribed || !channel || motionChannelNumber !== currentChannel
+      || motionSendInFlight || !G?.player || !document.querySelector?.('#game.active')) return false;
+    const identity = window.getPvpIdentityV1?.();
+    if (!identity?.userId) return false;
+    const now = Date.now();
+    const petSide = avatarVisualSync?.petSideFromFacing(G.player._petSide, G.lastMove)
+      || G.player._petSide || 'left';
+    const payload = {
+      u:String(identity.userId).slice(0, 80),
+      s:motionSessionId,
+      q:++motionSequence,
+      c:currentChannel,
+      m:String(G.currentMap || '').slice(0, 40),
+      x:Math.round(Number(G.player.x) || 0),
+      y:Math.round(Number(G.player.y) || 0),
+      f:{ x:Number(G.lastMove?.x) || 0, y:Number(G.lastMove?.y) || 1 },
+      ps:petSide === 'right' ? 'right' : 'left',
+      pv:G.currentMap === 'town' && !G.modalState?.pause && !G.currentCombatMonsterId,
+      mv:!!G.isMoving,
+      dn:Number(G.danceTimer || 0) > 0,
+    };
+    const signature = JSON.stringify([payload.m, payload.x, payload.y, payload.f.x, payload.f.y,
+      payload.ps, payload.pv, payload.mv, payload.dn]);
+    if (signature === lastMotionSignature && now - lastMotionSentAt < MOTION_IDLE_KEEPALIVE_MS) return false;
+    lastMotionSignature = signature;
+    lastMotionSentAt = now;
+    motionSendInFlight = true;
+    try {
+      Promise.resolve(channel.send({ type:'broadcast', event:'motion', payload }))
+        .catch(() => {})
+        .finally(() => { motionSendInFlight = false; });
+      return true;
+    } catch {
+      motionSendInFlight = false;
+      return false;
+    }
+  }
+
   function clearPresenceState(status = 'waiting-login') {
+    disconnectMotionChannel();
     activeClient = null;
     lastSuccessfulSyncAt = 0;
     pendingChats.length = 0;
@@ -373,6 +582,8 @@
     channelJoined = false;
     channelStatus = status;
     channelReason = null;
+    motionSessionId = createMessageId();
+    motionSequence = 0;
     window.__multiplayerStatusV53 = status;
     window.__multiplayerPresenceStatusV1 = status;
     updateOnlineBadge();
@@ -534,6 +745,7 @@
       normalizeChannelCounts(data.channelCounts);
       const channelChanged = channelJoined && currentChannel !== responseChannel;
       if (channelChanged) {
+        disconnectMotionChannel();
         clearRemoteRoster(true);
         seenChatIds.clear();
         seenChatOrder.length = 0;
@@ -564,6 +776,7 @@
       channelReason = null;
       updateOnlineBadge();
       notifyChannelState(true);
+      void connectMotionChannel(client, currentChannel);
       return Object.freeze({
         ok:true,
         channel:currentChannel,
@@ -653,12 +866,19 @@
   }
 
   setInterval(tick, MAINTENANCE_MS);
+  setInterval(broadcastMotion, MOTION_BROADCAST_MS);
   setInterval(() => { syncPresence(); }, PRESENCE_SYNC_MS);
   window.__mpSyncPresenceV54 = syncPresence;
   window.__mpPendingChatCountV54 = () => pendingChats.length;
   window.__mpMultiplayerCountsV54 = () => Object.freeze({
     sameMap:sameMapRosterSize,
     visible:visibleSameMapSize,
+  });
+  window.__mpMotionStateV55 = () => Object.freeze({
+    channel:motionChannelNumber,
+    subscribed:motionSubscribed,
+    connecting:motionConnecting,
+    intervalMs:MOTION_BROADCAST_MS,
   });
   window.addEventListener('beforeunload', () => clearPresenceState('waiting-login'));
 
