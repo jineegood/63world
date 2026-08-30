@@ -197,8 +197,13 @@ test('world roster, chat, and position stay server-verified on the Friday 2-seco
   assert.match(multiplayer, /const MOTION_BROADCAST_MS = 220/);
   assert.match(multiplayer, /const MOTION_IDLE_KEEPALIVE_MS = 2000/);
   assert.match(multiplayer, /const PRESENCE_SYNC_MS = 2000/);
-  assert.match(multiplayer, /motion = api\.create\(\)/,
+  assert.match(multiplayer, /\? api\.create\(\)/,
     'the 220ms stream must reuse the original 90-600ms interpolation and portal snap defaults');
+  assert.match(multiplayer, /defaultStepMs:PRESENCE_SYNC_MS/);
+  assert.match(multiplayer, /maxStepMs:PRESENCE_SYNC_MS \+ 300/);
+  assert.match(multiplayer, /snapDistance:800/);
+  assert.match(multiplayer, /motionSubscribed \? '빠른 이동' : '기본 이동'/,
+    'the live badge must reveal whether the low-latency channel actually subscribed');
   assert.match(multiplayer, /CONTROL_CHARACTERS_RE = \/\[\\u0000-\\u001f\\u007f-\\u009f\]\//);
   assert.match(multiplayer, /payload\.knownVisuals = knownVisuals[\s\S]*payload\.lastChatId = resetCursor \? '0' : lastChatId[\s\S]*payload\.lastAnnouncementId/);
   assert.match(multiplayer, /client\.rpc\('sync_world_presence_v3'/);
@@ -544,6 +549,7 @@ test('five channels isolate 28-player rosters/chat/220ms motion while direct ren
     },
   );
   assert.match(sessions[0].badge.textContent, /채널 1 · 같은 지역 8명/);
+  assert.match(sessions[0].badge.textContent, /빠른 이동/);
   assert.ok(sessions.every((session) => session.client.authSteps.includes('setAuth')));
   assert.ok(sessions.every((session) => (
     session.intervals.some(({ ms }) => ms === 2000)

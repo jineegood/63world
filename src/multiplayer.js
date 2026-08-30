@@ -144,13 +144,27 @@
   });
 
   // 위치가 띄엄띄엄 도착해도 화면에서는 이어 보이게 한다. 모듈이 없으면 예전처럼 그대로 그린다.
-  function trackRemoteMotion(name, x, y, snap) {
+  function trackRemoteMotion(name, x, y, snap, cadenceMs = PRESENCE_SYNC_MS) {
     const api = window.YuksamRemoteMotion;
     if (!api || typeof x !== 'number' || typeof y !== 'number') return;
+    const fast = cadenceMs === MOTION_BROADCAST_MS;
+    const normalizedCadence = fast ? MOTION_BROADCAST_MS : PRESENCE_SYNC_MS;
     let motion = motions.get(name);
-    if (!motion) {
-      // 예전 220ms 전송판의 90~600ms 보간·360px 순간이동 기준을 그대로 쓴다.
-      motion = api.create();
+    if (!motion || motion._cadenceMs !== normalizedCadence) {
+      const previousPoint = motion?.sample?.(Date.now()) || remotes.get(name) || null;
+      // 빠른 채널은 예전 220ms 기본값을 그대로 쓴다. RPC 폴백은 다음 2초
+      // snapshot까지 계속 이동해 0.6초 뒤 멈춰 서는 현상을 만들지 않는다.
+      motion = fast
+        ? api.create()
+        : api.create({
+          defaultStepMs:PRESENCE_SYNC_MS,
+          maxStepMs:PRESENCE_SYNC_MS + 300,
+          snapDistance:800,
+        });
+      motion._cadenceMs = normalizedCadence;
+      if (previousPoint && Number.isFinite(previousPoint.x) && Number.isFinite(previousPoint.y)) {
+        motion.push(previousPoint.x, previousPoint.y, Date.now(), { snap:true });
+      }
       motions.set(name, motion);
     }
     motion.push(x, y, Date.now(), { snap });
@@ -304,7 +318,7 @@
     onlineBadgeElement = badge;
     const status = window.__multiplayerPresenceStatusV1;
     const label = status === 'online'
-      ? `채널 ${currentChannel} · 같은 지역 ${sameMapRosterSize}명 · 화면 ${visibleSameMapSize}명`
+      ? `채널 ${currentChannel} · 같은 지역 ${sameMapRosterSize}명 · 화면 ${visibleSameMapSize}명 · ${motionSubscribed ? '빠른 이동' : '기본 이동'}`
       : status === 'offline' ? `채널 ${currentChannel} · 동기화 재시도 중`
         : `채널 ${currentChannel} · 동기화 중`;
     if (label === lastBadgeText) return;
@@ -366,7 +380,7 @@
       }
       remotes.set(p.name, next);
       if (!preserveLiveMotion) {
-        trackRemoteMotion(p.name, p.x, p.y, !previous || previous.map !== p.map);
+        trackRemoteMotion(p.name, p.x, p.y, !previous || previous.map !== p.map, PRESENCE_SYNC_MS);
       }
     });
     remotes.forEach((remote, name) => {
@@ -466,7 +480,7 @@
       at:now,
       _motionAt:now,
     });
-    trackRemoteMotion(name, value.x, value.y, false);
+    trackRemoteMotion(name, value.x, value.y, false, MOTION_BROADCAST_MS);
     return true;
   }
 
@@ -514,6 +528,7 @@
             motionConnecting = false;
             channelReason = 'MOTION_FALLBACK';
           }
+          updateOnlineBadge();
           notifyChannelState();
         });
       return true;
