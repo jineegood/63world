@@ -103,7 +103,7 @@ test('raid milestones normalize ownership, expose quest goals, and register thre
   assert.equal(api.rewardForGroup(2).questTitle, '[파티] 함께 오른 스무 층');
   assert.equal(api.rewardForGroup(4).questTitle, '[파티] 빌딩의 허리를 넘어서');
   assert.equal(api.rewardForGroup(7).questTitle, '[파티] 육삼의 정상');
-  assert.match(api.rewardForGroup(7).description, /청록·자홍 네온/);
+  assert.match(api.rewardForGroup(7).description, /먹빛 하늘.*무광 금빛/);
   const picker = api.pickerMarkup({
     name:'철벽', class:'warrior', level:5,
     raidNameplates:['raid_20_steel'], nameplate:{ theme:'raid_20_steel' },
@@ -118,8 +118,16 @@ test('raid milestones normalize ownership, expose quest goals, and register thre
   assert.equal(resolver({ cosmetics:{ theme:'unowned' } }), 'default');
 
   const colors = [];
+  let gradientCalls = 0;
+  let arcCalls = 0;
   const ctx = {
-    save() {}, restore() {}, beginPath() {}, roundRect() {}, fill() {}, stroke() {}, arc() {},
+    save() {}, restore() {}, beginPath() {}, roundRect() {}, fill() {}, stroke() {},
+    moveTo() {}, lineTo() {},
+    arc() { arcCalls += 1; },
+    createLinearGradient() {
+      gradientCalls += 1;
+      return { addColorStop() {} };
+    },
     fillText() {}, measureText:(value) => ({ width:String(value).length * 10 }),
     set fillStyle(value) { colors.push(value); }, get fillStyle() { return colors.at(-1); },
     set strokeStyle(value) { colors.push(value); }, get strokeStyle() { return colors.at(-1); },
@@ -128,9 +136,13 @@ test('raid milestones normalize ownership, expose quest goals, and register thre
   assert.ok(colors.includes('#94a3b8'));
   assert.ok(colors.some((value) => String(value).startsWith('rgba(251,146,60,')),
     '20층은 기본 청록과 다른 주황 표시등이어야 한다');
-  const nameplatesCss = fs.readFileSync(path.join(root, 'style.css'), 'utf8');
-  assert.match(nameplatesCss, /raid-summit-neon-v1/);
-  assert.match(nameplatesCss, /raid-nameplate-summit-63[\s\S]*?#67e8f9[\s\S]*?#f0abfc/);
+  colors.length = 0;
+  arcCalls = 0;
+  registered.get('raid_63_summit')(ctx, 300, 200, { name:'정상', roleLine:'LV.63 무기 전사' });
+  assert.ok(colors.includes('rgba(5,10,20,.97)'));
+  assert.ok(colors.includes('#d6b96b'), '63층은 강철 이름표와 다른 무광 금빛 테두리를 써야 한다');
+  assert.equal(gradientCalls, 0, '상시 렌더되는 최종 이름표는 매 프레임 그라디언트를 만들지 않는다');
+  assert.equal(arcCalls, 1, '최종 이름표는 안테나 표시등 하나만 그린다');
 });
 
 test('Supabase REST configuration normalizes to one Realtime websocket endpoint', () => {
@@ -145,7 +157,7 @@ test('Supabase REST configuration normalizes to one Realtime websocket endpoint'
   );
 });
 
-test('world roster/chat stay server-verified while only compact motion uses private Realtime', () => {
+test('world roster, chat, and position stay server-verified on the Friday 2-second RPC path', () => {
   const sql = presenceMigrationSource();
   const multiplayer = multiplayerSource();
 
@@ -181,18 +193,21 @@ test('world roster/chat stay server-verified while only compact motion uses priv
   assert.match(sql, /grant execute on function public\.sync_world_presence_v1\(jsonb\)[\s\S]*to authenticated/i);
   assert.match(multiplayer, /const CHANNEL_COUNT = 5/);
   assert.match(multiplayer, /const CHANNEL_CAPACITY = 8/);
-  assert.match(multiplayer, /const MOTION_BROADCAST_MS = 250/);
-  assert.match(multiplayer, /client\.channel\(`\$\{MOTION_TOPIC_PREFIX\}\$\{channel\}`,[\s\S]*private:true/);
-  assert.match(multiplayer, /client\.realtime\.setAuth\(token\)/);
-  assert.match(multiplayer, /\.on\('broadcast', \{ event:'motion' \}/);
-  assert.doesNotMatch(multiplayer, /event:\s*'snapshot'/i);
   assert.match(multiplayer, /const RPC_TIMEOUT_MS = 4500/);
   assert.match(multiplayer, /const PRESENCE_SYNC_MS = 2000/);
+  assert.match(multiplayer, /defaultStepMs:PRESENCE_SYNC_MS/);
+  assert.match(multiplayer, /maxStepMs:PRESENCE_SYNC_MS \+ 300/);
   assert.match(multiplayer, /snapDistance:800/);
   assert.match(multiplayer, /CONTROL_CHARACTERS_RE = \/\[\\u0000-\\u001f\\u007f-\\u009f\]\//);
   assert.match(multiplayer, /payload\.knownVisuals = knownVisuals[\s\S]*payload\.lastChatId = resetCursor \? '0' : lastChatId[\s\S]*payload\.lastAnnouncementId/);
   assert.match(multiplayer, /client\.rpc\('sync_world_presence_v3'/);
   assert.match(multiplayer, /window\.YuksamWorldChannelsV1 = Object\.freeze/);
+  assert.match(multiplayer, /channelStatus = 'online'/);
+  assert.doesNotMatch(multiplayer,
+    /MOTION_BROADCAST_MS|MOTION_TOPIC_PREFIX|connectMotionChannel|broadcastMotion|client\.channel\(|client\.realtime|\.send\(\{\s*type:'broadcast'/,
+    'Friday-smooth restoration must not create or send through a private Realtime motion channel');
+  assert.doesNotMatch(multiplayer, /setInterval\([^\n]*250|setInterval\(broadcastMotion/,
+    'there must be no 250ms motion timer');
   assert.match(multiplayer, /function remoteSpriteState[\s\S]*remote:true/);
   assert.match(multiplayer, /draw\(ctx, s\.x, s\.y/);
   assert.doesNotMatch(multiplayer,
@@ -206,13 +221,16 @@ test('world roster/chat stay server-verified while only compact motion uses priv
     'the per-frame remote renderer must never touch DOM state');
   assert.doesNotMatch(renderBody, /setTimeout|setInterval|requestAnimationFrame/,
     'remote sprite rendering must follow the world frame callback without its own FPS throttle');
+  assert.doesNotMatch(renderBody, /performance\.now|estimatedFps|render(?:Last|Ema|Max)Ms|renderCalls|directPaints/,
+    'per-frame performance diagnostics must stay out of the renderer');
+  assert.doesNotMatch(multiplayer, /__mpRemoteRenderStatsV54/,
+    'the removed diagnostics API must not keep render counters alive');
   assert.match(multiplayer, /Promise\.race\(\[/);
 });
 
-test('five channels isolate 28-player rosters/chat/motion and direct rendering has lightweight diagnostics', async () => {
+test('five channels isolate 28-player rosters/chat while direct rendering follows each world frame', async () => {
   const presenceRows = new Map();
   const chatRows = [];
-  const topics = new Map();
   let rpcCalls = 0;
 
   function channelCounts() {
@@ -243,67 +261,23 @@ test('five channels isolate 28-player rosters/chat/motion and direct rendering h
     };
   }
 
-  function removeRealtimeChannel(channel) {
-    topics.get(channel.topic)?.delete(channel);
-  }
-
-  class FakeRealtimeChannel {
-    constructor(client, topic) {
-      this.client = client;
-      this.topic = topic;
-      this.motionListener = null;
-    }
-    on(type, filter, listener) {
-      assert.equal(type, 'broadcast');
-      assert.equal(filter.event, 'motion');
-      this.motionListener = listener;
-      return this;
-    }
-    subscribe(onStatus) {
-      const selected = Number(this.topic.split('-').at(-1));
-      assert.equal(this.client.authorizedChannel, selected, 'v3 presence must precede private subscribe');
-      if (!topics.has(this.topic)) topics.set(this.topic, new Set());
-      topics.get(this.topic).add(this);
-      onStatus?.('SUBSCRIBED');
-      return this;
-    }
-    async send(message) {
-      assert.equal(message.type, 'broadcast');
-      assert.equal(message.event, 'motion');
-      for (const target of topics.get(this.topic) || []) {
-        if (target !== this) target.motionListener?.({ payload:JSON.parse(JSON.stringify(message.payload)) });
-      }
-      return 'ok';
-    }
-  }
-
   class FakeClient {
     constructor(identity) {
       this.identity = identity;
-      this.authorizedChannel = null;
-      this.authSteps = [];
-      this.removedTopics = [];
+      this.unexpectedRealtimeCalls = 0;
       this.auth = {
         getSession:async () => {
-          this.authSteps.push('getSession');
+          this.unexpectedRealtimeCalls += 1;
           return { data:{ session:{ access_token:`token-${identity.userId}` } } };
         },
       };
       this.realtime = {
-        setAuth:async (token) => {
-          assert.equal(token, `token-${identity.userId}`);
-          this.authSteps.push('setAuth');
-        },
+        setAuth:async () => { this.unexpectedRealtimeCalls += 1; },
       };
     }
-    channel(topic, options) {
-      assert.equal(options?.config?.private, true);
-      assert.deepEqual(this.authSteps.slice(-2), ['getSession', 'setAuth']);
-      return new FakeRealtimeChannel(this, topic);
-    }
-    removeChannel(channel) {
-      this.removedTopics.push(channel.topic);
-      removeRealtimeChannel(channel);
+    channel() {
+      this.unexpectedRealtimeCalls += 1;
+      throw new Error('private Realtime motion must stay disabled');
     }
     async rpc(name, { p_state:state }) {
       assert.equal(name, 'sync_world_presence_v3');
@@ -335,7 +309,6 @@ test('five channels isolate 28-player rosters/chat/motion and direct rendering h
         name:this.identity.displayName,
       };
       presenceRows.set(this.identity.userId, saved);
-      this.authorizedChannel = saved.channel;
       if (submittedChat && !this.rejectChat && !chatRows.some((row) => (
         row.userId === this.identity.userId && row.clientId === submittedChat.id
       ))) {
@@ -490,7 +463,7 @@ test('five channels isolate 28-player rosters/chat/motion and direct rendering h
       nameplates, yuksamPaints, bitmapDraws, badge, domActivity, identity, client, storage };
   }
 
-  async function settleRealtime() {
+  async function settleAsyncWork() {
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
@@ -500,10 +473,10 @@ test('five channels isolate 28-player rosters/chat/motion and direct rendering h
   const preferred = (index) => index < 8 ? 1 : 2 + ((index - 8) % 4);
   const sessions = Array.from({ length:28 }, (_, index) => createSession(index, preferred(index)));
   await Promise.all(sessions.map((session) => session.window.__mpSyncPresenceV54()));
-  await settleRealtime();
+  await settleAsyncWork();
   rpcCalls = 0;
   await Promise.all(sessions.map((session) => session.window.__mpSyncPresenceV54()));
-  await settleRealtime();
+  await settleAsyncWork();
 
   assert.equal(rpcCalls, 28, 'each student still uses one bounded 2-second roster poll');
   assert.ok(sessions.every((session) => session.window.__multiplayerStatusV53 === 'online'));
@@ -520,17 +493,20 @@ test('five channels isolate 28-player rosters/chat/motion and direct rendering h
     },
   );
   assert.match(sessions[0].badge.textContent, /채널 1 · 같은 지역 8명/);
-  assert.ok(sessions.every((session) => session.client.authSteps.includes('setAuth')));
+  assert.ok(sessions.every((session) => session.client.unexpectedRealtimeCalls === 0));
+  assert.ok(sessions.every((session) => (
+    session.intervals.some(({ ms }) => ms === 2000)
+      && session.intervals.every(({ ms }) => ms !== 250)
+  )), 'every session must use the 2-second RPC timer and no 250ms motion timer');
   const occupancy = Object.values(sessions[0].window.YuksamWorldChannelsV1.getState().channelCounts);
   assert.equal(occupancy.reduce((sum, count) => sum + count, 0), 28);
   assert.equal(Math.max(...occupancy), 8);
-  assert.equal(topics.size, 5, 'all five private motion channels should be active');
 
-  // Only motion is low-latency broadcast, and only a server-rostered peer in the same channel accepts it.
+  // Position follows the same authenticated 2-second snapshot path and remains channel-isolated.
   sessions[0].game.player.x = 377;
   sessions[0].game.isMoving = true;
-  sessions[0].intervals.find((entry) => entry.ms === 250).fn();
-  await settleRealtime();
+  await sessions[0].window.__mpSyncPresenceV54();
+  await sessions[1].window.__mpSyncPresenceV54();
   assert.equal(sessions[1].window.__remotePlayersV53.get('학생01').x, 377);
   assert.equal(sessions[8].window.__remotePlayersV53.has('학생01'), false);
 
@@ -551,30 +527,18 @@ test('five channels isolate 28-player rosters/chat/motion and direct rendering h
   assert.equal(first.nameplates.length, 7);
   assert.equal(first.bitmapDraws.length, 0, 'the large per-player bitmap cache must be absent');
 
-  const layoutsAfterSnapshot = first.window.__mpRemoteRenderStatsV54().crowdLayouts;
   for (let frame = 0; frame < 60; frame += 1) first.layers[0].render();
   assert.equal(first.drawn.length, 7 * 61,
     'the regression checks direct renderer routing per callback; it does not promise device FPS');
-  assert.equal(first.window.__mpRemoteRenderStatsV54().crowdLayouts, layoutsAfterSnapshot);
-  const diagnostics = first.window.__mpRemoteRenderStatsV54();
-  assert.equal(diagnostics.renderCalls, 61);
-  assert.equal(diagnostics.directPaints, 7 * 61);
-  assert.ok(Number.isFinite(diagnostics.renderLastMs));
-  assert.ok(Number.isFinite(diagnostics.renderEmaMs));
-  assert.ok(Number.isFinite(diagnostics.renderMaxMs));
-  assert.ok(Number.isFinite(diagnostics.estimatedFps));
-  assert.deepEqual(Object.keys(diagnostics).filter((key) => /cache|bitmap|thrott/i.test(key)), []);
 
   const assertEveryRemotePaintsEveryFrame = (label, updateRemote) => {
     first.window.__remotePlayersV53.forEach(updateRemote);
     const frames = 12;
     const drawsBefore = first.drawn.length;
-    const paintsBefore = first.window.__mpRemoteRenderStatsV54().directPaints;
     const bitmapsBefore = first.bitmapDraws.length;
     for (let frame = 0; frame < frames; frame += 1) first.layers[0].render();
     assert.equal(first.drawn.length - drawsBefore, 7 * frames,
       `${label} remote sprites must be repainted by every world frame callback`);
-    assert.equal(first.window.__mpRemoteRenderStatsV54().directPaints - paintsBefore, 7 * frames);
     assert.equal(first.bitmapDraws.length, bitmapsBefore,
       `${label} remote sprites must not be composited from a bitmap cache`);
   };
@@ -610,11 +574,11 @@ test('five channels isolate 28-player rosters/chat/motion and direct rendering h
   assert.equal(full.code, 'CHANNEL_FULL');
   assert.equal(sessions[8].window.YuksamWorldChannelsV1.getState().channel, 2);
   const changed = await sessions[8].window.YuksamWorldChannelsV1.changeChannel(3);
-  await settleRealtime();
+  await settleAsyncWork();
   assert.equal(changed.ok, true);
   assert.equal(sessions[8].window.YuksamWorldChannelsV1.getState().channel, 3);
   assert.equal(sessions[8].storage.get('yuksam_world_channel_v1'), '3');
-  assert.ok(sessions[8].client.removedTopics.includes('world-motion-v1:channel-2'));
+  assert.equal(sessions[8].client.unexpectedRealtimeCalls, 0);
   assert.equal(sessions[8].window.__remotePlayersV53.has('학생13'), false,
     'the old channel roster must be cleared after switching');
   assert.equal((await sessions[8].window.YuksamWorldChannelsV1.changeChannel(6)).code, 'INVALID_CHANNEL');
@@ -624,14 +588,13 @@ test('five channels isolate 28-player rosters/chat/motion and direct rendering h
   const solo = createSession(98, 5);
   solo.game.currentMap = 'soloProbe';
   await solo.window.__mpSyncPresenceV54();
-  await settleRealtime();
+  await settleAsyncWork();
   assert.equal(solo.window.__remotePlayersV53.size, 0);
   const soloLayer = solo.layers[0];
   const soloContext = { map:solo.game.currentMap };
   assert.equal(soloLayer.when(soloContext), false,
     'the world pipeline must skip the multiplayer renderer when no remote player exists');
   const soloBefore = {
-    renderCalls:solo.window.__mpRemoteRenderStatsV54().renderCalls,
     drawn:solo.drawn.length,
     bitmapDraws:solo.bitmapDraws.length,
     ...solo.domActivity,
@@ -642,7 +605,6 @@ test('five channels isolate 28-player rosters/chat/motion and direct rendering h
     soloLayer.render(soloContext);
   }
   assert.deepEqual({
-    renderCalls:solo.window.__mpRemoteRenderStatsV54().renderCalls,
     drawn:solo.drawn.length,
     bitmapDraws:solo.bitmapDraws.length,
     ...solo.domActivity,

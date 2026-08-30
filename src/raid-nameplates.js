@@ -35,7 +35,7 @@
       questTitle:'[파티] 육삼의 정상',
       name:'육삼 정상 이름표',
       shortName:'육삼의 정상',
-      description:'정상 안테나를 감싼 청록·자홍 네온과 금빛 섬광이 끊임없이 흐르는 최종 이름표',
+      description:'먹빛 하늘, 무광 금빛 테두리와 옥상 안테나를 담은 이름표',
       icon:'♛',
       cssClass:'raid-nameplate-summit-63',
     }),
@@ -252,50 +252,26 @@
 
   function drawSummit63(ctx, x, y, model) {
     const metrics = plateMetrics(ctx, x, y, model);
-    const t = nowSeconds();
-    const pulse = .72 + ((Math.sin(t * 4.2) + 1) / 2) * .28;
-    const sweep = (Math.sin(t * 1.35) + 1) / 2;
+    const blink = .62 + Math.sin(nowSeconds() * 1.1) * .2;
     ctx.save();
-    ctx.shadowColor = sweep > .5 ? '#22d3ee' : '#e879f9';
-    ctx.shadowBlur = 14 + pulse * 7;
+    ctx.shadowColor = 'rgba(0,0,0,.96)'; ctx.shadowBlur = 11;
     roundedPath(ctx, metrics.left, metrics.top, metrics.width, metrics.height, 13);
-    const gradient = typeof ctx.createLinearGradient === 'function'
-      ? ctx.createLinearGradient(metrics.left, metrics.top, metrics.left + metrics.width, metrics.top + metrics.height)
-      : null;
-    if (gradient) {
-      gradient.addColorStop(0, 'rgba(3,7,28,.98)');
-      gradient.addColorStop(.32, 'rgba(8,47,73,.97)');
-      gradient.addColorStop(.68, 'rgba(88,28,135,.97)');
-      gradient.addColorStop(1, 'rgba(76,5,25,.98)');
-    }
-    ctx.fillStyle = gradient || 'rgba(23,22,67,.98)'; ctx.fill();
-    ctx.strokeStyle = sweep > .5 ? '#67e8f9' : '#f0abfc'; ctx.lineWidth = 4; ctx.stroke();
+    ctx.fillStyle = 'rgba(5,10,20,.97)'; ctx.fill();
+    ctx.strokeStyle = '#d6b96b'; ctx.lineWidth = 3; ctx.stroke();
     roundedPath(ctx, metrics.left + 4, metrics.top + 4, metrics.width - 8, metrics.height - 8, 9);
-    ctx.shadowColor = '#facc15'; ctx.shadowBlur = 9 + pulse * 5;
-    ctx.strokeStyle = `rgba(250,204,21,${.58 + pulse * .32})`; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,251,235,.68)'; ctx.lineWidth = 1; ctx.stroke();
     ctx.shadowBlur = 0;
-    const dotGap = Math.max(18, (metrics.width - 24) / 7);
-    for (let index = 0; index < 8; index += 1) {
-      const active = ((index + Math.floor(t * 7)) % 8) < 3;
-      ctx.fillStyle = active ? '#fef08a' : (index % 2 ? '#22d3ee' : '#e879f9');
-      ctx.globalAlpha = active ? .98 : .42;
-      ctx.beginPath();
-      ctx.arc(metrics.left + 12 + index * dotGap, metrics.top + metrics.height - 4, active ? 2.1 : 1.4, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-    ctx.strokeStyle = '#fef08a'; ctx.lineWidth = 2;
+    ctx.strokeStyle = '#d6b96b'; ctx.lineWidth = 1.6;
     ctx.beginPath();
     ctx.moveTo(x - 13, metrics.top); ctx.lineTo(x - 7, metrics.top - 6);
     ctx.lineTo(x - 2, metrics.top); ctx.lineTo(x + 3, metrics.top - 10);
     ctx.lineTo(x + 8, metrics.top); ctx.lineTo(x + 14, metrics.top - 5); ctx.stroke();
-    ctx.shadowColor = '#22d3ee'; ctx.shadowBlur = 10;
-    ctx.strokeStyle = '#ecfeff'; ctx.lineWidth = 1.4;
+    ctx.strokeStyle = '#f8fafc'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(x + 3, metrics.top - 10); ctx.lineTo(x + 3, metrics.top - 16); ctx.stroke();
-    ctx.shadowColor = '#fb7185'; ctx.shadowBlur = 10 + pulse * 5;
-    ctx.fillStyle = `rgba(251,113,133,${pulse})`;
-    ctx.beginPath(); ctx.arc(x + 3, metrics.top - 17, 2.8, 0, Math.PI * 2); ctx.fill();
-    drawPlateText(ctx, x, metrics, model, '#ffffff', '#a5f3fc');
+    ctx.shadowColor = '#f87171'; ctx.shadowBlur = 7;
+    ctx.fillStyle = `rgba(248,113,113,${blink})`;
+    ctx.beginPath(); ctx.arc(x + 3, metrics.top - 17, 2.2, 0, Math.PI * 2); ctx.fill();
+    drawPlateText(ctx, x, metrics, model, '#fff7d6', '#e7d59b');
     ctx.restore();
   }
 
