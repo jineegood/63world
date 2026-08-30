@@ -23,7 +23,12 @@ test('admin data module loads before the dashboard and secure branches delegate 
   assert.match(source, /adminOpenStudentSkillsV2\(['"]?\$\{[^}]*userId/);
   assert.match(source, /장비창 보기/);
   assert.match(source, /스킬창 보기/);
-  assert.match(source, /읽기 전용/);
+  assert.match(source, /YuksamAdminStudentPreviewV1/);
+  const game = fs.readFileSync(path.join(root, 'game.js'), 'utf8');
+  assert.match(game, /character-window-v33/);
+  assert.match(game, /skill-window-v35/);
+  assert.match(game, /admin-student-readonly-preview-v1/);
+  assert.match(game, /읽기 전용/);
   assert.match(source, /접속 중/);
   assert.match(source, /던전 최고 돌파/);
 });

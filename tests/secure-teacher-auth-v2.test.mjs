@@ -28,9 +28,10 @@ test('secure dashboard uses a separately stored teacher client and delegates pas
   assert.match(source, /storageKey\s*:\s*['"]ysb_teacher_auth_v2['"]/);
   assert.match(source, /YuksamAdminAuthV2\.create/);
   assert.match(source, /secureAdminAuthV2\.resetStudentPassword/);
-  assert.match(source, /cryptoApi\.getRandomValues/);
-  assert.match(source, /adminCopyTemporaryPasswordV2/);
-  assert.match(source, /secureAdminTemporaryPasswordV2/);
+  assert.match(source, /secureAdminStudentPw/);
+  assert.match(source, /secureAdminStudentPwConfirm/);
+  assert.match(source, /비밀번호 재설정/);
+  assert.doesNotMatch(source, /adminGenerateTemporaryPasswordV2|adminCopyTemporaryPasswordV2|secureAdminTemporaryPasswordV2/);
   assert.match(source, /현재 비밀번호는 볼 수 없습니다/);
   assert.doesNotMatch(source, /escapeHtml\(p\.password\)/);
   assert.match(source, /secureAdminAuthV2\.changeOwnPassword/);

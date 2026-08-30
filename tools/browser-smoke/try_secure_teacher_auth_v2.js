@@ -109,20 +109,26 @@ run(root, async ({ window, $, sleep, asyncErrors }) => {
       && dashboardText.includes('2구간 · 20층'));
 
     window.adminOpenResetPasswordV2('22222222-2222-4222-8222-222222222222');
-    const temporaryPassword = $('secureAdminTemporaryPasswordV2')?.textContent || '';
-    check('teacher gets one visible Web Crypto temporary password', Boolean($('secureAdminStudentName'))
-      && temporaryPassword.length === 14
-      && !Boolean($('secureAdminStudentPw')));
-    await window.adminCopyTemporaryPasswordV2();
-    check('temporary password copy uses the exact one-time value', window.__copiedTemporaryPassword === temporaryPassword);
+    check('teacher gets direct password reset fields without a visible password', Boolean($('secureAdminStudentName'))
+      && Boolean($('secureAdminStudentPw'))
+      && Boolean($('secureAdminStudentPwConfirm'))
+      && !Boolean($('secureAdminTemporaryPasswordV2')));
+    $('secureAdminStudentPw').value = 'first-student-password';
+    $('secureAdminStudentPwConfirm').value = 'different-password';
+    await window.adminResetStudentPassword();
+    check('mismatched password confirmation does not call the server', !window.__studentReset);
+    $('secureAdminStudentPw').value = 'new-student-password';
+    $('secureAdminStudentPwConfirm').value = 'new-student-password';
     await window.adminResetStudentPassword();
     check('reset uses the named server function', window.__studentReset?.name === 'teacher-reset-password');
     check('reset sends normalized student name', window.__studentReset?.input?.body?.normalizedName === '별빛');
-    check('reset applies the generated temporary password', window.__studentReset?.input?.body?.newPassword === temporaryPassword);
-    check('applied password remains only in its one-time modal until close', $('secureAdminTemporaryPasswordV2')?.textContent === temporaryPassword
-      && $('applyTemporaryPasswordV2Btn')?.disabled === true);
-    window.adminFinishTemporaryPasswordV2();
-    check('closing the one-time modal removes the temporary password', !window.document.querySelector('#modal').textContent.includes(temporaryPassword));
+    check('reset applies the password chosen by the teacher', window.__studentReset?.input?.body?.newPassword === 'new-student-password');
+    check('successful reset clears and locks both password fields', $('secureAdminStudentPw')?.value === ''
+      && $('secureAdminStudentPwConfirm')?.value === ''
+      && $('secureAdminStudentPw')?.disabled === true
+      && $('secureAdminStudentPwConfirm')?.disabled === true
+      && $('resetStudentPasswordV2Btn')?.disabled === true);
+    check('chosen password is never rendered into the modal', !window.document.querySelector('#modal').textContent.includes('new-student-password'));
 
     window.openAdminPanel('settings');
     $('teacherNewPw').value = 'new-teacher-password';
@@ -142,12 +148,6 @@ run(root, async ({ window, $, sleep, asyncErrors }) => {
 }, {
   cloudConfigCode:"window.YUKSAM_CLOUD = { securityV2Enabled:true, url:'https://project.supabase.co', anonKey:'publishable-key-that-is-long-enough' };",
   scriptOverrides:{ 'vendor/supabase-client.bundle.js':fakeClientSource },
-  beforeLoad({ window }) {
-    Object.defineProperty(window.navigator, 'clipboard', {
-      configurable:true,
-      value:{ async writeText(value) { window.__copiedTemporaryPassword = value; } },
-    });
-  },
 }).catch((error) => {
   console.log(String(error?.stack || error));
   process.exit(1);

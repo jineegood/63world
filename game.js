@@ -6739,6 +6739,120 @@ function updateQuestTracker() {
   updateHud();
 })();
 
+/* 관리자 학생 조회에서도 실제 C/N 화면을 그대로 재사용한다. 학생 저장값은
+   임시 플레이어에만 적용하고, 렌더 직후 로그인한 교사 캐릭터로 되돌린다. */
+(function installAdminStudentPreviewV1() {
+  if (window.YuksamAdminStudentPreviewV1) return;
+
+  const READONLY_CLASS = 'admin-student-readonly-preview-v1';
+
+  function previewPlayerForAdminV1(student) {
+    return normalizePlayer({
+      name:String(student?.displayName || '학생'),
+      class:String(student?.className || 'warrior'),
+      spec:student?.spec || null,
+      level:Number(student?.level) || 1,
+      exp:Number(student?.exp) || 0,
+      gold:Number(student?.gold) || 0,
+      building:Number(student?.building) || 0,
+      hp:Number(student?.hp) || 0,
+      maxHp:Number(student?.maxHp) || 0,
+      skillPoints:Number(student?.skillPoints) || 0,
+      baseStatsVersion:Number(student?.baseStatsVersion) || 0,
+      appearance:{ ...(student?.appearance || {}) },
+      costume:{ ...(student?.costume || {}) },
+      equipment:{ ...(student?.equipment || {}) },
+      inventory:[...(Array.isArray(student?.inventory) ? student.inventory : [])],
+      skills:{ ...(student?.skills || {}) },
+      weaponUpgrades:{ ...(student?.weaponUpgrades || {}) },
+      pets:[...(Array.isArray(student?.pets) ? student.pets : [])],
+      activePet:student?.activePet || null,
+      records:{ ...(student?.records || {}) },
+    });
+  }
+
+  function restoreAdminLivePlayerV1(livePlayer) {
+    game.player = livePlayer;
+    try { updateHud?.(); } catch {}
+  }
+
+  function lockAdminStudentPreviewV1(root, student, kind) {
+    if (!root) return false;
+    root.classList.add(READONLY_CLASS);
+    root.querySelectorAll('[onclick], [ondragstart], [ondragover], [ondrop]').forEach((element) => {
+      ['onclick', 'ondragstart', 'ondragover', 'ondrop'].forEach((attribute) => element.removeAttribute(attribute));
+    });
+    root.querySelectorAll('[draggable]').forEach((element) => element.setAttribute('draggable', 'false'));
+
+    const banner = document.createElement('div');
+    banner.className = 'panel-card admin-student-preview-banner-v1';
+    banner.innerHTML = `<span class="badge">🔒 읽기 전용</span><b>${escapeHtml(student?.displayName || '학생')} 학생의 실제 ${escapeHtml(kind)} 화면</b><small>조회 중에는 장착, 파괴, 스킬 습득이 되지 않습니다.</small>`;
+    root.prepend(banner);
+
+    const back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'ghost wide admin-student-preview-back-v1';
+    back.textContent = '학생 목록으로 돌아가기';
+    back.addEventListener('click', () => window.openAdminPanel?.('students'));
+    root.appendChild(back);
+    return true;
+  }
+
+  function openEquipment(student) {
+    if (!student || typeof openCharacterPanel !== 'function') return false;
+    const previewPlayer = previewPlayerForAdminV1(student);
+    const livePlayer = game.player;
+    try {
+      game.player = previewPlayer;
+      openCharacterPanel();
+    } catch (_) {
+      return false;
+    } finally {
+      restoreAdminLivePlayerV1(livePlayer);
+    }
+
+    const root = document.querySelector('#modalContent .character-window-v33');
+    if (!lockAdminStudentPreviewV1(root, student, '장비·상태창')) return false;
+    const pvpRecord = root.querySelector('#characterPvpRecordV33');
+    if (pvpRecord) {
+      pvpRecord.id = 'adminCharacterPvpRecordV1';
+      pvpRecord.textContent = '관리자 조회';
+    }
+
+    // 원래 장비창의 지연 캔버스 렌더 뒤에 학생 외형으로 한 번 더 확정한다.
+    setTimeout(() => {
+      const currentRoot = document.querySelector('#modalContent .character-window-v33');
+      if (!currentRoot?.classList.contains(READONLY_CLASS)) return;
+      const currentLivePlayer = game.player;
+      try {
+        game.player = previewPlayer;
+        if (typeof drawCharacterPanelCanvas === 'function') drawCharacterPanelCanvas();
+      } finally {
+        restoreAdminLivePlayerV1(currentLivePlayer);
+      }
+    }, 35);
+    return true;
+  }
+
+  function openSkills(student) {
+    if (!student || typeof openSkillTreeModal !== 'function') return false;
+    const previewPlayer = previewPlayerForAdminV1(student);
+    const livePlayer = game.player;
+    try {
+      game.player = previewPlayer;
+      openSkillTreeModal();
+    } catch (_) {
+      return false;
+    } finally {
+      restoreAdminLivePlayerV1(livePlayer);
+    }
+    const root = document.querySelector('#modalContent .skill-window-v35');
+    return lockAdminStudentPreviewV1(root, student, '스킬창');
+  }
+
+  window.YuksamAdminStudentPreviewV1 = Object.freeze({ openEquipment, openSkills });
+})();
+
 /* v18: delayed monster defeat animation + class skill trees */
 (() => {
   Object.assign(SKILL_DEFS, V18_SKILL_PATCHES);

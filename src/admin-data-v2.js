@@ -83,6 +83,26 @@
     return Object.freeze(result);
   }
 
+  function sanitizeAppearance(value) {
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    const result = {};
+    ['shirt', 'pants', 'hair', 'hairStyle', 'skin', 'accessory'].forEach((field) => {
+      const text = safeText(source[field], 40);
+      if (text) result[field] = text;
+    });
+    return Object.freeze(result);
+  }
+
+  function sanitizeCostume(value) {
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    const result = {};
+    ['head', 'armor', 'accessory'].forEach((slot) => {
+      const itemId = safeText(source[slot], 80);
+      if (itemId) result[slot] = itemId;
+    });
+    return Object.freeze(result);
+  }
+
   function sanitizeRankMap(value, maximumValue = 99) {
     const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
     const result = {};
@@ -134,10 +154,13 @@
       maxHp:nonNegativeInteger(data.maxHp),
       skillPoints:nonNegativeInteger(data.skillPoints),
       baseStatsVersion:nonNegativeInteger(data.baseStatsVersion),
+      appearance:sanitizeAppearance(data.appearance),
+      costume:sanitizeCostume(data.costume),
       equipment:sanitizeEquipment(data.equipment),
       inventory:sanitizeIdList(data.inventory),
       skills:sanitizeRankMap(data.skills, 5),
       weaponUpgrades:sanitizeRankMap(data.weaponUpgrades, 4),
+      pets:sanitizeIdList(data.pets, 50),
       activePet:safeText(data.activePet, 80) || null,
       records:Object.freeze({
         answered:nonNegativeInteger(records.answered),

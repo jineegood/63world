@@ -3844,3 +3844,31 @@ body.defeated #app { filter: grayscale(1) brightness(.62); transition: filter .3
   .hof-loading-v58 span { animation: none; }
   .hof-filter-v58:hover { transform: none; }
 }
+
+.admin-student-preview-banner-v1 {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 4px 10px;
+  margin-bottom: 10px;
+  border-color: rgba(125, 211, 252, .5);
+  background: linear-gradient(135deg, rgba(14, 116, 144, .25), rgba(15, 23, 42, .92));
+}
+.admin-student-preview-banner-v1 small {
+  grid-column: 2;
+  color: #cbd5e1;
+}
+.admin-student-readonly-preview-v1 [draggable],
+.admin-student-readonly-preview-v1 .skill-node-v35,
+.admin-student-readonly-preview-v1 .paper-slot,
+.admin-student-readonly-preview-v1 .slot-pet-v33 {
+  cursor: default !important;
+}
+.admin-student-readonly-preview-v1 .destroy-item-btn-v32,
+.admin-student-readonly-preview-v1 .unequip-btn,
+.admin-student-readonly-preview-v1 .bag-slot > button.primary,
+.admin-student-readonly-preview-v1 .skill-node-state-v35 {
+  opacity: .34;
+  pointer-events: none;
+}
+.admin-student-preview-back-v1 { margin-top: 14px; }

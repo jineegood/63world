@@ -10,9 +10,12 @@ window.__profileRows = [{
   user_id:'${studentId}', display_name:'별빛', updated_at:'2026-07-23T01:02:03.000Z',
   data:{ class:'mage', spec:'화염', level:7, exp:1234, gold:44, building:8,
     hp:48, maxHp:70, skillPoints:2, baseStatsVersion:2,
+    appearance:{ shirt:'#2563eb', pants:'#1e293b', hair:'#111827', hairStyle:'wave', skin:'#f1d2b6', accessory:'none' },
+    costume:{ head:'costume_ninja_mask', armor:'costume_ninja_suit', accessory:'costume_spartan_cape' },
     equipment:{ weapon:'ironwoodStaff', armor:'navyRobe', head:'navyWizardHat', accessory:null },
     inventory:['ironwoodStaff','navyRobe','navyWizardHat'],
-    skills:{ mage_basic_element:2, mage_fire_meteor_v24:1 }, weaponUpgrades:{ ironwoodStaff:2 }, raidTopGroup:4,
+    skills:{ mage_basic_element:2, mage_fire_meteor_v24:1 }, weaponUpgrades:{ ironwoodStaff:2 },
+    pets:['pet_slime'], activePet:'pet_slime', raidTopGroup:4,
     password:'must-not-render', records:{ answered:12, correct:9, wrongLog:[{ q:'<img src=x>', a:'정답', mine:'<script>bad</script>', at:1, access_token:'hidden' }] } }
 }];
 window.YuksamSupabaseClient = {
@@ -112,13 +115,24 @@ run(root, async ({ window, $, sleep, asyncErrors }) => {
   check('student detail contains no credentials', !/must-not-render|access_token|teacher-secret/.test(window.document.querySelector('#modal').innerHTML));
 
   window.adminOpenStudentEquipmentV2(studentId);
-  check('equipment opens in an explicit read-only modal', /장비창 · 별빛/.test(window.document.querySelector('#modal').textContent)
-    && window.document.querySelector('#modal').textContent.includes('읽기 전용')
-    && window.document.querySelector('#modal').textContent.includes('수정 지팡이'));
+  await sleep(60);
+  const equipmentRoot = window.document.querySelector('#modalContent .character-window-v33');
+  check('equipment reuses the actual character screen in read-only mode', Boolean(equipmentRoot)
+    && equipmentRoot.classList.contains('admin-student-readonly-preview-v1')
+    && equipmentRoot.textContent.includes('인벤토리 / 상태창')
+    && equipmentRoot.textContent.includes('별빛')
+    && equipmentRoot.textContent.includes('수정 지팡이')
+    && Boolean(equipmentRoot.querySelector('#characterPanelCanvas')));
+  check('equipment preview removes all mutating inline actions', equipmentRoot?.querySelectorAll('[onclick], [ondragstart], [ondragover], [ondrop]').length === 0
+    && Array.from(equipmentRoot?.querySelectorAll('[draggable]') || []).every((element) => element.getAttribute('draggable') === 'false'));
   window.adminOpenStudentSkillsV2(studentId);
-  check('skills open in an explicit read-only modal', /스킬창 · 별빛/.test(window.document.querySelector('#modal').textContent)
-    && window.document.querySelector('#modal').textContent.includes('읽기 전용')
-    && window.document.querySelector('#modal').textContent.includes('메테오'));
+  const skillRoot = window.document.querySelector('#modalContent .skill-window-v35');
+  check('skills reuse the actual skill tree in read-only mode', Boolean(skillRoot)
+    && skillRoot.classList.contains('admin-student-readonly-preview-v1')
+    && Boolean(skillRoot.querySelector('.skill-tree-v35'))
+    && skillRoot.textContent.includes('화염')
+    && skillRoot.textContent.includes('메테오'));
+  check('skill preview removes all learning actions', skillRoot?.querySelectorAll('[onclick]').length === 0);
 
   window.adminOpenWrongLogV2(studentId);
   check('wrong log is displayed as text', window.document.querySelector('#modal').textContent.includes('<img src=x>'));

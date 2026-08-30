@@ -29,10 +29,12 @@ function setup(overrides = {}) {
     data:{
       class:'mage', spec:'화염', level:7, exp:1234, gold:44, building:8,
       hp:51, maxHp:70, skillPoints:3, baseStatsVersion:2,
+      appearance:{ shirt:'#112233', pants:'#223344', hair:'#334455', hairStyle:'wave', skin:'#ffe0bd', accessory:'halo', password:'hidden' },
+      costume:{ head:'costume_ninja_mask', armor:'costume_ninja_suit', accessory:'costume_spartan_cape', password:'hidden' },
       equipment:{ weapon:'ironwoodStaff', armor:'navyRobe', head:null, accessory:'moonRing', password:'nested-secret' },
       inventory:['ironwoodStaff', 'navyRobe', 'moonRing'],
       skills:{ mage_basic_element:2, mage_fire_meteor_v24:1, invalid:-3 },
-      weaponUpgrades:{ ironwoodStaff:3, impossible:99 }, activePet:'pet_slime',
+      weaponUpgrades:{ ironwoodStaff:3, impossible:99 }, pets:['pet_slime', 'yuksam', ''], activePet:'pet_slime',
       password:'must-not-leak', email:'student@example.com', access_token:'token-value',
       records:{ answered:12, correct:9, password:'nested-secret', wrongLog:Array.from({ length:35 }, (_, i) => ({
         q:`문제${i}`, a:`정답${i}`, mine:`오답${i}`, at:i, refresh_token:'hidden',
@@ -106,10 +108,12 @@ test('listStudents returns only frozen sanitized summaries ordered by the backen
     raidTopFloor:40,
     className:'mage', spec:'화염', level:7, exp:1234, gold:44, building:8,
     hp:51, maxHp:70, skillPoints:3, baseStatsVersion:2,
+    appearance:{ shirt:'#112233', pants:'#223344', hair:'#334455', hairStyle:'wave', skin:'#ffe0bd', accessory:'halo' },
+    costume:{ head:'costume_ninja_mask', armor:'costume_ninja_suit', accessory:'costume_spartan_cape' },
     equipment:{ weapon:'ironwoodStaff', armor:'navyRobe', head:null, accessory:'moonRing' },
     inventory:['ironwoodStaff', 'navyRobe', 'moonRing'],
     skills:{ mage_basic_element:2, mage_fire_meteor_v24:1 },
-    weaponUpgrades:{ ironwoodStaff:3, impossible:4 }, activePet:'pet_slime',
+    weaponUpgrades:{ ironwoodStaff:3, impossible:4 }, pets:['pet_slime', 'yuksam'], activePet:'pet_slime',
     records:{ answered:12, correct:9, wrongLog:Array.from({ length:30 }, (_, i) => ({
       q:`문제${i + 5}`, a:`정답${i + 5}`, mine:`오답${i + 5}`, at:i + 5,
     })) },
