@@ -367,10 +367,11 @@ test('a last-strike submit returns the original round and its public event batch
   const match = {
     id:'ko-match', playerAId:'a', playerBId:'b', round:4, phase:'waiting',
     deadline:21000, answerKey:'5',
-    playerAState:{ userId:'a', name:'A', level:1, className:'warrior', maxHp:100, hp:100, attack:100, defense:0, skills:{}, cooldowns:{}, statuses:{} },
+    playerAState:{ userId:'a', name:'A', level:1, className:'warrior', maxHp:100, hp:100, primaryStat:200, attack:100, defense:0, skills:{}, cooldowns:{}, statuses:{} },
     playerBState:{ userId:'b', name:'B', level:1, className:'warrior', maxHp:100, hp:10, attack:1, defense:0, skills:{}, cooldowns:{}, statuses:{} },
   };
-  const rolls = [30, 1];
+  /* initiative 뒤 공격력 최대치, 적중, 비치명 순서. */
+  const rolls = [30, 1, 999999, 999999, 999999];
   const service = createPvpService({
     now:() => 6000,
     randomInt:(minimum) => rolls.shift() ?? minimum,

@@ -580,6 +580,107 @@ test('damage split across shield and HP shows the total log and two floating num
   assert.notEqual(numbers[0].style.left, numbers[1].style.left);
 });
 
+test('a missed PvP hit leaves HP and visuals unchanged while logging and playing miss audio', async () => {
+  const ui = harness();
+  ui.window.enterPvpMatchV1(ui.match);
+  ui.emit({
+    type:'event',
+    round:1,
+    sequenceNo:81,
+    kind:'damage',
+    source:'a',
+    target:'b',
+    amount:0,
+    absorbed:0,
+    hpDamage:0,
+    missed:true,
+    label:'기본 공격',
+  });
+
+  await ui.advance(70);
+  assert.match(ui.lastHtml(), /HP 100\/100/);
+  assert.match(visibleText(ui.lastHtml()), /A 학생의 기본 공격이 B 학생에게 빗나갔습니다!/);
+  assert.equal(
+    ui.actors.stage.children.some((child) => /combat-floating-damage/.test(child.className)),
+    false,
+  );
+  assert.equal(ui.actors.monster.classList.contains('impact'), false);
+  assert.deepEqual(
+    ui.calls.filter(([type]) => type === 'mappedAudio'),
+    [['mappedAudio', 'miss']],
+  );
+  assert.equal(ui.calls.some(([type, id]) => type === 'sfx' && id === 'hit'), false);
+  assert.equal(ui.calls.some(([type, id]) => type === 'sfx' && id === 'critical'), false);
+});
+
+test('critical damage split marks only the HP number critical and plays the critical cue', async () => {
+  const ui = harness();
+  ui.window.enterPvpMatchV1({
+    ...ui.match,
+    playerBState:{ ...ui.match.playerBState, shield:7 },
+  });
+  ui.emit({
+    type:'event',
+    round:1,
+    sequenceNo:82,
+    kind:'damage',
+    source:'a',
+    target:'b',
+    amount:15,
+    absorbed:7,
+    hpDamage:8,
+    critical:true,
+  });
+
+  await ui.advance(70);
+  assert.match(
+    visibleText(ui.lastHtml()),
+    /💥 치명타! A 학생이 B 학생에게 총 15의 피해를 주었습니다! \(보호막 7, 체력 8\)/,
+  );
+  const numbers = ui.actors.stage.children.filter((child) => /combat-floating-damage/.test(child.className));
+  assert.equal(numbers.length, 2);
+  assert.match(numbers[0].className, /shield-damage/);
+  assert.doesNotMatch(numbers[0].className, /\bcritical\b/);
+  assert.match(numbers[1].className, /\bdamage\b/);
+  assert.match(numbers[1].className, /\bcritical\b/);
+  assert.equal(ui.calls.filter(([type, id]) => type === 'sfx' && id === 'critical').length, 1);
+  assert.equal(ui.calls.some(([type, id]) => type === 'sfx' && id === 'hit'), false);
+});
+
+test('a critical fully absorbed by shield plays both shield-block and critical cues', async () => {
+  const ui = harness();
+  ui.window.enterPvpMatchV1({
+    ...ui.match,
+    playerBState:{ ...ui.match.playerBState, shield:12 },
+  });
+  ui.emit({
+    type:'event',
+    round:1,
+    sequenceNo:83,
+    kind:'damage',
+    source:'a',
+    target:'b',
+    amount:12,
+    absorbed:12,
+    hpDamage:0,
+    critical:true,
+  });
+
+  await ui.advance(70);
+  assert.match(ui.lastHtml(), /HP 100\/100/);
+  assert.match(
+    visibleText(ui.lastHtml()),
+    /💥 치명타! A 학생이 B 학생에게 총 12의 피해를 주었습니다! \(보호막 12\)/,
+  );
+  const numbers = ui.actors.stage.children.filter((child) => /combat-floating-damage/.test(child.className));
+  assert.equal(numbers.length, 1);
+  assert.match(numbers[0].className, /shield-damage/);
+  assert.doesNotMatch(numbers[0].className, /\bcritical\b/);
+  assert.equal(ui.calls.filter(([type, id]) => type === 'sfx' && id === 'shieldBlock').length, 1);
+  assert.equal(ui.calls.filter(([type, id]) => type === 'sfx' && id === 'critical').length, 1);
+  assert.equal(ui.calls.some(([type, id]) => type === 'sfx' && id === 'hit'), false);
+});
+
 test('a tied server roll lands, then launches both dice again and settles on the final roll', async () => {
   const ui = harness();
   ui.window.enterPvpMatchV1(ui.match);

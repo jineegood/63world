@@ -614,7 +614,7 @@
     }
   }
 
-  function showImpact(targetSide, amount, kind = 'damage', lane = 0) {
+  function showImpact(targetSide, amount, kind = 'damage', lane = 0, critical = false) {
     const targetIsMe = targetSide === meSide();
     const selector = targetIsMe ? '.combat-player' : '.combat-monster';
     const actor = document.querySelector?.(`#modalContent ${selector}`) || document.querySelector?.(selector);
@@ -624,7 +624,7 @@
       || document.querySelector?.('.pvp-combat-stage-v2');
     if (!stage?.appendChild || !document.createElement) return;
     const number = document.createElement('span');
-    number.className = `combat-floating-damage ${targetIsMe ? 'player' : 'monster'} ${kind}`;
+    number.className = `combat-floating-damage ${targetIsMe ? 'player' : 'monster'} ${kind}${critical ? ' critical' : ''}`;
     number.textContent = kind === 'heal' || kind === 'shield' ? `+${Math.max(0, Number(amount) || 0)}` : `-${Math.max(0, Number(amount) || 0)}`;
     const baseLeft = targetIsMe ? 24 : 76;
     number.style.left = `${baseLeft + Math.max(-1, Math.min(1, Number(lane) || 0)) * 6}%`;
@@ -684,8 +684,19 @@
     }
 
     if (event.kind === 'damage' && target) {
+      if (event.missed === true) {
+        const targetName = target.name || sideName(event.target);
+        const label = String(event.label || '').trim();
+        setCombatLog(`${sourceName} 학생의 ${label || '공격'}이 ${targetName} 학생에게 빗나갔습니다!`,
+          event.target === meSide() ? 'enemy-action' : 'correct-answer');
+        const fallback = () => global.playSfx?.('miss');
+        if (!global.playMappedAudio?.('miss', { onFallback:fallback })) fallback();
+        await delay(EVENT_DELAYS.damage);
+        return;
+      }
       const absorbed = Math.max(0, Number(event.absorbed) || 0);
       const hpDamage = Math.max(0, Number(event.hpDamage) || 0);
+      const critical = event.critical === true;
       target.shield = Math.max(0, Number(target.shield || 0) - absorbed);
       target.hp = Math.max(0, Number(target.hp || 0) - hpDamage);
       const targetName = target.name || sideName(event.target);
@@ -694,13 +705,14 @@
       if (hpDamage > 0) parts.push(`체력 ${hpDamage}`);
       const totalDamage = absorbed + hpDamage;
       setCombatLog(totalDamage > 0
-        ? `${sourceName} 학생이 ${targetName} 학생에게 총 ${totalDamage}의 피해를 주었습니다! (${parts.join(', ')})`
+        ? `${critical ? '💥 치명타! ' : ''}${sourceName} 학생이 ${targetName} 학생에게 총 ${totalDamage}의 피해를 주었습니다! (${parts.join(', ')})`
         : `${targetName} 학생이 피해를 막아냈습니다!`,
         event.target === meSide() ? 'enemy-action' : 'correct-answer');
       if (absorbed > 0) showImpact(event.target, absorbed, 'shield-damage', hpDamage > 0 ? -1 : 0);
-      if (hpDamage > 0) showImpact(event.target, hpDamage, 'damage', absorbed > 0 ? 1 : 0);
+      if (hpDamage > 0) showImpact(event.target, hpDamage, 'damage', absorbed > 0 ? 1 : 0, critical);
       if (absorbed > 0 && hpDamage === 0) global.playSfx?.('shieldBlock');
-      else global.playSfx?.('hit');
+      if (critical) global.playSfx?.('critical');
+      else if (!(absorbed > 0 && hpDamage === 0)) global.playSfx?.('hit');
       await delay(EVENT_DELAYS.damage);
       return;
     }
