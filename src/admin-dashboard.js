@@ -30,6 +30,8 @@ const checkedWorkbookQuestionsV2 = new Set();
 let secureAdminWorkbookRefreshV2 = false;
 let secureAdminWorkbookSyncedAtV2 = 0;
 let secureAdminCheatPendingV3 = false;
+let secureAdminAnnouncementPendingV1 = false;
+let secureAdminAnnouncementRequestV1 = null;
 const CHEAT_ENABLED_KEY_V2 = 'ysb_teacher_cheat_enabled_v2';
 window.__cheatEnabledV54 = false;
 const initialCheatClusterV2 = document.getElementById('cheatCluster');
@@ -665,6 +667,16 @@ function teacherSettingsHtml(){
         </div>
         <p class="muted">변경 내용은 학생 화면에 약 15초 안에 반영됩니다.</p>
       </div>
+      <div class="panel-card teacher-announcement-card-v1" style="margin-top:12px">
+        <h3>📢 관리자용 전체 알림</h3>
+        <p class="muted">접속 중인 모든 채널의 학생에게 상단 알림을 띄우고 대화창에도 남깁니다.</p>
+        <textarea id="teacherAnnouncementV1" maxlength="120" rows="3" placeholder="예: 1분 뒤 서버가 종료됩니다!"
+          oninput="adminUpdateAnnouncementCountV1()"></textarea>
+        <div class="teacher-announcement-actions-v1">
+          <small id="teacherAnnouncementCountV1" class="muted">0 / 120자</small>
+          <button class="primary" id="teacherAnnouncementSendBtnV1" onclick="adminBroadcastAnnouncementV1()">전체 알림 보내기</button>
+        </div>
+      </div>
       ${teacherCheatCardHtml()}
       <button class="ghost wide" onclick="adminTeacherLogout()" style="margin-top:12px">관리자 로그아웃</button>
     </div>`;
@@ -761,6 +773,54 @@ if (SECURE_ADMIN_MODE_V2 && secureAdminAuthV2) {
       setTeacherCheatUiV3(false);
     });
 }
+
+window.adminUpdateAnnouncementCountV1 = function adminUpdateAnnouncementCountV1(){
+  const input = $('teacherAnnouncementV1');
+  const count = $('teacherAnnouncementCountV1');
+  if (count) count.textContent = `${String(input?.value || '').length} / 120자`;
+  if (secureAdminAnnouncementRequestV1?.message !== String(input?.value || '').normalize('NFKC').trim().replace(/\s+/g, ' ')) {
+    secureAdminAnnouncementRequestV1 = null;
+  }
+};
+
+window.adminBroadcastAnnouncementV1 = async function adminBroadcastAnnouncementV1(){
+  if (secureAdminAnnouncementPendingV1 || !requireTeacherAuth() || !secureAdminDataV2?.broadcastAnnouncement) return false;
+  const input = $('teacherAnnouncementV1');
+  const message = String(input?.value || '').normalize('NFKC').trim().replace(/\s+/g, ' ');
+  if (!message || message.length > 120 || /[\u0000-\u001f\u007f-\u009f]/.test(message)) {
+    toast('전체 알림은 1자 이상 120자 이하로 입력해 주세요.');
+    input?.focus();
+    return false;
+  }
+  let requestId = secureAdminAnnouncementRequestV1?.message === message
+    ? secureAdminAnnouncementRequestV1.requestId
+    : null;
+  try {
+    if (!requestId) requestId = window.YuksamWorldAnnouncementsV1?.requestId?.();
+    if (!requestId) throw new Error('안전한 알림 요청을 만들지 못했어요.');
+  } catch (error) {
+    toast(error?.message || '안전한 알림 요청을 만들지 못했어요.');
+    return false;
+  }
+  secureAdminAnnouncementRequestV1 = { message, requestId };
+  secureAdminAnnouncementPendingV1 = true;
+  const button = $('teacherAnnouncementSendBtnV1');
+  if (button) { button.disabled = true; button.textContent = '전송 중...'; }
+  try {
+    await secureAdminDataV2.broadcastAnnouncement(message, requestId);
+    secureAdminAnnouncementRequestV1 = null;
+    if (input) input.value = '';
+    window.adminUpdateAnnouncementCountV1();
+    toast('전체 알림을 전송했습니다. 학생 화면에는 약 2초 안에 표시됩니다.');
+    return true;
+  } catch (error) {
+    toast(error?.message || '전체 알림을 보내지 못했어요.');
+    return false;
+  } finally {
+    secureAdminAnnouncementPendingV1 = false;
+    if (button) { button.disabled = false; button.textContent = '전체 알림 보내기'; }
+  }
+};
 
 function teacherStore(){
   try {

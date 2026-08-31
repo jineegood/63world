@@ -85,9 +85,17 @@ function setup(overrides = {}) {
         return overrides.invokeResult || { data:{ ok:true, displayName:'별빛' }, error:null };
       },
     },
-    async rpc(name) {
-      calls.push(['rpc', name]);
-      return { data:statusRows, error:overrides.statusError || null };
+    async rpc(name, input) {
+      calls.push(['rpc', name, input]);
+      if (name === 'teacher_student_status_v1') {
+        return { data:statusRows, error:overrides.statusError || null };
+      }
+      if (name === 'teacher_broadcast_world_announcement_v1') {
+        return overrides.announcementResult || {
+          data:{ ok:true, id:'77', message:input?.p_message, replayed:false }, error:null,
+        };
+      }
+      return { data:null, error:{ status:404 } };
     },
   };
   return { calls, service:loadApi().create({ client }) };
@@ -123,7 +131,7 @@ test('listStudents returns only frozen sanitized summaries ordered by the backen
   assert.doesNotMatch(JSON.stringify(result), /password|email|token|must-not-leak|hidden/i);
   assert.deepEqual(calls.filter(([name]) => ['select', 'order'].includes(name)).map(([name]) => name), ['select', 'order']);
   assert.equal(calls.find(([name]) => name === 'select')[1], 'user_id,display_name,data,updated_at');
-  assert.deepEqual(calls.find(([name]) => name === 'rpc'), ['rpc', 'teacher_student_status_v1']);
+  assert.deepEqual(calls.find(([name]) => name === 'rpc'), ['rpc', 'teacher_student_status_v1', undefined]);
 });
 
 test('student status is sanitized and raid group seven maps to the real 63rd floor', async () => {
@@ -176,7 +184,48 @@ test('student or user_metadata teacher claims cannot list or mutate', async () =
     await assert.rejects(service.grantReward(studentId, { gold:1, building:0, exp:0 }), (error) => error.code === 'FORBIDDEN');
     await assert.rejects(service.deleteStudent(studentId), (error) => error.code === 'FORBIDDEN');
     await assert.rejects(service.applyStudentCheat(studentId, 'exp20'), (error) => error.code === 'FORBIDDEN');
+    await assert.rejects(
+      service.broadcastAnnouncement('수업 종료', '30000000-0000-4000-8000-000000000003'),
+      (error) => error.code === 'FORBIDDEN',
+    );
   }
+});
+
+test('broadcastAnnouncement validates and normalizes one teacher-only global notice RPC', async () => {
+  const { calls, service } = setup();
+  const requestId = '30000000-0000-4000-8000-000000000003';
+  for (const [message, id] of [
+    ['', requestId],
+    ['가'.repeat(121), requestId],
+    ['중단\u0000공지', requestId],
+    ['정상 공지', 'not-a-uuid'],
+  ]) {
+    await assert.rejects(service.broadcastAnnouncement(message, id), (error) => error.code === 'INVALID_ANNOUNCEMENT');
+  }
+
+  const result = await service.broadcastAnnouncement('  1분 뒤   서버가 종료됩니다!  ', requestId);
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), {
+    id:'77', message:'1분 뒤 서버가 종료됩니다!', replayed:false,
+  });
+  const rpc = calls.find(([, name]) => name === 'teacher_broadcast_world_announcement_v1');
+  assert.deepEqual(JSON.parse(JSON.stringify(rpc)), [
+    'rpc', 'teacher_broadcast_world_announcement_v1',
+    { p_message:'1분 뒤 서버가 종료됩니다!', p_request_id:requestId },
+  ]);
+});
+
+test('announcement backend errors remain safe and expose rate limiting without raw details', async () => {
+  const { service } = setup({
+    announcementResult:{ data:null, error:{ message:'teacher announcement rate limited secret' } },
+  });
+  await assert.rejects(
+    service.broadcastAnnouncement('잠시 뒤 종료', '30000000-0000-4000-8000-000000000004'),
+    (error) => {
+      assert.equal(error.code, 'RATE_LIMITED');
+      assert.doesNotMatch(error.message, /secret/i);
+      return true;
+    },
+  );
 });
 
 test('grantReward validates bounds and inserts one exact append-only grant', async () => {

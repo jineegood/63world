@@ -35,7 +35,7 @@
       questTitle:'[파티] 육삼의 정상',
       name:'육삼 정상 이름표',
       shortName:'육삼의 정상',
-      description:'먹빛 하늘, 무광 금빛 테두리와 옥상 안테나를 담은 이름표',
+      description:'청록빛과 자홍빛 네온, 황금 테두리와 옥상 안테나가 빛나는 최종 이름표',
       icon:'♛',
       cssClass:'raid-nameplate-summit-63',
     }),
@@ -252,26 +252,28 @@
 
   function drawSummit63(ctx, x, y, model) {
     const metrics = plateMetrics(ctx, x, y, model);
-    const blink = .62 + Math.sin(nowSeconds() * 1.1) * .2;
+    const pulse = (Math.sin(nowSeconds() * 2.4) + 1) / 2;
+    const cyanAlpha = .68 + pulse * .30;
+    const magentaAlpha = .98 - pulse * .26;
     ctx.save();
-    ctx.shadowColor = 'rgba(0,0,0,.96)'; ctx.shadowBlur = 11;
+    ctx.shadowColor = pulse > .5 ? '#22d3ee' : '#e879f9'; ctx.shadowBlur = 12 + pulse * 6;
     roundedPath(ctx, metrics.left, metrics.top, metrics.width, metrics.height, 13);
-    ctx.fillStyle = 'rgba(5,10,20,.97)'; ctx.fill();
-    ctx.strokeStyle = '#d6b96b'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = pulse > .5 ? 'rgba(8,48,75,.97)' : 'rgba(76,5,89,.96)'; ctx.fill();
+    ctx.strokeStyle = `rgba(103,232,249,${cyanAlpha})`; ctx.lineWidth = 3; ctx.stroke();
     roundedPath(ctx, metrics.left + 4, metrics.top + 4, metrics.width - 8, metrics.height - 8, 9);
-    ctx.strokeStyle = 'rgba(255,251,235,.68)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.strokeStyle = `rgba(250,204,21,${magentaAlpha})`; ctx.lineWidth = 1.4; ctx.stroke();
     ctx.shadowBlur = 0;
-    ctx.strokeStyle = '#d6b96b'; ctx.lineWidth = 1.6;
+    ctx.strokeStyle = '#fef08a'; ctx.lineWidth = 1.6;
     ctx.beginPath();
     ctx.moveTo(x - 13, metrics.top); ctx.lineTo(x - 7, metrics.top - 6);
     ctx.lineTo(x - 2, metrics.top); ctx.lineTo(x + 3, metrics.top - 10);
     ctx.lineTo(x + 8, metrics.top); ctx.lineTo(x + 14, metrics.top - 5); ctx.stroke();
     ctx.strokeStyle = '#f8fafc'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(x + 3, metrics.top - 10); ctx.lineTo(x + 3, metrics.top - 16); ctx.stroke();
-    ctx.shadowColor = '#f87171'; ctx.shadowBlur = 7;
-    ctx.fillStyle = `rgba(248,113,113,${blink})`;
+    ctx.shadowColor = '#e879f9'; ctx.shadowBlur = 7;
+    ctx.fillStyle = `rgba(240,171,252,${magentaAlpha})`;
     ctx.beginPath(); ctx.arc(x + 3, metrics.top - 17, 2.2, 0, Math.PI * 2); ctx.fill();
-    drawPlateText(ctx, x, metrics, model, '#fff7d6', '#e7d59b');
+    drawPlateText(ctx, x, metrics, model, '#ffffff', '#a5f3fc');
     ctx.restore();
   }
 

@@ -103,7 +103,7 @@ test('raid milestones normalize ownership, expose quest goals, and register thre
   assert.equal(api.rewardForGroup(2).questTitle, '[파티] 함께 오른 스무 층');
   assert.equal(api.rewardForGroup(4).questTitle, '[파티] 빌딩의 허리를 넘어서');
   assert.equal(api.rewardForGroup(7).questTitle, '[파티] 육삼의 정상');
-  assert.match(api.rewardForGroup(7).description, /먹빛 하늘.*무광 금빛/);
+  assert.match(api.rewardForGroup(7).description, /청록빛.*자홍빛 네온.*황금 테두리/);
   const picker = api.pickerMarkup({
     name:'철벽', class:'warrior', level:5,
     raidNameplates:['raid_20_steel'], nameplate:{ theme:'raid_20_steel' },
@@ -139,8 +139,12 @@ test('raid milestones normalize ownership, expose quest goals, and register thre
   colors.length = 0;
   arcCalls = 0;
   registered.get('raid_63_summit')(ctx, 300, 200, { name:'정상', roleLine:'LV.63 무기 전사' });
-  assert.ok(colors.includes('rgba(5,10,20,.97)'));
-  assert.ok(colors.includes('#d6b96b'), '63층은 강철 이름표와 다른 무광 금빛 테두리를 써야 한다');
+  assert.ok(colors.some((value) => ['rgba(8,48,75,.97)', 'rgba(76,5,89,.96)'].includes(value)),
+    '63층은 선택창과 같은 청록·자홍 네온 바탕을 써야 한다');
+  assert.ok(colors.some((value) => String(value).startsWith('rgba(103,232,249,')),
+    '63층은 실제 캐릭터에서도 청록 네온 외곽선이 보여야 한다');
+  assert.ok(colors.some((value) => String(value).startsWith('rgba(250,204,21,')),
+    '최종 보상의 황금 안쪽 테두리는 유지해야 한다');
   assert.equal(gradientCalls, 0, '상시 렌더되는 최종 이름표는 매 프레임 그라디언트를 만들지 않는다');
   assert.equal(arcCalls, 1, '최종 이름표는 안테나 표시등 하나만 그린다');
 });
@@ -191,7 +195,7 @@ test('world roster, chat, and position stay server-verified on the Friday 2-seco
   assert.match(sql, /'players', coalesce\(v_players, '\[\]'::jsonb\)[\s\S]*'visuals', coalesce\(v_visuals, '\[\]'::jsonb\)[\s\S]*'messages', coalesce\(v_messages, '\[\]'::jsonb\)[\s\S]*'acceptedChatId', v_chat_accepted_id/i);
   assert.match(sql, /revoke all on function public\.sync_world_presence_v1\(jsonb\)[\s\S]*from public, anon, authenticated/i);
   assert.match(sql, /grant execute on function public\.sync_world_presence_v1\(jsonb\)[\s\S]*to authenticated/i);
-  assert.match(multiplayer, /const CHANNEL_COUNT = 5/);
+  assert.match(multiplayer, /const CHANNEL_COUNT = 10/);
   assert.match(multiplayer, /const CHANNEL_CAPACITY = 8/);
   assert.match(multiplayer, /const RPC_TIMEOUT_MS = 4500/);
   assert.match(multiplayer, /const MOTION_BROADCAST_MS = 220/);
@@ -237,14 +241,14 @@ test('world roster, chat, and position stay server-verified on the Friday 2-seco
   assert.match(multiplayer, /Promise\.race\(\[/);
 });
 
-test('five channels isolate 28-player rosters/chat/220ms motion while direct rendering follows each world frame', async () => {
+test('ten channels isolate 28-player rosters/chat/220ms motion while direct rendering follows each world frame', async () => {
   const presenceRows = new Map();
   const chatRows = [];
   const topics = new Map();
   let rpcCalls = 0;
 
   function channelCounts() {
-    return Object.fromEntries(Array.from({ length:5 }, (_, index) => {
+    return Object.fromEntries(Array.from({ length:10 }, (_, index) => {
       const channel = index + 1;
       return [String(channel), [...presenceRows.values()].filter((row) => row.channel === channel).length];
     }));
@@ -336,7 +340,7 @@ test('five channels isolate 28-player rosters/chat/220ms motion while direct ren
     }
     async rpc(name, { p_state:state }) {
       assert.equal(name, 'sync_world_presence_v3');
-      assert.ok(Number.isInteger(state.channel) && state.channel >= 1 && state.channel <= 5);
+      assert.ok(Number.isInteger(state.channel) && state.channel >= 1 && state.channel <= 10);
       rpcCalls += 1;
       const previous = presenceRows.get(this.identity.userId) || null;
       const activeOthers = [...presenceRows.values()].filter((row) => (
@@ -525,8 +529,8 @@ test('five channels isolate 28-player rosters/chat/220ms motion while direct ren
     await Promise.resolve();
   }
 
-  // Eight students fill channel 1; the remaining twenty are distributed five per channel.
-  const preferred = (index) => index < 8 ? 1 : 2 + ((index - 8) % 4);
+  // Eight students fill channel 1; the remaining twenty are spread across channels 2-10.
+  const preferred = (index) => index < 8 ? 1 : 2 + ((index - 8) % 9);
   const sessions = Array.from({ length:28 }, (_, index) => createSession(index, preferred(index)));
   await Promise.all(sessions.map((session) => session.window.__mpSyncPresenceV54()));
   await settleRealtime();
@@ -537,14 +541,16 @@ test('five channels isolate 28-player rosters/chat/220ms motion while direct ren
   assert.equal(rpcCalls, 28, 'each student still uses one bounded 2-second roster poll');
   assert.ok(sessions.every((session) => session.window.__multiplayerStatusV53 === 'online'));
   assert.equal(sessions[0].window.__remotePlayersV53.size, 7);
-  assert.equal(sessions[8].window.__remotePlayersV53.size, 4);
+  assert.equal(sessions[8].window.__remotePlayersV53.size, 2);
   assert.equal(sessions[0].window.__remotePlayersV53.has('학생09'), false,
     'a different channel must not enter this roster');
   assert.equal(sessions[0].window.__remotePlayersV53.get('학생02').costume.head, 'blue-cap');
   assert.deepEqual(
     JSON.parse(JSON.stringify(sessions[0].window.YuksamWorldChannelsV1.getState())),
     {
-      channel:1, channelCounts:{ 1:8, 2:5, 3:5, 4:5, 5:5 }, maxChannels:5, capacity:8,
+      channel:1,
+      channelCounts:{ 1:8, 2:3, 3:3, 4:2, 5:2, 6:2, 7:2, 8:2, 9:2, 10:2 },
+      maxChannels:10, capacity:8,
       status:'online', switching:false, cooldownUntil:0, canChange:true, reason:null,
     },
   );
@@ -559,7 +565,7 @@ test('five channels isolate 28-player rosters/chat/220ms motion while direct ren
   const occupancy = Object.values(sessions[0].window.YuksamWorldChannelsV1.getState().channelCounts);
   assert.equal(occupancy.reduce((sum, count) => sum + count, 0), 28);
   assert.equal(Math.max(...occupancy), 8);
-  assert.equal(topics.size, 5, 'all five private motion channels should be active');
+  assert.equal(topics.size, 10, 'all ten private motion channels should be active');
 
   // Only visual motion takes the low-latency path, and it stays inside the server-approved channel.
   sessions[0].game.player.x = 377;
@@ -642,9 +648,9 @@ test('five channels isolate 28-player rosters/chat/220ms motion while direct ren
   assert.equal(sessions[8].window.YuksamWorldChannelsV1.getState().channel, 3);
   assert.equal(sessions[8].storage.get('yuksam_world_channel_v1'), '3');
   assert.ok(sessions[8].client.removedTopics.includes('world-motion-v1:channel-2'));
-  assert.equal(sessions[8].window.__remotePlayersV53.has('학생13'), false,
+  assert.equal(sessions[8].window.__remotePlayersV53.has('학생18'), false,
     'the old channel roster must be cleared after switching');
-  assert.equal((await sessions[8].window.YuksamWorldChannelsV1.changeChannel(6)).code, 'INVALID_CHANNEL');
+  assert.equal((await sessions[8].window.YuksamWorldChannelsV1.changeChannel(11)).code, 'INVALID_CHANNEL');
   unsubscribe();
   assert.ok(stateEvents.length >= 3);
 

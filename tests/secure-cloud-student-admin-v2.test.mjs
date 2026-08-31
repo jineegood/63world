@@ -24,6 +24,10 @@ test('admin data module loads before the dashboard and secure branches delegate 
   assert.match(source, /장비창 보기/);
   assert.match(source, /스킬창 보기/);
   assert.match(source, /YuksamAdminStudentPreviewV1/);
+  assert.match(source, /관리자용 전체 알림/);
+  assert.match(source, /maxlength="120"/);
+  assert.match(source, /secureAdminDataV2\.broadcastAnnouncement\(message, requestId\)/);
+  assert.match(source, /YuksamWorldAnnouncementsV1\?\.requestId/);
   const game = fs.readFileSync(path.join(root, 'game.js'), 'utf8');
   assert.match(game, /character-window-v33/);
   assert.match(game, /skill-window-v35/);

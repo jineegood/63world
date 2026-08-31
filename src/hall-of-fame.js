@@ -63,6 +63,7 @@
     const meta = filterMeta(scope);
     return `<section class="hof-shell-v58">
       <header class="hof-hero-v58">
+        <button type="button" class="hof-close-v59" onclick="closeModal()" aria-label="명예의 전당 나가기">×</button>
         <div class="hof-trophy-v58" aria-hidden="true"><span>🏆</span></div>
         <div class="hof-hero-copy-v58">
           <small>63 WORLD · HALL OF FAME</small>

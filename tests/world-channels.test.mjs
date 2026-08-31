@@ -8,6 +8,10 @@ const migration = fs.readFileSync(path.join(
   root,
   'supabase/migrations/202608290001_world_channels_v1.sql',
 ), 'utf8');
+const expansion = fs.readFileSync(path.join(
+  root,
+  'supabase/migrations/202608310001_expand_channels_and_teacher_announcements_v1.sql',
+), 'utf8');
 
 function functionBody(name) {
   const match = migration.match(new RegExp(
@@ -92,4 +96,21 @@ test('private realtime motion topics require a recent assignment to the exact ch
   assert.match(migration, /create policy "world motion broadcast receive v1"[\s\S]*for select[\s\S]*to authenticated[\s\S]*extension = 'broadcast'[\s\S]*realtime\.topic\(\)/i);
   assert.match(migration, /create policy "world motion broadcast send v1"[\s\S]*for insert[\s\S]*to authenticated[\s\S]*with check[\s\S]*extension = 'broadcast'[\s\S]*realtime\.topic\(\)/i);
   assert.match(migration, /revoke all on function public\.can_access_world_motion_channel_v1\(text\)[\s\S]*grant execute[\s\S]*to authenticated/i);
+});
+
+test('current upgrade expands the protected channel range to 1-10 while keeping capacity eight', () => {
+  assert.match(expansion, /world_presence_v1_channel_safe[\s\S]*check \(channel between 1 and 10\)/i);
+  assert.match(expansion, /world_chat_v1_channel_safe[\s\S]*check \(channel between 1 and 10\)/i);
+  assert.match(expansion, /new\.channel not between 1 and 10/i);
+  assert.match(expansion, /v_active_others >= 8 and not v_active_incumbent/i);
+  assert.match(expansion, /\^world-motion-v1:channel-\(\?:\[1-9\]\|10\)\$/i);
+  assert.match(expansion, /\^world-motion-v1:channel-\(\[1-9\]\|10\)\$/i);
+  assert.doesNotMatch(expansion, /world-motion-v1:channel-\[1-10\]/i,
+    '[1-10] is a character range and must never be used for channel ten');
+  assert.match(expansion, /v_channel_pattern text := '''\^\[1-5\]\(\?:\\\.0\+\)\?\$'''/i);
+  assert.match(expansion, /v_channel_replacement text := '''\^\(\?:\[1-9\]\|10\)\(\?:\\\.0\+\)\?\$'''/i);
+  assert.match(expansion, /''6'', count\(\*\) filter \(where presence\.channel = 6\)[\s\S]*''10'', count\(\*\) filter \(where presence\.channel = 10\)/i);
+  assert.match(expansion, /v_count_occurrences <> 2[\s\S]*unexpected sync_world_presence_v3 channel counter count/i,
+    'the migration must fail closed instead of silently half-patching v3');
+  assert.match(expansion, /revoke all on function public\.sync_world_presence_v3\(jsonb\)[\s\S]*grant execute[\s\S]*to authenticated/i);
 });

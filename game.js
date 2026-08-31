@@ -1244,11 +1244,12 @@ function mountWorldChannelSettingsV1() {
   const render = (nextState = api.getState()) => {
     if (disposed || !root.isConnected) return;
     lastState = nextState || lastState || {};
-    const current = Math.max(1, Math.min(5, Math.round(Number(lastState.channel) || 1)));
-    const capacity = 8;
+    const maximumChannels = Math.max(1, Math.min(10, Math.round(Number(lastState.maxChannels) || 10)));
+    const current = Math.max(1, Math.min(maximumChannels, Math.round(Number(lastState.channel) || 1)));
+    const capacity = Math.max(1, Math.min(8, Math.round(Number(lastState.capacity) || 8)));
     const ready = lastState.status === 'online';
     const cooldown = Date.now() < Number(lastState.cooldownUntil || 0);
-    const gridMarkup = Array.from({ length:5 }, (_, index) => {
+    const gridMarkup = Array.from({ length:maximumChannels }, (_, index) => {
       const channel = index + 1;
       const count = Math.max(0, Math.min(capacity,
         Math.round(Number(lastState.channelCounts?.[String(channel)]) || 0)));
@@ -1325,7 +1326,7 @@ function openSettingsModal() {
       <div class="range-row"><span>효과음</span><input id="sfxVolumeRange" type="range" min="0" max="100" value="${Math.round(game.settings.sfxVolume * 100)}" /><b id="sfxVolumeText">${Math.round(game.settings.sfxVolume * 100)}</b></div>
       <p class="muted">로그인/캐릭터 생성/마을/사냥터별 배경음을 재생합니다.</p>
       <section id="worldChannelSettingsV1" class="world-channel-settings-v1" aria-label="월드 채널 선택" aria-live="polite">
-        <div class="world-channel-head-v1"><strong>🌐 월드 채널</strong><span>5개 채널 · 채널당 최대 8명</span></div>
+        <div class="world-channel-head-v1"><strong>🌐 월드 채널</strong><span>10개 채널 · 채널당 최대 8명</span></div>
         <div id="worldChannelGridV1" class="world-channel-grid-v1"></div>
         <p id="worldChannelStatusV1" class="muted world-channel-status-v1">현재 채널 정보를 불러오고 있습니다…</p>
       </section>

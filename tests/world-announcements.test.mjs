@@ -10,6 +10,10 @@ const migration = fs.readFileSync(path.join(
   root,
   'supabase/migrations/202608280001_world_announcements_and_special_actions_v1.sql',
 ), 'utf8');
+const expansion = fs.readFileSync(path.join(
+  root,
+  'supabase/migrations/202608310001_expand_channels_and_teacher_announcements_v1.sql',
+), 'utf8');
 
 function loadAnnouncements({ sessionStorage } = {}) {
   const chats = [];
@@ -57,21 +61,23 @@ test('verified notices format, deduplicate, persist to chat, and queue one small
     { id:'9007199254740993', kind:'legendary_upgrade', actorName:'가람', subjectId:'mithrilSword' },
     { id:'9007199254740994', kind:'legendary_pet', actorName:'나리', subjectId:'yuksam' },
     { id:'9007199254740995', kind:'raid_clear', partyNames:['가람', '나리', '다온'], floor:40 },
+    { id:'9007199254740996', kind:'teacher_notice', message:'1분 뒤 서버가 종료됩니다!' },
   ]);
 
-  assert.equal(accepted.length, 3);
-  assert.equal(api.getCursor(), '9007199254740995', 'cursor must not lose bigint precision');
+  assert.equal(accepted.length, 4);
+  assert.equal(api.getCursor(), '9007199254740996', 'cursor must not lose bigint precision');
   assert.deepEqual(chats.map(({ message }) => message), [
     '✨ 가람 님이 미스릴 검 전설 강화에 성공했습니다!',
     '🌟 나리 님이 전설 펫 육삼이를 획득했습니다!',
     '🏆 가람, 나리, 다온 님이 40층을 클리어하셨습니다!',
+    '📢 1분 뒤 서버가 종료됩니다!',
   ]);
   assert.equal(region.textContent, chats[0].message);
   assert.equal(classes.has('is-visible'), true);
   assert.equal(timers[0].ms, 4200);
 
   api.consume([{ id:'9007199254740994', kind:'legendary_pet', actorName:'나리', subjectId:'yuksam' }]);
-  assert.equal(chats.length, 3, 'a replayed presence page must not duplicate chat or banners');
+  assert.equal(chats.length, 4, 'a replayed presence page must not duplicate chat or banners');
 });
 
 test('announcement input is bounded and local fallback is restricted to file/loopback', () => {
@@ -81,6 +87,13 @@ test('announcement input is bounded and local fallback is restricted to file/loo
   assert.equal(api.normalizeAnnouncement({ id:'3', kind:'legendary_pet', actorName:'A\u0000', subjectId:'yuksam' }), null);
   assert.equal(api.normalizeAnnouncement({ id:'4', kind:'legendary_pet', actorName:'A', subjectId:'chick' }), null,
     'only the legendary yuksam pet may produce a legendary-pet notice');
+  assert.equal(api.normalizeAnnouncement({ id:'5', kind:'teacher_notice', message:'' }), null);
+  assert.equal(api.normalizeAnnouncement({ id:'6', kind:'teacher_notice', message:'A\u0000B' }), null);
+  assert.equal(api.normalizeAnnouncement({ id:'7', kind:'teacher_notice', message:'가'.repeat(121) }), null);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(api.normalizeAnnouncement({ id:'8', kind:'teacher_notice', message:'  수업   종료  ' }))),
+    { id:'8', kind:'teacher_notice', message:'수업 종료' },
+  );
   assert.equal(api.isLocalTestEnvironment({ protocol:'file:', hostname:'' }), true);
   assert.equal(api.isLocalTestEnvironment({ protocol:'http:', hostname:'localhost' }), true);
   assert.equal(api.isLocalTestEnvironment({ protocol:'https:', hostname:'63world.example' }), false);
@@ -151,4 +164,24 @@ test('production UI uses the RPC while random outcome fallback stays behind the 
   assert.match(multiplayer, /worldAnnouncements\?\.consume\?\.\(data\.announcements\)/);
   assert.match(index, /id="worldAnnouncementRegion"[\s\S]*src="src\/world-announcements\.js"/);
   assert.match(css, /\.world-announcement-banner[\s\S]*\.chat-line\.announcement/);
+  assert.match(css, /\.world-announcement-banner\[data-kind="teacher_notice"\]/);
+});
+
+test('teacher notices are authorized, bounded, idempotent, rate-limited, and projected through the locked feed', () => {
+  assert.match(expansion, /world_announcements_v1_kind_check[\s\S]*'teacher_notice'/i);
+  assert.match(expansion, /create or replace function public\.teacher_broadcast_world_announcement_v1\(\s*p_message text,\s*p_request_id uuid/i);
+  assert.match(expansion, /security definer\s+set search_path = ''/i);
+  assert.match(expansion, /v_user_id uuid := auth\.uid\(\)/i);
+  assert.match(expansion, /v_user_id is null or not public\.is_teacher\(\)/i);
+  assert.match(expansion, /char_length\(v_message\) not between 1 and 120[\s\S]*v_message ~ '\[\[:cntrl:\]\]'/i);
+  assert.match(expansion, /pg_advisory_xact_lock[\s\S]*yuksam-teacher-announcement-v1/i);
+  assert.match(expansion, /where announcement\.kind = 'teacher_notice'[\s\S]*announcement\.source_id = p_request_id/i);
+  assert.match(expansion, /v_existing\.actor_user_id is distinct from v_user_id/i);
+  assert.match(expansion, /announcement request id was already used/i);
+  assert.match(expansion, /interval '2 seconds'[\s\S]*detail = 'RATE_LIMITED'/i);
+  assert.match(expansion, /insert into public\.world_announcements_v1[\s\S]*'teacher_notice', p_request_id, v_user_id/i);
+  assert.match(expansion, /revoke all on function public\.teacher_broadcast_world_announcement_v1\(text, uuid\)[\s\S]*from public, anon, authenticated/i);
+  assert.match(expansion, /grant execute on function public\.teacher_broadcast_world_announcement_v1\(text, uuid\)[\s\S]*to authenticated/i);
+  assert.match(expansion, /'message', recent\.payload ->> 'message'/i);
+  assert.match(expansion, /announcement\.id > v_last_announcement_id[\s\S]*limit 30/i);
 });

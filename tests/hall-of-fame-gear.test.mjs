@@ -68,8 +68,10 @@ test('명예의 전당은 전체·세 직업·던전·PvP TOP 5 버튼과 새 �
   assert.match(hallSource, /aria-pressed/);
   assert.match(hallSource, /hof-stage-v58/);
   assert.match(hallSource, /hof-spotlights-v58/);
+  assert.match(hallSource, /class="hof-close-v59"[^>]*onclick="closeModal\(\)"[^>]*aria-label="명예의 전당 나가기"/);
   assert.match(hallSource, /\[3, 1, 0, 2, 4\]/);
   assert.match(style, /\.modal-box:has\(\.hof-shell-v58\)/);
+  assert.match(style, /\.hof-close-v59\s*\{[\s\S]*position:\s*absolute[\s\S]*right:\s*10px/);
   assert.match(style, /\.hof-podium-v58/);
   assert.match(style, /\.hof-board-v58[\s\S]*overflow-x:\s*auto/);
 });

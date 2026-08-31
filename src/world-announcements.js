@@ -2,7 +2,7 @@
   'use strict';
 
   const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
-  const VALID_KINDS = new Set(['legendary_upgrade', 'legendary_pet', 'raid_clear']);
+  const VALID_KINDS = new Set(['legendary_upgrade', 'legendary_pet', 'raid_clear', 'teacher_notice']);
   const VALID_ACTIONS = new Set(['enhance', 'summonPet']);
   const REQUEST_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const USER_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -119,11 +119,22 @@
     return text;
   }
 
+  function cleanNotice(value) {
+    const text = String(value || '').normalize('NFKC').trim().replace(/\s+/g, ' ');
+    if (!text || text.length > 120 || /[\u0000-\u001f\u007f-\u009f]/.test(text)) return '';
+    return text;
+  }
+
   function normalizeAnnouncement(value) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
     const id = normalizeId(value.id);
     const kind = String(value.kind || '');
     if (!id || !VALID_KINDS.has(kind)) return null;
+
+    if (kind === 'teacher_notice') {
+      const message = cleanNotice(value.message);
+      return message ? Object.freeze({ id, kind, message }) : null;
+    }
 
     if (kind === 'legendary_upgrade' || kind === 'legendary_pet') {
       const actorName = cleanName(value.actorName);
@@ -144,6 +155,9 @@
 
   function formatAnnouncement(announcement) {
     if (!announcement) return '';
+    if (announcement.kind === 'teacher_notice') {
+      return `📢 ${announcement.message}`;
+    }
     if (announcement.kind === 'legendary_upgrade') {
       const item = global.YuksamData?.ITEM_DEFS?.[announcement.subjectId];
       const weaponName = item?.slot === 'weapon' && cleanName(item.name) ? cleanName(item.name) : '무기';

@@ -16,7 +16,7 @@ test('환경설정 하단은 눈에 띄는 도움말과 관리자 모드 두 버
   const settings = start >= 0 && end > start ? gameSource.slice(start, end) : '';
   assert.match(settings, /class="settings-actions-v1"/);
   assert.match(settings, /id="worldChannelSettingsV1"/);
-  assert.match(settings, /5개 채널 · 채널당 최대 8명/);
+  assert.match(settings, /10개 채널 · 채널당 최대 8명/);
   assert.match(settings, /mountWorldChannelSettingsV1\(\)/);
   assert.match(settings, /class="help-launch-v1"[^>]*onclick="openGameHelpV1\(\)"[^>]*>❓ 도움말/);
   assert.match(settings, /onclick="openAdminPanel\(\)"[^>]*>🔐 관리자 모드/);

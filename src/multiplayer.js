@@ -20,7 +20,7 @@
   const PRESENCE_SYNC_MS = 2000;
   const RPC_TIMEOUT_MS = 4500;
   const STALE_MS = 10000;
-  const CHANNEL_COUNT = 5;
+  const CHANNEL_COUNT = 10;
   const CHANNEL_CAPACITY = 8;
   const CHANNEL_SWITCH_COOLDOWN_MS = 3000;
   const CHANNEL_STORAGE_KEY = 'yuksam_world_channel_v1';

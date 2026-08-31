@@ -41,8 +41,11 @@ window.YuksamSupabaseClient = {
         async signOut() { window.__teacherSignedIn = false; return { error:null }; },
         async updateUser() { return { data:{ user:teacher }, error:null }; },
       },
-      async rpc(name) {
-        window.__adminCalls.push(['rpc', name]);
+      async rpc(name, input) {
+        window.__adminCalls.push(['rpc', name, input]);
+        if (name === 'teacher_broadcast_world_announcement_v1') {
+          return { data:{ ok:true, id:'77', message:input && input.p_message, replayed:false }, error:null };
+        }
         if (name !== 'teacher_student_status_v1') return { data:null, error:{ status:404 } };
         return { data:window.__profileRows.map((row) => ({
           user_id:row.user_id, is_online:true,
@@ -107,6 +110,26 @@ run(root, async ({ window, $, sleep, asyncErrors }) => {
   check('real raid clear floor is shown', window.document.querySelector('#secureAdminStudentRows')?.textContent.includes('4구간 · 40층'));
   const dashboardHtml = window.document.querySelector('#modal').innerHTML;
   check('dashboard contains no credentials', !/must-not-render|access_token|teacher-secret|6363/.test(dashboardHtml));
+
+  window.openAdminPanel('settings');
+  const announcementInput = $('teacherAnnouncementV1');
+  check('teacher settings expose one bounded global announcement composer', Boolean(announcementInput)
+    && announcementInput.maxLength === 120
+    && Boolean($('teacherAnnouncementSendBtnV1')));
+  announcementInput.value = '  1분 뒤   서버가 종료됩니다!  ';
+  window.adminUpdateAnnouncementCountV1();
+  await window.adminBroadcastAnnouncementV1();
+  const announcementCall = window.__adminCalls.find((call) => call[0] === 'rpc'
+    && call[1] === 'teacher_broadcast_world_announcement_v1');
+  check('global announcement uses the teacher RPC with normalized text and a UUID',
+    announcementCall?.[2]?.p_message === '1분 뒤 서버가 종료됩니다!'
+      && /^[0-9a-f-]{36}$/.test(announcementCall?.[2]?.p_request_id || ''));
+  check('announcement composer resets after a successful send', $('teacherAnnouncementV1')?.value === ''
+    && $('teacherAnnouncementCountV1')?.textContent === '0 / 120자'
+    && $('teacherAnnouncementSendBtnV1')?.disabled === false);
+
+  window.openAdminPanel('students');
+  await sleep(40);
 
   window.adminOpenStudentDetailV2(studentId);
   const detailText = window.document.querySelector('#modal').textContent;

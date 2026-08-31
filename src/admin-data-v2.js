@@ -22,6 +22,8 @@
     RAID_NOT_IN_BATTLE:'던전 전투 중에만 사용할 수 있어요.',
     RAID_PARTY_INCOMPLETE:'세 명이 모두 던전에 접속한 뒤 사용할 수 있어요.',
     AUDIT_FAILED:'보안 알림을 불러오지 못했어요.',
+    ANNOUNCEMENT_FAILED:'전체 알림을 보내지 못했어요.',
+    INVALID_ANNOUNCEMENT:'전체 알림은 1자 이상 120자 이하로 입력해 주세요.',
   });
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const RAID_NAMEPLATES = new Set(['raid_20_steel', 'raid_40_twilight', 'raid_63_summit']);
@@ -44,7 +46,7 @@
     if (text.includes('failed to fetch') || text.includes('network request') || text.includes('networkerror')) return error('OFFLINE');
     if (status === 401 || status === 403 || text.includes('forbidden') || text.includes('jwt')) return error('FORBIDDEN');
     if (status === 404 || text.includes('student_not_found')) return error('STUDENT_NOT_FOUND');
-    if (status === 429 || text.includes('rate_limit')) return error('RATE_LIMITED');
+    if (status === 429 || text.includes('rate_limit') || text.includes('rate limit')) return error('RATE_LIMITED');
     return error(fallback);
   }
 
@@ -173,6 +175,18 @@
   function validateUserId(userId) {
     if (typeof userId !== 'string' || !UUID.test(userId)) throw error('STUDENT_NOT_FOUND');
     return userId;
+  }
+
+  function validateAnnouncement(message, requestId) {
+    const normalizedMessage = typeof message === 'string'
+      ? message.normalize('NFKC').trim().replace(/\s+/g, ' ')
+      : '';
+    if (!normalizedMessage || normalizedMessage.length > 120
+      || /[\u0000-\u001f\u007f-\u009f]/.test(normalizedMessage)
+      || typeof requestId !== 'string' || !UUID.test(requestId)) {
+      throw error('INVALID_ANNOUNCEMENT');
+    }
+    return Object.freeze({ message:normalizedMessage, requestId:requestId.toLowerCase() });
   }
 
   function summarizeSecurityAlert(row) {
@@ -377,9 +391,28 @@
       return true;
     }
 
+    async function broadcastAnnouncement(message, requestId) {
+      const announcement = validateAnnouncement(message, requestId);
+      await requireTeacher();
+      if (typeof client.rpc !== 'function') throw error('ANNOUNCEMENT_FAILED');
+      const { data, error:rpcError } = await client.rpc('teacher_broadcast_world_announcement_v1', {
+        p_message:announcement.message,
+        p_request_id:announcement.requestId,
+      });
+      if (rpcError) throw mapError(rpcError, 'ANNOUNCEMENT_FAILED');
+      if (!data?.ok || typeof data.id !== 'string' || typeof data.message !== 'string') {
+        throw error('ANNOUNCEMENT_FAILED');
+      }
+      return Object.freeze({
+        id:safeText(data.id, 19),
+        message:safeText(data.message, 120),
+        replayed:data.replayed === true,
+      });
+    }
+
     return Object.freeze({
       listStudents, grantReward, deleteStudent, applyStudentCheat, killRaidMonster, toggleRaidPause,
-      listSecurityAlerts, resolveSecurityAlert,
+      listSecurityAlerts, resolveSecurityAlert, broadcastAnnouncement,
     });
   }
 
