@@ -206,20 +206,57 @@
   function plateMetrics(ctx, x, y, model) {
     const top = y + 58;
     ctx.font = '900 18px Jua, Noto Sans KR, system-ui';
-    const width = Math.max(ctx.measureText(model.name).width, ctx.measureText(model.roleLine).width) + 42;
-    return { top, left:x - width / 2, width, height:50 };
+    const textWidth = Math.max(ctx.measureText(model.name).width, ctx.measureText(model.roleLine).width);
+    /* The costume-picker preview has an icon column followed by the centered
+       name copy. Keep the live canvas plate on that exact visual layout. */
+    const width = textWidth + 46;
+    const left = x - width / 2;
+    return {
+      top,
+      left,
+      width,
+      height:52,
+      iconX:left + 16,
+      textX:left + 32 + textWidth / 2,
+    };
   }
 
-  function drawPlateText(ctx, x, metrics, model, nameColor, roleColor) {
+  function drawPlateText(ctx, metrics, model, nameColor, roleColor, glow = null) {
     ctx.textAlign = 'center';
-    ctx.shadowColor = 'rgba(0,0,0,.94)';
-    ctx.shadowBlur = 5;
+    ctx.shadowColor = glow?.name || 'rgba(0,0,0,.94)';
+    ctx.shadowBlur = Number(glow?.nameBlur) || 5;
     ctx.font = '900 18px Jua, Noto Sans KR, system-ui';
     ctx.fillStyle = nameColor;
-    ctx.fillText(model.name, x, metrics.top + 21);
+    ctx.fillText(model.name, metrics.textX, metrics.top + 21);
+    ctx.shadowColor = glow?.role || 'rgba(0,0,0,.94)';
+    ctx.shadowBlur = Number(glow?.roleBlur) || 5;
     ctx.font = '900 14px Noto Sans KR, Jua, system-ui';
     ctx.fillStyle = roleColor;
-    ctx.fillText(model.roleLine, x, metrics.top + 39);
+    ctx.fillText(model.roleLine, metrics.textX, metrics.top + 40);
+  }
+
+  function drawPlateIcon(ctx, metrics, icon, color, shadowColor = 'rgba(0,0,0,.7)', shadowBlur = 4) {
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '900 18px Segoe UI Symbol, Noto Sans Symbols, system-ui';
+    ctx.shadowColor = shadowColor;
+    ctx.shadowBlur = shadowBlur;
+    ctx.fillStyle = color;
+    ctx.fillText(icon, metrics.iconX, metrics.top + metrics.height / 2);
+    ctx.textBaseline = 'alphabetic';
+  }
+
+  function fillAngledPanel(ctx, metrics, color, startRatio, endRatio, slant = 13) {
+    const start = metrics.left + metrics.width * startRatio;
+    const end = metrics.left + metrics.width * endRatio;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(start + slant, metrics.top);
+    ctx.lineTo(end + slant, metrics.top);
+    ctx.lineTo(end - slant, metrics.top + metrics.height);
+    ctx.lineTo(start - slant, metrics.top + metrics.height);
+    ctx.closePath?.();
+    ctx.fill();
   }
 
   function drawSteel20(ctx, x, y, model) {
@@ -229,15 +266,17 @@
     ctx.shadowColor = 'rgba(0,0,0,.94)'; ctx.shadowBlur = 9;
     roundedPath(ctx, metrics.left, metrics.top, metrics.width, metrics.height, 10);
     ctx.fillStyle = 'rgba(24,31,38,.95)'; ctx.fill();
+    ctx.save();
+    roundedPath(ctx, metrics.left, metrics.top, metrics.width, metrics.height, 10);
+    ctx.clip?.();
+    fillAngledPanel(ctx, metrics, '#313c48', .42, 1.18, 10);
+    ctx.restore();
+    roundedPath(ctx, metrics.left, metrics.top, metrics.width, metrics.height, 10);
     ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 2; ctx.stroke();
     roundedPath(ctx, metrics.left + 4, metrics.top + 4, metrics.width - 8, metrics.height - 8, 7);
-    ctx.strokeStyle = 'rgba(71,85,105,.95)'; ctx.lineWidth = 1; ctx.stroke();
-    ctx.shadowColor = '#fb923c'; ctx.shadowBlur = 8;
-    ctx.fillStyle = `rgba(251,146,60,${pulse})`;
-    [metrics.left + 10, metrics.left + metrics.width - 10].forEach((lightX) => {
-      ctx.beginPath(); ctx.arc(lightX, metrics.top + 25, 3.5, 0, Math.PI * 2); ctx.fill();
-    });
-    drawPlateText(ctx, x, metrics, model, '#fff7ed', '#fdba74');
+    ctx.strokeStyle = '#26323d'; ctx.lineWidth = 3; ctx.stroke();
+    drawPlateIcon(ctx, metrics, '▣', `rgba(251,146,60,${pulse})`, '#fb923c', 7);
+    drawPlateText(ctx, metrics, model, '#fff7ed', '#fdba74');
     ctx.restore();
   }
 
@@ -260,12 +299,9 @@
     roundedPath(ctx, metrics.left + 4, metrics.top + 4, metrics.width - 8, metrics.height - 8, 10);
     ctx.strokeStyle = 'rgba(251,146,60,.82)'; ctx.lineWidth = 1; ctx.stroke();
     ctx.shadowBlur = 0;
-    for (let index = 0; index < 4; index += 1) {
-      const glow = .18 + ((Math.sin(t * .75 + index * 1.7) + 1) / 2) * .34;
-      ctx.fillStyle = `rgba(251,191,36,${glow})`;
-      ctx.fillRect(metrics.left + 12 + index * ((metrics.width - 30) / 3), metrics.top + 8, 4, 5);
-    }
-    drawPlateText(ctx, x, metrics, model, '#fff7ed', '#ddd6fe');
+    const iconAlpha = .76 + Math.sin(t * 1.2) * .18;
+    drawPlateIcon(ctx, metrics, '◆', `rgba(251,146,60,${iconAlpha})`, '#fb923c', 6);
+    drawPlateText(ctx, metrics, model, '#fff7ed', '#ddd6fe');
     ctx.restore();
   }
 
@@ -277,22 +313,30 @@
     ctx.save();
     ctx.shadowColor = pulse > .5 ? '#22d3ee' : '#e879f9'; ctx.shadowBlur = 12 + pulse * 6;
     roundedPath(ctx, metrics.left, metrics.top, metrics.width, metrics.height, 13);
-    ctx.fillStyle = pulse > .5 ? 'rgba(8,48,75,.97)' : 'rgba(76,5,89,.96)'; ctx.fill();
-    ctx.strokeStyle = `rgba(103,232,249,${cyanAlpha})`; ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = '#03071c'; ctx.fill();
+    ctx.save();
+    roundedPath(ctx, metrics.left, metrics.top, metrics.width, metrics.height, 13);
+    ctx.clip?.();
+    fillAngledPanel(ctx, metrics, '#08304b', .18, .53);
+    fillAngledPanel(ctx, metrics, '#581c87', .49, .82);
+    fillAngledPanel(ctx, metrics, '#4c0519', .78, 1.18);
+    const sweep = ((nowSeconds() % 2.1) / 2.1) * 1.8 - .4;
+    fillAngledPanel(ctx, metrics, 'rgba(255,255,255,.22)', sweep, sweep + .10, 9);
+    ctx.restore();
+    roundedPath(ctx, metrics.left, metrics.top, metrics.width, metrics.height, 13);
+    ctx.strokeStyle = pulse > .5
+      ? `rgba(240,171,252,${magentaAlpha})`
+      : `rgba(103,232,249,${cyanAlpha})`;
+    ctx.lineWidth = 3; ctx.stroke();
     roundedPath(ctx, metrics.left + 4, metrics.top + 4, metrics.width - 8, metrics.height - 8, 9);
     ctx.strokeStyle = `rgba(250,204,21,${magentaAlpha})`; ctx.lineWidth = 1.4; ctx.stroke();
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = '#fef08a'; ctx.lineWidth = 1.6;
-    ctx.beginPath();
-    ctx.moveTo(x - 13, metrics.top); ctx.lineTo(x - 7, metrics.top - 6);
-    ctx.lineTo(x - 2, metrics.top); ctx.lineTo(x + 3, metrics.top - 10);
-    ctx.lineTo(x + 8, metrics.top); ctx.lineTo(x + 14, metrics.top - 5); ctx.stroke();
-    ctx.strokeStyle = '#f8fafc'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(x + 3, metrics.top - 10); ctx.lineTo(x + 3, metrics.top - 16); ctx.stroke();
-    ctx.shadowColor = '#e879f9'; ctx.shadowBlur = 7;
-    ctx.fillStyle = `rgba(240,171,252,${magentaAlpha})`;
-    ctx.beginPath(); ctx.arc(x + 3, metrics.top - 17, 2.2, 0, Math.PI * 2); ctx.fill();
-    drawPlateText(ctx, x, metrics, model, '#ffffff', '#a5f3fc');
+    drawPlateIcon(ctx, metrics, '♛', '#fef08a', pulse > .5 ? '#e879f9' : '#22d3ee', 9);
+    drawPlateText(ctx, metrics, model, '#ffffff', '#a5f3fc', {
+      name:pulse > .5 ? '#d946ef' : '#22d3ee',
+      nameBlur:9,
+      role:'#0891b2',
+      roleBlur:6,
+    });
     ctx.restore();
   }
 

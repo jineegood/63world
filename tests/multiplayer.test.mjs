@@ -137,33 +137,43 @@ test('raid milestones normalize ownership, expose quest goals, and register thre
   const colors = [];
   let gradientCalls = 0;
   let arcCalls = 0;
+  const drawnText = [];
   const ctx = {
-    save() {}, restore() {}, beginPath() {}, roundRect() {}, fill() {}, stroke() {},
-    moveTo() {}, lineTo() {},
+    save() {}, restore() {}, beginPath() {}, roundRect() {}, fill() {}, stroke() {}, clip() {},
+    moveTo() {}, lineTo() {}, closePath() {},
     arc() { arcCalls += 1; },
     createLinearGradient() {
       gradientCalls += 1;
       return { addColorStop() {} };
     },
-    fillText() {}, measureText:(value) => ({ width:String(value).length * 10 }),
+    fillText(value) { drawnText.push(String(value)); }, measureText:(value) => ({ width:String(value).length * 10 }),
     set fillStyle(value) { colors.push(value); }, get fillStyle() { return colors.at(-1); },
     set strokeStyle(value) { colors.push(value); }, get strokeStyle() { return colors.at(-1); },
   };
   registered.get('raid_20_steel')(ctx, 300, 200, { name:'철벽', roleLine:'LV.5 무기 전사' });
   assert.ok(colors.includes('#94a3b8'));
+  assert.ok(colors.includes('#313c48'), '20층 실제 이름표도 선택창의 강철 그라데이션 색을 사용해야 한다');
   assert.ok(colors.some((value) => String(value).startsWith('rgba(251,146,60,')),
     '20층은 기본 청록과 다른 주황 표시등이어야 한다');
+  assert.ok(drawnText.includes('▣'), '20층 실제 이름표도 선택창의 강철 아이콘을 사용해야 한다');
   colors.length = 0;
+  drawnText.length = 0;
+  registered.get('raid_40_twilight')(ctx, 300, 200, { name:'황혼', roleLine:'LV.40 마법사' });
+  assert.ok(drawnText.includes('◆'), '40층 실제 이름표도 선택창의 황혼 아이콘을 사용해야 한다');
+  colors.length = 0;
+  drawnText.length = 0;
+  gradientCalls = 0;
   arcCalls = 0;
   registered.get('raid_63_summit')(ctx, 300, 200, { name:'정상', roleLine:'LV.63 무기 전사' });
-  assert.ok(colors.some((value) => ['rgba(8,48,75,.97)', 'rgba(76,5,89,.96)'].includes(value)),
-    '63층은 선택창과 같은 청록·자홍 네온 바탕을 써야 한다');
-  assert.ok(colors.some((value) => String(value).startsWith('rgba(103,232,249,')),
-    '63층은 실제 캐릭터에서도 청록 네온 외곽선이 보여야 한다');
+  assert.ok(['#03071c', '#08304b', '#581c87', '#4c0519'].every((value) => colors.includes(value)),
+    '63층은 선택창과 같은 먹빛·청록·보라·자홍 네온 바탕을 모두 써야 한다');
+  assert.ok(colors.some((value) => /^rgba\((103,232,249|240,171,252),/.test(String(value))),
+    '63층은 실제 캐릭터에서도 선택창처럼 청록·자홍 네온 외곽선이 보여야 한다');
   assert.ok(colors.some((value) => String(value).startsWith('rgba(250,204,21,')),
     '최종 보상의 황금 안쪽 테두리는 유지해야 한다');
+  assert.ok(drawnText.includes('♛'), '63층 실제 이름표도 선택창의 왕관 아이콘을 사용해야 한다');
   assert.equal(gradientCalls, 0, '상시 렌더되는 최종 이름표는 매 프레임 그라디언트를 만들지 않는다');
-  assert.equal(arcCalls, 1, '최종 이름표는 안테나 표시등 하나만 그린다');
+  assert.equal(arcCalls, 0, '선택창에 없는 안테나 표시등은 실제 이름표에도 그리지 않는다');
 });
 
 test('Supabase REST configuration normalizes to one Realtime websocket endpoint', () => {
