@@ -16,6 +16,7 @@
       description:'차가운 강철판과 주황색 승강기 표시등으로 만든 이름표',
       icon:'▣',
       cssClass:'raid-nameplate-steel-20',
+      possessStats:Object.freeze({ 체력:2 }),
     }),
     Object.freeze({
       id:'raid_40_twilight',
@@ -27,6 +28,7 @@
       description:'보랏빛 창문과 저녁 노을이 겹쳐지는 이중 테두리 이름표',
       icon:'◆',
       cssClass:'raid-nameplate-twilight-40',
+      possessStats:Object.freeze({ 체력:3 }),
     }),
     Object.freeze({
       id:'raid_63_summit',
@@ -38,6 +40,7 @@
       description:'청록빛과 자홍빛 네온, 황금 테두리와 옥상 안테나가 빛나는 최종 이름표',
       icon:'♛',
       cssClass:'raid-nameplate-summit-63',
+      possessStats:Object.freeze({ 체력:4 }),
     }),
   ]);
   const BY_ID = new Map(DEFINITIONS.map((definition) => [definition.id, definition]));
@@ -84,6 +87,21 @@
 
   function definition(themeId) {
     return BY_ID.get(String(themeId || '')) || null;
+  }
+
+  function possessionStats(source = {}) {
+    const rawOwned = Array.isArray(source)
+      ? source
+      : source?.raidNameplates ?? source?.raid_nameplates;
+    const total = { 체력:0 };
+    normalizeOwned(rawOwned).forEach((id) => {
+      const stats = BY_ID.get(id)?.possessStats || {};
+      Object.entries(stats).forEach(([key, value]) => {
+        const amount = Number(value);
+        if (Number.isFinite(amount)) total[key] = (Number(total[key]) || 0) + amount;
+      });
+    });
+    return Object.freeze(total);
   }
 
   function equip(player, themeId) {
@@ -138,6 +156,7 @@
         <div class="raid-nameplate-card-copy-v1">
           <b>${escapeHtml(entry.name)}</b>
           <p>${escapeHtml(entry.description)}</p>
+          <small class="raid-nameplate-stat-v1">보유 효과 · 체력 +${Number(entry.possessStats?.체력) || 0}</small>
           <small class="raid-nameplate-quest-v1">${escapeHtml(entry.questTitle)}</small>
           <small>${hasItem ? `${entry.floorLabel} 최초 돌파 보상 · 영구 보유` : `🔒 파티 던전 ${entry.floorLabel} 최초 돌파 시 획득`}</small>
         </div>
@@ -146,7 +165,7 @@
     }).join('');
     return `<section class="raid-nameplate-picker-v1">
       <div class="raid-nameplate-picker-head-v1">
-        <div><h3>🏅 이름표 스킨</h3><p>파티 던전 이정표를 달성하면 영구 해금됩니다. 능력치는 오르지 않습니다.</p></div>
+        <div><h3>🏅 이름표 스킨</h3><p>파티 던전 이정표를 달성하면 영구 해금됩니다. 장착하지 않아도 보유 효과가 모두 적용됩니다.</p></div>
         <button class="${defaultEquipped ? 'ghost' : 'primary'} small" onclick="equipRaidNameplateV1('default')">${defaultEquipped ? '기본 이름표 사용 중' : '기본 이름표로 변경'}</button>
       </div>
       <div class="raid-nameplate-grid-v1">${cards}</div>
@@ -158,7 +177,7 @@
     if (!entry) return '';
     return `<div class="raid-nameplate-reward-v1 ${entry.cssClass}">
       <div class="raid-nameplate-reward-icon-v1">${escapeHtml(entry.icon)}</div>
-      <div><small>꾸미기 아이템 획득 · ${escapeHtml(entry.questTitle)}</small><strong>${escapeHtml(entry.name)}</strong><p>${escapeHtml(entry.description)}</p></div>
+      <div><small>이름표 보상 획득 · ${escapeHtml(entry.questTitle)}</small><strong>${escapeHtml(entry.name)}</strong><p>${escapeHtml(entry.description)} · 보유 효과: 체력 +${Number(entry.possessStats?.체력) || 0}</p></div>
       <button class="primary small" id="raidEquipNameplateBtnV1">바로 장착</button>
     </div>`;
   }
@@ -294,6 +313,7 @@
     definitions:DEFINITIONS,
     definition,
     rewardForGroup,
+    possessionStats,
     normalizeOwned,
     normalizePlayerFields,
     applyServerSnapshot,

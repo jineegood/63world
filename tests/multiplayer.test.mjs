@@ -103,6 +103,21 @@ test('raid milestones normalize ownership, expose quest goals, and register thre
   assert.equal(api.rewardForGroup(2).questTitle, '[파티] 함께 오른 스무 층');
   assert.equal(api.rewardForGroup(4).questTitle, '[파티] 빌딩의 허리를 넘어서');
   assert.equal(api.rewardForGroup(7).questTitle, '[파티] 육삼의 정상');
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(api.definitions.map(({ id, possessStats }) => ({ id, possessStats })))),
+    [
+      { id:'raid_20_steel', possessStats:{ 체력:2 } },
+      { id:'raid_40_twilight', possessStats:{ 체력:3 } },
+      { id:'raid_63_summit', possessStats:{ 체력:4 } },
+    ],
+  );
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(api.possessionStats({
+      raidNameplates:['raid_63_summit', 'fake_theme', 'raid_20_steel', 'raid_20_steel', 'raid_40_twilight'],
+      nameplate:{ theme:'default' },
+    }))),
+    { 체력:9 },
+  );
   assert.match(api.rewardForGroup(7).description, /청록빛.*자홍빛 네온.*황금 테두리/);
   const picker = api.pickerMarkup({
     name:'철벽', class:'warrior', level:5,
@@ -113,6 +128,8 @@ test('raid milestones normalize ownership, expose quest goals, and register thre
   assert.match(picker, /\[파티\] 함께 오른 스무 층/);
   assert.match(picker, /\[파티\] 빌딩의 허리를 넘어서/);
   assert.match(picker, /\[파티\] 육삼의 정상/);
+  assert.match(picker, /장착하지 않아도 보유 효과가 모두 적용/);
+  assert.match(picker, /보유 효과 · 체력 \+2/);
   assert.deepEqual([...registered.keys()], ['raid_20_steel', 'raid_40_twilight', 'raid_63_summit']);
   assert.equal(resolver({ cosmetics:{ theme:'raid_20_steel' } }), 'raid_20_steel');
   assert.equal(resolver({ cosmetics:{ theme:'unowned' } }), 'default');
@@ -210,7 +227,9 @@ test('world roster, chat, and position stay server-verified on the Friday 2-seco
     'the live badge must reveal whether the low-latency channel actually subscribed');
   assert.match(multiplayer, /CONTROL_CHARACTERS_RE = \/\[\\u0000-\\u001f\\u007f-\\u009f\]\//);
   assert.match(multiplayer, /payload\.knownVisuals = knownVisuals[\s\S]*payload\.lastChatId = resetCursor \? '0' : lastChatId[\s\S]*payload\.lastAnnouncementId/);
-  assert.match(multiplayer, /client\.rpc\('sync_world_presence_v3'/);
+  assert.match(multiplayer, /client\.rpc\('sync_world_presence_v4'/);
+  assert.match(multiplayer, /channelMode:channelMode === 'auto' \? 'auto' : 'manual'/);
+  assert.match(multiplayer, /!channelJoined[\s\S]*preferredChannelMode !== 'manual'/);
   assert.match(multiplayer, /window\.YuksamWorldChannelsV1 = Object\.freeze/);
   assert.match(multiplayer, /channelStatus = 'online'/);
   assert.match(multiplayer, /MOTION_TOPIC_PREFIX = 'world-motion-v1:channel-'/);
@@ -339,16 +358,33 @@ test('ten channels isolate 28-player rosters/chat/220ms motion while direct rend
       removeRealtimeChannel(channel);
     }
     async rpc(name, { p_state:state }) {
-      assert.equal(name, 'sync_world_presence_v3');
+      assert.equal(name, 'sync_world_presence_v4');
       assert.ok(Number.isInteger(state.channel) && state.channel >= 1 && state.channel <= 10);
+      assert.ok(['auto', 'manual'].includes(state.channelMode));
       rpcCalls += 1;
       const previous = presenceRows.get(this.identity.userId) || null;
+      const requestedChannel = state.channelMode === 'auto'
+        ? Array.from({ length:10 }, (_, index) => index + 1)
+          .map((channel) => ({
+            channel,
+            count:[...presenceRows.values()].filter((row) => (
+              row.channel === channel && row.userId !== this.identity.userId
+            )).length,
+          }))
+          .filter(({ count }) => count < 8)
+          .sort((left, right) => (
+            Number(left.count >= 3) - Number(right.count >= 3)
+              || (left.count >= 3 ? left.count : 0) - (right.count >= 3 ? right.count : 0)
+              || left.channel - right.channel
+          ))[0]?.channel
+        : state.channel;
+      assert.ok(Number.isInteger(requestedChannel));
       const activeOthers = [...presenceRows.values()].filter((row) => (
-        row.channel === state.channel && row.userId !== this.identity.userId
+        row.channel === requestedChannel && row.userId !== this.identity.userId
       )).length;
-      if (activeOthers >= 8 && previous?.channel !== state.channel) {
+      if (activeOthers >= 8 && previous?.channel !== requestedChannel) {
         return { data:{
-          ok:false, code:'CHANNEL_FULL', map:state.map, channel:state.channel,
+          ok:false, code:'CHANNEL_FULL', map:state.map, channel:requestedChannel,
           previousChannel:previous?.channel || null, channelCounts:channelCounts(),
           players:[], visuals:[], messages:[], announcements:[],
         }, error:null };
@@ -362,8 +398,10 @@ test('ten channels isolate 28-player rosters/chat/220ms motion while direct rend
       delete copied.knownVisuals;
       delete copied.lastChatId;
       delete copied.lastAnnouncementId;
+      delete copied.channelMode;
       const saved = {
         ...copied,
+        channel:requestedChannel,
         userId:this.identity.userId,
         name:this.identity.displayName,
       };
@@ -400,7 +438,7 @@ test('ten channels isolate 28-player rosters/chat/220ms motion while direct rend
     }
   }
 
-  function createSession(index, preferredChannel) {
+  function createSession(index, preferredChannel, preferredMode = null) {
     const name = `학생${String(index + 1).padStart(2, '0')}`;
     const identity = { userId:`id-${String(index).padStart(2, '0')}`, displayName:name, role:'student' };
     const client = new FakeClient(identity);
@@ -436,6 +474,7 @@ test('ten channels isolate 28-player rosters/chat/220ms motion while direct rend
       }),
     };
     const storage = new Map([['yuksam_world_channel_v1', String(preferredChannel)]]);
+    if (preferredMode) storage.set('yuksam_world_channel_mode_v1', preferredMode);
     let messageCounter = 0;
     let performanceClock = 0;
     const window = {
@@ -529,9 +568,9 @@ test('ten channels isolate 28-player rosters/chat/220ms motion while direct rend
     await Promise.resolve();
   }
 
-  // Eight students fill channel 1; the remaining twenty are spread across channels 2-10.
-  const preferred = (index) => index < 8 ? 1 : 2 + ((index - 8) % 9);
-  const sessions = Array.from({ length:28 }, (_, index) => createSession(index, preferred(index)));
+  // Old clients saved channel 1 for everyone. The new first admission ignores
+  // that stale preference and fills each channel to three before using the next.
+  const sessions = Array.from({ length:28 }, (_, index) => createSession(index, 1));
   await Promise.all(sessions.map((session) => session.window.__mpSyncPresenceV54()));
   await settleRealtime();
   rpcCalls = 0;
@@ -540,21 +579,21 @@ test('ten channels isolate 28-player rosters/chat/220ms motion while direct rend
 
   assert.equal(rpcCalls, 28, 'each student still uses one bounded 2-second roster poll');
   assert.ok(sessions.every((session) => session.window.__multiplayerStatusV53 === 'online'));
-  assert.equal(sessions[0].window.__remotePlayersV53.size, 7);
-  assert.equal(sessions[8].window.__remotePlayersV53.size, 2);
-  assert.equal(sessions[0].window.__remotePlayersV53.has('학생09'), false,
+  assert.equal(sessions[0].window.__remotePlayersV53.size, 2);
+  assert.equal(sessions[3].window.__remotePlayersV53.size, 2);
+  assert.equal(sessions[0].window.__remotePlayersV53.has('학생04'), false,
     'a different channel must not enter this roster');
   assert.equal(sessions[0].window.__remotePlayersV53.get('학생02').costume.head, 'blue-cap');
   assert.deepEqual(
     JSON.parse(JSON.stringify(sessions[0].window.YuksamWorldChannelsV1.getState())),
     {
       channel:1,
-      channelCounts:{ 1:8, 2:3, 3:3, 4:2, 5:2, 6:2, 7:2, 8:2, 9:2, 10:2 },
+      channelCounts:{ 1:3, 2:3, 3:3, 4:3, 5:3, 6:3, 7:3, 8:3, 9:3, 10:1 },
       maxChannels:10, capacity:8,
       status:'online', switching:false, cooldownUntil:0, canChange:true, reason:null,
     },
   );
-  assert.match(sessions[0].badge.textContent, /채널 1 · 같은 지역 8명/);
+  assert.match(sessions[0].badge.textContent, /채널 1 · 같은 지역 3명/);
   assert.match(sessions[0].badge.textContent, /빠른 이동/);
   assert.ok(sessions.every((session) => session.client.authSteps.includes('setAuth')));
   assert.ok(sessions.every((session) => (
@@ -564,7 +603,7 @@ test('ten channels isolate 28-player rosters/chat/220ms motion while direct rend
   )), 'every session must keep the 2-second roster poll and restore the original 220ms motion timer');
   const occupancy = Object.values(sessions[0].window.YuksamWorldChannelsV1.getState().channelCounts);
   assert.equal(occupancy.reduce((sum, count) => sum + count, 0), 28);
-  assert.equal(Math.max(...occupancy), 8);
+  assert.equal(Math.max(...occupancy), 3);
   assert.equal(topics.size, 10, 'all ten private motion channels should be active');
 
   // Only visual motion takes the low-latency path, and it stays inside the server-approved channel.
@@ -573,7 +612,7 @@ test('ten channels isolate 28-player rosters/chat/220ms motion while direct rend
   sessions[0].intervals.find((entry) => entry.fn.name === 'broadcastMotion').fn();
   await settleRealtime();
   assert.equal(sessions[1].window.__remotePlayersV53.get('학생01').x, 377);
-  assert.equal(sessions[8].window.__remotePlayersV53.has('학생01'), false);
+  assert.equal(sessions[3].window.__remotePlayersV53.has('학생01'), false);
 
   // A slower DB snapshot still contains the sender's previous x=300 and must not rewind x=377.
   await sessions[1].window.__mpSyncPresenceV54();
@@ -583,21 +622,21 @@ test('ten channels isolate 28-player rosters/chat/220ms motion while direct rend
   sessions[0].window.__mpBroadcastChatV53('1채널 안녕!');
   await sessions[0].window.__mpSyncPresenceV54();
   await sessions[1].window.__mpSyncPresenceV54();
-  await sessions[8].window.__mpSyncPresenceV54();
+  await sessions[3].window.__mpSyncPresenceV54();
   assert.deepEqual(sessions[1].chats.at(-1), { type:'user', sender:'학생01', message:'1채널 안녕!' });
-  assert.equal(sessions[8].chats.some(({ message }) => message === '1채널 안녕!'), false);
+  assert.equal(sessions[3].chats.some(({ message }) => message === '1채널 안녕!'), false);
 
   const first = sessions[0];
   first.layers[0].render();
-  assert.equal(first.drawn.length, 7);
+  assert.equal(first.drawn.length, 2);
   assert.ok(first.drawn.every(({ remote }) => remote === true), 'remote drawing must disable local-only aura work');
-  assert.ok(new Set(first.drawn.map(({ x, y }) => `${Math.round(x)},${Math.round(y)}`)).size >= 6);
+  assert.ok(new Set(first.drawn.map(({ x, y }) => `${Math.round(x)},${Math.round(y)}`)).size >= 2);
   assert.equal(first.paintedText.includes('🐤'), true);
-  assert.equal(first.nameplates.length, 7);
+  assert.equal(first.nameplates.length, 2);
   assert.equal(first.bitmapDraws.length, 0, 'the large per-player bitmap cache must be absent');
 
   for (let frame = 0; frame < 60; frame += 1) first.layers[0].render();
-  assert.equal(first.drawn.length, 7 * 61,
+  assert.equal(first.drawn.length, 2 * 61,
     'the regression checks direct renderer routing per callback; it does not promise device FPS');
 
   const assertEveryRemotePaintsEveryFrame = (label, updateRemote) => {
@@ -606,7 +645,7 @@ test('ten channels isolate 28-player rosters/chat/220ms motion while direct rend
     const drawsBefore = first.drawn.length;
     const bitmapsBefore = first.bitmapDraws.length;
     for (let frame = 0; frame < frames; frame += 1) first.layers[0].render();
-    assert.equal(first.drawn.length - drawsBefore, 7 * frames,
+    assert.equal(first.drawn.length - drawsBefore, 2 * frames,
       `${label} remote sprites must be repainted by every world frame callback`);
     assert.equal(first.bitmapDraws.length, bitmapsBefore,
       `${label} remote sprites must not be composited from a bitmap cache`);
@@ -636,19 +675,42 @@ test('ten channels isolate 28-player rosters/chat/220ms motion while direct rend
   assert.equal(first.window.__remotePlayersV53.get('학생02').activePet, 'yuksam');
   assert.equal(first.yuksamPaints.at(-1).petId, 'yuksam');
 
+  // Channel 10 must receive its second and third students before channel 1
+  // gets the first automatic fourth student.
+  const extraSessions = [28, 29, 30].map((index) => createSession(index, 1));
+  for (const session of extraSessions) {
+    await session.window.__mpSyncPresenceV54();
+    await settleRealtime();
+  }
+  assert.deepEqual(
+    extraSessions.map((session) => session.window.YuksamWorldChannelsV1.getState().channel),
+    [10, 10, 1],
+  );
+  assert.deepEqual(
+    Object.values(extraSessions[2].window.YuksamWorldChannelsV1.getState().channelCounts),
+    [4, 3, 3, 3, 3, 3, 3, 3, 3, 3],
+  );
+
+  // A manual settings choice may deliberately exceed the soft target, but the
+  // existing hard capacity still rejects the ninth student.
+  for (const index of [3, 4, 5, 6]) {
+    const manual = await sessions[index].window.YuksamWorldChannelsV1.changeChannel(1);
+    assert.equal(manual.ok, true);
+  }
   const stateEvents = [];
   const unsubscribe = sessions[8].window.YuksamWorldChannelsV1.subscribe((state) => stateEvents.push(state));
   const full = await sessions[8].window.YuksamWorldChannelsV1.changeChannel(1);
   assert.equal(full.ok, false);
   assert.equal(full.code, 'CHANNEL_FULL');
-  assert.equal(sessions[8].window.YuksamWorldChannelsV1.getState().channel, 2);
-  const changed = await sessions[8].window.YuksamWorldChannelsV1.changeChannel(3);
+  assert.equal(sessions[8].window.YuksamWorldChannelsV1.getState().channel, 3);
+  const changed = await sessions[8].window.YuksamWorldChannelsV1.changeChannel(4);
   await settleRealtime();
   assert.equal(changed.ok, true);
-  assert.equal(sessions[8].window.YuksamWorldChannelsV1.getState().channel, 3);
-  assert.equal(sessions[8].storage.get('yuksam_world_channel_v1'), '3');
-  assert.ok(sessions[8].client.removedTopics.includes('world-motion-v1:channel-2'));
-  assert.equal(sessions[8].window.__remotePlayersV53.has('학생18'), false,
+  assert.equal(sessions[8].window.YuksamWorldChannelsV1.getState().channel, 4);
+  assert.equal(sessions[8].storage.get('yuksam_world_channel_v1'), '4');
+  assert.equal(sessions[8].storage.get('yuksam_world_channel_mode_v1'), 'manual');
+  assert.ok(sessions[8].client.removedTopics.includes('world-motion-v1:channel-3'));
+  assert.equal(sessions[8].window.__remotePlayersV53.has('학생08'), false,
     'the old channel roster must be cleared after switching');
   assert.equal((await sessions[8].window.YuksamWorldChannelsV1.changeChannel(11)).code, 'INVALID_CHANNEL');
   unsubscribe();

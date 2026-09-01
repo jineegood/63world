@@ -2,11 +2,19 @@
   'use strict';
 
   const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
-  const VALID_KINDS = new Set(['legendary_upgrade', 'legendary_pet', 'raid_clear', 'teacher_notice']);
+  const VALID_KINDS = new Set([
+    'legendary_upgrade', 'legendary_pet', 'raid_clear', 'teacher_notice',
+    'elite_defeat', 'level_ten',
+  ]);
   const VALID_ACTIONS = new Set(['enhance', 'summonPet']);
   const REQUEST_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const USER_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const ITEM_ID_RE = /^[A-Za-z][A-Za-z0-9_-]{0,79}$/;
+  const ELITE_MONSTERS = Object.freeze({
+    forest_elite_slime:Object.freeze({ name:'엘리트 슬라임', particle:'을' }),
+    desert_elite_snake:Object.freeze({ name:'엘리트 스네이크', particle:'를' }),
+    swamp_elite_zombie:Object.freeze({ name:'엘리트 좀비', particle:'를' }),
+  });
   const PENDING_KEY_PREFIX = 'ysb_world_special_action_v1:';
   const MAX_SEEN_IDS = 500;
   const BANNER_MS = 4200;
@@ -145,6 +153,18 @@
       return Object.freeze({ id, kind, actorName, subjectId });
     }
 
+    if (kind === 'elite_defeat') {
+      const actorName = cleanName(value.actorName);
+      const subjectId = String(value.subjectId || '');
+      if (!actorName || !ELITE_MONSTERS[subjectId]) return null;
+      return Object.freeze({ id, kind, actorName, subjectId });
+    }
+
+    if (kind === 'level_ten') {
+      const actorName = cleanName(value.actorName);
+      return actorName ? Object.freeze({ id, kind, actorName }) : null;
+    }
+
     const partyNames = Array.isArray(value.partyNames)
       ? value.partyNames.map(cleanName).filter(Boolean).slice(0, 3)
       : [];
@@ -168,6 +188,14 @@
     }
     if (announcement.kind === 'raid_clear') {
       return `🏆 ${announcement.partyNames.join(', ')} 님이 ${announcement.floor}층을 클리어하셨습니다!`;
+    }
+    if (announcement.kind === 'elite_defeat') {
+      const monster = ELITE_MONSTERS[announcement.subjectId];
+      if (!monster) return '';
+      return `👑 ${announcement.actorName} 님이 ${monster.name}${monster.particle} 처치했습니다!`;
+    }
+    if (announcement.kind === 'level_ten') {
+      return `🎊 ${announcement.actorName} 님이 10레벨을 달성했습니다!`;
     }
     return '';
   }

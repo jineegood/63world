@@ -71,7 +71,7 @@ test('real browser preserves bonuses and fixes legacy first-call consistency', {
   assert.match(result.stdout, /PASS: warrior 방어 keeps cumulative specialization bonuses/);
   assert.match(result.stdout, /PASS: weapon enhancement bonus follows tier formula once/);
   assert.match(result.stdout, /PASS: legacy player fields produce stable stats on the first call/);
-  assert.match(result.stdout, /RESULT: PASS 14 \/ FAIL 0/);
+  assert.match(result.stdout, /RESULT: PASS 15 \/ FAIL 0/);
 });
 
 test('production uses one total-stats boundary without versioned wrappers', () => {

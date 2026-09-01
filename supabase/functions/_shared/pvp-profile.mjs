@@ -1,4 +1,5 @@
 import { PVP_PROFILE_CATALOG, PVP_SKILLS } from './pvp-catalog.mjs';
+import { raidNameplatePossessionStats } from './raid-nameplate-stats.mjs';
 
 const VALID_SPECS = Object.freeze({
   warrior:new Set(['방어', '무기']),
@@ -158,6 +159,7 @@ export function buildAuthoritativePvpProfile({ userId, displayName, data:rawData
     if (skill?.flatBonuses) addStats(total, skill.flatBonuses);
   }
   specializationStats(total, className, spec);
+  addStats(total, raidNameplatePossessionStats(data.raidNameplates ?? data.raid_nameplates));
 
   const ownedPets = new Set((Array.isArray(data.pets) ? data.pets : [])
     .slice(0, 100).map((id) => boundedText(id, 80)));

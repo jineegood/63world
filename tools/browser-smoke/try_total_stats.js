@@ -30,7 +30,7 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
     Object.assign(p, {
       class:klass, spec, baseStatsVersion:originalBaseVersion,
       equipment:{ weapon:defaultWeapon(klass) }, inventory:[], skills:{},
-      pets:[], activePet:null, weaponUpgrades:{}, maxHp:100, hp:100,
+      pets:[], activePet:null, weaponUpgrades:{}, raidNameplates:[], nameplate:{ theme:'default' }, maxHp:100, hp:100,
     });
   }
   function stats() { return window.eval('computeTotalStats()'); }
@@ -64,6 +64,13 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   p.equipment.accessory = 'cloverBadge';
   const equipped = stats();
   check('equipped accessory replaces its possession bonus with full stats', equipped.힘 === possessed.힘 + 3 && equipped.체력 === possessed.체력 + 1 && equipped.지능 === possessed.지능);
+
+  prepare('warrior');
+  const noNameplates = stats();
+  p.raidNameplates = ['raid_63_summit', 'raid_20_steel', 'raid_40_twilight'];
+  p.nameplate = { theme:'default' };
+  const ownedNameplates = stats();
+  check('all milestone nameplates grant cumulative possession vitality without being equipped', ownedNameplates.체력 === noNameplates.체력 + 9);
 
   prepare('warrior');
   const noPet = stats();

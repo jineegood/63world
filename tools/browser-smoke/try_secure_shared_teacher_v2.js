@@ -4,10 +4,10 @@ const root = process.argv[2] || path.join(__dirname, '..', '..');
 const mode = process.argv[3] || 'manage';
 
 const fakeClientSource = `
-window.__teacherSignedIn = false;
+window.__teacherSignedIn = window.__sharedTeacherMode === 'restore-closed';
 window.__sharedWrites = [];
 window.__sharedRows = {
-  classroom_settings:{ version:1, serverOpen:true },
+  classroom_settings:{ version:1, serverOpen:window.__sharedTeacherMode !== 'restore-closed' },
   workbooks:{ version:1, items:[{
     id:'cloud-book', name:'Cloud Math', zone:'silent_forest', subject:'math',
     prompt:'teacher cloud book', enabled:true, createdAt:1,
@@ -69,6 +69,29 @@ run(root, async ({ window, $, sleep, asyncErrors }) => {
     checks.push([name, Boolean(passed)]);
     console.log(`${passed ? 'PASS' : 'FAIL'}: ${name}`);
   };
+
+  if (mode === 'restore-closed') {
+    await sleep(30);
+    window.openAdminPanel('settings');
+    check('restored teacher settings waits for the authoritative server state',
+      window.document.querySelector('#modal').textContent.includes('실제 운영 상태를 확인하는 중'));
+    await sleep(30);
+    const settingsText = window.document.querySelector('#modal').textContent;
+    const closeButton = [...window.document.querySelectorAll('#modal button')]
+      .find((button) => button.textContent.trim() === '서버 닫기');
+    check('restored teacher settings show the actual closed server state', settingsText.includes('🔴 닫힘'));
+    check('closed-state buttons are synchronized without toggling twice', closeButton?.disabled === true);
+    await window.adminSetServerOpen(true);
+    await sleep(30);
+    check('manual server open still works alongside the daily schedule',
+      window.__sharedRows.classroom_settings.serverOpen === true
+      && window.document.querySelector('#modal').textContent.includes('🟢 열림'));
+    check('restored settings flow produced no async errors', asyncErrors.length === 0);
+    if (asyncErrors.length) console.log(asyncErrors.join('\\n'));
+    const failures = checks.filter(([, passed]) => !passed).length;
+    console.log(`RESULT: ${failures === 0 ? 'PASS' : 'FAIL'} ${checks.length - failures}/${checks.length}`);
+    process.exit(failures === 0 ? 0 : 1);
+  }
 
   window.openAdminPanel('students');
   $('teacherEmail').value = 'teacher@example.com';

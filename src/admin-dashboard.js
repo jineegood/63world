@@ -29,6 +29,7 @@ let workbookCreatePendingV2 = false;
 const checkedWorkbookQuestionsV2 = new Set();
 let secureAdminWorkbookRefreshV2 = false;
 let secureAdminWorkbookSyncedAtV2 = 0;
+let secureAdminClassroomRefreshV1 = false;
 let secureAdminCheatPendingV3 = false;
 let secureAdminAnnouncementPendingV1 = false;
 let secureAdminAnnouncementRequestV1 = null;
@@ -652,6 +653,13 @@ function teacherCheatCardHtml(){
 function teacherSettingsHtml(){
   if (SECURE_ADMIN_MODE_V2) {
     const open = secureAdminSharedV2 ? secureAdminSharedV2.getServerOpen() : true;
+    const serverState = secureAdminClassroomRefreshV1
+      ? '<div class="empty-state">서버의 실제 운영 상태를 확인하는 중...</div>'
+      : `<p style="text-align:center;font-weight:800">${open ? '🟢 열림' : '🔴 닫힘'}</p>
+        <div class="action-row">
+          <button class="primary" onclick="adminSetServerOpen(true)" ${open ? 'disabled' : ''}>서버 열기</button>
+          <button class="ghost danger-text" onclick="adminSetServerOpen(false)" ${open ? '' : 'disabled'}>서버 닫기</button>
+        </div>`;
     return `<div class="teacher-body">
       <div class="panel-card">
         <h3>관리자 비밀번호 변경</h3>
@@ -660,11 +668,8 @@ function teacherSettingsHtml(){
       </div>
       <div class="panel-card" style="margin-top:12px">
         <h3>수업 서버 상태</h3>
-        <p style="text-align:center;font-weight:800">${open ? '🟢 열림' : '🔴 닫힘'}</p>
-        <div class="action-row">
-          <button class="primary" onclick="adminSetServerOpen(true)" ${open ? 'disabled' : ''}>서버 열기</button>
-          <button class="ghost danger-text" onclick="adminSetServerOpen(false)" ${open ? '' : 'disabled'}>서버 닫기</button>
-        </div>
+        ${serverState}
+        <p class="muted">매일 서울시간 13:00에 자동으로 열리고 13:55에 자동으로 닫힙니다. 수동으로 열거나 닫을 수도 있으며, 다음 자동 전환 시각부터 정해진 일정이 다시 적용됩니다.</p>
         <p class="muted">변경 내용은 학생 화면에 약 15초 안에 반영됩니다.</p>
       </div>
       <div class="panel-card teacher-announcement-card-v1" style="margin-top:12px">
@@ -992,6 +997,7 @@ function adminStudentTotalStatsV2(student) {
   }[`${student.className}:${student.spec}`];
   add(specBonus);
   add(window.PET_DEFS_V27?.[student.activePet]?.stats);
+  add(window.YuksamRaidNameplatesV1?.possessionStats?.(student));
   const weaponId = student.equipment?.weapon;
   const weapon = data.ITEM_DEFS?.[weaponId];
   const tier = Math.max(0, Math.min(4, Number(student.weaponUpgrades?.[weaponId]) || 0));
@@ -1048,7 +1054,7 @@ window.adminOpenStudentDetailV2 = function adminOpenStudentDetailV2(userId) {
   const classMeta = CLASS_META[student.className] || { name:student.className || '미정' };
   const stats = adminStudentTotalStatsV2(student);
   const calculatedMaxHp = Math.max(1, 8 + (Number(stats.체력) || 1) * 3 + student.level * 2);
-  const maxHp = student.maxHp > 0 ? student.maxHp : calculatedMaxHp;
+  const maxHp = Math.max(Number(student.maxHp) || 0, calculatedMaxHp);
   const hp = Math.min(maxHp, Math.max(0, student.hp));
   const slotNames = ADMIN_EQUIPMENT_SLOT_NAMES_V2;
   const equipmentHtml = Object.entries(slotNames).map(([slot, label]) => {
@@ -1277,6 +1283,18 @@ window.adminDeleteSelectedStudentsV2 = async function adminDeleteSelectedStudent
 
 function openAdminPanel(tab, options) {
   if (!requireTeacherAuth()) return;
+  if (SECURE_ADMIN_MODE_V2 && tab === 'settings' && secureAdminSharedV2
+    && !(options && options.skipClassroomRefresh) && !secureAdminClassroomRefreshV1) {
+    secureAdminClassroomRefreshV1 = true;
+    secureAdminSharedV2.refreshClassroomSettings()
+      .catch((error) => {
+        toast(error?.message || '서버의 실제 운영 상태를 불러오지 못했어요.');
+      })
+      .finally(() => {
+        secureAdminClassroomRefreshV1 = false;
+        openAdminPanel('settings', { ...(options || {}), skipClassroomRefresh:true });
+      });
+  }
   if (SECURE_ADMIN_MODE_V2 && tab === 'workbooks' && secureAdminSharedV2
     && !(options && options.skipWorkbookRefresh) && !secureAdminWorkbookRefreshV2) {
     secureAdminWorkbookRefreshV2 = true;

@@ -19,6 +19,7 @@ test('admin data module loads before the dashboard and secure branches delegate 
   assert.match(source, /adminOpenWrongLogV2\(['"]?\$\{[^}]*userId/);
   assert.match(source, /adminOpenStudentDetailV2\(['"]?\$\{[^}]*userId/);
   assert.match(source, /function adminStudentTotalStatsV2\(student\)/);
+  assert.match(source, /YuksamRaidNameplatesV1\?\.possessionStats\?\.\(student\)/);
   assert.match(source, /adminOpenStudentEquipmentV2\(['"]?\$\{[^}]*userId/);
   assert.match(source, /adminOpenStudentSkillsV2\(['"]?\$\{[^}]*userId/);
   assert.match(source, /장비창 보기/);

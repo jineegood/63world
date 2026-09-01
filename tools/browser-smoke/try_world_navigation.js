@@ -154,6 +154,28 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   check('position guard leaves walkable portal positions in place',
     portalFailures.length === 0, portalFailures.join(', '));
 
+  const blacksmithDoor = worlds.town.upgradeShop;
+  setMap('town', { x:blacksmithDoor.doorX, y:blacksmithDoor.doorY + 180 });
+  const blacksmithClickPlan = window.YuksamClickMovement.planPath({
+    start:{ x:G.player.x, y:G.player.y },
+    target:{ x:blacksmithDoor.doorX, y:blacksmithDoor.doorY },
+    bounds:{ width:worlds.town.width, height:worlds.town.height },
+    colliders:window.eval('getCurrentMapColliders()'),
+    radius:30,
+    cellSize:32,
+  });
+  const blacksmithArrival = blacksmithClickPlan.at(-1);
+  check('blacksmith door click finds a reachable interaction point',
+    blacksmithClickPlan.length > 0
+      && Math.hypot(blacksmithArrival.x - blacksmithDoor.doorX, blacksmithArrival.y - blacksmithDoor.doorY) < 100,
+    JSON.stringify(blacksmithArrival || null));
+  if (blacksmithArrival) {
+    G.player.x = blacksmithArrival.x;
+    G.player.y = blacksmithArrival.y;
+  }
+  window.eval('interact()');
+  check('blacksmith click-arrival interaction enters the interior', G.currentMap === 'upgradeShopInterior', G.currentMap);
+
   check('town pet door enters pet interior', transition('town', { x:worlds.town.petShop.doorX, y:worlds.town.petShop.doorY }).map === 'petShopInterior');
   check('town upgrade door enters upgrade interior', transition('town', { x:worlds.town.upgradeShop.doorX, y:worlds.town.upgradeShop.doorY }).map === 'upgradeShopInterior');
   check('town equipment door enters equipment shop', transition('town', { x:worlds.town.shop.doorX, y:worlds.town.shop.doorY }).map === 'equipmentShop');

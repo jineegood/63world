@@ -35,6 +35,7 @@ function setup(overrides = {}) {
       inventory:['ironwoodStaff', 'navyRobe', 'moonRing'],
       skills:{ mage_basic_element:2, mage_fire_meteor_v24:1, invalid:-3 },
       weaponUpgrades:{ ironwoodStaff:3, impossible:99 }, pets:['pet_slime', 'yuksam', ''], activePet:'pet_slime',
+      raidNameplates:['raid_20_steel', 'raid_40_twilight', 'raid_63_summit'],
       password:'must-not-leak', email:'student@example.com', access_token:'token-value',
       records:{ answered:12, correct:9, password:'nested-secret', wrongLog:Array.from({ length:35 }, (_, i) => ({
         q:`문제${i}`, a:`정답${i}`, mine:`오답${i}`, at:i, refresh_token:'hidden',
@@ -122,6 +123,7 @@ test('listStudents returns only frozen sanitized summaries ordered by the backen
     inventory:['ironwoodStaff', 'navyRobe', 'moonRing'],
     skills:{ mage_basic_element:2, mage_fire_meteor_v24:1 },
     weaponUpgrades:{ ironwoodStaff:3, impossible:4 }, pets:['pet_slime', 'yuksam'], activePet:'pet_slime',
+    raidNameplates:['raid_20_steel', 'raid_40_twilight', 'raid_63_summit'],
     records:{ answered:12, correct:9, wrongLog:Array.from({ length:30 }, (_, i) => ({
       q:`문제${i + 5}`, a:`정답${i + 5}`, mine:`오답${i + 5}`, at:i + 5,
     })) },

@@ -154,6 +154,29 @@ test('server PvP profile ignores request-like combat numbers and rejects impossi
   assert.equal(profile.defense, 0);
 });
 
+test('owned raid milestone nameplates grant cumulative vitality without being equipped', async () => {
+  const { buildAuthoritativePvpProfile } = await import(profileUrl.href);
+  const profile = buildAuthoritativePvpProfile({
+    userId:'student-nameplates',
+    displayName:'등반가',
+    data:{
+      name:'등반가',
+      class:'warrior',
+      exp:0,
+      baseStatsVersion:2,
+      inventory:['training_greatsword'],
+      equipment:{ weapon:'training_greatsword' },
+      raidNameplates:[
+        'raid_63_summit', 'raid_20_steel', 'fake-nameplate',
+        'raid_40_twilight', 'raid_20_steel',
+      ],
+      nameplate:{ theme:'default' },
+    },
+  });
+  assert.equal(profile.level, 1);
+  assert.equal(profile.maxHp, 49, '기본 22 HP에 보유 체력 9 × 3 HP가 더해진다');
+});
+
 test('30-sided initiative rerolls ties and picks the higher player', async () => {
   const rules = await import(rulesUrl.href);
   assert.deepEqual(rules.rollInitiative(sequence([29, 29, 4, 18])), {

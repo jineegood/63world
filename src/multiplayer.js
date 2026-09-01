@@ -24,6 +24,7 @@
   const CHANNEL_CAPACITY = 8;
   const CHANNEL_SWITCH_COOLDOWN_MS = 3000;
   const CHANNEL_STORAGE_KEY = 'yuksam_world_channel_v1';
+  const CHANNEL_MODE_STORAGE_KEY = 'yuksam_world_channel_mode_v1';
   const MOTION_TOPIC_PREFIX = 'world-motion-v1:channel-';
   const CONTROL_CHARACTERS_RE = /[\u0000-\u001f\u007f-\u009f]/;
   const remotes = new Map(); // name -> server-verified current-map state
@@ -57,6 +58,7 @@
     Array.from({ length:CHANNEL_COUNT }, (_, index) => [String(index + 1), 0]),
   );
   let currentChannel = readPreferredChannel();
+  let preferredChannelMode = readPreferredChannelMode();
   let channelJoined = false;
   let channelStatus = enabled ? 'waiting-login' : 'off';
   let channelSwitching = false;
@@ -75,8 +77,22 @@
     } catch { return 1; }
   }
 
-  function savePreferredChannel(channel) {
-    try { window.localStorage?.setItem?.(CHANNEL_STORAGE_KEY, String(channel)); } catch {}
+  function readPreferredChannelMode() {
+    try {
+      return window.localStorage?.getItem?.(CHANNEL_MODE_STORAGE_KEY) === 'manual'
+        ? 'manual'
+        : 'auto';
+    } catch { return 'auto'; }
+  }
+
+  function savePreferredChannel(channel, mode = preferredChannelMode) {
+    try {
+      window.localStorage?.setItem?.(CHANNEL_STORAGE_KEY, String(channel));
+      window.localStorage?.setItem?.(
+        CHANNEL_MODE_STORAGE_KEY,
+        mode === 'manual' ? 'manual' : 'auto',
+      );
+    } catch {}
   }
 
   function normalizeChannelCounts(value) {
@@ -271,7 +287,13 @@
     };
   }
 
-  function localPresencePayload(G, chat, channel = currentChannel, resetCursor = false) {
+  function localPresencePayload(
+    G,
+    chat,
+    channel = currentChannel,
+    resetCursor = false,
+    channelMode = 'manual',
+  ) {
     const weaponId = G.player.equipment?.weapon || null;
     const petSide = avatarVisualSync?.petSideFromFacing(G.player._petSide, G.lastMove)
       || G.player._petSide
@@ -282,6 +304,7 @@
       name:G.player.name,
       map:G.currentMap,
       channel,
+      channelMode:channelMode === 'auto' ? 'auto' : 'manual',
       x:Math.round(G.player.x), y:Math.round(G.player.y),
       level:G.player.level, class:G.player.class, spec:G.player.spec || null,
       equipment:G.player.equipment || {}, appearance:G.player.appearance || {},
@@ -690,7 +713,7 @@
       timer = setTimeout(() => reject(new Error('WORLD_PRESENCE_TIMEOUT')), RPC_TIMEOUT_MS);
     });
     return Promise.race([
-      Promise.resolve(client.rpc('sync_world_presence_v3', { p_state:payload })),
+      Promise.resolve(client.rpc('sync_world_presence_v4', { p_state:payload })),
       timeout,
     ]).finally(() => clearTimeout(timer));
   }
@@ -710,13 +733,17 @@
     if (!client) return false;
     const sentMap = G.currentMap;
     let requestedChannel = normalizeChannel(options.channel) || currentChannel;
+    const automaticAdmission = !channelJoined
+      && options.manual !== true
+      && preferredChannelMode !== 'manual';
+    const requestedMode = automaticAdmission ? 'auto' : 'manual';
     const changingChannel = channelJoined && requestedChannel !== currentChannel;
     const resetCursor = changingChannel || !channelJoined;
     const sentChat = changingChannel ? null : (pendingChats[0] || null);
     try {
       let response = await rpcWithTimeout(
         client,
-        localPresencePayload(G, sentChat, requestedChannel, resetCursor),
+        localPresencePayload(G, sentChat, requestedChannel, resetCursor, requestedMode),
       );
       let data = response?.data;
       if (response?.error) throw response.error;
@@ -730,7 +757,7 @@
           requestedChannel = fallback;
           response = await rpcWithTimeout(
             client,
-            localPresencePayload(G, null, requestedChannel, true),
+            localPresencePayload(G, null, requestedChannel, true, requestedMode),
           );
           data = response?.data;
           if (response?.error) throw response.error;
@@ -752,7 +779,8 @@
         });
       }
       const responseChannel = normalizeChannel(data?.channel);
-      if (!data || data.ok !== true || data.map !== sentMap || responseChannel !== requestedChannel
+      if (!data || data.ok !== true || data.map !== sentMap
+        || (!automaticAdmission && responseChannel !== requestedChannel)
         || !Array.isArray(data.players) || !Array.isArray(data.visuals)
         || !Array.isArray(data.messages) || !Array.isArray(data.announcements)) {
         throw new Error('WORLD_PRESENCE_INVALID');
@@ -775,6 +803,7 @@
       currentChannel = responseChannel;
       rosterMap = sentMap;
       channelJoined = true;
+      if (options.manual === true) preferredChannelMode = 'manual';
       savePreferredChannel(currentChannel);
       if (!applyPresenceSnapshot(data.players, data.visuals, sentMap)) {
         throw new Error('WORLD_PRESENCE_VISUAL_MISSING');

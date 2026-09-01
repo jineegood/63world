@@ -183,7 +183,7 @@ test('real browser preserves collider, movement, and transition behavior', { tim
   assert.match(result.stdout, /PASS: final room suppresses all automatic transitions/);
   assert.match(result.stdout, /PASS: one frame reuses one collider array and releases it afterward/);
   // 63빌딩 던전 충돌 검사 2개와 프레임 캐시 검사 1개가 늘어 30개 → 33개가 되었다.
-  assert.match(result.stdout, /RESULT: PASS 38 \/ FAIL 0/);
+  assert.match(result.stdout, /RESULT: PASS 40 \/ FAIL 0/);
 });
 
 test('production uses one navigation boundary without versioned wrappers', () => {

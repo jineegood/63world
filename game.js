@@ -882,6 +882,10 @@ function calculateBaseStats() {
       total[k] = (total[k] || 0) + v;
     });
   });
+  /* 20/40/63층 이름표는 장착 여부와 무관한 영구 보유 보상이다. */
+  Object.entries(window.YuksamRaidNameplatesV1?.possessionStats?.(game.player) || {}).forEach(([k, v]) => {
+    total[k] = (total[k] || 0) + (Number(v) || 0);
+  });
   Object.entries(game.player.skills || {}).forEach(([skillId, rank]) => {
     const skill = SKILL_DEFS[skillId];
     const points = getSkillRank(skillId) || Number(rank) || 0;
@@ -6273,6 +6277,19 @@ function updateQuestTracker() {
     Object.defineProperty(monster, '__zoneScale', { value: zone, enumerable: false, configurable: true });
     return monster;
   }
+  function applyMonsterBalanceV60(monster, { hp = 1, attack = 1 } = {}) {
+    if (!monster) return monster;
+    const nextMaxHp = Math.max(1, Math.round(Number(monster.maxHp || monster.hp || 1) * hp));
+    monster.maxHp = nextMaxHp;
+    monster.hp = nextMaxHp;
+    monster.attack = Math.max(1, Math.round(Number(monster.attack || 1) * attack));
+    return monster;
+  }
+  function applyNormalSwampBalanceV60(monster) {
+    if (monster?.type === 'tarantula') return applyMonsterBalanceV60(monster, { hp:1.10, attack:1.25 });
+    if (monster?.type === 'zombie') return applyMonsterBalanceV60(monster, { attack:1.15 });
+    return monster;
+  }
   function polishNormalMonsterV2(monster) {
     if (!monster || monster.elite) return monster;
     Object.assign(monster, YuksamGameplayPolishV2.tuneNormalMonster(monster));
@@ -6338,7 +6355,8 @@ function updateQuestTracker() {
       x: p.x, y: p.y, r: 32, hp: randomInt(70, 73), exp: 16, gold: 20,
       attack: randomInt(20, 23), speed: 0.70, aggro: 310,
     }));
-    return [...spiders, ...zombies].map((monster) => applyZoneScaleV42(monster, 'swamp'));
+    return [...spiders, ...zombies]
+      .map((monster) => applyNormalSwampBalanceV60(applyZoneScaleV42(monster, 'swamp')));
   };
 
   function addBossPortalGuards(mapKey) {
@@ -6362,6 +6380,7 @@ function updateQuestTracker() {
         type: def.type, name: def.name, level: def.level, x, y, r: def.r,
         hp: def.hp(), exp: def.exp, gold: def.gold, attack: def.attack(), speed: def.speed, aggro: def.aggro,
       }), mapKey);
+      if (mapKey === 'swamp') applyNormalSwampBalanceV60(guard);
       game.forestMonsters.push(mapKey === 'forest' ? polishNormalMonsterV2(guard) : guard);
     }
   }
@@ -6524,6 +6543,7 @@ function updateQuestTracker() {
     };
     const base = table[mapKey] || table.forest;
     const boss = applyZoneScaleV42(monsterBase({ id: 'elite_' + mapKey + '_' + uid(), ...base, x: 820, y: 430, speed: 0.0, aggro: 9999 }), mapKey);
+    if (mapKey === 'swamp') applyMonsterBalanceV60(boss, { attack:0.80 });
     boss.elite = true; boss.noEscape = true; boss.chasing = true;
     return boss;
   };
@@ -14268,6 +14288,21 @@ function updateQuestTracker() {
     savePlayer?.();
     appendChatMessage?.('system', '이동', '펫 상점 내부로 들어왔습니다.');
   }
+  function enterUpgradeShopFromInteractionV60() {
+    if (game.transitionLock && Date.now() < game.transitionLock) return;
+    game.transitionLock = Date.now() + 700;
+    playSfx?.('door');
+    closeModal?.();
+    game.currentMap = 'upgradeShopInterior';
+    game.player.map = 'upgradeShopInterior';
+    game.player.x = worldDefs.upgradeShopInterior.playerSpawn.x;
+    game.player.y = worldDefs.upgradeShopInterior.playerSpawn.y;
+    $('returnTownBtn')?.classList.remove('hidden');
+    updateHud?.();
+    syncAudioFileBgm?.();
+    savePlayer?.();
+    appendChatMessage?.('system', '이동', '대장간 내부로 들어왔습니다.');
+  }
   function exitFinalBossRoomV35() {
     closeModal();
     hideTooltipV35();
@@ -14307,10 +14342,11 @@ function updateQuestTracker() {
   worldInteractionRegistry.registerAction({
     id:'final-world-actions-v35',
     priority:350,
-    types:['healingWell', 'petShopDoor', 'petShopExit', 'upgradeShopExit', 'petOrbNpc', 'upgradeNpc', 'finalBossPortal', 'finalBossExitV35', 'finalTeacherNpcV35'],
+    types:['healingWell', 'petShopDoor', 'upgradeShopDoor', 'petShopExit', 'upgradeShopExit', 'petOrbNpc', 'upgradeNpc', 'finalBossPortal', 'finalBossExitV35', 'finalTeacherNpcV35'],
     handle:(nearest) => {
       if (nearest.type === 'healingWell') window.openHealingWellModal();
       else if (nearest.type === 'petShopDoor') enterPetShopFromInteractionV35();
+      else if (nearest.type === 'upgradeShopDoor') enterUpgradeShopFromInteractionV60();
       else if (nearest.type === 'petOrbNpc') window.openPetShopModalV34();
       else if (nearest.type === 'upgradeNpc') {
         if (!window.openQuestNpcIntroV3?.('enhance', () => window.openUpgradeShopModalV33())) window.openUpgradeShopModalV33();

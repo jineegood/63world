@@ -12,6 +12,10 @@ const expansion = fs.readFileSync(path.join(
   root,
   'supabase/migrations/202608310001_expand_channels_and_teacher_announcements_v1.sql',
 ), 'utf8');
+const autoDistribution = fs.readFileSync(path.join(
+  root,
+  'supabase/migrations/202609010002_world_channel_auto_distribution_v1.sql',
+), 'utf8');
 
 function functionBody(name) {
   const match = migration.match(new RegExp(
@@ -113,4 +117,33 @@ test('current upgrade expands the protected channel range to 1-10 while keeping 
   assert.match(expansion, /v_count_occurrences <> 2[\s\S]*unexpected sync_world_presence_v3 channel counter count/i,
     'the migration must fail closed instead of silently half-patching v3');
   assert.match(expansion, /revoke all on function public\.sync_world_presence_v3\(jsonb\)[\s\S]*grant execute[\s\S]*to authenticated/i);
+});
+
+test('v4 serializes automatic admissions and fills each channel to three in order before a fourth', () => {
+  assert.match(autoDistribution,
+    /create or replace function public\.sync_world_presence_v4\(p_state jsonb\)/i);
+  assert.match(autoDistribution,
+    /jsonb_typeof\(p_state -> 'channelMode'\) is distinct from 'string'/i);
+  assert.match(autoDistribution, /v_channel_mode not in \('auto', 'manual'\)/i);
+  assert.match(autoDistribution,
+    /v_channel_mode = 'manual'[\s\S]*return public\.sync_world_presence_v3\(p_state - 'channelMode'\)/i,
+    'manual selection must keep the requested v3 channel and its hard cap of eight');
+
+  const lockAt = autoDistribution.indexOf("'yuksam-world-auto-admission-v1'");
+  const chooseAt = autoDistribution.indexOf('from pg_catalog.generate_series(1, 10)');
+  const writeAt = autoDistribution.lastIndexOf('public.sync_world_presence_v3(');
+  assert.ok(lockAt >= 0 && lockAt < chooseAt && chooseAt < writeAt,
+    'the global automatic-admission lock must cover both channel selection and the v3 write');
+  assert.match(autoDistribution, /presence\.user_id <> v_user_id/i);
+  assert.match(autoDistribution, /presence\.last_seen_at >= clock_timestamp\(\) - interval '8 seconds'/i);
+  assert.match(autoDistribution, /where active\.occupancy < 8/i);
+  assert.match(autoDistribution,
+    /order by\s+\(active\.occupancy >= 3\),\s+case when active\.occupancy >= 3 then active\.occupancy else 0 end,\s+candidate\.channel/i,
+    'automatic admission must fill channel 1 to three before moving to channel 2');
+  assert.match(autoDistribution,
+    /\(p_state - 'channelMode' - 'channel'\)[\s\S]*jsonb_build_object\('channel', v_selected_channel\)/i,
+    'the server-selected channel must replace, not trust, the automatic client preference');
+  assert.match(autoDistribution,
+    /revoke all on function public\.sync_world_presence_v4\(jsonb\)[\s\S]*grant execute[\s\S]*to authenticated/i);
+  assert.match(autoDistribution, /security definer\s+set search_path = ''/i);
 });

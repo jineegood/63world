@@ -164,6 +164,7 @@
       weaponUpgrades:sanitizeRankMap(data.weaponUpgrades, 4),
       pets:sanitizeIdList(data.pets, 50),
       activePet:safeText(data.activePet, 80) || null,
+      raidNameplates:sanitizeIdList(data.raidNameplates, 3),
       records:Object.freeze({
         answered:nonNegativeInteger(records.answered),
         correct:nonNegativeInteger(records.correct),
