@@ -248,17 +248,19 @@ test('final combat integration uses approved balance helpers', () => {
   assert.match(gameSource, /game\.elementalBarrierUsed\s*=\s*true/);
   assert.doesNotMatch(gameSource, /executeHpThreshold\(getSkillRank\('mage_basic_element'\)\)/);
   assert.match(gameSource, /YuksamCombatRules\.scaleMonsterStats/);
-  assert.match(gameSource, /YuksamCombatRules\.rollEnhancement\(next\.chance, Math\.random\(\)\)/);
+  assert.match(gameSource, /YuksamCombatRules\.rollEnhancement\(next\.successChance, Math\.random\(\)\)/);
 });
 
-test('enhancement rate UI is generated from canonical tier data', () => {
+test('enhancement display rate stays separate from the actual success rate', () => {
   const rateHelper = gameSource.match(/function upgradeRatesHtmlV33\(\)[\s\S]*?\n  }/)?.[0] || '';
   assert.match(rateHelper, /TIER_INFO_V27/);
+  assert.match(rateHelper, /tier\.chance/);
+  assert.doesNotMatch(rateHelper, /tier\.successChance/);
   assert.doesNotMatch(rateHelper, /70%|50%|30%|10%/);
-  assert.match(patchDataSource, /chance:\.80/);
-  assert.match(patchDataSource, /chance:\.60/);
-  assert.match(patchDataSource, /chance:\.40/);
-  assert.match(patchDataSource, /chance:\.20/);
+  assert.match(patchDataSource, /chance:\.80, successChance:\.80/);
+  assert.match(patchDataSource, /chance:\.60, successChance:\.60/);
+  assert.match(patchDataSource, /chance:\.40, successChance:\.40/);
+  assert.match(patchDataSource, /chance:\.20, successChance:\.15/);
 });
 
 test('HUD logout and in-window skill point hint use the approved layout', () => {

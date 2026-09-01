@@ -69,7 +69,7 @@ test('shielded damage reports shield and HP loss separately', () => {
   });
 });
 
-test('enhancement succeeds only when the random roll is below the displayed chance', () => {
+test('enhancement succeeds only when the random roll is below the configured success chance', () => {
   for (const chance of [0.8, 0.6, 0.4, 0.2]) {
     assert.equal(rules.rollEnhancement(chance, chance - Number.EPSILON), true);
     assert.equal(rules.rollEnhancement(chance, chance), false);

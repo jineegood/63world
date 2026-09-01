@@ -43,7 +43,14 @@ test('patch data module exposes mutable pet and enhancement tables', () => {
   assert.equal(data.PET_DEFS_V27.yuksam.desc, '전설 펫. 눈과 미소를 가진 작은 육삼빌딩이 당신의 곁을 지켜줍니다.');
   assert.equal(data.TIER_INFO_V27.length, 5);
   assert.equal(data.TIER_INFO_V27[4].name, '전설');
-  assert.equal(data.TIER_INFO_V27[4].chance, 0.20); // 사용자 지정 강화 확률(80/60/40/20) 반영
+  assert.deepEqual(
+    Array.from(data.TIER_INFO_V27.slice(1), (tier) => tier.chance),
+    [0.80, 0.60, 0.40, 0.20],
+  );
+  assert.deepEqual(
+    Array.from(data.TIER_INFO_V27.slice(1), (tier) => tier.successChance),
+    [0.80, 0.60, 0.40, 0.15],
+  );
   assert.equal(data.WORLD_PATCHES_V17.swamp.key, 'swamp');
   assert.equal(data.WORLD_PATCHES_V21.finalBossRoom.key, 'finalBossRoom');
   assert.equal(data.WORLD_PATCHES_V27.town.petShop.name, '펫 상점');

@@ -37,7 +37,7 @@
       questTitle:'[파티] 육삼의 정상',
       name:'육삼 정상 이름표',
       shortName:'육삼의 정상',
-      description:'청록빛과 자홍빛 네온, 황금 테두리와 옥상 안테나가 빛나는 최종 이름표',
+      description:'청록빛과 자홍빛 네온, 황금 테두리와 왕관이 빛나는 최종 이름표',
       icon:'♛',
       cssClass:'raid-nameplate-summit-63',
       possessStats:Object.freeze({ 체력:4 }),
@@ -221,6 +221,26 @@
     };
   }
 
+  function pickerPlateMetrics(ctx, x, y, model, borderWidth) {
+    ctx.font = '900 14px Jua, Noto Sans KR, system-ui';
+    const nameWidth = ctx.measureText(model.name).width;
+    ctx.font = '400 9px Noto Sans KR, Jua, system-ui';
+    const roleWidth = ctx.measureText(model.roleLine).width;
+    const textWidth = Math.max(nameWidth, roleWidth);
+    /* CSS picker layout: border + 8px padding + 16px icon + 6px gap
+       + text column + 8px padding + border. */
+    const width = Math.ceil(textWidth + borderWidth * 2 + 38);
+    const left = x - width / 2;
+    return {
+      top:y + 58,
+      left,
+      width,
+      height:52,
+      iconX:left + borderWidth + 16,
+      textX:left + borderWidth + 30 + textWidth / 2,
+    };
+  }
+
   function drawPlateText(ctx, metrics, model, nameColor, roleColor, glow = null) {
     ctx.textAlign = 'center';
     ctx.shadowColor = glow?.name || 'rgba(0,0,0,.94)';
@@ -246,6 +266,29 @@
     ctx.textBaseline = 'alphabetic';
   }
 
+  function drawPickerPlateText(ctx, metrics, model, nameColor, roleColor) {
+    ctx.textAlign = 'center';
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.font = '900 14px Jua, Noto Sans KR, system-ui';
+    ctx.fillStyle = nameColor;
+    ctx.fillText(model.name, metrics.textX, metrics.top + 24);
+    ctx.font = '400 9px Noto Sans KR, Jua, system-ui';
+    ctx.fillStyle = roleColor;
+    ctx.fillText(model.roleLine, metrics.textX, metrics.top + 39);
+  }
+
+  function drawPickerPlateIcon(ctx, metrics, icon, color, shadowColor = 'transparent', shadowBlur = 0) {
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '400 16px Segoe UI Symbol, Noto Sans Symbols, system-ui';
+    ctx.shadowColor = shadowColor;
+    ctx.shadowBlur = shadowBlur;
+    ctx.fillStyle = color;
+    ctx.fillText(icon, metrics.iconX, metrics.top + 26);
+    ctx.textBaseline = 'alphabetic';
+  }
+
   function fillAngledPanel(ctx, metrics, color, startRatio, endRatio, slant = 13) {
     const start = metrics.left + metrics.width * startRatio;
     const end = metrics.left + metrics.width * endRatio;
@@ -259,49 +302,123 @@
     ctx.fill();
   }
 
+  const pickerFrameCache = new Map();
+
+  function paintPickerFrame(ctx, metrics, themeId, useGradient) {
+    const steel = themeId === 'raid_20_steel';
+    const borderWidth = steel ? 2 : 3;
+    const radius = steel ? 10 : 14;
+    const colors = steel
+      ? ['#181f26', '#313c48']
+      : ['#1e1b4b', '#4c1d95', '#7c2d12'];
+    roundedPath(
+      ctx,
+      metrics.left + borderWidth / 2,
+      metrics.top + borderWidth / 2,
+      metrics.width - borderWidth,
+      metrics.height - borderWidth,
+      radius - borderWidth / 2,
+    );
+    const gradient = useGradient && typeof ctx.createLinearGradient === 'function'
+      ? ctx.createLinearGradient(metrics.left, metrics.top, metrics.left + metrics.width, metrics.top + metrics.height)
+      : null;
+    if (gradient) {
+      gradient.addColorStop(0, colors[0]);
+      if (!steel) gradient.addColorStop(.56, colors[1]);
+      gradient.addColorStop(1, colors.at(-1));
+      ctx.fillStyle = gradient;
+      ctx.fill();
+    } else {
+      ctx.fillStyle = colors[0];
+      ctx.fill();
+      ctx.save();
+      roundedPath(ctx, metrics.left, metrics.top, metrics.width, metrics.height, radius);
+      ctx.clip?.();
+      if (steel) {
+        fillAngledPanel(ctx, metrics, colors[1], .42, 1.18, 10);
+      } else {
+        fillAngledPanel(ctx, metrics, colors[1], .32, .78, 11);
+        fillAngledPanel(ctx, metrics, colors[2], .72, 1.18, 11);
+      }
+      ctx.restore();
+    }
+    roundedPath(
+      ctx,
+      metrics.left + borderWidth / 2,
+      metrics.top + borderWidth / 2,
+      metrics.width - borderWidth,
+      metrics.height - borderWidth,
+      radius - borderWidth / 2,
+    );
+    ctx.strokeStyle = steel ? '#94a3b8' : '#c4b5fd';
+    ctx.lineWidth = borderWidth;
+    ctx.stroke();
+    const insetWidth = steel ? 3 : 1;
+    const inset = borderWidth + insetWidth / 2;
+    roundedPath(
+      ctx,
+      metrics.left + inset,
+      metrics.top + inset,
+      metrics.width - inset * 2,
+      metrics.height - inset * 2,
+      Math.max(2, radius - inset),
+    );
+    ctx.strokeStyle = steel ? '#26323d' : 'rgba(251,146,60,.86)';
+    ctx.lineWidth = insetWidth;
+    ctx.stroke();
+  }
+
+  function pickerFrameTexture(themeId, width, height) {
+    const documentValue = global.document;
+    if (!documentValue?.createElement) return null;
+    const pixelWidth = Math.max(1, Math.ceil(width));
+    const pixelHeight = Math.max(1, Math.ceil(height));
+    const key = `${themeId}:${pixelWidth}x${pixelHeight}`;
+    if (pickerFrameCache.has(key)) return pickerFrameCache.get(key);
+    const canvas = documentValue.createElement('canvas');
+    if (!canvas) return null;
+    canvas.width = pixelWidth;
+    canvas.height = pixelHeight;
+    const frameContext = canvas.getContext?.('2d');
+    if (!frameContext) return null;
+    paintPickerFrame(frameContext, {
+      left:0,
+      top:0,
+      width:pixelWidth,
+      height:pixelHeight,
+    }, themeId, true);
+    if (pickerFrameCache.size >= 96) {
+      const oldestKey = pickerFrameCache.keys().next().value;
+      if (oldestKey) pickerFrameCache.delete(oldestKey);
+    }
+    pickerFrameCache.set(key, canvas);
+    return canvas;
+  }
+
+  function drawPickerFrame(ctx, metrics, themeId) {
+    const texture = pickerFrameTexture(themeId, metrics.width, metrics.height);
+    if (texture && typeof ctx.drawImage === 'function') {
+      ctx.drawImage(texture, metrics.left, metrics.top, metrics.width, metrics.height);
+      return;
+    }
+    paintPickerFrame(ctx, metrics, themeId, false);
+  }
+
   function drawSteel20(ctx, x, y, model) {
-    const metrics = plateMetrics(ctx, x, y, model);
-    const pulse = .76 + Math.sin(nowSeconds() * 1.45) * .16;
+    const metrics = pickerPlateMetrics(ctx, x, y, model, 2);
     ctx.save();
-    ctx.shadowColor = 'rgba(0,0,0,.94)'; ctx.shadowBlur = 9;
-    roundedPath(ctx, metrics.left, metrics.top, metrics.width, metrics.height, 10);
-    ctx.fillStyle = 'rgba(24,31,38,.95)'; ctx.fill();
-    ctx.save();
-    roundedPath(ctx, metrics.left, metrics.top, metrics.width, metrics.height, 10);
-    ctx.clip?.();
-    fillAngledPanel(ctx, metrics, '#313c48', .42, 1.18, 10);
-    ctx.restore();
-    roundedPath(ctx, metrics.left, metrics.top, metrics.width, metrics.height, 10);
-    ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 2; ctx.stroke();
-    roundedPath(ctx, metrics.left + 4, metrics.top + 4, metrics.width - 8, metrics.height - 8, 7);
-    ctx.strokeStyle = '#26323d'; ctx.lineWidth = 3; ctx.stroke();
-    drawPlateIcon(ctx, metrics, '▣', `rgba(251,146,60,${pulse})`, '#fb923c', 7);
-    drawPlateText(ctx, metrics, model, '#fff7ed', '#fdba74');
+    drawPickerFrame(ctx, metrics, 'raid_20_steel');
+    drawPickerPlateIcon(ctx, metrics, '▣', '#fb923c', '#fb923c', 7);
+    drawPickerPlateText(ctx, metrics, model, '#fff7ed', '#fdba74');
     ctx.restore();
   }
 
   function drawTwilight40(ctx, x, y, model) {
-    const metrics = plateMetrics(ctx, x, y, model);
-    const t = nowSeconds();
+    const metrics = pickerPlateMetrics(ctx, x, y, model, 3);
     ctx.save();
-    ctx.shadowColor = 'rgba(0,0,0,.94)'; ctx.shadowBlur = 9;
-    roundedPath(ctx, metrics.left, metrics.top, metrics.width, metrics.height, 14);
-    const gradient = typeof ctx.createLinearGradient === 'function'
-      ? ctx.createLinearGradient(metrics.left, metrics.top, metrics.left + metrics.width, metrics.top + metrics.height)
-      : null;
-    if (gradient) {
-      gradient.addColorStop(0, 'rgba(30,27,75,.96)');
-      gradient.addColorStop(.55, 'rgba(76,29,149,.95)');
-      gradient.addColorStop(1, 'rgba(124,45,18,.94)');
-    }
-    ctx.fillStyle = gradient || 'rgba(55,31,103,.96)'; ctx.fill();
-    ctx.strokeStyle = '#c4b5fd'; ctx.lineWidth = 3; ctx.stroke();
-    roundedPath(ctx, metrics.left + 4, metrics.top + 4, metrics.width - 8, metrics.height - 8, 10);
-    ctx.strokeStyle = 'rgba(251,146,60,.82)'; ctx.lineWidth = 1; ctx.stroke();
-    ctx.shadowBlur = 0;
-    const iconAlpha = .76 + Math.sin(t * 1.2) * .18;
-    drawPlateIcon(ctx, metrics, '◆', `rgba(251,146,60,${iconAlpha})`, '#fb923c', 6);
-    drawPlateText(ctx, metrics, model, '#fff7ed', '#ddd6fe');
+    drawPickerFrame(ctx, metrics, 'raid_40_twilight');
+    drawPickerPlateIcon(ctx, metrics, '◆', '#fb923c');
+    drawPickerPlateText(ctx, metrics, model, '#fff7ed', '#ddd6fe');
     ctx.restore();
   }
 

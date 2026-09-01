@@ -153,7 +153,7 @@ test('raid milestones normalize ownership, expose quest goals, and register thre
   registered.get('raid_20_steel')(ctx, 300, 200, { name:'철벽', roleLine:'LV.5 무기 전사' });
   assert.ok(colors.includes('#94a3b8'));
   assert.ok(colors.includes('#313c48'), '20층 실제 이름표도 선택창의 강철 그라데이션 색을 사용해야 한다');
-  assert.ok(colors.some((value) => String(value).startsWith('rgba(251,146,60,')),
+  assert.ok(colors.includes('#fb923c'),
     '20층은 기본 청록과 다른 주황 표시등이어야 한다');
   assert.ok(drawnText.includes('▣'), '20층 실제 이름표도 선택창의 강철 아이콘을 사용해야 한다');
   colors.length = 0;
@@ -174,6 +174,110 @@ test('raid milestones normalize ownership, expose quest goals, and register thre
   assert.ok(drawnText.includes('♛'), '63층 실제 이름표도 선택창의 왕관 아이콘을 사용해야 한다');
   assert.equal(gradientCalls, 0, '상시 렌더되는 최종 이름표는 매 프레임 그라디언트를 만들지 않는다');
   assert.equal(arcCalls, 0, '선택창에 없는 안테나 표시등은 실제 이름표에도 그리지 않는다');
+});
+
+test('20·40층 live nameplates cache the picker gradients and preserve its exact layout/chrome', () => {
+  const registered = new Map();
+  const createdFrames = [];
+  let frameGradientCalls = 0;
+  let liveGradientCalls = 0;
+
+  function createFrameContext() {
+    const gradients = [];
+    const strokes = [];
+    const context = {
+      gradients,
+      strokes,
+      save() {}, restore() {}, beginPath() {}, roundRect() {}, fill() {},
+      stroke() { strokes.push({ color:this.strokeStyle, width:this.lineWidth }); },
+      createLinearGradient() {
+        frameGradientCalls += 1;
+        const stops = [];
+        gradients.push(stops);
+        return { addColorStop:(offset, color) => stops.push([offset, color]) };
+      },
+    };
+    return context;
+  }
+
+  const window = {
+    performance:{ now:() => 1000 },
+    document:{
+      createElement(tag) {
+        assert.equal(tag, 'canvas');
+        const context = createFrameContext();
+        const canvas = { width:0, height:0, getContext:() => context, context };
+        createdFrames.push(canvas);
+        return canvas;
+      },
+    },
+    YuksamPlayerNameplateV1:{
+      registerTheme:(id, draw) => { registered.set(id, draw); return true; },
+      setThemeResolver() {},
+    },
+  };
+  vm.runInNewContext(raidNameplateSource(), { window, Date, Math, Map, Set, Object, String, Number, Array });
+
+  const text = [];
+  const images = [];
+  const liveContext = {
+    save() {}, restore() {},
+    measureText(value) {
+      const factor = String(this.font).includes('14px') ? 7 : 4.5;
+      return { width:String(value).length * factor };
+    },
+    drawImage(...args) { images.push(args); },
+    fillText(value, x, y) {
+      text.push({
+        value:String(value), x, y, font:this.font, color:this.fillStyle,
+        shadowColor:this.shadowColor, shadowBlur:this.shadowBlur,
+      });
+    },
+    createLinearGradient() { liveGradientCalls += 1; return { addColorStop() {} }; },
+  };
+  const model = { name:'철벽', roleLine:'LV.20 무기 전사' };
+  registered.get('raid_20_steel')(liveContext, 300, 200, model);
+  registered.get('raid_20_steel')(liveContext, 300, 200, model);
+  registered.get('raid_40_twilight')(liveContext, 300, 200, model);
+  registered.get('raid_40_twilight')(liveContext, 300, 200, model);
+
+  assert.equal(createdFrames.length, 2, '각 디자인·폭의 배경은 한 번만 만들고 다음 프레임부터 재사용해야 한다');
+  assert.equal(frameGradientCalls, 2, '그라데이션은 캐시 생성 시에만 한 번씩 만들어야 한다');
+  assert.equal(liveGradientCalls, 0, '월드 매 프레임에서는 CanvasGradient를 만들지 않아야 한다');
+  assert.deepEqual(createdFrames[0].context.gradients[0], [[0, '#181f26'], [1, '#313c48']]);
+  assert.deepEqual(createdFrames[1].context.gradients[0], [[0, '#1e1b4b'], [.56, '#4c1d95'], [1, '#7c2d12']]);
+  assert.deepEqual(createdFrames[0].context.strokes, [
+    { color:'#94a3b8', width:2 },
+    { color:'#26323d', width:3 },
+  ]);
+  assert.deepEqual(createdFrames[1].context.strokes, [
+    { color:'#c4b5fd', width:3 },
+    { color:'rgba(251,146,60,.86)', width:1 },
+  ]);
+  assert.ok(images.every(([, , , , height]) => height === 52), '선택창과 실제 이름표 높이는 모두 52px이어야 한다');
+  assert.equal(images[2][3], images[0][3] + 2, '3px 황혼 테두리는 2px 강철 테두리보다 전체 폭이 2px 넓어야 한다');
+
+  const steelIcon = text.find((entry) => entry.value === '▣');
+  const twilightIcon = text.find((entry) => entry.value === '◆');
+  assert.match(steelIcon.font, /400 16px/);
+  assert.equal(steelIcon.color, '#fb923c');
+  assert.equal(steelIcon.shadowColor, '#fb923c');
+  assert.equal(steelIcon.shadowBlur, 7);
+  assert.match(twilightIcon.font, /400 16px/);
+  assert.equal(twilightIcon.color, '#fb923c');
+  assert.equal(twilightIcon.shadowColor, 'transparent');
+  assert.equal(twilightIcon.shadowBlur, 0);
+  assert.equal(steelIcon.x - images[0][1], 18, '강철: border 2 + padding 8 + icon half 8');
+  assert.equal(twilightIcon.x - images[2][1], 19, '황혼: border 3 + padding 8 + icon half 8');
+
+  const name = text.find((entry) => entry.value === '철벽');
+  const role = text.find((entry) => entry.value === 'LV.20 무기 전사');
+  assert.match(name.font, /900 14px/);
+  assert.equal(name.y, 282);
+  assert.match(role.font, /400 9px/);
+  assert.equal(role.y, 297);
+  assert.equal(name.shadowBlur, 0);
+  assert.equal(role.shadowBlur, 0);
 });
 
 test('Supabase REST configuration normalizes to one Realtime websocket endpoint', () => {

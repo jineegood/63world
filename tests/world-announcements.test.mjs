@@ -18,6 +18,10 @@ const milestoneExpansion = fs.readFileSync(path.join(
   root,
   'supabase/migrations/202609010003_elite_and_level_announcements_v1.sql',
 ), 'utf8');
+const legendaryEnhancementBalance = fs.readFileSync(path.join(
+  root,
+  'supabase/migrations/202609010011_legendary_enhancement_success_rate_v1.sql',
+), 'utf8');
 
 function loadAnnouncements({ sessionStorage } = {}) {
   const chats = [];
@@ -159,6 +163,21 @@ test('migration keeps notices private and all special outcomes atomic and idempo
   assert.match(migration, /revoke all on function public\.sync_world_presence_v2\(jsonb\)[\s\S]*grant execute[\s\S]*to authenticated/i);
 });
 
+test('additive migration lowers only the authoritative legendary roll to fifteen percent', () => {
+  assert.match(migration, /v_chance := case v_old_tier[\s\S]*when 3 then 0\.20/i,
+    'the applied historical migration must remain immutable');
+  assert.match(legendaryEnhancementBalance,
+    /create or replace function public\.perform_world_special_action_v1\(\s*p_action text,\s*p_request_id uuid/i);
+  assert.match(legendaryEnhancementBalance,
+    /v_chance := case v_old_tier\s*when 0 then 0\.80\s*when 1 then 0\.60\s*when 2 then 0\.40\s*when 3 then 0\.15\s*else 0\s*end;/i);
+  assert.doesNotMatch(legendaryEnhancementBalance, /when 3 then 0\.20/i);
+  assert.match(legendaryEnhancementBalance, /v_success := pg_catalog\.random\(\) < v_chance/i);
+  assert.match(legendaryEnhancementBalance,
+    /if v_success and v_new_tier = 4 then[\s\S]*'legendary_upgrade'/i);
+  assert.match(legendaryEnhancementBalance,
+    /revoke all on function public\.perform_world_special_action_v1\(text, uuid\)[\s\S]*grant execute[\s\S]*to authenticated/i);
+});
+
 test('production UI uses the RPC while random outcome fallback stays behind the local-only gate', () => {
   const game = fs.readFileSync(path.join(root, 'game.js'), 'utf8');
   const multiplayer = fs.readFileSync(path.join(root, 'src/multiplayer.js'), 'utf8');
@@ -169,6 +188,7 @@ test('production UI uses the RPC while random outcome fallback stays behind the 
   assert.match(game, /performWorldSpecialAction\('summonPet', requestId\)/);
   assert.match(game, /pendingUpgradeRequestIdV1[\s\S]*pendingPetSummonRequestIdV1/);
   assert.match(game, /loadPendingWorldSpecialActionV1\('enhance'\)[\s\S]*resultItem/);
+  assert.match(game, /rollEnhancement\(next\.successChance, Math\.random\(\)\)/);
   assert.match(game, /rememberPendingWorldSpecialActionV1\('summonPet'/);
   assert.match(multiplayer, /payload\.lastAnnouncementId = worldAnnouncements\?\.getCursor/);
   assert.match(multiplayer, /client\.rpc\('sync_world_presence_v4'/);

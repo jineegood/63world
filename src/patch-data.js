@@ -9,11 +9,11 @@
   };
 
   const TIER_INFO_V27 = [
-    { name:'일반', cls:'tier-0', color:'#cbd5e1', chance:null },
-    { name:'고급', cls:'tier-1', color:'#22c55e', chance:.80 },
-    { name:'희귀', cls:'tier-2', color:'#3b82f6', chance:.60 },
-    { name:'에픽', cls:'tier-3', color:'#a855f7', chance:.40 },
-    { name:'전설', cls:'tier-4', color:'#f59e0b', chance:.20 },
+    { name:'일반', cls:'tier-0', color:'#cbd5e1', chance:null, successChance:null },
+    { name:'고급', cls:'tier-1', color:'#22c55e', chance:.80, successChance:.80 },
+    { name:'희귀', cls:'tier-2', color:'#3b82f6', chance:.60, successChance:.60 },
+    { name:'에픽', cls:'tier-3', color:'#a855f7', chance:.40, successChance:.40 },
+    { name:'전설', cls:'tier-4', color:'#f59e0b', chance:.20, successChance:.15 },
   ];
 
   const WORLD_PATCHES_V17 = {

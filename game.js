@@ -10947,7 +10947,7 @@ function updateQuestTracker() {
     if ((game.player.building || 0) < 3) { toast('빌딩 화폐가 부족합니다. 강화에는 3빌딩이 필요합니다.'); return; }
     const next = TIER_INFO_V27[tier + 1];
     game.player.building -= 3;
-    const success = Math.random() < next.chance;
+    const success = Math.random() < next.successChance;
     const newTier = success ? tier + 1 : Math.max(0, tier - 1);
     game.player.weaponUpgrades[item.id] = newTier;
     ensurePlayerHp(); savePlayer(); updateHud(); playSfx(success ? 'quest' : 'hit');
@@ -11028,11 +11028,11 @@ function updateQuestTracker() {
   try { document.title = '63월드'; } catch {}
 
   const TIER_INFO_V28 = window.TIER_INFO_V27 || [
-    { name:'일반', cls:'tier-0', color:'#cbd5e1', chance:null },
-    { name:'고급', cls:'tier-1', color:'#22c55e', chance:.70 },
-    { name:'희귀', cls:'tier-2', color:'#3b82f6', chance:.50 },
-    { name:'에픽', cls:'tier-3', color:'#a855f7', chance:.30 },
-    { name:'전설', cls:'tier-4', color:'#f59e0b', chance:.10 },
+    { name:'일반', cls:'tier-0', color:'#cbd5e1', chance:null, successChance:null },
+    { name:'고급', cls:'tier-1', color:'#22c55e', chance:.80, successChance:.80 },
+    { name:'희귀', cls:'tier-2', color:'#3b82f6', chance:.60, successChance:.60 },
+    { name:'에픽', cls:'tier-3', color:'#a855f7', chance:.40, successChance:.40 },
+    { name:'전설', cls:'tier-4', color:'#f59e0b', chance:.20, successChance:.15 },
   ];
   window.TIER_INFO_V28 = TIER_INFO_V28;
 
@@ -11120,7 +11120,7 @@ function updateQuestTracker() {
 
   function upgradeRatesHtmlV28() {
     const rows = TIER_INFO_V28.slice(1).map((tier, index) =>
-      `<div><span class="tier-dot tier-${index + 1}"></span>${tier.name} 성공률 <strong>${tier.chance}%</strong></div>`
+      `<div><span class="tier-dot tier-${index + 1}"></span>${tier.name} 성공률 <strong>${Math.round(tier.chance * 100)}%</strong></div>`
     ).join('');
     return `<div class="upgrade-rates-v28"><b>강화 확률 안내</b>${rows}<small>강화 비용은 3빌딩이며, 실패하면 한 등급 아래로 하락합니다.</small></div>`;
   }
@@ -11187,7 +11187,7 @@ function updateQuestTracker() {
     renderUpgradeProgressV28(item, next);
     playSfx('upgradeCharge');
     setTimeout(() => {
-      const success = Math.random() < next.chance;
+      const success = Math.random() < next.successChance;
       const newTier = success ? tier + 1 : Math.max(0, tier - 1);
       game.player.weaponUpgrades[item.id] = newTier;
       ensurePlayerHp?.(); savePlayer?.(); updateHud?.();
@@ -13233,7 +13233,7 @@ function updateQuestTracker() {
       if (localFallback) {
         await animation;
         game.player.building -= 3;
-        const success = YuksamCombatRules.rollEnhancement(next.chance, Math.random());
+        const success = YuksamCombatRules.rollEnhancement(next.successChance, Math.random());
         const newTier = success ? tier + 1 : Math.max(0, tier - 1);
         game.player.weaponUpgrades[item.id] = newTier;
         outcome = Object.freeze({ success, weaponId:item.id, oldTier:tier, newTier });
