@@ -254,8 +254,10 @@ test('20·40층 live nameplates cache the picker gradients and preserve its exac
     { color:'#c4b5fd', width:3 },
     { color:'rgba(251,146,60,.86)', width:1 },
   ]);
-  assert.ok(images.every(([, , , , height]) => height === 52), '선택창과 실제 이름표 높이는 모두 52px이어야 한다');
-  assert.equal(images[2][3], images[0][3] + 2, '3px 황혼 테두리는 2px 강철 테두리보다 전체 폭이 2px 넓어야 한다');
+  assert.deepEqual(images.map(([, , , , height]) => height), [52, 52, 53, 53],
+    '선택창에서 측정한 강철 52px·황혼 53px 높이를 실제 이름표도 유지해야 한다');
+  assert.equal(images[0][3], 166);
+  assert.equal(images[2][3], 166, '두 이름표 모두 실제 선택창에서 측정한 166px 폭이어야 한다');
 
   const steelIcon = text.find((entry) => entry.value === '▣');
   const twilightIcon = text.find((entry) => entry.value === '◆');
@@ -272,12 +274,71 @@ test('20·40층 live nameplates cache the picker gradients and preserve its exac
 
   const name = text.find((entry) => entry.value === '철벽');
   const role = text.find((entry) => entry.value === 'LV.20 무기 전사');
-  assert.match(name.font, /900 14px/);
+  assert.match(name.font, /700 14px/);
   assert.equal(name.y, 282);
-  assert.match(role.font, /400 9px/);
+  assert.match(role.font, /400 9px Gowun Dodum/);
   assert.equal(role.y, 297);
+  assert.equal(name.x, 311, '166px 선택창에서 아이콘 다음 텍스트 열의 정중앙이어야 한다');
   assert.equal(name.shadowBlur, 0);
   assert.equal(role.shadowBlur, 0);
+
+  ['김서준', '가나다라마바사', 'abcdefghijklmn'].forEach((studentName) => {
+    registered.get('raid_20_steel')(liveContext, 300, 200, { name:studentName, roleLine:'LV.40 무기 전사' });
+    assert.equal(text.at(-2)?.value, studentName, `허용된 학생 이름 ${studentName}은 잘리면 안 된다`);
+    assert.equal(images.at(-1)[3], 166);
+  });
+
+  const longName = 'abcdefghijklmnopqrstuvwx';
+  registered.get('raid_20_steel')(liveContext, 300, 200, { name:longName, roleLine:'LV.40 무기 전사' });
+  const fittedName = text.at(-2)?.value;
+  assert.equal(images.at(-1)[3], 166, '긴 이전 캐릭터 이름도 공통 배경 폭을 늘려 preview와 어긋나면 안 된다');
+  assert.notEqual(fittedName, longName);
+  assert.match(fittedName, /…$/, 'CSS의 text-overflow처럼 긴 이름은 동일 canvas에서 말줄임해야 한다');
+});
+
+test('20·40층 costume previews call the exact same canvas theme renderer as equipped players', () => {
+  const draws = [];
+  const contexts = [{ clearRect() {} }, { clearRect() {} }];
+  const canvases = [
+    {
+      width:1, height:1,
+      getAttribute:() => 'raid_20_steel',
+      getContext:() => contexts[0],
+    },
+    {
+      width:1, height:1,
+      getAttribute:() => 'raid_40_twilight',
+      getContext:() => contexts[1],
+    },
+  ];
+  const root = { querySelectorAll:() => canvases };
+  const window = {
+    YuksamPlayerNameplateV1:{
+      registerTheme() { return true; },
+      setThemeResolver() {},
+      draw(...args) { draws.push(args); },
+    },
+  };
+  vm.runInNewContext(raidNameplateSource(), { window, Date, Math, Map, Set, Object, String, Number, Array });
+  const player = {
+    name:'명진쌤', level:40, class:'warrior', spec:'무기',
+    raidNameplates:['raid_20_steel', 'raid_40_twilight'], nameplate:{ theme:'raid_20_steel' },
+  };
+  const picker = window.YuksamRaidNameplatesV1.pickerMarkup(player);
+  assert.match(picker, /data-raid-nameplate-canvas-v1="raid_20_steel"[^>]*width="166" height="52"/);
+  assert.match(picker, /data-raid-nameplate-canvas-v1="raid_40_twilight"[^>]*width="166" height="53"/);
+  assert.match(picker, /raid-nameplate-preview-v1 raid-nameplate-summit-63/,
+    '이미 맞는 63층 미리보기와 renderer는 그대로 보존한다');
+
+  assert.equal(window.YuksamRaidNameplatesV1.renderPickerCanvases(player, root), 2);
+  assert.deepEqual(canvases.map(({ width, height }) => ({ width, height })), [
+    { width:166, height:52 },
+    { width:166, height:53 },
+  ]);
+  assert.deepEqual(draws.map(([, x, y, visual]) => ({ x, y, theme:visual.nameplate.theme })), [
+    { x:83, y:-58, theme:'raid_20_steel' },
+    { x:83, y:-58, theme:'raid_40_twilight' },
+  ]);
 });
 
 test('Supabase REST configuration normalizes to one Realtime websocket endpoint', () => {

@@ -225,7 +225,9 @@ test('the costume closet includes the independently equipped raid nameplate coll
   assert.match(nameplates, /육삼 정상 이름표/);
   assert.match(nameplates, /파티 던전 \$\{entry\.floorLabel\} 최초 돌파 시 획득/);
   assert.match(style, /\.raid-nameplate-grid-v1\s*\{[^}]*grid-template-columns:\s*repeat\(3,/);
-  assert.match(style, /\.raid-nameplate-preview-v1\.raid-nameplate-steel-20[\s\S]*?#fb923c/);
+  assert.match(nameplates, /definitionValue\.id === 'raid_20_steel' \|\| definitionValue\.id === 'raid_40_twilight'/);
+  assert.match(nameplates, /data-raid-nameplate-canvas-v1="\$\{definitionValue\.id\}"/);
+  assert.match(style, /\.raid-nameplate-preview-v1\.raid-nameplate-canvas-host-v1/);
   assert.match(index, /<script src="src\/raid-nameplates\.js"><\/script>[\s\S]*?<script src="src\/raid-run-ui\.js"><\/script>/);
 });
 

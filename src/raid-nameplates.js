@@ -136,6 +136,13 @@
   function previewMarkup(definitionValue, player, { locked = false, equipped = false } = {}) {
     const name = escapeHtml(player?.name || '모험가');
     const roleLine = escapeHtml(roleLineFor(player));
+    if (definitionValue.id === 'raid_20_steel' || definitionValue.id === 'raid_40_twilight') {
+      const height = definitionValue.id === 'raid_20_steel' ? 52 : 53;
+      return `<div class="raid-nameplate-preview-v1 raid-nameplate-canvas-host-v1${locked ? ' locked' : ''}" aria-hidden="true">
+        <canvas class="raid-nameplate-canvas-preview-v1" data-raid-nameplate-canvas-v1="${definitionValue.id}" width="166" height="${height}"></canvas>
+        ${equipped ? '<em>장착 중</em>' : ''}
+      </div>`;
+    }
     return `<div class="raid-nameplate-preview-v1 ${definitionValue.cssClass}${locked ? ' locked' : ''}" aria-hidden="true">
       <i>${escapeHtml(definitionValue.icon)}</i>
       <span><b>${name}</b><small>${roleLine}</small></span>
@@ -163,13 +170,15 @@
         <button class="${isEquipped ? 'ghost' : 'primary'} small" ${hasItem ? '' : 'disabled'} onclick="equipRaidNameplateV1('${entry.id}')">${isEquipped ? '장착 중' : (hasItem ? '장착' : '잠김')}</button>
       </article>`;
     }).join('');
-    return `<section class="raid-nameplate-picker-v1">
+    const markup = `<section class="raid-nameplate-picker-v1">
       <div class="raid-nameplate-picker-head-v1">
         <div><h3>🏅 이름표 스킨</h3><p>파티 던전 이정표를 달성하면 영구 해금됩니다. 장착하지 않아도 보유 효과가 모두 적용됩니다.</p></div>
         <button class="${defaultEquipped ? 'ghost' : 'primary'} small" onclick="equipRaidNameplateV1('default')">${defaultEquipped ? '기본 이름표 사용 중' : '기본 이름표로 변경'}</button>
       </div>
       <div class="raid-nameplate-grid-v1">${cards}</div>
     </section>`;
+    schedulePickerCanvasRender(player);
+    return markup;
   }
 
   function rewardMarkup(themeId) {
@@ -222,22 +231,20 @@
   }
 
   function pickerPlateMetrics(ctx, x, y, model, borderWidth) {
-    ctx.font = '900 14px Jua, Noto Sans KR, system-ui';
-    const nameWidth = ctx.measureText(model.name).width;
-    ctx.font = '400 9px Noto Sans KR, Jua, system-ui';
-    const roleWidth = ctx.measureText(model.roleLine).width;
-    const textWidth = Math.max(nameWidth, roleWidth);
     /* CSS picker layout: border + 8px padding + 16px icon + 6px gap
-       + text column + 8px padding + border. */
-    const width = Math.ceil(textWidth + borderWidth * 2 + 38);
+       + text column + 8px padding + border. The live and preview backing
+       canvases deliberately share this fixed measured desktop width. */
+    const width = 166;
     const left = x - width / 2;
+    const textColumnWidth = width - borderWidth * 2 - 38;
     return {
       top:y + 58,
       left,
       width,
-      height:52,
+      height:borderWidth === 2 ? 52 : 53,
       iconX:left + borderWidth + 16,
-      textX:left + borderWidth + 30 + textWidth / 2,
+      textX:left + borderWidth + 30 + textColumnWidth / 2,
+      textWidth:textColumnWidth,
     };
   }
 
@@ -267,21 +274,28 @@
   }
 
   function drawPickerPlateText(ctx, metrics, model, nameColor, roleColor) {
+    const fit = (value) => {
+      const text = String(value || '');
+      if (ctx.measureText(text).width <= metrics.textWidth) return text;
+      const glyphs = Array.from(text);
+      while (glyphs.length && ctx.measureText(`${glyphs.join('')}…`).width > metrics.textWidth) glyphs.pop();
+      return `${glyphs.join('')}…`;
+    };
     ctx.textAlign = 'center';
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
-    ctx.font = '900 14px Jua, Noto Sans KR, system-ui';
+    ctx.font = '700 14px Jua, Noto Sans KR, system-ui';
     ctx.fillStyle = nameColor;
-    ctx.fillText(model.name, metrics.textX, metrics.top + 24);
-    ctx.font = '400 9px Noto Sans KR, Jua, system-ui';
+    ctx.fillText(fit(model.name), metrics.textX, metrics.top + 24);
+    ctx.font = '400 9px Gowun Dodum, Noto Sans KR, system-ui';
     ctx.fillStyle = roleColor;
-    ctx.fillText(model.roleLine, metrics.textX, metrics.top + 39);
+    ctx.fillText(fit(model.roleLine), metrics.textX, metrics.top + 39);
   }
 
   function drawPickerPlateIcon(ctx, metrics, icon, color, shadowColor = 'transparent', shadowBlur = 0) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = '400 16px Segoe UI Symbol, Noto Sans Symbols, system-ui';
+    ctx.font = '400 16px Gowun Dodum, Noto Sans KR, system-ui';
     ctx.shadowColor = shadowColor;
     ctx.shadowBlur = shadowBlur;
     ctx.fillStyle = color;
@@ -404,6 +418,45 @@
     paintPickerFrame(ctx, metrics, themeId, false);
   }
 
+  function renderPickerCanvases(player, root = global.document) {
+    const renderer = global.YuksamPlayerNameplateV1;
+    if (!renderer?.draw || !root?.querySelectorAll) return 0;
+    let rendered = 0;
+    root.querySelectorAll('[data-raid-nameplate-canvas-v1]').forEach((canvas) => {
+      const themeId = String(canvas.getAttribute('data-raid-nameplate-canvas-v1') || '');
+      if (themeId !== 'raid_20_steel' && themeId !== 'raid_40_twilight') return;
+      const height = themeId === 'raid_20_steel' ? 52 : 53;
+      /* Attribute assignment intentionally resets the whole 2D state. A DOM
+         preview can be redrawn after web-font readiness; clearRect alone does
+         not reset transforms, alpha, shadows, text state, or filters. */
+      canvas.width = 166;
+      canvas.height = height;
+      const context = canvas.getContext?.('2d');
+      if (!context) return;
+      renderer.draw(context, canvas.width / 2, -58, {
+        ...(player && typeof player === 'object' ? player : {}),
+        nameplate:{ theme:themeId },
+      }, { source:'local', preview:true });
+      rendered += 1;
+    });
+    return rendered;
+  }
+
+  function schedulePickerCanvasRender(player) {
+    const snapshot = player && typeof player === 'object'
+      ? {
+          name:player.name,
+          level:player.level,
+          class:player.class,
+          spec:player.spec,
+        }
+      : {};
+    const render = () => renderPickerCanvases(snapshot);
+    if (typeof global.requestAnimationFrame === 'function') global.requestAnimationFrame(render);
+    else if (typeof global.setTimeout === 'function') global.setTimeout(render, 0);
+    global.document?.fonts?.ready?.then?.(render).catch?.(() => {});
+  }
+
   function drawSteel20(ctx, x, y, model) {
     const metrics = pickerPlateMetrics(ctx, x, y, model, 2);
     ctx.save();
@@ -480,6 +533,7 @@
     applyServerSnapshot,
     equip,
     pickerMarkup,
+    renderPickerCanvases,
     rewardMarkup,
     installCanvasThemes,
   });

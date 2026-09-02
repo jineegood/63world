@@ -4615,6 +4615,7 @@ function startGame(existing = false, options = {}) {
     showLoadingTransition('63월드로 이동중입니다.', () => startGame(existing, { skipLoading: true }));
     return;
   }
+  const questSupplyCatchUp = window.YuksamQuestTutorialPolishV3?.reconcileActionQuestSupplies(game.player);
   if (!existing) {
     game.currentMap = 'town';
     game.player.map = 'town';
@@ -4641,6 +4642,10 @@ function startGame(existing = false, options = {}) {
   savePlayer();
   toast(existing ? '기존 캐릭터로 접속했습니다.' : '63마을에 도착했습니다!');
   appendChatMessage('system', '안내', '채팅은 Enter를 눌러 입력할 수 있습니다.');
+  if (questSupplyCatchUp?.changed) {
+    toast(`🏢 누락된 퀘스트 보급 빌딩 화폐 ${questSupplyCatchUp.total}개를 받았습니다!`);
+    appendChatMessage('system', '퀘스트 보급', `누락된 수락 보상 빌딩 화폐 ${questSupplyCatchUp.total}개를 지급했습니다.`);
+  }
 }
 
 function canEquip(item, player) {
@@ -7691,7 +7696,17 @@ function updateQuestTracker() {
     const grant = def.grantOnAccept;
     if (grant) {
       if (grant.item && window.grantQuestRewardItemV38) window.grantQuestRewardItemV38(grant.item);
-      if (grant.building) { addBuilding(grant.building); toast(`🏢 빌딩 화폐 ${grant.building}개를 받았습니다!`); }
+      if (grant.building) {
+        const result = window.YuksamQuestTutorialPolishV3?.grantAcceptBuildingSupply({
+          player:game.player,
+          questState:game.player.quests[id],
+          amount:grant.building,
+        });
+        if (result?.granted) {
+          updateHud();
+          toast(`🏢 빌딩 화폐 ${result.amount}개를 받았습니다!`);
+        }
+      }
       if (grant.gold) { addGold(grant.gold); toast(`💰 ${grant.gold}골드를 받았습니다!`); }
     }
     if (id === 'tut_skill' && Object.values(game.player.skills || {}).some((rank) => Number(rank) > 0)) {

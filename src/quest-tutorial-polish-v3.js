@@ -29,6 +29,38 @@
     }),
   });
 
+  const ACCEPT_BUILDING_GRANT_VERSION = 1;
+  const ACTION_QUEST_BUILDING_SUPPLIES = Object.freeze({
+    tut_enhance:3,
+    tut_pet:10,
+  });
+
+  function grantAcceptBuildingSupply({ player, questState, amount } = {}) {
+    const safeAmount = Math.max(0, Math.trunc(Number(amount) || 0));
+    const appliedVersion = Math.max(0, Math.trunc(Number(questState?.acceptBuildingGrantVersion) || 0));
+    if (!player || !questState || safeAmount <= 0 || appliedVersion >= ACCEPT_BUILDING_GRANT_VERSION) {
+      return Object.freeze({ granted:false, amount:0 });
+    }
+    player.building = Math.max(0, Math.trunc(Number(player.building) || 0)) + safeAmount;
+    questState.acceptBuildingGrantVersion = ACCEPT_BUILDING_GRANT_VERSION;
+    return Object.freeze({ granted:true, amount:safeAmount });
+  }
+
+  function reconcileActionQuestSupplies(player) {
+    if (!player || !player.quests || typeof player.quests !== 'object') {
+      return Object.freeze({ changed:false, total:0, grants:Object.freeze([]) });
+    }
+    const grants = [];
+    for (const [questId, amount] of Object.entries(ACTION_QUEST_BUILDING_SUPPLIES)) {
+      const questState = player.quests[questId];
+      if (!questState || !['accepted', 'ready'].includes(questState.status)) continue;
+      const result = grantAcceptBuildingSupply({ player, questState, amount });
+      if (result.granted) grants.push(Object.freeze({ questId, amount:result.amount }));
+    }
+    const total = grants.reduce((sum, grant) => sum + grant.amount, 0);
+    return Object.freeze({ changed:total > 0, total, grants:Object.freeze(grants) });
+  }
+
   function applyTrainingAccept({ questId, player, questState } = {}) {
     if (questId !== 'tut_healing_well' || !player || !questState
       || questState.status !== 'accepted'
@@ -93,6 +125,10 @@
   }
 
   global.YuksamQuestTutorialPolishV3 = Object.freeze({
+    ACCEPT_BUILDING_GRANT_VERSION,
+    ACTION_QUEST_BUILDING_SUPPLIES,
+    grantAcceptBuildingSupply,
+    reconcileActionQuestSupplies,
     applyTrainingAccept,
     recordHealingSuccess,
     migrateHealingQuest,

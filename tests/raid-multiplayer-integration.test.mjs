@@ -239,6 +239,44 @@ class FakeRaidRoomStore {
     return member?.active ? clone(this.rooms.get(roomId) || null) : null;
   }
 
+  async findActiveRoomForUser(userId) {
+    for (const [roomId, roomMembers] of this.members) {
+      const member = roomMembers.get(userId);
+      const room = this.rooms.get(roomId);
+      if (member?.active && room && !room.finishedAt
+        && !['cleared', 'wiped', 'cancelled'].includes(room.phase)) return clone(room);
+    }
+    return null;
+  }
+
+  async expireIdleRooms({ checkedAt, roomId = null, userId = null, code = null, all = false }) {
+    const cutoff = Number(checkedAt) - (30 * 60 * 1000);
+    let expired = 0;
+    for (const room of this.rooms.values()) {
+      const members = [...(this.members.get(room.id)?.values() || [])];
+      const scoped = all
+        || (roomId === room.id && (!userId || members.some((member) => member.active && member.userId === userId)))
+        || (code && room.code === code)
+        || (userId && members.some((member) => member.active && member.userId === userId));
+      const open = !['cleared', 'wiped', 'cancelled'].includes(room.phase);
+      const roomActivity = Date.parse(room.updatedAt || room.createdAt || 0);
+      const recentlySeen = members.some((member) => member.active && Number(member.lastSeenAt) > cutoff);
+      if (!scoped || !open || roomActivity > cutoff || recentlySeen) continue;
+      room.phase = 'cancelled';
+      room.finishedAt = new Date(checkedAt).toISOString();
+      room.updatedAt = room.finishedAt;
+      room.version += 1;
+      for (const member of members) {
+        if (!member.active) continue;
+        member.active = false;
+        member.ready = false;
+        member.slot = null;
+      }
+      expired += 1;
+    }
+    return expired;
+  }
+
   async listMembers(roomId) {
     return clone(this.roomMembers(roomId));
   }
@@ -422,6 +460,54 @@ function createBrowserRaidClient(hub, service, userId, displayName) {
   const identity = Object.freeze({ userId, displayName, role:'student' });
   return context.YuksamRaidPartyClient.create({ client:supabase, getIdentity:() => identity });
 }
+
+test('활동 중인 30분 던전은 유지하고 30분 idle 뒤에는 stale 자리와 초대 코드를 새 방에 돌려준다', async (t) => {
+  const hub = new FakeRealtimeHub();
+  const store = new FakeRaidRoomStore(hub, {
+    alice:{ userId:'alice', name:'앨리스', className:'warrior', spec:'무기', maxHp:42, attack:10 },
+  });
+  const startedAt = Date.UTC(2026, 8, 2, 3, 0, 0);
+  let clock = startedAt;
+  const service = createRaidRoomService({ store, now:() => clock });
+  const alice = createBrowserRaidClient(hub, service, 'alice', '앨리스');
+  t.after(() => alice.close());
+
+  const created = await alice.create({ floorGroup:1 });
+  const oldRoomId = created.room.id;
+  const oldCode = created.room.code;
+  store.rooms.get(oldRoomId).phase = 'travel';
+
+  clock = startedAt + (29 * 60 * 1000);
+  await alice.heartbeat(oldRoomId);
+
+  clock = startedAt + (58 * 60 * 1000);
+  const stillRunning = await alice.resume();
+  assert.equal(stillRunning.room.id, oldRoomId,
+    '방 생성 후 58분이어도 최근 heartbeat가 29분 전이면 진행 중 방을 보존해야 한다');
+
+  clock = startedAt + (59 * 60 * 1000) + 1;
+  await assert.rejects(
+    alice.resume(),
+    (error) => error?.code === 'ROOM_NOT_FOUND',
+    '마지막 활동 후 30분이 넘은 방은 자동 복구 대상이 아니어야 한다',
+  );
+  assert.equal(store.rooms.get(oldRoomId).phase, 'cancelled');
+  assert.equal(store.members.get(oldRoomId).get('alice').active, false,
+    'stale active member가 새 방 생성을 막으면 안 된다');
+
+  const fresh = await alice.create({ floorGroup:1 });
+  assert.notEqual(fresh.room.id, oldRoomId);
+  assert.equal(fresh.room.code, oldCode,
+    '취소된 방은 partial unique 범위에서 빠져 같은 네 자리 코드를 다시 쓸 수 있어야 한다');
+
+  store.rooms.get(fresh.room.id).phase = 'cleared';
+  store.rooms.get(fresh.room.id).finishedAt = new Date(clock).toISOString();
+  await assert.rejects(
+    alice.resume(),
+    (error) => error?.code === 'ROOM_NOT_FOUND',
+    '완료된 방은 시간 경과를 기다리지 않고 즉시 resume 대상에서 빠져야 한다',
+  );
+});
 
 test('three authenticated browser sessions create, join, form, start and resolve one synchronized raid round', async (t) => {
   const hub = new FakeRealtimeHub();

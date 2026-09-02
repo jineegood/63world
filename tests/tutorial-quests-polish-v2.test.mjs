@@ -74,6 +74,64 @@ test('existing players past the mushroom quest receive a completed healing tutor
   assert.equal(api.migrateHealingQuest(quests), false);
 });
 
+test('accept building supplies are granted exactly once and leave a saved quest marker', () => {
+  const api = loadTutorialApi();
+  const player = { building:4 };
+  const quest = { status:'accepted', progress:0, target:1 };
+
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(api.grantAcceptBuildingSupply({ player, questState:quest, amount:3 }))),
+    { granted:true, amount:3 },
+  );
+  assert.equal(player.building, 7);
+  assert.equal(quest.acceptBuildingGrantVersion, api.ACCEPT_BUILDING_GRANT_VERSION);
+  assert.equal(api.grantAcceptBuildingSupply({ player, questState:quest, amount:3 }).granted, false);
+  assert.equal(player.building, 7, 'repeated calls must not duplicate the accept reward');
+});
+
+test('legacy accepted action quests receive the missed 3 plus 10 buildings once', () => {
+  const api = loadTutorialApi();
+  const player = {
+    building:2,
+    quests:{
+      tut_enhance:{ status:'accepted', progress:0, target:1 },
+      tut_pet:{ status:'ready', progress:1, target:1 },
+      elite_snake_hunt:{ status:'completed', progress:1, target:1 },
+    },
+  };
+
+  const first = api.reconcileActionQuestSupplies(player);
+  assert.equal(first.changed, true);
+  assert.equal(first.total, 13);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(first.grants)),
+    [{ questId:'tut_enhance', amount:3 }, { questId:'tut_pet', amount:10 }],
+  );
+  assert.equal(player.building, 15);
+  assert.equal(player.quests.tut_enhance.acceptBuildingGrantVersion, 1);
+  assert.equal(player.quests.tut_pet.acceptBuildingGrantVersion, 1);
+
+  const second = api.reconcileActionQuestSupplies(player);
+  assert.equal(second.changed, false);
+  assert.equal(second.total, 0);
+  assert.equal(player.building, 15, 'login reconciliation must be idempotent');
+});
+
+test('completed action quests are not retroactively paid after their reward was already claimed', () => {
+  const api = loadTutorialApi();
+  const player = {
+    building:9,
+    quests:{
+      tut_enhance:{ status:'completed', progress:1, target:1 },
+      tut_pet:{ status:'completed', progress:1, target:1 },
+    },
+  };
+  const result = api.reconcileActionQuestSupplies(player);
+  assert.equal(result.changed, false);
+  assert.equal(result.total, 0);
+  assert.equal(player.building, 9);
+});
+
 test('quest npc introductions exclude the pet orb and costume introduction grants a gift', () => {
   const api = loadTutorialApi();
   const costumeQuest = { status:'accepted', progress:0, target:1 };
@@ -105,6 +163,8 @@ test('the quest-only costume is hidden from the paid shop and game hooks tutoria
   assert.match(game, /applyTrainingAccept/);
   assert.match(game, /recordHealingSuccess/);
   assert.match(game, /grantQuestCostume/);
+  assert.match(game, /grantAcceptBuildingSupply/);
+  assert.match(game, /reconcileActionQuestSupplies/);
   assert.match(game, /openQuestNpcIntroV3/);
   assert.doesNotMatch(game, /ownsAllCostumes\(game\.player\.costumeInventory/);
 });

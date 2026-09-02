@@ -3434,24 +3434,6 @@ body.defeated #app { filter: grayscale(1) brightness(.62); transition: filter .3
   font-style: normal;
   font-weight: 900;
 }
-.raid-nameplate-preview-v1.raid-nameplate-steel-20 {
-  border: 2px solid #94a3b8;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #181f26, #313c48);
-  box-shadow: inset 0 0 0 3px #26323d;
-  color: #fff7ed;
-}
-.raid-nameplate-preview-v1.raid-nameplate-steel-20 > i { color: #fb923c; text-shadow: 0 0 7px #fb923c; }
-.raid-nameplate-preview-v1.raid-nameplate-steel-20 small { color: #fdba74; }
-.raid-nameplate-preview-v1.raid-nameplate-twilight-40 {
-  border: 3px solid #c4b5fd;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #1e1b4b, #4c1d95 56%, #7c2d12);
-  box-shadow: inset 0 0 0 1px rgba(251,146,60,.86);
-  color: #fff7ed;
-}
-.raid-nameplate-preview-v1.raid-nameplate-twilight-40 > i { color: #fb923c; }
-.raid-nameplate-preview-v1.raid-nameplate-twilight-40 small { color: #ddd6fe; }
 .raid-nameplate-preview-v1.raid-nameplate-summit-63 {
   isolation: isolate;
   border: 3px solid #67e8f9;
@@ -3491,6 +3473,23 @@ body.defeated #app { filter: grayscale(1) brightness(.62); transition: filter .3
 }
 .raid-nameplate-preview-v1.raid-nameplate-summit-63 b { text-shadow: 0 0 6px #22d3ee, 0 0 11px #d946ef; }
 .raid-nameplate-preview-v1.raid-nameplate-summit-63 small { color: #a5f3fc; text-shadow: 0 0 6px #0891b2; }
+.raid-nameplate-preview-v1.raid-nameplate-canvas-host-v1 {
+  display: block;
+  width: min(100%, 166px);
+  min-height: 0;
+  margin-inline: auto;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.raid-nameplate-canvas-preview-v1 {
+  display: block;
+  width: 100%;
+  height: auto;
+}
 @keyframes raid-summit-neon-v1 {
   from { border-color: #67e8f9; box-shadow: inset 0 0 0 1px rgba(250,204,21,.72), 0 0 7px #22d3ee, 0 0 14px rgba(34,211,238,.58); }
   to { border-color: #f0abfc; box-shadow: inset 0 0 0 1px rgba(254,240,138,.96), 0 0 10px #e879f9, 0 0 24px rgba(217,70,239,.86); }

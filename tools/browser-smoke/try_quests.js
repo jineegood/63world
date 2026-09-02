@@ -42,13 +42,17 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   chk(qs('tut_shop').progress >= 1 && qs('tut_shop').status === 'ready', '(c) 구매 훅 진행', qs('tut_shop').status);
 
   // (c) 강화 훅 (빌딩 차감 시도 = 진행, 성공/실패 무관)
+  G().player.building = 7;
   ev("acceptQuest('tut_enhance')"); await sleep(60);
+  chk(G().player.building === 10, '(c) 강화 퀘스트 수락 보급 +3', G().player.building);
   G().player.building = 50;
-  ev('upgradeCurrentWeaponV33()'); await sleep(150);
+  ev('upgradeCurrentWeaponV33()'); await sleep(4300);
   chk(qs('tut_enhance').progress >= 1 && qs('tut_enhance').status === 'ready', '(c) 강화 훅 진행', qs('tut_enhance').status);
 
   // (c) 펫 훅 (소환 확정은 약 5초 후)
+  G().player.building = 11;
   ev("acceptQuest('tut_pet')"); await sleep(60);
+  chk(G().player.building === 21, '(c) 펫 퀘스트 수락 보급 +10', G().player.building);
   G().player.building = 50;
   ev('rollPetV34()'); await sleep(5400);
   chk(qs('tut_pet').progress >= 1 && qs('tut_pet').status === 'ready', '(c) 펫 훅 진행', qs('tut_pet').status);

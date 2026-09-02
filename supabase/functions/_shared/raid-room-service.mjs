@@ -4,6 +4,10 @@ const MAX_TEXT = 120;
 const MAX_QUESTION = 500;
 const MAX_RESULT_BYTES = 96 * 1024;
 const ALLOWED_PUBLISH_PHASES = new Set(['effects', 'travel', 'cleared', 'wiped', 'cancelled']);
+const ROOM_SCOPED_OPERATIONS = new Set([
+  'sync', 'setFormation', 'ready', 'start', 'beginRound', 'submit',
+  'publishRound', 'ackPlayback', 'ackQuestionReady', 'heartbeat', 'leave',
+]);
 
 /* 63빌딩 던전 구간(1~7). 앞 구간을 깨야 다음 구간이 열린다. */
 const FIRST_FLOOR_GROUP = 1;
@@ -162,6 +166,20 @@ export function createRaidRoomService({ store, now = Date.now } = {}) {
     return profile;
   }
 
+  async function expireIdleScope(userId, operation, body) {
+    if (typeof store.expireIdleRooms !== 'function') return;
+    if (operation === 'resume') {
+      await store.expireIdleRooms({ userId, checkedAt:now() });
+      return;
+    }
+    if (!ROOM_SCOPED_OPERATIONS.has(operation)) return;
+    await store.expireIdleRooms({
+      roomId:roomId(body?.roomId),
+      userId,
+      checkedAt:now(),
+    });
+  }
+
   async function sync(userId, rawRoomId, rawAfterSequence = 0) {
     const id = roomId(rawRoomId);
     let room = await store.getRoomForUser(id, userId);
@@ -236,6 +254,10 @@ export function createRaidRoomService({ store, now = Date.now } = {}) {
   async function handle(userId, body = {}) {
     if (!userId) failRaidRoom('UNAUTHENTICATED');
     const op = text(body.op, 24);
+    /* Refreshing last_seen_at before checking the TTL would revive a day-old
+       room.  The server closes an idle room first, then performs the requested
+       action only if the authenticated member is still active. */
+    await expireIdleScope(userId, op, body);
     switch (op) {
       case 'create': {
         const floorGroup = Math.trunc(Number(body.floorGroup) || 0);

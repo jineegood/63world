@@ -41,6 +41,10 @@ const hallAndTeacherNameplateMigration = fs.readFileSync(
   path.join(root, 'supabase/migrations/202608270004_hall_of_fame_and_teacher_nameplates_v1.sql'),
   'utf8',
 );
+const idleTtlMigration = fs.readFileSync(
+  path.join(root, 'supabase/migrations/202609020001_raid_room_idle_ttl_v1.sql'),
+  'utf8',
+);
 const serviceUrl = pathToFileURL(path.join(root, 'supabase/functions/_shared/raid-room-service.mjs'));
 const errorUrl = pathToFileURL(path.join(root, 'supabase/functions/_shared/raid-room-error.mjs'));
 const storeUrl = pathToFileURL(path.join(root, 'supabase/functions/_shared/raid-room-store.mjs'));
@@ -54,6 +58,46 @@ test('raid migration enforces four-digit rooms, one active room per student, and
   assert.match(migration, /v_count\s*<>\s*3[\s\S]*PARTY_INCOMPLETE/i);
   assert.match(migration, /count\(distinct slot\)[\s\S]*v_slots\s*<>\s*3/i);
   assert.match(migration, /p_floor_group\s*<>\s*1[\s\S]*INVALID_REQUEST/i);
+});
+
+test('던전 방 TTL은 생성 시각이 아니라 서버 활동 기준 30분이며 stale 자리와 코드를 함께 해제한다', () => {
+  const expiryFunction = idleTtlMigration.match(
+    /create or replace function public\.private_expire_idle_raid_rooms_v1[\s\S]*?\n\$\$;/i,
+  )?.[0] || '';
+  const createFunction = idleTtlMigration.match(
+    /create or replace function public\.private_create_raid_room_v1[\s\S]*?\n\$\$;/i,
+  )?.[0] || '';
+  const joinFunction = idleTtlMigration.match(
+    /create or replace function public\.private_join_raid_room_v1[\s\S]*?\n\$\$;/i,
+  )?.[0] || '';
+
+  assert.match(expiryFunction, /interval '30 minutes'/i);
+  assert.match(expiryFunction, /room\.updated_at\s*<=\s*v_cutoff/i);
+  assert.match(expiryFunction,
+    /active_member\.active[\s\S]*active_member\.last_seen_at\s*>\s*v_cutoff/i,
+    '최근 heartbeat가 있는 방은 생성된 지 오래됐어도 만료시키면 안 된다');
+  assert.doesNotMatch(expiryFunction, /room\.created_at\s*</i);
+  assert.doesNotMatch(expiryFunction, /room\.expires_at\s*<=/i);
+  assert.match(expiryFunction, /set phase = 'cancelled'/i);
+  assert.match(expiryFunction, /set active = false[\s\S]*ready = false[\s\S]*slot = null/i);
+  assert.match(expiryFunction, /delete from public\.raid_question_secrets_v1/i);
+  assert.match(expiryFunction, /p_invite_code[\s\S]*room\.invite_code = p_invite_code/i);
+  assert.match(migration,
+    /raid_rooms_v1_active_code_unique[\s\S]*where phase in/i,
+    '기존 partial unique index가 취소된 방의 코드를 즉시 재사용 가능하게 한다');
+
+  assert.match(createFunction, /private_expire_idle_raid_rooms_v1\([\s\S]*true/i);
+  assert.doesNotMatch(createFunction, /where phase = 'lobby' and expires_at <=/i);
+  assert.match(joinFunction, /private_expire_idle_raid_rooms_v1\(/i);
+  assert.match(joinFunction, /invite_code = p_invite_code[\s\S]*phase = 'lobby'/i);
+  assert.doesNotMatch(joinFunction, /expires_at\s*>\s*p_joined_at/i);
+  assert.match(idleTtlMigration,
+    /select public\.private_expire_idle_raid_rooms_v1\([\s\S]*clock_timestamp\(\)[\s\S]*true/i,
+    '배포 시 이미 남아 있는 오래된 방도 한 번 정리해야 한다');
+  assert.match(idleTtlMigration,
+    /revoke all on function public\.private_expire_idle_raid_rooms_v1[\s\S]*authenticated/i);
+  assert.match(idleTtlMigration,
+    /grant execute on function public\.private_expire_idle_raid_rooms_v1[\s\S]*service_role/i);
 });
 
 test('raid tables force RLS, expose only participant views, and keep answers and writes private', () => {
@@ -478,6 +522,48 @@ test('resume reports ROOM_NOT_FOUND when the authenticated user has no active ro
   );
 });
 
+test('resume와 heartbeat는 오래된 방을 되살리기 전에 서버 TTL 정리를 먼저 수행한다', async () => {
+  const { createRaidRoomService } = await import(serviceUrl.href);
+  const calls = [];
+  let active = true;
+  const store = {
+    expireIdleRooms:async (value) => {
+      calls.push(['expire', value]);
+      active = false;
+      return 1;
+    },
+    findActiveRoomForUser:async () => {
+      calls.push(['find']);
+      return active ? { id:'old-room', phase:'travel' } : null;
+    },
+    heartbeat:async () => {
+      calls.push(['heartbeat']);
+      if (!active) throw Object.assign(new Error('NOT_MEMBER'), { code:'NOT_MEMBER' });
+    },
+  };
+  const service = createRaidRoomService({ store, now:() => 1_800_001 });
+
+  await assert.rejects(
+    service.handle('student-a', { op:'resume' }),
+    (error) => error.code === 'ROOM_NOT_FOUND',
+  );
+  assert.deepEqual(calls.slice(0, 2), [
+    ['expire', { userId:'student-a', checkedAt:1_800_001 }],
+    ['find'],
+  ]);
+
+  active = true;
+  calls.length = 0;
+  await assert.rejects(
+    service.handle('student-a', { op:'heartbeat', roomId:'old-room' }),
+    (error) => error.code === 'NOT_MEMBER',
+  );
+  assert.deepEqual(calls.map(([name]) => name), ['expire', 'heartbeat']);
+  assert.deepEqual(calls[0][1], {
+    roomId:'old-room', userId:'student-a', checkedAt:1_800_001,
+  });
+});
+
 test('Supabase store finds only a non-terminal active room for resume', async () => {
   const { createSupabaseRaidRoomStore } = await import(storeUrl.href);
   const queried = [];
@@ -509,6 +595,36 @@ test('Supabase store finds only a non-terminal active room for resume', async ()
   assert.equal(room.phase, 'travel');
   assert.equal(queried.some((entry) => entry[0] === 'raid_room_members_v1'
     && entry[1] === 'eq' && entry[2] === 'active' && entry[3] === true), true);
+});
+
+test('Supabase store calls the service-role idle cleanup RPC with a scoped server timestamp', async () => {
+  const { createSupabaseRaidRoomStore } = await import(storeUrl.href);
+  const calls = [];
+  const client = {
+    from() { return {}; },
+    async rpc(name, args) {
+      calls.push([name, args]);
+      return { data:2, error:null };
+    },
+  };
+  const store = createSupabaseRaidRoomStore(client);
+  const expired = await store.expireIdleRooms({
+    checkedAt:Date.UTC(2026, 8, 2, 4, 0, 0),
+    roomId:'00000000-0000-0000-0000-000000000001',
+    userId:'00000000-0000-0000-0000-000000000002',
+  });
+
+  assert.equal(expired, 2);
+  assert.deepEqual(calls, [[
+    'private_expire_idle_raid_rooms_v1',
+    {
+      p_checked_at:'2026-09-02T04:00:00.000Z',
+      p_room_id:'00000000-0000-0000-0000-000000000001',
+      p_user_id:'00000000-0000-0000-0000-000000000002',
+      p_invite_code:null,
+      p_all:false,
+    },
+  ]]);
 });
 
 test('Supabase store uses server-owned raid progress instead of editable player JSON', async () => {

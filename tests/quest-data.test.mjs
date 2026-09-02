@@ -62,7 +62,7 @@ test('quest data module exposes mutable quest definitions', () => {
     'tut_skill',
   ]);
   assert.equal(data.QUEST_DEFS.elite_slime_hunt.eliteOnly, true);
-  assert.equal(data.QUEST_DEFS.elite_snake_hunt.reward.building, 15); // [피드백] 빌딩 보상 3배
+  assert.equal(data.QUEST_DEFS.elite_snake_hunt.reward.building, 10);
   // [v38 신규] 튜토리얼 퀘스트는 targetTypes 대신 actionType 을 갖는다.
   assert.equal(data.QUEST_DEFS.tut_equip.actionType, 'equip');
   assert.equal(data.QUEST_DEFS.tut_shop.actionType, 'buy');
@@ -129,11 +129,31 @@ test('quest data matches the current approved progression', () => {
   assert.equal(quests.stomp_hunt.reward.item, undefined);
   assert.equal(quests.elite_snake_hunt.reward.item, 'starCape');
   assert.equal(quests.tut_accessory.grantOnAccept.building, 5);
+  assert.equal(quests.tut_enhance.grantOnAccept.building, 3);
+  assert.equal(quests.tut_pet.grantOnAccept.building, 10);
   assert.match(quests.tut_accessory.pages[1], /새나리 쌤/);
   assert.doesNotMatch(quests.slime_hunt.done, /보스/);
   assert.doesNotMatch(quests.swamp_king_hunt.done, /명진쌤 보스|졌다고/);
   assert.equal(quests.tut_costume.actionType, 'receiveCostume');
   assert.equal(quests.tut_costume.grantOnAccept, undefined);
+});
+
+test('action quest supplies move 13 buildings forward without increasing the full quest total', () => {
+  const context = createContext({ window:{} });
+  context.globalThis = context.window;
+  runBrowserModule('src/quest-data.js', context);
+  const quests = Object.values(context.window.YuksamQuestData.QUEST_DEFS);
+
+  const completionBuilding = quests.reduce((sum, quest) => sum + Number(quest.reward?.building || 0), 0);
+  const acceptBuilding = quests.reduce((sum, quest) => sum + Number(quest.grantOnAccept?.building || 0), 0);
+  const shiftedOut = (9 - context.window.YuksamQuestData.QUEST_DEFS.elite_slime_hunt.reward.building)
+    + (15 - context.window.YuksamQuestData.QUEST_DEFS.elite_snake_hunt.reward.building)
+    + (15 - context.window.YuksamQuestData.QUEST_DEFS.swamp_king_hunt.reward.building);
+
+  assert.equal(shiftedOut, 13, 'exactly 13 buildings should move out of other completion rewards');
+  assert.equal(completionBuilding, 83, 'completion rewards should be the previous 96 minus 13');
+  assert.equal(acceptBuilding, 18, 'accept rewards should be the previous 5 plus 13');
+  assert.equal(completionBuilding + acceptBuilding, 101, 'the full quest building total must stay unchanged');
 });
 
 test('ordinary hunt completions do not falsely claim that a boss was defeated', () => {

@@ -160,6 +160,17 @@ export function createSupabaseRaidRoomStore(client) {
   }
 
   return Object.freeze({
+    async expireIdleRooms(value = {}) {
+      const expired = await rpc('private_expire_idle_raid_rooms_v1', {
+        p_checked_at:new Date(value.checkedAt).toISOString(),
+        p_room_id:value.roomId || null,
+        p_user_id:value.userId || null,
+        p_invite_code:value.code || null,
+        p_all:value.all === true,
+      });
+      return safeInteger(expired);
+    },
+
     async getAuthoritativeProfile(userId) {
       const [profileResult, progressResult] = await Promise.all([
         client.from('player_profiles_v2')
@@ -233,7 +244,9 @@ export function createSupabaseRaidRoomStore(client) {
         .select('room_id').eq('user_id', userId).eq('active', true).limit(1).maybeSingle());
       if (!member?.room_id) return null;
       const room = await getRoom(member.room_id);
-      return room && !['cleared', 'wiped', 'cancelled'].includes(room.phase) ? room : null;
+      return room && !room.finishedAt && !['cleared', 'wiped', 'cancelled'].includes(room.phase)
+        ? room
+        : null;
     },
 
     async listMembers(id) {
