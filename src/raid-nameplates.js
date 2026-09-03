@@ -249,17 +249,24 @@
   }
 
   function drawPlateText(ctx, metrics, model, nameColor, roleColor, glow = null) {
+    const fit = (value) => {
+      const text = String(value || '');
+      if (!Number.isFinite(metrics.textWidth) || ctx.measureText(text).width <= metrics.textWidth) return text;
+      const glyphs = Array.from(text);
+      while (glyphs.length && ctx.measureText(`${glyphs.join('')}…`).width > metrics.textWidth) glyphs.pop();
+      return `${glyphs.join('')}…`;
+    };
     ctx.textAlign = 'center';
     ctx.shadowColor = glow?.name || 'rgba(0,0,0,.94)';
     ctx.shadowBlur = Number(glow?.nameBlur) || 5;
     ctx.font = '900 18px Jua, Noto Sans KR, system-ui';
     ctx.fillStyle = nameColor;
-    ctx.fillText(model.name, metrics.textX, metrics.top + 21);
+    ctx.fillText(fit(model.name), metrics.textX, metrics.top + 21);
     ctx.shadowColor = glow?.role || 'rgba(0,0,0,.94)';
     ctx.shadowBlur = Number(glow?.roleBlur) || 5;
     ctx.font = '900 14px Noto Sans KR, Jua, system-ui';
     ctx.fillStyle = roleColor;
-    ctx.fillText(model.roleLine, metrics.textX, metrics.top + 40);
+    ctx.fillText(fit(model.roleLine), metrics.textX, metrics.top + 40);
   }
 
   function drawPlateIcon(ctx, metrics, icon, color, shadowColor = 'rgba(0,0,0,.7)', shadowBlur = 4) {
@@ -270,36 +277,6 @@
     ctx.shadowBlur = shadowBlur;
     ctx.fillStyle = color;
     ctx.fillText(icon, metrics.iconX, metrics.top + metrics.height / 2);
-    ctx.textBaseline = 'alphabetic';
-  }
-
-  function drawPickerPlateText(ctx, metrics, model, nameColor, roleColor) {
-    const fit = (value) => {
-      const text = String(value || '');
-      if (ctx.measureText(text).width <= metrics.textWidth) return text;
-      const glyphs = Array.from(text);
-      while (glyphs.length && ctx.measureText(`${glyphs.join('')}…`).width > metrics.textWidth) glyphs.pop();
-      return `${glyphs.join('')}…`;
-    };
-    ctx.textAlign = 'center';
-    ctx.shadowColor = 'transparent';
-    ctx.shadowBlur = 0;
-    ctx.font = '700 14px Jua, Noto Sans KR, system-ui';
-    ctx.fillStyle = nameColor;
-    ctx.fillText(fit(model.name), metrics.textX, metrics.top + 24);
-    ctx.font = '400 9px Gowun Dodum, Noto Sans KR, system-ui';
-    ctx.fillStyle = roleColor;
-    ctx.fillText(fit(model.roleLine), metrics.textX, metrics.top + 39);
-  }
-
-  function drawPickerPlateIcon(ctx, metrics, icon, color, shadowColor = 'transparent', shadowBlur = 0) {
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.font = '400 16px Gowun Dodum, Noto Sans KR, system-ui';
-    ctx.shadowColor = shadowColor;
-    ctx.shadowBlur = shadowBlur;
-    ctx.fillStyle = color;
-    ctx.fillText(icon, metrics.iconX, metrics.top + 26);
     ctx.textBaseline = 'alphabetic';
   }
 
@@ -461,8 +438,8 @@
     const metrics = pickerPlateMetrics(ctx, x, y, model, 2);
     ctx.save();
     drawPickerFrame(ctx, metrics, 'raid_20_steel');
-    drawPickerPlateIcon(ctx, metrics, '▣', '#fb923c', '#fb923c', 7);
-    drawPickerPlateText(ctx, metrics, model, '#fff7ed', '#fdba74');
+    drawPlateIcon(ctx, metrics, '▣', '#fb923c', '#fb923c', 7);
+    drawPlateText(ctx, metrics, model, '#fff7ed', '#fdba74');
     ctx.restore();
   }
 
@@ -470,8 +447,8 @@
     const metrics = pickerPlateMetrics(ctx, x, y, model, 3);
     ctx.save();
     drawPickerFrame(ctx, metrics, 'raid_40_twilight');
-    drawPickerPlateIcon(ctx, metrics, '◆', '#fb923c');
-    drawPickerPlateText(ctx, metrics, model, '#fff7ed', '#ddd6fe');
+    drawPlateIcon(ctx, metrics, '◆', '#fb923c');
+    drawPlateText(ctx, metrics, model, '#fff7ed', '#ddd6fe');
     ctx.restore();
   }
 

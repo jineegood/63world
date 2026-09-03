@@ -522,7 +522,7 @@ test('resume reports ROOM_NOT_FOUND when the authenticated user has no active ro
   );
 });
 
-test('resume와 heartbeat는 오래된 방을 되살리기 전에 서버 TTL 정리를 먼저 수행한다', async () => {
+test('resume만 오래된 방을 정리하고 전투 핫패스에는 추가 TTL RPC를 넣지 않는다', async () => {
   const { createRaidRoomService } = await import(serviceUrl.href);
   const calls = [];
   let active = true;
@@ -554,14 +554,50 @@ test('resume와 heartbeat는 오래된 방을 되살리기 전에 서버 TTL 정
 
   active = true;
   calls.length = 0;
-  await assert.rejects(
-    service.handle('student-a', { op:'heartbeat', roomId:'old-room' }),
-    (error) => error.code === 'NOT_MEMBER',
-  );
-  assert.deepEqual(calls.map(([name]) => name), ['expire', 'heartbeat']);
-  assert.deepEqual(calls[0][1], {
-    roomId:'old-room', userId:'student-a', checkedAt:1_800_001,
+  store.getRoomForUser = async () => ({
+    id:'old-room', phase:'travel', version:1, nextSequence:1,
   });
+  store.listMembers = async () => [];
+  store.listEventsAfter = async () => [];
+  await service.handle('student-a', { op:'heartbeat', roomId:'old-room' });
+  assert.deepEqual(calls.map(([name]) => name), ['heartbeat'],
+    'heartbeat must not pay for a second database RPC before its own write');
+});
+
+test('sync, ready, submit, publish, playback acknowledgements는 TTL 정리 RPC를 호출하지 않는다', async () => {
+  const { createRaidRoomService } = await import(serviceUrl.href);
+  let expiryCalls = 0;
+  const room = {
+    id:'room-1', hostId:'host', phase:'travel', version:1, nextSequence:1,
+    floorGroup:1, round:1,
+  };
+  const store = {
+    expireIdleRooms:async () => { expiryCalls += 1; },
+    getRoomForUser:async () => room,
+    listMembers:async () => [],
+    listEventsAfter:async () => [],
+    setReady:async () => {},
+    submitRound:async () => ({ accepted:true }),
+    publishRound:async () => {},
+    ackPlayback:async () => {},
+    ackQuestionReady:async () => {},
+  };
+  const service = createRaidRoomService({ store, now:() => 1_800_001 });
+
+  await service.handle('host', { op:'sync', roomId:'room-1' });
+  await service.handle('host', { op:'ready', roomId:'room-1', ready:true });
+  await service.handle('host', {
+    op:'submit', roomId:'room-1', round:1, actionId:'basic', answer:'1', requestId:'submit-1',
+  });
+  await service.handle('host', {
+    op:'publishRound', roomId:'room-1', round:1, requestId:'publish-1',
+    result:{ nextPhase:'travel', currentFloor:1, encounterIndex:0 },
+  });
+  await service.handle('host', { op:'ackPlayback', roomId:'room-1', round:1 });
+  await service.handle('host', { op:'ackQuestionReady', roomId:'room-1', round:1 });
+
+  assert.equal(expiryCalls, 0,
+    'stale cleanup belongs to create/join/resume, never the repeated combat request path');
 });
 
 test('Supabase store finds only a non-terminal active room for resume', async () => {

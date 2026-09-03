@@ -171,8 +171,17 @@ fs.mkdirSync(outputDir, { recursive:true });
   await page.locator('#nameplateRuntimeComparisonsV1').screenshot({ path:path.join(outputDir, 'comparison.png') });
   fs.writeFileSync(path.join(outputDir, 'measurements.json'), JSON.stringify({ result, errors }, null, 2));
   console.log(JSON.stringify({ result, errors, screenshot:path.join(outputDir, 'comparison.png') }, null, 2));
+  /* Separate DOM canvases can rasterize large glowing text a few channel
+     values apart because their on-screen positions land on different device
+     subpixels. Geometry must still be exact, and a real renderer mismatch is
+     far above this narrow antialiasing allowance. */
   if (errors.length || result.slice(0, 2).some((entry) => (
-    !entry.pixelDifference || entry.pixelDifference.meanAbsoluteDifference > 2.5
+    entry.dom.renderer !== 'shared-canvas'
+    || !entry.dom.canvas
+    || entry.dom.canvas.width !== entry.canvas.width
+    || entry.dom.canvas.height !== entry.canvas.height
+    || !entry.pixelDifference
+    || entry.pixelDifference.meanAbsoluteDifference > 5
   ))) process.exitCode = 1;
   await browser.close();
 })().catch((error) => {

@@ -176,7 +176,7 @@ test('raid milestones normalize ownership, expose quest goals, and register thre
   assert.equal(arcCalls, 0, '선택창에 없는 안테나 표시등은 실제 이름표에도 그리지 않는다');
 });
 
-test('20·40층 live nameplates cache the picker gradients and preserve its exact layout/chrome', () => {
+test('20·40층 live nameplates cache the picker gradients and use the shared default·63 typography', () => {
   const registered = new Map();
   const createdFrames = [];
   let frameGradientCalls = 0;
@@ -223,7 +223,7 @@ test('20·40층 live nameplates cache the picker gradients and preserve its exac
   const liveContext = {
     save() {}, restore() {},
     measureText(value) {
-      const factor = String(this.font).includes('14px') ? 7 : 4.5;
+      const factor = String(this.font).includes('18px') ? 8 : 7;
       return { width:String(value).length * factor };
     },
     drawImage(...args) { images.push(args); },
@@ -261,26 +261,28 @@ test('20·40층 live nameplates cache the picker gradients and preserve its exac
 
   const steelIcon = text.find((entry) => entry.value === '▣');
   const twilightIcon = text.find((entry) => entry.value === '◆');
-  assert.match(steelIcon.font, /400 16px/);
+  assert.match(steelIcon.font, /900 18px/);
   assert.equal(steelIcon.color, '#fb923c');
   assert.equal(steelIcon.shadowColor, '#fb923c');
   assert.equal(steelIcon.shadowBlur, 7);
-  assert.match(twilightIcon.font, /400 16px/);
+  assert.match(twilightIcon.font, /900 18px/);
   assert.equal(twilightIcon.color, '#fb923c');
-  assert.equal(twilightIcon.shadowColor, 'transparent');
-  assert.equal(twilightIcon.shadowBlur, 0);
+  assert.equal(twilightIcon.shadowColor, 'rgba(0,0,0,.7)');
+  assert.equal(twilightIcon.shadowBlur, 4);
   assert.equal(steelIcon.x - images[0][1], 18, '강철: border 2 + padding 8 + icon half 8');
   assert.equal(twilightIcon.x - images[2][1], 19, '황혼: border 3 + padding 8 + icon half 8');
 
   const name = text.find((entry) => entry.value === '철벽');
   const role = text.find((entry) => entry.value === 'LV.20 무기 전사');
-  assert.match(name.font, /700 14px/);
-  assert.equal(name.y, 282);
-  assert.match(role.font, /400 9px Gowun Dodum/);
-  assert.equal(role.y, 297);
+  assert.match(name.font, /900 18px Jua/);
+  assert.equal(name.y, 279);
+  assert.match(role.font, /900 14px Noto Sans KR/);
+  assert.equal(role.y, 298);
   assert.equal(name.x, 311, '166px 선택창에서 아이콘 다음 텍스트 열의 정중앙이어야 한다');
-  assert.equal(name.shadowBlur, 0);
-  assert.equal(role.shadowBlur, 0);
+  assert.equal(name.shadowColor, 'rgba(0,0,0,.94)');
+  assert.equal(name.shadowBlur, 5);
+  assert.equal(role.shadowColor, 'rgba(0,0,0,.94)');
+  assert.equal(role.shadowBlur, 5);
 
   ['김서준', '가나다라마바사', 'abcdefghijklmn'].forEach((studentName) => {
     registered.get('raid_20_steel')(liveContext, 300, 200, { name:studentName, roleLine:'LV.40 무기 전사' });
