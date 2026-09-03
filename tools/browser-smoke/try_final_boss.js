@@ -36,18 +36,26 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   chk(G().modalState?.type === 'combat', '최종보스 전투 진입', 'modal=' + G().modalState?.type);
   if (G().modalState?.type === 'combat') {
     const m = window.eval('currentCombatMonster()');
-    chk(m && /명진|teacher/i.test(m.name + m.type), '보스 = 명진쌤', m && m.name);
+    chk(m && m.name === '최종보스 명진쌤' && m.type === 'teacherBoss', '전투창 보스 이름 = 최종보스 명진쌤', m && m.name);
     window.Math.random = () => 0.99;
+    m.attack = 50;
+    G().player.maxHp = 100;
+    G().player.hp = 100;
+    G().combatShield = 0;
     // 한 라운드: 공격 → 문제 → 정답
     const atk = window.document.querySelector('#modalContent button.primary, #modalContent .combat-menu button');
     if (atk) { window.eval(atk.getAttribute('onclick')); await sleep(400); }
     if (G().currentQuestion && $('combatAnswer')) {
       const hpBefore = m.hp;
+      const playerHpBefore = G().player.hp;
       $('combatAnswer').value = G().currentQuestion.answer;
       window.submitCombatAnswer();
       const deadline = Date.now() + 5000;
       while (m.hp >= hpBefore && Date.now() < deadline) await sleep(50);
       chk(m.hp < hpBefore, '보스에게 피해', `${m.hp}/${hpBefore}`);
+      const counterDeadline = Date.now() + 5000;
+      while (G().player.hp >= playerHpBefore && Date.now() < counterDeadline) await sleep(50);
+      chk(playerHpBefore - G().player.hp === 42, '최종보스 실제 피해 30% 감소', `${playerHpBefore}→${G().player.hp}`);
     }
   }
   await sleep(400);

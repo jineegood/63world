@@ -9829,6 +9829,11 @@ function updateQuestTracker() {
     });
     const critical = !eliteSelfShieldTurn && !hitMissPlans[0].missed && (forceCrit || monsterCritV25());
     if (critical) incoming = Math.max(1, Math.ceil(incoming * 1.8));
+    if (!eliteSelfShieldTurn && monster.type === 'teacherBoss') {
+      // 최종보스의 기본·특수·치명타 공격을 모두 기존 최종 산출값의 70%로 낮춘다.
+      incoming = YuksamCombatRules.applyFinalBossDamageNerf(incoming, monster.type);
+      extraHit = YuksamCombatRules.applyFinalBossDamageNerf(extraHit, monster.type);
+    }
     if (!eliteSelfShieldTurn) {
       plannedAmounts[0] = incoming;
       plannedAmounts[1] = extraHit;
@@ -13631,7 +13636,7 @@ function updateQuestTracker() {
       game.finalTeacherBossV34 = monsterBase({
         id:'teacher_final_v34',
         type:'teacherBoss',
-        name:'명진쌤',
+        name:'최종보스 명진쌤',
         level:99,
         hp:999,   // [밸런스] 사실상 못 깨는 히든보스 컨셉 (사용자 지정)
         attack:40 + Math.floor(Math.random() * 11), // 공격 40~50: 기존 20~25에서 2배 강화
@@ -13646,7 +13651,7 @@ function updateQuestTracker() {
     }
     Object.assign(game.finalTeacherBossV34, {
       x:def.x, y:def.y, r:def.r,
-      name:'명진쌤',
+      name:'최종보스 명진쌤',
       level:99,
       maxHp:999,
       hp: Math.min(999, Math.max(1, game.finalTeacherBossV34.hp || 999)),

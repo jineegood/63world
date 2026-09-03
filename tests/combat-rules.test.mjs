@@ -89,6 +89,34 @@ test('monster miss chance adds the universal ten percent and caps at one hundred
   assert.equal(rules.combinedMonsterMissChance(2), 1);
 });
 
+test('final teacher damage is reduced to seventy percent while every other monster is unchanged', () => {
+  for (const [damage, expected] of [[48, 34], [55, 39], [60, 42], [78, 55]]) {
+    assert.equal(rules.applyFinalBossDamageNerf(damage, 'teacherBoss'), expected);
+  }
+  assert.equal(rules.applyFinalBossDamageNerf(48, 'zombie'), 48);
+  assert.equal(rules.applyFinalBossDamageNerf(0, 'teacherBoss'), 0);
+});
+
+test('active final boss combat uses the exact battle name and one common post-pattern nerf', () => {
+  const gameSource = readFileSync(join(root, 'game.js'), 'utf8');
+  const activeBossStart = gameSource.indexOf('function ensureFinalTeacherBossV34()');
+  const activeBossEnd = gameSource.indexOf('function exitFinalBossRoomV34()', activeBossStart);
+  const activeBossSource = gameSource.slice(activeBossStart, activeBossEnd);
+  assert.ok(activeBossStart >= 0 && activeBossEnd > activeBossStart);
+  assert.equal((activeBossSource.match(/name:'최종보스 명진쌤'/g) || []).length, 2);
+
+  const counterStart = gameSource.indexOf('monsterCounterAttack = function monsterCounterAttackV25');
+  const counterEnd = gameSource.indexOf('window.submitCombatAnswer = function submitCombatAnswerV25', counterStart);
+  const counterSource = gameSource.slice(counterStart, counterEnd);
+  assert.ok(counterStart >= 0 && counterEnd > counterStart);
+  assert.equal((counterSource.match(/applyFinalBossDamageNerf\(/g) || []).length, 2);
+  assert.match(counterSource, /if \(!eliteSelfShieldTurn && monster\.type === 'teacherBoss'\)/);
+  const criticalIndex = counterSource.indexOf('if (critical) incoming =');
+  const nerfIndex = counterSource.indexOf('applyFinalBossDamageNerf(incoming');
+  const finalHitIndex = counterSource.indexOf('plannedAmounts[0] = incoming');
+  assert.ok(criticalIndex >= 0 && criticalIndex < nerfIndex && nerfIndex < finalHitIndex);
+});
+
 test('light flash heals every living ally for half maximum HP and clamps at max HP', () => {
   const allies = [
     { hp: 20, maxHp: 100 },

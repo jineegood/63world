@@ -85,6 +85,11 @@
     return Math.min(1, 0.10 + Math.max(0, Number(skillChance) || 0));
   }
 
+  function applyFinalBossDamageNerf(damage, monsterType) {
+    const amount = Math.max(0, Number(damage) || 0);
+    return monsterType === 'teacherBoss' ? Math.ceil(amount * 0.70) : amount;
+  }
+
   function planLivingAllyHeals(allies, healMaxPct) {
     const healed = [];
     (allies || []).forEach((ally, targetIndex) => {
@@ -307,6 +312,7 @@
     rollEnhancement,
     rollHostileHit,
     combinedMonsterMissChance,
+    applyFinalBossDamageNerf,
     healLivingAllies,
     planLivingAllyHeals,
     normalizeCombatStatuses,

@@ -161,9 +161,9 @@ test('jsdom combat state changes occur on their matching queued events', { timeo
   assert.match(result.stdout, /PASS: Fire skill critical hits use the Ember rank table from 200 through 300 percent/);
   assert.match(result.stdout, /PASS: Holy attacks can critically hit again \(v51\) alongside Shadow and other classes/);
   assert.match(result.stdout, /PASS: Void Mastery ranks one through five apply their boundary critical rolls to shadow ticks/);
-  assert.match(result.stdout, /PASS: Teacher base, Heavy, and Homework Bomb damage use the 20 percent pre-technique bonus/);
+  assert.match(result.stdout, /PASS: Teacher base, Heavy, and Homework Bomb damage keep their bonus then take the final 30 percent nerf/);
   assert.match(result.stdout, /PASS: Teacher Homework Bomb gives each of its two landed notices its own projectile impact/);
-  assert.match(result.stdout, /PASS: Teacher chill halves the already-buffed base damage and consumes one chill turn/);
+  assert.match(result.stdout, /PASS: Teacher chill halves the already-buffed base damage before the final 30 percent nerf and consumes one chill turn/);
 });
 
 test('jsdom Shield Charge uses its new shield before capped critical damage and Guardian Oath clears it on revive', { timeout:40000 }, () => {

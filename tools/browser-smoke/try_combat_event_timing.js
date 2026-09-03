@@ -848,10 +848,10 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   const teacherBase = await resolveTeacherDamage([.99, .99]);
   const teacherHeavy = await resolveTeacherDamage([.01, .99, .99]);
   const teacherHomework = await resolveTeacherDamage([.99, .01, .99, .99, .99]);
-  ok('Teacher base, Heavy, and Homework Bomb damage use the 20 percent pre-technique bonus',
-    teacherBase.map((event) => event.effectAmount).join(',') === '16'
-      && teacherHeavy.map((event) => event.effectAmount).join(',') === '26'
-      && teacherHomework.map((event) => event.effectAmount).join(',') === '12,12',
+  ok('Teacher base, Heavy, and Homework Bomb damage keep their bonus then take the final 30 percent nerf',
+    teacherBase.map((event) => event.effectAmount).join(',') === '12'
+      && teacherHeavy.map((event) => event.effectAmount).join(',') === '19'
+      && teacherHomework.map((event) => event.effectAmount).join(',') === '9,9',
     JSON.stringify({ teacherBase, teacherHeavy, teacherHomework }));
   ok('Teacher Homework Bomb gives each of its two landed notices its own projectile impact',
     teacherHomework.length === 2
@@ -873,8 +873,8 @@ run(root, async ({ window, $, click, sleep, asyncErrors }) => {
   const teacherChillDamage = teacherChillTrace
     .filter((event) => event.type === 'player-damage')
     .map((event) => event.effectAmount);
-  ok('Teacher chill halves the already-buffed base damage and consumes one chill turn',
-    teacherChillDamage.join(',') === '8'
+  ok('Teacher chill halves the already-buffed base damage before the final 30 percent nerf and consumes one chill turn',
+    teacherChillDamage.join(',') === '6'
       && monster.chillTurns === 0,
     JSON.stringify({ teacherChillDamage, chillTurns:monster.chillTurns, teacherChillTrace }));
 
