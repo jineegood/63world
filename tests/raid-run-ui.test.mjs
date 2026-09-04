@@ -68,7 +68,11 @@ function networkUiHarness({ mode = 'create', identityUserId = 'alice' } = {}) {
     game,
     document,
     performance:{ now:() => 100 },
-    setTimeout,
+    setTimeout(...args) {
+      const timer = setTimeout(...args);
+      timer.unref();
+      return timer;
+    },
     clearTimeout,
     setInterval(callback, milliseconds) { calls.push(['interval', milliseconds, callback]); return 11; },
     clearInterval(id) { calls.push(['clearInterval', id]); },
@@ -231,8 +235,9 @@ test('온라인 대기실은 정확히 세 명·대형 저장·전원 준비 후
   assert.match(block, /roster\.length === 3 && R\.SLOTS\.every/);
   assert.match(block, /roster\.length === 3 && roster\.every\(\(member\) => rowById\(member\.id\)\?\.ready === true\)/);
   assert.match(block, /id="raidSaveFormationBtn"/);
-  assert.match(block, /networkSession\.client\.setFormation/);
-  assert.match(block, /networkSession\.client\.ready/);
+  assert.match(block, /session\.client\.setFormation/);
+  assert.match(block, /session\.client\.ready/);
+  assert.match(block, /if \(networkSession === session\) setNetworkData\(data\)/);
   // 구간을 못 연 사람이 있으면 카운트다운도 시작하지 않는다.
   assert.match(block, /syncNetworkLobbyCountdown\(savedFormation && allReady && partyUnlocked && partyDiverse\)/);
   assert.match(block, /partyUnlockState\(\)/);
@@ -364,18 +369,19 @@ test('대기 캐릭터 카드에서 근거가 불분명한 공격 숫자를 보�
 });
 
 test('Realtime 알림과 heartbeat는 모두 같은 sync 경로로 방 상태를 갱신한다', () => {
-  assert.match(uiSource, /session\.client\.subscribe\(session\.room\.id, \(\) => refreshNetworkRoom\(\), refreshNetworkRoom\)/);
+  assert.match(uiSource, /transport\.session\.client\.subscribe\(transport\.session\.room\.id, refresh, refresh\)/);
   assert.match(uiSource, /session\.client\.sync\(session\.room\.id, session\.lastSequence \|\| 0\)/);
   assert.match(uiSource, /session\.client\.heartbeat\(session\.room\.id, session\.lastSequence \|\| 0\)/);
-  assert.match(uiSource, /global\.setInterval\([\s\S]*?, 3000\)/);
+  assert.match(uiSource, /NETWORK_HEARTBEAT_MS = 3000/);
+  assert.match(uiSource, /transport\.timer = global\.setTimeout/);
   assert.match(uiSource, /stopNetworkTransport\(\)/);
 });
 
 test('늦게 도착한 옛 방 상태와 결과 재전송이 체력을 두 번 바꾸지 않는다', () => {
   assert.match(uiSource, /incomingVersion < currentVersion/);
   assert.match(uiSource, /if \(!staleSnapshot && incomingRoom\) networkSession\.room = incomingRoom/);
-  assert.match(uiSource, /if \(networkRefreshPending\) \{[\s\S]*networkRefreshAgain = true/);
-  assert.match(uiSource, /while \(networkSession === session && networkRefreshAgain\)/);
+  assert.match(uiSource, /transport\.refreshRequested = true/);
+  assert.match(uiSource, /if \(!currentNetworkTransport\(transport\) \|\| transport\.pending\) return/);
   assert.match(uiSource, /session\.pendingRoundPublishes\.get\(round\)/);
   assert.match(uiSource, /requestId:`raid-publish-\$\{session\.room\.id\}-\$\{round\}`/);
   assert.match(uiSource, /pending\.result,[\s\S]*pending\.requestId/);

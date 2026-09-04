@@ -40,10 +40,11 @@
   let networkSession = null;
   let giveUpConfirmOpen = false;
   let raidPartyClient = null;
-  let networkUnsubscribe = null;
-  let networkHeartbeatTimer = null;
-  let networkRefreshPending = false;
-  let networkRefreshAgain = false;
+  let networkTransport = null;
+  let networkEntrySequence = 0;
+  const NETWORK_HEARTBEAT_MS = 3000;
+  const NETWORK_SYNC_GAP_MS = 250;
+  const NETWORK_MAX_RETRY_MS = 30000;
   let networkDraftPlacement = {};
   let networkSelectedMemberId = null;
   let networkStarting = false;
@@ -546,7 +547,7 @@
   }
 
   function setNetworkData(data, { initial = false } = {}) {
-    if (!networkSession || !data) return;
+    if (!networkSession || networkSession.transportStopped || !data) return;
     const wasTeacherPaused = teacherPaused(networkSession);
     const incomingRoom = data.room || null;
     const currentVersion = Math.max(0, Number(networkSession.room?.version) || 0);
@@ -688,44 +689,94 @@
     if (phase === 'resolving') maybeResolveNetworkRound();
   }
 
-  async function refreshNetworkRoom() {
-    if (!networkSession) return;
-    if (networkRefreshPending) {
-      /* 조회 중 도착한 realtime 알림을 버리지 않는다. 현재 조회가 끝나자마자
-         한 번 더 읽어 새 phase와 이벤트를 가져온다. */
-      networkRefreshAgain = true;
+  function currentNetworkTransport(transport) {
+    return !!transport && !transport.stopped && networkTransport === transport
+      && networkSession === transport.session;
+  }
+
+  function scheduleNetworkTransport(transport) {
+    if (!currentNetworkTransport(transport) || transport.pending) return;
+    if (transport.timer !== null) global.clearTimeout(transport.timer);
+    const syncAt = transport.refreshRequested
+      ? transport.lastSyncAt + NETWORK_SYNC_GAP_MS : Infinity;
+    const nextAt = Math.max(transport.retryAt, Math.min(transport.heartbeatAt, syncAt));
+    transport.timer = global.setTimeout(() => {
+      transport.timer = null;
+      runNetworkTransport(transport);
+    }, Math.max(0, nextAt - Date.now()));
+  }
+
+  async function runNetworkTransport(transport) {
+    if (!currentNetworkTransport(transport) || transport.pending) return;
+    const now = Date.now();
+    const heartbeat = now >= transport.heartbeatAt;
+    if (now < transport.retryAt || (!heartbeat
+      && (!transport.refreshRequested || now < transport.lastSyncAt + NETWORK_SYNC_GAP_MS))) {
+      scheduleNetworkTransport(transport);
       return;
     }
-    const session = networkSession;
-    networkRefreshPending = true;
-    do {
-      networkRefreshAgain = false;
-      try {
-        const data = await session.client.sync(session.room.id, session.lastSequence || 0);
-        if (networkSession !== session) return;
-        setNetworkData(data);
-      } catch (error) {
-        if (networkSession === session && session.room?.phase === 'lobby') {
-          renderNetworkLobby(error?.message || '방 정보를 다시 불러오는 중입니다.');
-        }
+    if (transport.timer !== null) global.clearTimeout(transport.timer);
+    transport.timer = null;
+    transport.pending = true;
+    /* heartbeat 응답에도 전체 스냅샷과 누락 이벤트가 있다. 두 조회는 동시에
+       보내지 않고, 요청 도중 새로 온 알림만 한 번 더 조회하도록 남긴다. */
+    transport.refreshRequested = false;
+    if (!heartbeat) transport.lastSyncAt = now;
+    const session = transport.session;
+    try {
+      const data = heartbeat
+        ? await session.client.heartbeat(session.room.id, session.lastSequence || 0)
+        : await session.client.sync(session.room.id, session.lastSequence || 0, { retry:false });
+      if (!currentNetworkTransport(transport)) return;
+      setNetworkData(data);
+      transport.failures = 0;
+      transport.retryAt = 0;
+      transport.errorNotified = false;
+    } catch (error) {
+      if (!currentNetworkTransport(transport)) return;
+      transport.failures += 1;
+      transport.refreshRequested = true;
+      transport.retryAt = Date.now() + Math.min(NETWORK_MAX_RETRY_MS,
+        NETWORK_HEARTBEAT_MS * (2 ** Math.min(transport.failures - 1, 4)));
+      const terminal = ['UNAUTHENTICATED', 'SESSION_CHANGED', 'NOT_MEMBER', 'ROOM_NOT_FOUND',
+        'ROOM_CLOSED', 'INVALID_REQUEST'].includes(error?.code);
+      const message = error?.message || '던전 서버 연결을 다시 시도하고 있습니다.';
+      if (terminal) {
+        session.transportStopped = true;
+        session.transportError = `${message} 방을 나간 뒤 다시 연결해 주세요.`;
+        cancelNetworkLobbyCountdown();
+        stopNetworkTransport();
       }
-    } while (networkSession === session && networkRefreshAgain);
-    if (networkSession === session) {
-      networkRefreshPending = false;
-    } else {
-      networkRefreshPending = false;
-      networkRefreshAgain = false;
+      if (session.room?.phase === 'lobby') renderNetworkLobby(message);
+      if (terminal || (transport.failures >= 3 && !transport.errorNotified)) {
+        transport.errorNotified = true;
+        call('toast', message);
+      }
+    } finally {
+      /* 이전 방의 늦은 finally가 새 방의 pending/timer를 바꾸지 못한다. */
+      transport.pending = false;
+      if (heartbeat) {
+        transport.heartbeatAt = Date.now() - now < NETWORK_HEARTBEAT_MS
+          ? now + NETWORK_HEARTBEAT_MS : Date.now() + NETWORK_HEARTBEAT_MS;
+      }
+      scheduleNetworkTransport(transport);
     }
   }
 
+  function refreshNetworkRoom() {
+    const transport = networkTransport;
+    if (!currentNetworkTransport(transport)) return;
+    transport.refreshRequested = true;
+    return runNetworkTransport(transport);
+  }
+
   function stopNetworkTransport() {
-    if (networkUnsubscribe) {
-      try { networkUnsubscribe(); } catch (_) {}
-      networkUnsubscribe = null;
-    }
-    if (networkHeartbeatTimer) {
-      global.clearInterval(networkHeartbeatTimer);
-      networkHeartbeatTimer = null;
+    const transport = networkTransport;
+    networkTransport = null;
+    if (transport) {
+      transport.stopped = true;
+      if (transport.timer !== null) global.clearTimeout(transport.timer);
+      try { transport.unsubscribe?.(); } catch (_) {}
     }
     if (raidQuestionReadyRetryTimer) {
       global.clearTimeout(raidQuestionReadyRetryTimer);
@@ -736,26 +787,26 @@
   function startNetworkTransport() {
     stopNetworkTransport();
     if (!networkSession) return;
-    const session = networkSession;
-    networkUnsubscribe = session.client.subscribe(session.room.id, () => refreshNetworkRoom(), refreshNetworkRoom);
-    networkHeartbeatTimer = global.setInterval(async () => {
-      if (networkSession !== session) return;
-      try {
-        const data = await session.client.heartbeat(session.room.id, session.lastSequence || 0);
-        if (networkSession === session) setNetworkData(data);
-      } catch (_) { /* 다음 heartbeat/sync에서 다시 이어진다. */ }
-    }, 3000);
+    const transport = networkTransport = {
+      session:networkSession, stopped:false, pending:false, refreshRequested:false,
+      heartbeatAt:Date.now() + NETWORK_HEARTBEAT_MS, lastSyncAt:-Infinity,
+      retryAt:0, failures:0, errorNotified:false, timer:null, unsubscribe:null,
+    };
+    const refresh = () => {
+      if (currentNetworkTransport(transport)) refreshNetworkRoom();
+    };
+    transport.unsubscribe = transport.session.client.subscribe(transport.session.room.id, refresh, refresh);
+    scheduleNetworkTransport(transport);
   }
 
   function resetNetworkSession() {
+    networkEntrySequence += 1;
     setTeacherPauseAudio(false);
     stopNetworkTransport();
     cancelNetworkLobbyCountdown();
     stopRaidQuestionTimer();
     travelAnimationToken += 1;
     networkSession = null;
-    networkRefreshPending = false;
-    networkRefreshAgain = false;
     networkDraftPlacement = {};
     networkSelectedMemberId = null;
     networkStarting = false;
@@ -939,14 +990,15 @@
   async function leaveNetworkRoom({ returnToTown = false } = {}) {
     const session = networkSession;
     resetNetworkSession();
-    if (session) {
-      try { await session.client.leave(session.room.id); } catch (_) {}
-    }
     active = null;
     question = null;
     busy = false;
     call('closeModal');
     if (returnToTown && G()?.currentMap === MAP_KEY) leaveDungeonMap();
+    /* 떠나기 응답을 기다리는 사이 새 방을 열어도 새 화면은 닫지 않는다. */
+    if (session) {
+      try { await session.client.leave(session.room.id); } catch (_) {}
+    }
   }
 
   async function openNetworkLobby(options = {}) {
@@ -956,6 +1008,7 @@
       call('toast', '로그인한 학생 3명이 있어야 던전에 들어갈 수 있습니다.');
       return false;
     }
+    let entrySequence = ++networkEntrySequence;
 
     call('openModal', `
       <h2>63빌딩 던전</h2>
@@ -964,11 +1017,14 @@
 
     try {
       await global.flushLocalPlayerForPvpV1?.();
+      if (entrySequence !== networkEntrySequence) return false;
       const data = options.mode === 'join'
         ? await client.join({ code:String(options.code || '') })
         : await client.create({ floorGroup:Number(options.floorGroup) || 1 });
+      if (entrySequence !== networkEntrySequence) return false;
       if (!data?.room?.id) throw new Error('대기실 정보를 받지 못했습니다.');
       resetNetworkSession();
+      entrySequence = networkEntrySequence;
       networkSession = {
         client,
         room:data.room,
@@ -995,6 +1051,7 @@
       }
       return true;
     } catch (error) {
+      if (entrySequence !== networkEntrySequence) return false;
       call('openModal', `
         <h2>대기실 연결 실패</h2>
         <div class="panel-card">
@@ -1038,7 +1095,7 @@
   }
 
   function networkLobbyStillReady() {
-    if (!networkSession || networkSession.room?.phase !== 'lobby') return false;
+    if (!networkSession || networkSession.transportStopped || networkSession.room?.phase !== 'lobby') return false;
     const rows = (networkSession.members || []).filter((row) => row && row.active !== false);
     const slots = rows.map((row) => row.slot).filter(Boolean);
     return rows.length === 3
@@ -1090,6 +1147,7 @@
   }
 
   function syncNetworkLobbyCountdown(shouldRun) {
+    shouldRun = shouldRun && !networkSession?.transportStopped;
     if (!shouldRun) {
       if (networkLobbyCountdownKey || networkLobbyCountdownTimer) cancelNetworkLobbyCountdown();
       return 0;
@@ -1113,6 +1171,7 @@
 
   function renderNetworkLobby(message = '') {
     if (!networkSession || networkSession.room?.phase !== 'lobby') return;
+    message = networkSession.transportError || message;
     ensureStyles();
     const R = rules();
     const roster = roomMembers();
@@ -1205,7 +1264,7 @@
           <div class="raid-bench-head"><span>대기 중</span></div>
           <div class="raid-bench">${waitingCards}${emptyWaiting || (!waiting.length ? '<div class="raid-bench-empty">모두 자리를 정했습니다!</div>' : '')}</div>
         </div>
-        ${allReady && partyDiverse && unlock.ok ? `<div class="raid-countdown">${countdown > 0 ? `${countdown}초 후 출발!` : '출발!'}</div>` : ''}
+        ${allReady && partyDiverse && unlock.ok && !networkSession.transportStopped ? `<div class="raid-countdown">${countdown > 0 ? `${countdown}초 후 출발!` : '출발!'}</div>` : ''}
         <p class="raid-room-status ${allReady && unlock.ok && partyDiverse ? 'good' : (roster.length < 3 || !unlock.ok || !partyDiverse ? 'warn' : '')}">${esc(status)}</p>
         <div class="raid-room-actions">
           ${host && roster.length === 3 && !savedFormation ? '<button class="primary" id="raidSaveFormationBtn" disabled>대형 확정</button>' : ''}
@@ -1237,24 +1296,35 @@
     });
     const save = global.document.getElementById('raidSaveFormationBtn');
     if (save) {
-      save.disabled = !seated;
+      save.disabled = !seated || networkSession.transportStopped === true;
       save.onclick = async () => {
+        const session = networkSession;
+        if (!session || session.transportStopped) return;
         save.disabled = true;
         try {
-          const data = await networkSession.client.setFormation(networkSession.room.id, { ...networkDraftPlacement });
-          setNetworkData(data);
-        } catch (error) { renderNetworkLobby(error?.message || '대형을 저장하지 못했습니다.'); }
+          const data = await session.client.setFormation(session.room.id, { ...networkDraftPlacement });
+          if (networkSession === session) setNetworkData(data);
+        } catch (error) {
+          if (networkSession === session) renderNetworkLobby(error?.message || '대형을 저장하지 못했습니다.');
+        }
       };
     }
     const ready = global.document.getElementById('raidReadyBtn');
+    if (ready && networkSession.transportStopped) ready.disabled = true;
     if (ready) ready.onclick = async () => {
+      const session = networkSession;
+      if (!session || session.transportStopped) return;
       if (!partyCompositionState().ok) {
         renderNetworkLobby(PARTY_COMPOSITION_MESSAGE);
         return;
       }
       ready.disabled = true;
-      try { setNetworkData(await networkSession.client.ready(networkSession.room.id, !myReady)); }
-      catch (error) { renderNetworkLobby(error?.message || '준비 상태를 바꾸지 못했습니다.'); }
+      try {
+        const data = await session.client.ready(session.room.id, !myReady);
+        if (networkSession === session) setNetworkData(data);
+      } catch (error) {
+        if (networkSession === session) renderNetworkLobby(error?.message || '준비 상태를 바꾸지 못했습니다.');
+      }
     };
     const leave = global.document.getElementById('raidNetworkLeaveBtn');
     if (leave) leave.onclick = () => leaveNetworkRoom();
@@ -1405,7 +1475,8 @@
     session.deadSubmittedRounds.add(round);
 
     Promise.resolve(session.client.submit(session.room.id, round, 'basic', ''))
-      .then(() => session.client.sync(session.room.id, session.lastSequence || 0))
+      .then(() => networkSession === session
+        ? session.client.sync(session.room.id, session.lastSequence || 0) : null)
       .then((data) => { if (networkSession === session) setNetworkData(data); })
       .catch((error) => {
         if (networkSession !== session) return;
@@ -1561,7 +1632,9 @@
       })
       .catch(() => {
         /* 다음 realtime/heartbeat 때 다시 시도한다. 진행을 먼저 열지는 않는다. */
-        if (networkSession === session) global.setTimeout(refreshNetworkRoom, 350);
+        if (networkSession === session) global.setTimeout(() => {
+          if (networkSession === session) refreshNetworkRoom();
+        }, 350);
       })
       .finally(() => {
         if (networkSession === session) session.ackingPlaybackRounds.delete(safeRound);
@@ -1716,6 +1789,7 @@
         setNetworkData(data);
       }
     } catch (error) {
+      if (networkSession !== session) return;
       session.resolvingRounds.delete(round);
       panelMode = 'playing';
       panelMessage = error?.message || '전투 결과를 동기화하지 못했습니다. 다시 연결하는 중입니다.';
@@ -1929,10 +2003,12 @@
     showPlaybackPanel(`답을 제출했습니다. ${networkQuestionWaitMessage({ submitted:true })}`);
     try {
       await session.client.submit(session.room.id, round, actionId, String(given ?? ''));
+      if (networkSession !== session) return;
       const data = await session.client.sync(session.room.id, session.lastSequence || 0);
       if (networkSession === session) setNetworkData(data);
     } catch (error) {
       session.submittedRounds.delete(round);
+      if (networkSession !== session) return;
       busy = false;
       panelMode = 'menu';
       panelMessage = error?.message || '답을 전송하지 못했습니다. 다시 시도해 주세요.';

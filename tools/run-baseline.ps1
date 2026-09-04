@@ -456,8 +456,10 @@ if ($Mode -eq 'all') {
     'tests/profile-portrait.test.mjs'
     'tests/profile-security-audit-v1.test.mjs'
     'tests/quest-dialogue-theme.test.mjs'
+    'tests/raid-lock-order.test.mjs'
     'tests/raid-pattern-effects.test.mjs'
     'tests/raid-progress.test.mjs'
+    'tests/raid-transport-pressure.test.mjs'
     'tests/recovery-ui-features.test.mjs'
     'tests/remote-motion.test.mjs'
     'tests/safe-server-boundary-v2.test.mjs'
@@ -465,6 +467,7 @@ if ($Mode -eq 'all') {
     'tests/teacher-cheat-ui.test.mjs'
     'tests/usability-polish-v62.test.mjs'
     'tests/workbook-import.test.mjs'
+    'tests/world-presence-lock.test.mjs'
   )
   foreach ($testFile in $standaloneTestFiles) {
     Invoke-CheckedNode -NodeExe $nodeExe -Arguments @('--test', $testFile)

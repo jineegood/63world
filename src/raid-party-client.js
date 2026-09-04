@@ -56,7 +56,7 @@
       throw new TypeError('Raid party client dependencies are required.');
     }
 
-    const channels = new Set();
+    const channels = new Map();
     let requestSequence = 0;
     let lastTraceId = '';
 
@@ -111,7 +111,7 @@
 
     const wait = (milliseconds) => new Promise((resolve) => global.setTimeout(resolve, milliseconds));
 
-    async function invoke(body, { verifySession = false } = {}) {
+    async function invoke(body, { verifySession = false, retry = true } = {}) {
       if (verifySession) await assertLiveIdentity();
       else identity();
 
@@ -126,7 +126,7 @@
         const code = await readErrorCode(error, data);
         if (!error && !data?.error) return data?.data ?? data;
         const retryable = !code || ['SERVER_ERROR', 'TEMPORARY_UNAVAILABLE'].includes(code);
-        if (retryable && attempt === 0) {
+        if (retry && retryable && attempt === 0) {
           await wait(350);
           continue;
         }
@@ -179,8 +179,23 @@
 
     function remove(channel) {
       if (!channels.has(channel)) return;
+      channels.get(channel)();
       channels.delete(channel);
       client.removeChannel?.(channel);
+    }
+
+    function memberSignature(row) {
+      /* UPDATE의 old는 기본 replica identity에서 기본키뿐일 수 있다.
+         전체 NEW 행끼리 비교하며, 필드가 부족한 알림은 항상 다시 조회한다. */
+      const required = ['room_id', 'user_id', 'active', 'ready', 'slot', 'profile_snapshot', 'combat_state'];
+      if (!row || required.some((key) => !Object.prototype.hasOwnProperty.call(row, key))) return null;
+      const canonical = (value) => {
+        if (Array.isArray(value)) return value.map(canonical);
+        if (!value || typeof value !== 'object') return value;
+        return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])]));
+      };
+      const { last_seen_at, ...meaningful } = row;
+      return JSON.stringify(canonical(meaningful));
     }
 
     function subscribe(roomId, listener, onReady) {
@@ -190,20 +205,33 @@
         return () => {};
       }
       const seenSequences = new Set();
+      const memberSignatures = new Map();
+      let active = true;
       const channel = client.channel(`raid-room-${safeRoomId}`)
         .on('postgres_changes', {
           event:'UPDATE', schema:'public', table:'raid_rooms_v1', filter:`id=eq.${safeRoomId}`,
-        }, (payload) => listener({ type:'room', room:payload?.new || null }))
+        }, (payload) => {
+          if (active) listener({ type:'room', room:payload?.new || null });
+        })
         .on('postgres_changes', {
           event:'*', schema:'public', table:'raid_room_members_v1', filter:`room_id=eq.${safeRoomId}`,
-        }, (payload) => listener({
-          type:'member',
-          eventType:payload?.eventType || '',
-          member:payload?.new || payload?.old || null,
-        }))
+        }, (payload) => {
+          if (!active) return;
+          const row = payload?.new || payload?.old || null;
+          const id = String(row?.user_id || '');
+          const signature = memberSignature(payload?.new);
+          if (payload?.eventType === 'UPDATE' && signature !== null
+            && memberSignatures.get(id) === signature) return;
+          if (signature !== null && payload?.eventType !== 'DELETE') {
+            if (memberSignatures.size >= 32 && !memberSignatures.has(id)) memberSignatures.clear();
+            memberSignatures.set(id, signature);
+          } else memberSignatures.delete(id);
+          listener({ type:'member', eventType:payload?.eventType || '', member:row });
+        })
         .on('postgres_changes', {
           event:'INSERT', schema:'public', table:'raid_events_v1', filter:`room_id=eq.${safeRoomId}`,
         }, (payload) => {
+          if (!active) return;
           const row = payload?.new;
           const sequenceNo = Number(row?.sequence_no);
           if (!Number.isSafeInteger(sequenceNo) || seenSequences.has(sequenceNo)) return;
@@ -216,14 +244,18 @@
           });
         })
         .subscribe((status) => {
-          if (status === 'SUBSCRIBED') onReady?.();
+          if (active && status === 'SUBSCRIBED') {
+            /* 재접속 중 놓친 상태는 전체 sync로 복구하고 NEW 기준도 새로 쌓는다. */
+            memberSignatures.clear();
+            onReady?.();
+          }
         });
-      channels.add(channel);
+      channels.set(channel, () => { active = false; });
       return () => remove(channel);
     }
 
     function close() {
-      [...channels].forEach(remove);
+      [...channels.keys()].forEach(remove);
     }
 
     return Object.freeze({
@@ -234,7 +266,11 @@
         op:'join', code:String(code ?? ''), requestId:requestId('join'),
       }),
       resume:() => invoke({ op:'resume' }, { verifySession:true }),
-      sync:(roomId, afterSequence = 0) => invoke({ op:'sync', roomId, afterSequence }),
+      /* 주기 요청의 재시도는 UI의 단일 전송 큐가 간격을 늘려 처리한다.
+         답 제출 뒤 직접 조회하는 기존 경로는 한 번의 즉시 재시도를 유지한다. */
+      sync:(roomId, afterSequence = 0, { retry = true } = {}) => invoke(
+        { op:'sync', roomId, afterSequence }, { retry },
+      ),
       setFormation:(roomId, assignments) => invoke({
         op:'setFormation', roomId, assignments, requestId:requestId('formation'),
       }, { verifySession:true }),
@@ -260,7 +296,7 @@
       ackQuestionReady:(roomId, round, afterSequence = 0) => invoke({
         op:'ackQuestionReady', roomId, round, afterSequence,
       }),
-      heartbeat:(roomId, afterSequence = 0) => invoke({ op:'heartbeat', roomId, afterSequence }),
+      heartbeat:(roomId, afterSequence = 0) => invoke({ op:'heartbeat', roomId, afterSequence }, { retry:false }),
       leave:(roomId) => invoke({
         op:'leave', roomId, requestId:requestId('leave'),
       }, { verifySession:true }),
